@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from datetime import UTC, datetime
 from typing import Any, cast
 
@@ -58,6 +59,33 @@ def _utc_now_ms() -> int:
     return int(datetime.now(UTC).timestamp() * 1000)
 
 
+def _inter_request_sleep_seconds() -> float:
+    value = os.getenv("DEPTH_DERIBIT_OPTION_TRADES_INTER_REQUEST_SLEEP_S", "0.15").strip()
+    try:
+        sleep_s = float(value)
+    except ValueError:
+        return 0.15
+    return max(0.0, sleep_s)
+
+
+def _route_retry_attempts() -> int:
+    value = os.getenv("DEPTH_DERIBIT_OPTION_TRADES_ROUTE_RETRY_ATTEMPTS", "3").strip()
+    try:
+        attempts = int(value)
+    except ValueError:
+        return 3
+    return max(1, attempts)
+
+
+def _route_retry_backoff_base_seconds() -> float:
+    value = os.getenv("DEPTH_DERIBIT_OPTION_TRADES_ROUTE_RETRY_BACKOFF_BASE_S", "0.5").strip()
+    try:
+        backoff_s = float(value)
+    except ValueError:
+        return 0.5
+    return max(0.0, backoff_s)
+
+
 def fetch_option_trades_range(
     *,
     currency: str,
@@ -79,6 +107,9 @@ def fetch_option_trades_range(
     collected: list[dict[str, object]] = []
     page_size = min(count, DERIBIT_OPTION_TRADES_MAX_PAGE_SIZE)
     max_pages = int(os.getenv("DEPTH_DERIBIT_OPTION_TRADES_MAX_PAGES_PER_RANGE", "5000"))
+    inter_request_sleep_s = _inter_request_sleep_seconds()
+    route_retry_attempts = _route_retry_attempts()
+    route_retry_backoff_base_s = _route_retry_backoff_base_seconds()
     pages = 0
 
     while cursor <= end_open_ms:
@@ -103,22 +134,46 @@ def fetch_option_trades_range(
         payload: Any | None = None
         last_error: Exception | None = None
         for base_url in _trades_base_urls():
-            try:
-                payload = get_json(
-                    f"{base_url}/api/v2/public/get_last_trades_by_currency_and_time",
-                    params=params,
-                )
-                break
-            except HttpClientError as exc:
-                last_error = exc
-                if not _is_route_failure(exc):
-                    raise
-                logger.warning(
-                    "Deribit option trades route failure via base_url=%s currency=%s cursor=%s; trying fallback",
+            for attempt in range(1, route_retry_attempts + 1):
+                logger.debug(
+                    "Deribit option trades request base_url=%s currency=%s cursor=%s end_ms=%s attempt=%s/%s",
                     base_url,
                     normalized_currency,
                     cursor,
+                    end_open_ms,
+                    attempt,
+                    route_retry_attempts,
                 )
+                try:
+                    payload = get_json(
+                        f"{base_url}/api/v2/public/get_last_trades_by_currency_and_time",
+                        params=params,
+                    )
+                    break
+                except HttpClientError as exc:
+                    last_error = exc
+                    if not _is_route_failure(exc):
+                        raise
+                    if attempt < route_retry_attempts:
+                        sleep_s = route_retry_backoff_base_s * (2 ** (attempt - 1))
+                        if sleep_s > 0:
+                            logger.debug(
+                                "Deribit option trades retry sleep base_url=%s currency=%s cursor=%s sleep_s=%.3f",
+                                base_url,
+                                normalized_currency,
+                                cursor,
+                                sleep_s,
+                            )
+                            time.sleep(sleep_s)
+                        continue
+                    logger.warning(
+                        "Deribit option trades route failure via base_url=%s currency=%s cursor=%s; trying fallback",
+                        base_url,
+                        normalized_currency,
+                        cursor,
+                    )
+            if payload is not None:
+                break
         if payload is None:
             assert last_error is not None
             raise last_error
@@ -136,6 +191,14 @@ def fetch_option_trades_range(
             break
         if not _has_more(payload):
             break
+        if inter_request_sleep_s > 0:
+            logger.debug(
+                "Deribit option trades inter-request sleep currency=%s cursor=%s sleep_s=%.3f",
+                normalized_currency,
+                cursor,
+                inter_request_sleep_s,
+            )
+            time.sleep(inter_request_sleep_s)
 
     dedup: dict[tuple[int, str, str], dict[str, object]] = {}
     for row in collected:

@@ -240,6 +240,7 @@ Responsibilities:
 
 - canonical 1-minute alignment
 - joining feature families
+- latest-source selection for equivalent upstream variants (newest artifact per required dataset)
 - versioned datasets
 - plot generation
 - manifests/provenance
@@ -699,6 +700,19 @@ uv run python main.py gold-build \
   --exchange deribit \
   --dataset-id gold.market.full.m1
 ```
+
+Source selection policy for gold combinations:
+
+- For each required upstream dataset (spot/perp/oi/funding/trades/options), if multiple equivalent symbol variants exist
+  (for example `BTC`, `BTC-USDC`, `BTC-PERPETUAL` that normalize to the same base symbol), gold selects the newest
+  matching variant by parquet file modification time and uses only that variant for the join.
+- For `gold.hybrid.full_l2.m1`, L2 input also uses the newest matching artifact.
+
+Gold retention policy:
+
+- Gold keeps only the latest `N` versions per `dataset_id/exchange/symbol` lineage (default `N=3`).
+- Configure via `gold-build.retention_keep_versions` in `config.yaml` or override with
+  `--retention-keep-versions`.
 
 Weitere Gold-Dataset-IDs:
 

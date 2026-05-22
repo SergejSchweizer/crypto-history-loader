@@ -13,6 +13,7 @@ from api.cli import build_parser
     ("argv", "expected"),
     [
         (["bronze-build", "--exchange", "deribit"], {"exchange": "deribit"}),
+        (["--debug", "bronze-build", "--exchange", "deribit"], {"debug": True}),
         (["bronze-build", "--exchanges", "deribit"], {"exchanges": ["deribit"]}),
         (["bronze-build", "--market", "perp_trades"], {"market": ["perp_trades"]}),
         (["bronze-build", "--market", "option_trades"], {"market": ["option_trades"]}),
@@ -57,6 +58,7 @@ from api.cli import build_parser
         (["gold-build", "--manifest"], {"manifest": True}),
         (["gold-build", "--plot"], {"plot": True}),
         (["gold-build", "--l2-validation-mode", "lenient"], {"l2_validation_mode": "lenient"}),
+        (["gold-build", "--retention-keep-versions", "5"], {"retention_keep_versions": 5}),
         (["gold-build", "--no-json-output"], {"no_json_output": True}),
         (["list-spot-timeframes", "--exchange", "deribit"], {"exchange": "deribit"}),
         (["list-spot-timeframes", "--exchanges", "deribit"], {"exchanges": ["deribit"]}),

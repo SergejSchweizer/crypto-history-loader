@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
@@ -1574,3 +1575,163 @@ def test_build_gold_full_keeps_minute_grid_and_reports_missing_values(tmp_path: 
     assert payload["missing_value_count_total"] >= 1
     assert payload["missing_value_count_by_column"]["spot_close_price"] == 1
     assert payload["feature_metadata"]["spot_close_price"]["missing_values"] == 1
+
+
+def test_build_gold_uses_latest_similar_silver_dataset_variant(tmp_path: Path) -> None:
+    silver = tmp_path / "silver"
+    gold = tmp_path / "gold"
+    symbol = "BTC"
+    exchange = "deribit"
+    t0 = datetime(2026, 5, 1, 0, 0, tzinfo=UTC)
+
+    stale_spot = (
+        silver
+        / "dataset_type=spot"
+        / f"exchange={exchange}"
+        / "symbol=BTC-USDC"
+        / "timeframe=1m"
+        / "BTC-USDC_2026_05.parquet"
+    )
+    fresh_spot = (
+        silver
+        / "dataset_type=spot"
+        / f"exchange={exchange}"
+        / "symbol=BTC"
+        / "timeframe=1m"
+        / "BTC_2026_05.parquet"
+    )
+    stale_spot.parent.mkdir(parents=True, exist_ok=True)
+    fresh_spot.parent.mkdir(parents=True, exist_ok=True)
+    pl.DataFrame(
+        [
+            {
+                "open_time": t0,
+                "exchange": exchange,
+                "symbol": symbol,
+                "open_price": 1.0,
+                "high_price": 1.1,
+                "low_price": 0.9,
+                "close_price": 1.0,
+                "volume": 10.0,
+            }
+        ]
+    ).write_parquet(stale_spot)
+    pl.DataFrame(
+        [
+            {
+                "open_time": t0,
+                "exchange": exchange,
+                "symbol": symbol,
+                "open_price": 2.0,
+                "high_price": 2.1,
+                "low_price": 1.9,
+                "close_price": 2.0,
+                "volume": 20.0,
+            }
+        ]
+    ).write_parquet(fresh_spot)
+    stale_ts = datetime(2026, 5, 1, 0, 0, tzinfo=UTC).timestamp()
+    fresh_ts = datetime(2026, 5, 2, 0, 0, tzinfo=UTC).timestamp()
+    os.utime(stale_spot, (stale_ts, stale_ts))
+    os.utime(fresh_spot, (fresh_ts, fresh_ts))
+
+    _write_silver_month(
+        silver,
+        dataset_type="perp",
+        exchange=exchange,
+        symbol="BTC-PERPETUAL",
+        timeframe="1m",
+        month="2026-05",
+        rows=[
+            {
+                "open_time": t0,
+                "exchange": exchange,
+                "symbol": symbol,
+                "open_price": 10.0,
+                "high_price": 11.0,
+                "low_price": 9.0,
+                "close_price": 10.0,
+                "volume": 100.0,
+            }
+        ],
+    )
+
+    report = build_gold_for_symbol(
+        silver_root=str(silver),
+        gold_root=str(gold),
+        exchange=exchange,
+        symbol=symbol,
+        dataset_id="gold.market.core.m1",
+        manifest=True,
+    )
+
+    written = pl.read_parquet(report.parquet_path).sort("timestamp_m1")
+    assert written.height == 1
+    assert written.get_column("spot_close_price").to_list() == [2.0]
+
+
+def test_build_gold_prunes_to_latest_three_versions(tmp_path: Path) -> None:
+    silver = tmp_path / "silver"
+    gold = tmp_path / "gold"
+    symbol = "BTC"
+    exchange = "deribit"
+    t0 = datetime(2026, 5, 1, 0, 0, tzinfo=UTC)
+
+    _write_silver_month(
+        silver,
+        dataset_type="spot",
+        exchange=exchange,
+        symbol="BTC_USDC",
+        timeframe="1m",
+        month="2026-05",
+        rows=[
+            {
+                "open_time": t0,
+                "exchange": exchange,
+                "symbol": symbol,
+                "open_price": 1.0,
+                "high_price": 1.1,
+                "low_price": 0.9,
+                "close_price": 1.0,
+                "volume": 10.0,
+            }
+        ],
+    )
+    _write_silver_month(
+        silver,
+        dataset_type="perp",
+        exchange=exchange,
+        symbol="BTC-PERPETUAL",
+        timeframe="1m",
+        month="2026-05",
+        rows=[
+            {
+                "open_time": t0,
+                "exchange": exchange,
+                "symbol": symbol,
+                "open_price": 10.0,
+                "high_price": 11.0,
+                "low_price": 9.0,
+                "close_price": 10.0,
+                "volume": 100.0,
+            }
+        ],
+    )
+
+    for dataset_version in ("v1.0.0", "v1.0.1", "v1.0.2", "v1.0.3"):
+        build_gold_for_symbol(
+            silver_root=str(silver),
+            gold_root=str(gold),
+            exchange=exchange,
+            symbol=symbol,
+            dataset_id="gold.market.core.m1",
+            dataset_version=dataset_version,
+            auto_version=False,
+            keep_last_versions=3,
+        )
+
+    version_dirs = sorted(
+        (gold / "dataset_id=gold.market.core.m1" / "dataset_type=gold_symbol_dataset").glob("feature_set_version=*")
+    )
+    kept_versions = sorted(path.name.split("=", 1)[1] for path in version_dirs)
+    assert kept_versions == ["v1.0.1", "v1.0.2", "v1.0.3"]

@@ -109,6 +109,40 @@ def test_fetch_option_trades_range_falls_back_on_route_failure(monkeypatch) -> N
     assert any("www.deribit.com" in url for url in calls)
 
 
+def test_fetch_option_trades_range_retries_route_failure_before_success(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    calls = {"n": 0}
+
+    def _fake_get_json(url: str, params: dict[str, object]) -> dict[str, object]:
+        del url
+        calls["n"] += 1
+        if calls["n"] < 3:
+            raise HttpClientError("Connection error for x: [Errno 113] No route to host")
+        return {
+            "result": {
+                "trades": [
+                    {
+                        "timestamp": int(cast(Any, params["start_timestamp"])),
+                        "trade_id": "id-1",
+                        "instrument_name": "BTC-31DEC26-100000-C",
+                    }
+                ],
+                "has_more": False,
+            }
+        }
+
+    monkeypatch.setenv("DEPTH_DERIBIT_OPTION_TRADES_ROUTE_RETRY_ATTEMPTS", "3")
+    monkeypatch.setenv("DEPTH_DERIBIT_OPTION_TRADES_ROUTE_RETRY_BACKOFF_BASE_S", "0")
+    monkeypatch.setattr(deribit_option_trades, "get_json", _fake_get_json)
+    rows = deribit_option_trades.fetch_option_trades_range(
+        currency="BTC",
+        start_open_ms=1_700_000_000_000,
+        end_open_ms=1_700_000_100_000,
+        count=1,
+    )
+    assert len(rows) == 1
+    assert calls["n"] == 3
+
+
 def test_option_extract_rows_and_has_more_helpers() -> None:
     payload = {"result": {"trades": [{"timestamp": 1, "trade_id": "a", "instrument_name": "X"}, 1], "has_more": True}}
     assert deribit_option_trades._extract_result_rows(payload) == [

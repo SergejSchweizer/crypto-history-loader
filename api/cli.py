@@ -116,6 +116,7 @@ def build_parser() -> argparse.ArgumentParser:
         default="config.yaml",
         help="Path to YAML configuration file for command defaults",
     )
+    parser.add_argument("--debug", action="store_true", help="Enable debug-level logging")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     add_bronze_build_parser(subparsers)
@@ -264,7 +265,7 @@ def main() -> None:
     if command_parser is not None:
         explicit = _collect_explicit_cli_dests(command_parser, sys.argv[1:])
         _apply_yaml_defaults(args=args, command=command, config=config_data, explicit_dests=explicit)
-    logger = configure_logging(module_name=str(args.command))
+    logger = configure_logging(module_name=str(args.command), debug=bool(getattr(args, "debug", False)))
     logger.info("Command start: %s", args.command)
 
     if args.command == "bronze-build":

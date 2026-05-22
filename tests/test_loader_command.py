@@ -102,16 +102,40 @@ def test_run_bronze_build_emits_manifest_and_plot_file_lists(tmp_path: Path, mon
 
 
 def test_exchange_symbol_start_dates_override_symbol_and_global_bounds() -> None:
+    original_tail = loader_cmd._TAIL_DELTA_ONLY
     original_global = loader_cmd._BRONZE_START_OPEN_MS
     original_symbol = dict(loader_cmd._BRONZE_SYMBOL_START_OPEN_MS)
     original_exchange_symbol = dict(loader_cmd._BRONZE_EXCHANGE_SYMBOL_START_OPEN_MS)
     try:
+        loader_cmd._TAIL_DELTA_ONLY = False
         loader_cmd._BRONZE_START_OPEN_MS = 1000
         loader_cmd._BRONZE_SYMBOL_START_OPEN_MS = {"BTC": 2000}
         loader_cmd._BRONZE_EXCHANGE_SYMBOL_START_OPEN_MS = {"deribit:BTC": 3000}
         assert loader_cmd._symbol_start_open_ms_bound(exchange="deribit", symbol="BTCUSDT") == 3000
         assert loader_cmd._symbol_start_open_ms_bound(exchange="deribit", symbol="ETHUSDT") == 1000
     finally:
+        loader_cmd._TAIL_DELTA_ONLY = original_tail
+        loader_cmd._BRONZE_START_OPEN_MS = original_global
+        loader_cmd._BRONZE_SYMBOL_START_OPEN_MS = original_symbol
+        loader_cmd._BRONZE_EXCHANGE_SYMBOL_START_OPEN_MS = original_exchange_symbol
+
+
+def test_symbol_start_bound_caps_to_last_30_days_in_tail_mode() -> None:
+    original_tail = loader_cmd._TAIL_DELTA_ONLY
+    original_global = loader_cmd._BRONZE_START_OPEN_MS
+    original_symbol = dict(loader_cmd._BRONZE_SYMBOL_START_OPEN_MS)
+    original_exchange_symbol = dict(loader_cmd._BRONZE_EXCHANGE_SYMBOL_START_OPEN_MS)
+    try:
+        loader_cmd._TAIL_DELTA_ONLY = True
+        loader_cmd._BRONZE_START_OPEN_MS = None
+        loader_cmd._BRONZE_SYMBOL_START_OPEN_MS = {}
+        loader_cmd._BRONZE_EXCHANGE_SYMBOL_START_OPEN_MS = {"deribit:BTC": 1000}
+        resolved = loader_cmd._symbol_start_open_ms_bound(exchange="deribit", symbol="BTCUSDT")
+        assert isinstance(resolved, int)
+        rolling_30_days_ago_ms = int((datetime.now(UTC).timestamp() - (30 * 24 * 60 * 60)) * 1000)
+        assert resolved >= rolling_30_days_ago_ms
+    finally:
+        loader_cmd._TAIL_DELTA_ONLY = original_tail
         loader_cmd._BRONZE_START_OPEN_MS = original_global
         loader_cmd._BRONZE_SYMBOL_START_OPEN_MS = original_symbol
         loader_cmd._BRONZE_EXCHANGE_SYMBOL_START_OPEN_MS = original_exchange_symbol

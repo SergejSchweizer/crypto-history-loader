@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import shutil
 import subprocess
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -175,6 +176,53 @@ def _latest_manifest_for_dataset(
             latest_mtime = mtime
             latest_payload = payload
     return latest_payload
+
+
+def _extract_feature_set_version(version_dir: Path) -> str | None:
+    segment = version_dir.name
+    if not segment.startswith("feature_set_version="):
+        return None
+    value = segment.split("=", 1)[1].strip()
+    return value or None
+
+
+def _prune_gold_versions(
+    *,
+    gold_root: Path,
+    dataset_id: str,
+    exchange: str,
+    symbol: str,
+    keep_last_versions: int,
+) -> None:
+    if keep_last_versions < 1:
+        raise ValueError(f"keep_last_versions must be >= 1; received {keep_last_versions}")
+    dataset_base = gold_root / f"dataset_id={dataset_id}" / "dataset_type=gold_symbol_dataset"
+    symbol_dirs = list(dataset_base.glob(f"feature_set_version=*/exchange={exchange}/symbol={symbol}"))
+    if len(symbol_dirs) <= keep_last_versions:
+        return
+
+    version_dirs: list[Path] = []
+    for symbol_dir in symbol_dirs:
+        version_dir = symbol_dir.parent.parent
+        if version_dir.exists():
+            version_dirs.append(version_dir)
+    version_dirs = sorted(set(version_dirs))
+    if len(version_dirs) <= keep_last_versions:
+        return
+
+    def _sort_key(path: Path) -> tuple[int, tuple[int, int, int], float, str]:
+        parsed_version = _extract_feature_set_version(path)
+        if parsed_version is not None:
+            try:
+                semver = _parse_semver(parsed_version)
+                return (1, semver, path.stat().st_mtime, path.name)
+            except ValueError:
+                pass
+        return (0, (0, 0, 0), path.stat().st_mtime, path.name)
+
+    version_dirs_sorted = sorted(version_dirs, key=_sort_key, reverse=True)
+    for old_dir in version_dirs_sorted[keep_last_versions:]:
+        shutil.rmtree(old_dir, ignore_errors=False)
 
 
 def _contract_bump_level(
@@ -431,7 +479,7 @@ def _read_dataset_frame(
 ) -> Any:
     pl = _require_polars()
     dataset_root = Path(silver_root) / f"dataset_type={dataset_type}" / f"exchange={exchange}"
-    files: list[Path] = []
+    candidate_dirs: list[tuple[float, Path]] = []
     symbol_dirs = sorted(dataset_root.glob(f"symbol=*/timeframe={timeframe}"))
     for sym_dir in symbol_dirs:
         sym_segment = sym_dir.parent.name
@@ -440,7 +488,15 @@ def _read_dataset_frame(
         raw_symbol = sym_segment.split("=", 1)[1]
         if normalize_symbol(raw_symbol) != symbol:
             continue
-        files.extend(sorted(sym_dir.glob("**/*.parquet")))
+        dir_files = sorted(sym_dir.glob("**/*.parquet"))
+        if not dir_files:
+            continue
+        latest_mtime = max(path.stat().st_mtime for path in dir_files)
+        candidate_dirs.append((latest_mtime, sym_dir))
+    if not candidate_dirs:
+        raise ValueError(f"Missing silver dataset for symbol={symbol}: {dataset_type}")
+    _, selected_dir = max(candidate_dirs, key=lambda item: (item[0], str(item[1])))
+    files = sorted(selected_dir.glob("**/*.parquet"))
     if not files:
         raise ValueError(f"Missing silver dataset for symbol={symbol}: {dataset_type}")
     frame = pl.read_parquet([str(path) for path in files])
@@ -1065,6 +1121,7 @@ def build_gold_for_symbol(
     manifest: bool = False,
     plot: bool = False,
     l2_validation_mode: str = "strict",
+    keep_last_versions: int = 3,
 ) -> GoldBuildReport:
     """Build one gold parquet dataset + manifest for a symbol.
 
@@ -1222,6 +1279,13 @@ def build_gold_for_symbol(
     manifest_path = artifact_dir / f"{stem}.json"
     manifest_path.write_text(json.dumps(manifest_payload, indent=2), encoding="utf-8")
     written_manifest: str | None = str(manifest_path.resolve())
+    _prune_gold_versions(
+        gold_root=root,
+        dataset_id=dataset_id,
+        exchange=exchange,
+        symbol=symbol,
+        keep_last_versions=keep_last_versions,
+    )
 
     return GoldBuildReport(
         exchange=exchange,

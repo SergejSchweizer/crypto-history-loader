@@ -130,7 +130,7 @@ def _safe_log_module_name(module_name: str) -> str:
     return normalized or "crypto-market-loader"
 
 
-def configure_logging(module_name: str = "crypto-market-loader") -> logging.Logger:
+def configure_logging(module_name: str = "crypto-market-loader", *, debug: bool = False) -> logging.Logger:
     """Configure process logging with daily rotation and 30-day retention."""
 
     safe_module_name = _safe_log_module_name(module_name)
@@ -138,7 +138,7 @@ def configure_logging(module_name: str = "crypto-market-loader") -> logging.Logg
     if logger.handlers:
         return logger
 
-    logger.setLevel(logging.INFO)
+    logger.setLevel(logging.DEBUG if debug else logging.INFO)
     logger.propagate = False
     formatter = logging.Formatter("%(asctime)s %(levelname)s %(message)s")
     log_file_env = os.getenv("DEPTH_SYNC_LOG_FILE", "").strip()
@@ -168,6 +168,16 @@ def configure_logging(module_name: str = "crypto-market-loader") -> logging.Logg
     stream_handler = logging.StreamHandler()
     stream_handler.setFormatter(formatter)
     logger.addHandler(stream_handler)
+
+    root_logger = logging.getLogger()
+    if not root_logger.handlers:
+        root_logger.setLevel(logging.DEBUG if debug else logging.INFO)
+        root_logger.addHandler(file_handler if "file_handler" in locals() else stream_handler)
+        if "file_handler" in locals():
+            root_logger.addHandler(stream_handler)
+
+    if debug:
+        logger.debug("Debug logging enabled module=%s", safe_module_name)
 
     return logger
 

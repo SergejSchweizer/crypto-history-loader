@@ -48,6 +48,12 @@ def add_gold_build_parser(subparsers: argparse._SubParsersAction[argparse.Argume
         default="strict",
         help="L2 quality handling for hybrid datasets: strict fails build, lenient drops invalid joined rows",
     )
+    parser.add_argument(
+        "--retention-keep-versions",
+        type=int,
+        default=3,
+        help="Keep only the latest N gold feature_set_version artifacts per dataset_id/exchange/symbol",
+    )
     parser.add_argument("--no-json-output", action="store_true", help="Suppress JSON output")
 
 
@@ -95,6 +101,11 @@ def run_gold_build(args: argparse.Namespace, logger: logging.Logger) -> None:
     version_base = cast(str, getattr(args, "version_base", "v1.0.0"))
     symbols = cast(list[str] | None, args.symbols)
     l2_validation_mode = cast(str, getattr(args, "l2_validation_mode", "strict"))
+    keep_last_versions = int(getattr(args, "retention_keep_versions", 3))
+    if keep_last_versions < 1:
+        raise ValueError(
+            f"Invalid --retention-keep-versions '{keep_last_versions}'. Value must be an integer >= 1"
+        )
     reports: list[dict[str, object]] = []
 
     dataset_ids = _resolve_dataset_ids(dataset_id)
@@ -124,6 +135,7 @@ def run_gold_build(args: argparse.Namespace, logger: logging.Logger) -> None:
                     manifest=True,
                     plot=True,
                     l2_validation_mode=l2_validation_mode,
+                    keep_last_versions=keep_last_versions,
                 )
             except ValueError as exc:
                 logger.warning(

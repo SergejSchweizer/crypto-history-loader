@@ -7,7 +7,7 @@ import json
 import logging
 from collections.abc import Callable
 from dataclasses import asdict
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Literal, cast
 
@@ -418,15 +418,25 @@ def _parse_exchange_symbol_start_dates(entries: list[str] | None) -> dict[str, i
 
 
 def _symbol_start_open_ms_bound(exchange: Exchange, symbol: str) -> int | None:
-    """Resolve exchange-symbol boundary, then symbol boundary, then global boundary."""
+    """Resolve effective start bound for Bronze fetches.
 
-    return symbol_start_open_ms_bound(
+    In default incremental mode (``tail_delta_only``), cap backfill to the
+    last 30 days even when older static bounds are configured.
+    """
+
+    configured_bound = symbol_start_open_ms_bound(
         exchange=exchange,
         symbol=symbol,
         global_start_open_ms=_BRONZE_START_OPEN_MS,
         symbol_start_open_ms=_BRONZE_SYMBOL_START_OPEN_MS,
         exchange_symbol_start_open_ms=_BRONZE_EXCHANGE_SYMBOL_START_OPEN_MS,
     )
+    if not _TAIL_DELTA_ONLY:
+        return configured_bound
+    rolling_bound = int((datetime.now(UTC) - timedelta(days=30)).timestamp() * 1000)
+    if configured_bound is None:
+        return rolling_bound
+    return max(configured_bound, rolling_bound)
 
 
 def _configure_bronze_start_bounds(args: argparse.Namespace, logger: logging.Logger) -> None:
@@ -655,6 +665,12 @@ def run_bronze_build(args: argparse.Namespace, logger: logging.Logger) -> None:
     global _TAIL_DELTA_ONLY
     _TAIL_DELTA_ONLY = bool(args.tail_delta_only)
     _configure_bronze_start_bounds(args=args, logger=logger)
+    if _TAIL_DELTA_ONLY:
+        rolling_bound = datetime.now(UTC) - timedelta(days=30)
+        logger.info(
+            "Bronze default tail-mode cap enabled max_missing_window_days=30 rolling_start_utc=%s",
+            rolling_bound.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        )
 
     try:
         with SingleInstanceLock(".run/crypto-market-loader.lock"):

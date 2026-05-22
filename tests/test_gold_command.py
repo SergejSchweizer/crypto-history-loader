@@ -69,6 +69,7 @@ def test_validate_version_args_rejects_invalid_version_base_in_auto_mode() -> No
 def test_run_gold_build_uses_helpers_and_emits_reports(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    captured_kwargs: dict[str, object] = {}
     monkeypatch.setattr(gold_cmd, "_resolve_gold_symbols", lambda **kwargs: ["BTC"])
     monkeypatch.setattr(gold_cmd, "_resolve_dataset_ids", lambda dataset_id: [dataset_id or "gold.market.full.m1"])
     monkeypatch.setattr(gold_cmd, "_validate_version_args", lambda **kwargs: None)
@@ -80,7 +81,11 @@ def test_run_gold_build_uses_helpers_and_emits_reports(
         def to_dict(self) -> dict[str, object]:
             return {"symbol": "BTC", "dataset_id": "gold.market.full.m1", "rows_out": 1}
 
-    monkeypatch.setattr(gold_cmd, "build_gold_for_symbol", lambda **kwargs: _Report())
+    def _build_gold_for_symbol(**kwargs: object) -> _Report:
+        captured_kwargs.update(kwargs)
+        return _Report()
+
+    monkeypatch.setattr(gold_cmd, "build_gold_for_symbol", _build_gold_for_symbol)
 
     args = argparse.Namespace(
         silver_root="lake/silver",
@@ -93,11 +98,13 @@ def test_run_gold_build_uses_helpers_and_emits_reports(
         version_base="v1.0.0",
         symbols=None,
         l2_validation_mode="strict",
+        retention_keep_versions=3,
         no_json_output=False,
     )
     gold_cmd.run_gold_build(args=args, logger=logging.getLogger("test"))
     payload = capsys.readouterr().out
     assert "gold.market.full.m1" in payload
+    assert captured_kwargs["keep_last_versions"] == 3
 
 
 def test_run_gold_build_skips_symbol_on_value_error(
@@ -125,6 +132,7 @@ def test_run_gold_build_skips_symbol_on_value_error(
         version_base="v1.0.0",
         symbols=None,
         l2_validation_mode="strict",
+        retention_keep_versions=3,
         no_json_output=False,
     )
     with caplog.at_level(logging.INFO):
@@ -135,3 +143,22 @@ def test_run_gold_build_skips_symbol_on_value_error(
         "Gold dataset skipped symbol=BTC dataset_id=gold.market.full.m1 reason=missing silver prerequisite"
         in caplog.text
     )
+
+
+def test_run_gold_build_rejects_invalid_retention_keep_versions() -> None:
+    args = argparse.Namespace(
+        silver_root="lake/silver",
+        gold_root="lake/gold",
+        l2_root="remote_l2_m1_features",
+        exchange="deribit",
+        dataset_id="gold.market.full.m1",
+        dataset_version="v1.0.0",
+        auto_version=False,
+        version_base="v1.0.0",
+        symbols=None,
+        l2_validation_mode="strict",
+        retention_keep_versions=0,
+        no_json_output=True,
+    )
+    with pytest.raises(ValueError, match="retention-keep-versions"):
+        gold_cmd.run_gold_build(args=args, logger=logging.getLogger("test"))
