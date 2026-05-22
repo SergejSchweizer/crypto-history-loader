@@ -6,9 +6,16 @@ import logging
 import os
 import time
 from collections.abc import Callable
-from datetime import UTC, datetime
 from typing import Any, cast
 
+from ingestion.exchanges.deribit_trade_common import (
+    env_float_non_negative,
+    env_int_min,
+    extract_result_rows,
+    has_more,
+    is_route_failure,
+    utc_now_ms,
+)
 from ingestion.exchanges.deribit import normalize_symbol
 from ingestion.http_client import HttpClientError, get_json
 
@@ -20,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 
 def _utc_now_ms() -> int:
-    return int(datetime.now(UTC).timestamp() * 1000)
+    return utc_now_ms()
 
 
 def _trades_base_url() -> str:
@@ -41,53 +48,34 @@ def _trades_base_urls() -> list[str]:
     return [primary, DERIBIT_TRADES_FALLBACK_BASE_URL] if primary != DERIBIT_TRADES_FALLBACK_BASE_URL else [primary]
 
 
-def _is_route_failure(exc: Exception) -> bool:
-    message = str(exc).lower()
-    return "no route to host" in message or "network is unreachable" in message
-
-
 def _extract_result_rows(payload: dict[str, Any]) -> list[dict[str, object]]:
-    result = payload.get("result")
-    if not isinstance(result, dict):
-        raise ValueError("Unexpected Deribit trades response payload")
-    rows = result.get("trades")
-    if not isinstance(rows, list):
-        return []
-    return [cast(dict[str, object], row) for row in rows if isinstance(row, dict)]
+    return extract_result_rows(payload, payload_name="trades")
+
+
+def _extract_rows_for_instrument(payload: dict[str, Any], *, instrument_name: str) -> list[dict[str, object]]:
+    """Extract rows and keep only the requested instrument."""
+
+    rows = _extract_result_rows(payload)
+    return [row for row in rows if str(cast(Any, row).get("instrument_name", "")) == instrument_name]
 
 
 def _has_more(payload: dict[str, Any]) -> bool:
-    result = payload.get("result")
-    if not isinstance(result, dict):
-        return False
-    return bool(result.get("has_more", False))
+    return has_more(payload)
 
 
 def _inter_request_sleep_seconds() -> float:
-    value = os.getenv("DEPTH_DERIBIT_TRADES_INTER_REQUEST_SLEEP_S", "0.15").strip()
-    try:
-        sleep_s = float(value)
-    except ValueError:
-        return 0.15
-    return max(0.0, sleep_s)
+    value = os.getenv("DEPTH_DERIBIT_TRADES_INTER_REQUEST_SLEEP_S", "0.15")
+    return env_float_non_negative(value=value, default=0.15)
 
 
 def _route_retry_attempts() -> int:
-    value = os.getenv("DEPTH_DERIBIT_TRADES_ROUTE_RETRY_ATTEMPTS", "3").strip()
-    try:
-        attempts = int(value)
-    except ValueError:
-        return 3
-    return max(1, attempts)
+    value = os.getenv("DEPTH_DERIBIT_TRADES_ROUTE_RETRY_ATTEMPTS", "3")
+    return env_int_min(value=value, default=3, minimum=1)
 
 
 def _route_retry_backoff_base_seconds() -> float:
-    value = os.getenv("DEPTH_DERIBIT_TRADES_ROUTE_RETRY_BACKOFF_BASE_S", "0.5").strip()
-    try:
-        backoff_s = float(value)
-    except ValueError:
-        return 0.5
-    return max(0.0, backoff_s)
+    value = os.getenv("DEPTH_DERIBIT_TRADES_ROUTE_RETRY_BACKOFF_BASE_S", "0.5")
+    return env_float_non_negative(value=value, default=0.5)
 
 
 def fetch_trades_range(
@@ -133,47 +121,84 @@ def fetch_trades_range(
             "count": page_size,
             "sorting": "asc",
         }
+        currency = instrument_name.split("-", 1)[0]
+        currency_params = {
+            "currency": currency,
+            "kind": "future",
+            "start_timestamp": cursor,
+            "end_timestamp": end_open_ms,
+            "count": page_size,
+            "sorting": "asc",
+        }
         payload: Any | None = None
+        endpoint_type: str | None = None
         last_error: Exception | None = None
         for base_url in _trades_base_urls():
-            for attempt in range(1, route_retry_attempts + 1):
-                logger.debug(
-                    "Deribit trades request base_url=%s instrument=%s cursor=%s end_ms=%s attempt=%s/%s",
-                    base_url,
-                    instrument_name,
-                    cursor,
-                    end_open_ms,
-                    attempt,
-                    route_retry_attempts,
-                )
-                try:
-                    payload = get_json(
-                        f"{base_url}/api/v2/public/get_last_trades_by_instrument_and_time",
-                        params=params,
-                    )
-                    break
-                except HttpClientError as exc:
-                    last_error = exc
-                    if not _is_route_failure(exc):
-                        raise
-                    if attempt < route_retry_attempts:
-                        sleep_s = route_retry_backoff_base_s * (2 ** (attempt - 1))
-                        if sleep_s > 0:
-                            logger.debug(
-                                "Deribit trades retry sleep base_url=%s instrument=%s cursor=%s sleep_s=%.3f",
-                                base_url,
-                                instrument_name,
-                                cursor,
-                                sleep_s,
-                            )
-                            time.sleep(sleep_s)
-                        continue
-                    logger.warning(
-                        "Deribit trades route failure via base_url=%s instrument=%s cursor=%s; trying fallback",
+            endpoint_attempts: tuple[tuple[str, dict[str, object], str], ...] = (
+                (
+                    "get_last_trades_by_instrument_and_time",
+                    params,
+                    f"{base_url}/api/v2/public/get_last_trades_by_instrument_and_time",
+                ),
+                (
+                    "get_last_trades_by_currency_and_time",
+                    currency_params,
+                    f"{base_url}/api/v2/public/get_last_trades_by_currency_and_time",
+                ),
+            )
+            for endpoint_name, endpoint_params, endpoint_url in endpoint_attempts:
+                payload = None
+                endpoint_type = None
+                for attempt in range(1, route_retry_attempts + 1):
+                    logger.debug(
+                        (
+                            "Deribit perp trades request base_url=%s endpoint=%s instrument=%s cursor=%s "
+                            "end_ms=%s attempt=%s/%s"
+                        ),
                         base_url,
+                        endpoint_name,
                         instrument_name,
                         cursor,
+                        end_open_ms,
+                        attempt,
+                        route_retry_attempts,
                     )
+                    try:
+                        payload = get_json(endpoint_url, params=endpoint_params)
+                        endpoint_type = endpoint_name
+                        break
+                    except HttpClientError as exc:
+                        last_error = exc
+                        if not is_route_failure(exc):
+                            raise
+                        if attempt < route_retry_attempts:
+                            sleep_s = route_retry_backoff_base_s * (2 ** (attempt - 1))
+                            if sleep_s > 0:
+                                logger.debug(
+                                    (
+                                        "Deribit perp trades retry sleep base_url=%s endpoint=%s instrument=%s "
+                                        "cursor=%s sleep_s=%.3f"
+                                    ),
+                                    base_url,
+                                    endpoint_name,
+                                    instrument_name,
+                                    cursor,
+                                    sleep_s,
+                                )
+                                time.sleep(sleep_s)
+                            continue
+                        logger.warning(
+                            (
+                            "Deribit perp trades route failure via base_url=%s endpoint=%s instrument=%s "
+                                "cursor=%s; trying fallback"
+                            ),
+                            base_url,
+                            endpoint_name,
+                            instrument_name,
+                            cursor,
+                        )
+                if payload is not None:
+                    break
             if payload is not None:
                 break
         if payload is None:
@@ -181,7 +206,10 @@ def fetch_trades_range(
             raise last_error
         if not isinstance(payload, dict):
             raise ValueError("Unexpected Deribit trades response format")
-        rows = _extract_result_rows(payload)
+        if endpoint_type == "get_last_trades_by_currency_and_time":
+            rows = _extract_rows_for_instrument(payload, instrument_name=instrument_name)
+        else:
+            rows = _extract_result_rows(payload)
         if not rows:
             break
         collected.extend(rows)
@@ -195,7 +223,7 @@ def fetch_trades_range(
             break
         if inter_request_sleep_s > 0:
             logger.debug(
-                "Deribit trades inter-request sleep instrument=%s cursor=%s sleep_s=%.3f",
+                "Deribit perp trades inter-request sleep instrument=%s cursor=%s sleep_s=%.3f",
                 instrument_name,
                 cursor,
                 inter_request_sleep_s,

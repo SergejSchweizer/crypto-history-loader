@@ -6,7 +6,7 @@ import argparse
 import json
 import logging
 from collections.abc import Callable
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Literal, cast
@@ -19,6 +19,7 @@ from api.commands.loader_dataset_handlers import (
     populate_oi_output,
     populate_trades_output,
 )
+from api.commands.loader_output import IncrementalPersistor, finalize_bronze_output
 from api.commands.loader_planning import (
     build_bronze_fetch_plan,
     canonical_symbol_key,
@@ -99,6 +100,43 @@ _BRONZE_START_OPEN_MS: int | None = None
 _BRONZE_SYMBOL_START_OPEN_MS: dict[str, int] = {}
 _BRONZE_EXCHANGE_SYMBOL_START_OPEN_MS: dict[str, int] = {}
 OI_DATASET_TYPE = dataset_contract("oi").dataset_type
+
+
+@dataclass(frozen=True)
+class BronzeRuntimeBoundsContext:
+    """Runtime bounds state for bronze fetch behavior."""
+
+    tail_delta_only: bool
+    global_start_open_ms: int | None
+    symbol_start_open_ms: dict[str, int]
+    exchange_symbol_start_open_ms: dict[str, int]
+
+
+_RUNTIME_BOUNDS_CONTEXT = BronzeRuntimeBoundsContext(
+    tail_delta_only=True,
+    global_start_open_ms=None,
+    symbol_start_open_ms={},
+    exchange_symbol_start_open_ms={},
+)
+
+
+def _current_runtime_bounds_context() -> BronzeRuntimeBoundsContext:
+    """Return effective runtime bounds context with legacy global fallback."""
+
+    context = _RUNTIME_BOUNDS_CONTEXT
+    if (
+        context.global_start_open_ms != _BRONZE_START_OPEN_MS
+        or context.symbol_start_open_ms != _BRONZE_SYMBOL_START_OPEN_MS
+        or context.exchange_symbol_start_open_ms != _BRONZE_EXCHANGE_SYMBOL_START_OPEN_MS
+        or context.tail_delta_only != _TAIL_DELTA_ONLY
+    ):
+        return BronzeRuntimeBoundsContext(
+            tail_delta_only=_TAIL_DELTA_ONLY,
+            global_start_open_ms=_BRONZE_START_OPEN_MS,
+            symbol_start_open_ms=_BRONZE_SYMBOL_START_OPEN_MS,
+            exchange_symbol_start_open_ms=_BRONZE_EXCHANGE_SYMBOL_START_OPEN_MS,
+        )
+    return context
 
 
 def _sanitize_symbols(raw_symbols: object, logger: logging.Logger) -> list[str]:
@@ -424,14 +462,15 @@ def _symbol_start_open_ms_bound(exchange: Exchange, symbol: str) -> int | None:
     last 30 days even when older static bounds are configured.
     """
 
+    context = _current_runtime_bounds_context()
     configured_bound = symbol_start_open_ms_bound(
         exchange=exchange,
         symbol=symbol,
-        global_start_open_ms=_BRONZE_START_OPEN_MS,
-        symbol_start_open_ms=_BRONZE_SYMBOL_START_OPEN_MS,
-        exchange_symbol_start_open_ms=_BRONZE_EXCHANGE_SYMBOL_START_OPEN_MS,
+        global_start_open_ms=context.global_start_open_ms,
+        symbol_start_open_ms=context.symbol_start_open_ms,
+        exchange_symbol_start_open_ms=context.exchange_symbol_start_open_ms,
     )
-    if not _TAIL_DELTA_ONLY:
+    if not context.tail_delta_only:
         return configured_bound
     rolling_bound = int((datetime.now(UTC) - timedelta(days=30)).timestamp() * 1000)
     if configured_bound is None:
@@ -443,6 +482,7 @@ def _configure_bronze_start_bounds(args: argparse.Namespace, logger: logging.Log
     """Initialize Bronze start-bound globals from CLI/config args and emit boundary logs."""
 
     global _BRONZE_START_OPEN_MS, _BRONZE_SYMBOL_START_OPEN_MS, _BRONZE_EXCHANGE_SYMBOL_START_OPEN_MS
+    global _RUNTIME_BOUNDS_CONTEXT
     (
         _BRONZE_START_OPEN_MS,
         _BRONZE_SYMBOL_START_OPEN_MS,
@@ -450,6 +490,12 @@ def _configure_bronze_start_bounds(args: argparse.Namespace, logger: logging.Log
     ) = configure_bronze_start_bounds(
         args=args,
         logger=logger,
+    )
+    _RUNTIME_BOUNDS_CONTEXT = BronzeRuntimeBoundsContext(
+        tail_delta_only=bool(getattr(args, "tail_delta_only", _TAIL_DELTA_ONLY)),
+        global_start_open_ms=_BRONZE_START_OPEN_MS,
+        symbol_start_open_ms=_BRONZE_SYMBOL_START_OPEN_MS,
+        exchange_symbol_start_open_ms=_BRONZE_EXCHANGE_SYMBOL_START_OPEN_MS,
     )
 
 
@@ -747,12 +793,6 @@ def run_bronze_build(args: argparse.Namespace, logger: logging.Logger) -> None:
             funding_concurrency = policy.funding_concurrency
             trade_concurrency = policy.trade_concurrency
             incremental_parquet_on_fetch = bool(args.save_parquet_lake)
-            incremental_parquet_files: list[str] = []
-            logged_daily_partitions: set[tuple[str, str, str, str, str, str]] = set()
-            streamed_candle_tasks: set[tuple[Exchange, Market, str, str]] = set()
-            streamed_oi_tasks: set[tuple[Exchange, str, str]] = set()
-            streamed_funding_tasks: set[tuple[Exchange, str, str]] = set()
-            streamed_trade_tasks: set[tuple[Exchange, TradeMarket, str]] = set()
             logger.info(
                 (
                     "Fetch mode enabled for spot/perp, oi, funding, and perp_trades with "
@@ -771,157 +811,11 @@ def run_bronze_build(args: argparse.Namespace, logger: logging.Logger) -> None:
                     fingerprint=checkpoint_fingerprint,
                     completed=checkpoint_completed,
                 )
-
-            def _log_new_daily_partitions(
-                *,
-                data_type: str,
-                exchange: str,
-                market: str,
-                symbol: str,
-                timeframe: str,
-                parquet_files: list[str],
-            ) -> None:
-                days = sorted(
-                    {day for day in (_extract_date_partition(path) for path in parquet_files) if day is not None}
-                )
-                new_days = [
-                    day
-                    for day in days
-                    if (data_type, exchange, market, symbol.upper(), timeframe, day) not in logged_daily_partitions
-                ]
-                if not new_days:
-                    return
-                for day in new_days:
-                    logged_daily_partitions.add((data_type, exchange, market, symbol.upper(), timeframe, day))
-                    logger.info(
-                        "Parquet daily file saved type=%s exchange=%s market=%s symbol=%s timeframe=%s day=%s",
-                        data_type,
-                        exchange,
-                        market,
-                        symbol.upper(),
-                        timeframe,
-                        day,
-                    )
-
-            def _persist_candle_task(task: CandleFetchTaskDTO, rows: list[SpotCandle]) -> None:
-                if not rows:
-                    return
-                storage_result = persist_loader_outputs_dto(
-                    storage=LoaderStorageDTO(candles={task.market: {task.exchange: {task.symbol.upper(): rows}}}),
-                    options=PersistOptionsDTO(
-                        save_parquet_lake=True,
-                        lake_root=cast(str, args.lake_root),
-                        oi_requested=False,
-                        funding_requested=False,
-                        trades_requested=False,
-                    ),
-                )
-                incremental_parquet_files.extend(storage_result.parquet_files)
-                _log_new_daily_partitions(
-                    data_type="ohlcv",
-                    exchange=task.exchange,
-                    market=task.market,
-                    symbol=task.symbol,
-                    timeframe=task.timeframe,
-                    parquet_files=storage_result.parquet_files,
-                )
-
-            def _persist_oi_task(task: OpenInterestFetchTaskDTO, rows: list[OpenInterestPoint]) -> None:
-                if not rows:
-                    return
-                storage_result = persist_loader_outputs_dto(
-                    storage=LoaderStorageDTO(open_interest={"perp": {task.exchange: {task.symbol.upper(): rows}}}),
-                    options=PersistOptionsDTO(
-                        save_parquet_lake=True,
-                        lake_root=cast(str, args.lake_root),
-                        oi_requested=True,
-                        funding_requested=False,
-                        trades_requested=False,
-                    ),
-                )
-                incremental_parquet_files.extend(storage_result.parquet_files)
-                _log_new_daily_partitions(
-                    data_type="oi",
-                    exchange=task.exchange,
-                    market="perp",
-                    symbol=task.symbol,
-                    timeframe=task.timeframe,
-                    parquet_files=storage_result.parquet_files,
-                )
-
-            def _persist_funding_task(task: FundingFetchTaskDTO, rows: list[FundingPoint]) -> None:
-                if not rows:
-                    return
-                storage_result = persist_loader_outputs_dto(
-                    storage=LoaderStorageDTO(funding={"perp": {task.exchange: {task.symbol.upper(): rows}}}),
-                    options=PersistOptionsDTO(
-                        save_parquet_lake=True,
-                        lake_root=cast(str, args.lake_root),
-                        oi_requested=False,
-                        funding_requested=True,
-                        trades_requested=False,
-                    ),
-                )
-                incremental_parquet_files.extend(storage_result.parquet_files)
-                _log_new_daily_partitions(
-                    data_type="funding",
-                    exchange=task.exchange,
-                    market="perp",
-                    symbol=task.symbol,
-                    timeframe=task.timeframe,
-                    parquet_files=storage_result.parquet_files,
-                )
-
-            def _persist_trade_task(task: TradeFetchTaskDTO, rows: list[TradeTick | OptionTradeTick]) -> None:
-                if not rows:
-                    return
-                storage_result = persist_loader_outputs_dto(
-                    storage=LoaderStorageDTO(trades={task.market: {task.exchange: {task.symbol.upper(): rows}}}),
-                    options=PersistOptionsDTO(
-                        save_parquet_lake=True,
-                        lake_root=cast(str, args.lake_root),
-                        oi_requested=False,
-                        funding_requested=False,
-                        trades_requested=True,
-                    ),
-                )
-                incremental_parquet_files.extend(storage_result.parquet_files)
-                _log_new_daily_partitions(
-                    data_type="option_trades" if task.market == "option" else "perp_trades",
-                    exchange=task.exchange,
-                    market=task.market,
-                    symbol=task.symbol,
-                    timeframe="tick",
-                    parquet_files=storage_result.parquet_files,
-                )
-
-            def _persist_trade_chunk(task: TradeFetchTaskDTO, rows: list[TradeTick | OptionTradeTick]) -> None:
-                if not rows:
-                    return
-                streamed_trade_tasks.add((task.exchange, task.market, task.symbol))
-                _persist_trade_task(task, rows)
-                _mark_checkpoint_complete("trade", (task.exchange, task.market, task.symbol))
-
-            def _persist_candle_chunk(task: CandleFetchTaskDTO, rows: list[SpotCandle]) -> None:
-                if not rows:
-                    return
-                streamed_candle_tasks.add((task.exchange, task.market, task.symbol, task.timeframe))
-                _persist_candle_task(task, rows)
-                _mark_checkpoint_complete("candle", (task.exchange, task.market, task.symbol, task.timeframe))
-
-            def _persist_oi_chunk(task: OpenInterestFetchTaskDTO, rows: list[OpenInterestPoint]) -> None:
-                if not rows:
-                    return
-                streamed_oi_tasks.add((task.exchange, task.symbol, task.timeframe))
-                _persist_oi_task(task, rows)
-                _mark_checkpoint_complete("oi", (task.exchange, task.symbol, task.timeframe))
-
-            def _persist_funding_chunk(task: FundingFetchTaskDTO, rows: list[FundingPoint]) -> None:
-                if not rows:
-                    return
-                streamed_funding_tasks.add((task.exchange, task.symbol, task.timeframe))
-                _persist_funding_task(task, rows)
-                _mark_checkpoint_complete("funding", (task.exchange, task.symbol, task.timeframe))
+            incremental_persistor = IncrementalPersistor(
+                lake_root=cast(str, args.lake_root),
+                mark_checkpoint_complete=_mark_checkpoint_complete,
+                persist_fn=persist_loader_outputs_dto,
+            )
 
             (
                 task_results,
@@ -944,54 +838,42 @@ def run_bronze_build(args: argparse.Namespace, logger: logging.Logger) -> None:
                 trade_concurrency=trade_concurrency,
                 logger=logger,
                 on_candle_task_complete=(
-                    lambda task, rows: (
-                        _persist_candle_task(task, rows)
-                        if (task.exchange, task.market, task.symbol, task.timeframe) not in streamed_candle_tasks
-                        else None
-                    )
+                    lambda task, rows: incremental_persistor.on_candle_task_complete(task, rows, logger)
                 )
                 if incremental_parquet_on_fetch
                 else None,
                 on_oi_task_complete=(
-                    lambda task, rows: (
-                        _persist_oi_task(task, rows)
-                        if (task.exchange, task.symbol, task.timeframe) not in streamed_oi_tasks
-                        else None
-                    )
+                    lambda task, rows: incremental_persistor.on_oi_task_complete(task, rows, logger)
                 )
                 if incremental_parquet_on_fetch
                 else None,
                 on_funding_task_complete=(
-                    lambda task, rows: (
-                        _persist_funding_task(task, rows)
-                        if (task.exchange, task.symbol, task.timeframe) not in streamed_funding_tasks
-                        else None
-                    )
+                    lambda task, rows: incremental_persistor.on_funding_task_complete(task, rows, logger)
                 )
                 if incremental_parquet_on_fetch
                 else None,
-                on_candle_task_chunk=_persist_candle_chunk if incremental_parquet_on_fetch else None,
-                on_oi_task_chunk=_persist_oi_chunk if incremental_parquet_on_fetch else None,
-                on_funding_task_chunk=_persist_funding_chunk if incremental_parquet_on_fetch else None,
+                on_candle_task_chunk=(
+                    lambda task, rows: incremental_persistor.on_candle_task_chunk(task, rows, logger)
+                )
+                if incremental_parquet_on_fetch
+                else None,
+                on_oi_task_chunk=(lambda task, rows: incremental_persistor.on_oi_task_chunk(task, rows, logger))
+                if incremental_parquet_on_fetch
+                else None,
+                on_funding_task_chunk=(
+                    lambda task, rows: incremental_persistor.on_funding_task_chunk(task, rows, logger)
+                )
+                if incremental_parquet_on_fetch
+                else None,
                 on_trade_task_complete=(
-                    lambda task, rows: (
-                        _persist_trade_task(task, rows)
-                        if (task.exchange, task.market, task.symbol) not in streamed_trade_tasks
-                        else None
-                    )
+                    lambda task, rows: incremental_persistor.on_trade_task_complete(task, rows, logger)
                 )
                 if incremental_parquet_on_fetch
                 else None,
-                on_trade_task_chunk=_persist_trade_chunk if incremental_parquet_on_fetch else None,
+                on_trade_task_chunk=(lambda task, rows: incremental_persistor.on_trade_task_chunk(task, rows, logger))
+                if incremental_parquet_on_fetch
+                else None,
             )
-            ohlcv_success_count = len(task_results)
-            ohlcv_error_count = len(task_errors)
-            oi_success_count = len(oi_results)
-            oi_error_count = len(oi_errors)
-            funding_success_count = len(funding_results)
-            funding_error_count = len(funding_errors)
-            trade_success_count = len(trade_results)
-            trade_error_count = len(trade_errors)
             for key in task_results:
                 _mark_checkpoint_complete("candle", key)
             for oi_key in oi_results:
@@ -1000,159 +882,46 @@ def run_bronze_build(args: argparse.Namespace, logger: logging.Logger) -> None:
                 _mark_checkpoint_complete("funding", funding_key)
             for trade_key in trade_results:
                 _mark_checkpoint_complete("trade", trade_key)
-            logger.info(
-                "Fetch summary spot/perp: success=%s failed=%s | "
-                "oi: success=%s failed=%s | funding: success=%s failed=%s | trades: success=%s failed=%s",
-                ohlcv_success_count,
-                ohlcv_error_count,
-                oi_success_count,
-                oi_error_count,
-                funding_success_count,
-                funding_error_count,
-                trade_success_count,
-                trade_error_count,
-            )
-            fairness = symbol_progress_rows(
-                candle_tasks=cast(list[tuple[str, str, str, str]], tasks),
-                oi_tasks=cast(list[tuple[str, str, str]], oi_tasks),
-                funding_tasks=cast(list[tuple[str, str, str]], funding_tasks),
-                trade_tasks=cast(list[tuple[str, str, str]], trade_tasks),
-                candle_results=cast(dict[tuple[str, str, str, str], object], task_results),
-                oi_results=cast(dict[tuple[str, str, str], object], oi_results),
-                funding_results=cast(dict[tuple[str, str, str], object], funding_results),
-                trade_results=cast(dict[tuple[str, str, str], object], trade_results),
-            )
-            if fairness:
-                logger.info("Bronze per-symbol progress: %s", fairness)
-
-            populate_ohlcv_output(
+            finalize_bronze_output(
+                logger=logger,
                 output=output,
                 tasks=tasks,
+                oi_tasks=oi_tasks,
+                funding_tasks=funding_tasks,
+                trade_tasks=trade_tasks,
                 task_results=task_results,
                 task_errors=task_errors,
+                oi_results=oi_results,
+                oi_errors=oi_errors,
+                funding_results=funding_results,
+                funding_errors=funding_errors,
+                trade_results=trade_results,
+                trade_errors=trade_errors,
                 multi_market=multi_market,
-                candle_serializer=_serialize_candle,
+                oi_requested=oi_requested,
+                funding_requested=funding_requested,
+                perp_trades_requested=perp_trades_requested,
+                option_trades_requested=option_trades_requested,
                 candles_for_storage=candles_for_storage,
+                open_interest_for_storage=open_interest_for_storage,
+                funding_for_storage=funding_for_storage,
+                trades_for_storage=trades_for_storage,
+                ohlcv_markets=ohlcv_markets,
+                args=args,
+                incremental_parquet_on_fetch=incremental_parquet_on_fetch,
+                incremental_parquet_files=incremental_persistor.incremental_parquet_files,
+                oi_dataset_type=OI_DATASET_TYPE,
+                sidecar_path_list_fn=_sidecar_path_list,
+                ensure_bronze_sidecars_fn=ensure_bronze_sidecars,
+                populate_ohlcv_output_fn=populate_ohlcv_output,
+                populate_oi_output_fn=populate_oi_output,
+                populate_funding_output_fn=populate_funding_output,
+                populate_trades_output_fn=populate_trades_output,
+                symbol_progress_rows_fn=symbol_progress_rows,
+                trade_error_breakdown_fn=trade_error_breakdown,
+                candle_serializer=_serialize_candle,
+                persist_fn=persist_loader_outputs_dto,
             )
-
-            if oi_requested:
-                populate_oi_output(
-                    output=output,
-                    tasks=oi_tasks,
-                    results=oi_results,
-                    errors=oi_errors,
-                    multi_market=multi_market,
-                    storage=open_interest_for_storage,
-                )
-
-            if funding_requested:
-                populate_funding_output(
-                    output=output,
-                    tasks=funding_tasks,
-                    results=funding_results,
-                    errors=funding_errors,
-                    multi_market=multi_market,
-                    storage=funding_for_storage,
-                )
-
-            if perp_trades_requested or option_trades_requested:
-                populate_trades_output(
-                    output=output,
-                    tasks=trade_tasks,
-                    results=trade_results,
-                    errors=trade_errors,
-                    multi_market=multi_market,
-                    storage=trades_for_storage,
-                )
-
-            if args.save_parquet_lake and not incremental_parquet_on_fetch:
-                try:
-                    storage_result = persist_loader_outputs_dto(
-                        storage=LoaderStorageDTO(
-                            candles=candles_for_storage,
-                            open_interest=open_interest_for_storage,
-                            funding=funding_for_storage,
-                            trades=trades_for_storage,
-                        ),
-                        options=PersistOptionsDTO(
-                            save_parquet_lake=True,
-                            lake_root=cast(str, args.lake_root),
-                            oi_requested=oi_requested,
-                            funding_requested=funding_requested,
-                            trades_requested=(perp_trades_requested or option_trades_requested),
-                        ),
-                    )
-                    output.update(storage_result.to_output_dict())
-                except Exception as exc:  # noqa: BLE001
-                    output["_parquet_error"] = str(exc)
-                    logger.exception("Parquet lake write failed")
-            elif incremental_parquet_on_fetch:
-                output["_parquet_files"] = incremental_parquet_files
-
-            if args.save_parquet_lake:
-                parquet_files = cast(list[str], output.get("_parquet_files", []))
-                selected_dataset_types: set[str] = set()
-                if any(market == "spot" for market in ohlcv_markets):
-                    selected_dataset_types.add("spot")
-                if any(market == "perp" for market in ohlcv_markets):
-                    selected_dataset_types.add("perp")
-                if oi_requested:
-                    selected_dataset_types.add(OI_DATASET_TYPE)
-                if funding_requested:
-                    selected_dataset_types.add("funding")
-                if perp_trades_requested:
-                    selected_dataset_types.add("perp_trades")
-                if option_trades_requested:
-                    selected_dataset_types.add("option_trades")
-                repaired_parquet_files = ensure_bronze_sidecars(
-                    lake_root=cast(str, args.lake_root),
-                    dataset_types=sorted(selected_dataset_types),
-                    log_fn=logger.info,
-                )
-                if repaired_parquet_files:
-                    parquet_files = sorted(set(parquet_files).union(repaired_parquet_files))
-                    output["_parquet_files"] = parquet_files
-                output["_manifest_files"] = _sidecar_path_list(parquet_files, ".json")
-                output["_plot_files"] = _sidecar_path_list(parquet_files, ".png")
-
-            if perp_trades_requested or option_trades_requested:
-                trade_task_total = len(trade_tasks)
-                breakdown = trade_error_breakdown(cast(dict[tuple[str, str, str], str], trade_errors))
-                trade_error_total = breakdown["total"]
-                trade_success_total = trade_task_total - trade_error_total
-                trade_net_unreachable_errors = breakdown["net_unreachable"]
-                trade_net_timeout_errors = breakdown["net_timeout"]
-                trade_other_errors = breakdown["other"]
-                trade_rows_total = sum(len(rows) for rows in trade_results.values())
-                output["_trade_error_breakdown"] = breakdown
-                trade_parquet_files = sorted(
-                    {
-                        str(Path(path).resolve())
-                        for path in cast(list[str], output.get("_parquet_files", []))
-                        if ("dataset_type=perp_trades" in path or "dataset_type=option_trades" in path)
-                        and path.endswith(".parquet")
-                    }
-                )
-                logger.info(
-                    (
-                        "Trades bronze summary tasks_total=%s tasks_success=%s tasks_failed=%s "
-                        "failed_net_unreachable=%s failed_net_timeout=%s failed_other=%s "
-                        "rows_total=%s parquet_files_written=%s lake_root=%s"
-                    ),
-                    trade_task_total,
-                    trade_success_total,
-                    trade_error_total,
-                    trade_net_unreachable_errors,
-                    trade_net_timeout_errors,
-                    trade_other_errors,
-                    trade_rows_total,
-                    len(trade_parquet_files),
-                    cast(str, args.lake_root),
-                )
-                if trade_parquet_files:
-                    logger.info("Trades bronze parquet files: %s", trade_parquet_files)
-                if trade_errors:
-                    logger.error("Trades bronze task errors: %s", trade_errors)
 
             if not args.no_json_output:
                 print(json.dumps(output, indent=2))

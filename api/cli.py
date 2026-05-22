@@ -212,6 +212,9 @@ def _apply_yaml_defaults(
         for raw_key, value in section.items():
             if not isinstance(raw_key, str):
                 continue
+            if raw_key == "debug":
+                # Keep debug as an explicit CLI-only switch.
+                continue
             if raw_key in explicit_dests or not hasattr(args, raw_key):
                 continue
             setattr(args, raw_key, value)

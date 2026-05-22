@@ -5,9 +5,16 @@ from __future__ import annotations
 import logging
 import os
 import time
-from datetime import UTC, datetime
 from typing import Any, cast
 
+from ingestion.exchanges.deribit_trade_common import (
+    env_float_non_negative,
+    env_int_min,
+    extract_result_rows,
+    has_more,
+    is_route_failure,
+    utc_now_ms,
+)
 from ingestion.http_client import HttpClientError, get_json
 
 DERIBIT_OPTION_TRADES_MAX_PAGE_SIZE = 1000
@@ -33,57 +40,31 @@ def _trades_base_urls() -> list[str]:
     return [primary]
 
 
-def _is_route_failure(exc: Exception) -> bool:
-    message = str(exc).lower()
-    return "no route to host" in message or "network is unreachable" in message
-
-
 def _extract_result_rows(payload: dict[str, Any]) -> list[dict[str, object]]:
-    result = payload.get("result")
-    if not isinstance(result, dict):
-        raise ValueError("Unexpected Deribit option trades response payload")
-    rows = result.get("trades")
-    if not isinstance(rows, list):
-        return []
-    return [cast(dict[str, object], row) for row in rows if isinstance(row, dict)]
+    return extract_result_rows(payload, payload_name="option trades")
 
 
 def _has_more(payload: dict[str, Any]) -> bool:
-    result = payload.get("result")
-    if not isinstance(result, dict):
-        return False
-    return bool(result.get("has_more", False))
+    return has_more(payload)
 
 
 def _utc_now_ms() -> int:
-    return int(datetime.now(UTC).timestamp() * 1000)
+    return utc_now_ms()
 
 
 def _inter_request_sleep_seconds() -> float:
-    value = os.getenv("DEPTH_DERIBIT_OPTION_TRADES_INTER_REQUEST_SLEEP_S", "0.15").strip()
-    try:
-        sleep_s = float(value)
-    except ValueError:
-        return 0.15
-    return max(0.0, sleep_s)
+    value = os.getenv("DEPTH_DERIBIT_OPTION_TRADES_INTER_REQUEST_SLEEP_S", "0.15")
+    return env_float_non_negative(value=value, default=0.15)
 
 
 def _route_retry_attempts() -> int:
-    value = os.getenv("DEPTH_DERIBIT_OPTION_TRADES_ROUTE_RETRY_ATTEMPTS", "3").strip()
-    try:
-        attempts = int(value)
-    except ValueError:
-        return 3
-    return max(1, attempts)
+    value = os.getenv("DEPTH_DERIBIT_OPTION_TRADES_ROUTE_RETRY_ATTEMPTS", "3")
+    return env_int_min(value=value, default=3, minimum=1)
 
 
 def _route_retry_backoff_base_seconds() -> float:
-    value = os.getenv("DEPTH_DERIBIT_OPTION_TRADES_ROUTE_RETRY_BACKOFF_BASE_S", "0.5").strip()
-    try:
-        backoff_s = float(value)
-    except ValueError:
-        return 0.5
-    return max(0.0, backoff_s)
+    value = os.getenv("DEPTH_DERIBIT_OPTION_TRADES_ROUTE_RETRY_BACKOFF_BASE_S", "0.5")
+    return env_float_non_negative(value=value, default=0.5)
 
 
 def fetch_option_trades_range(
@@ -152,7 +133,7 @@ def fetch_option_trades_range(
                     break
                 except HttpClientError as exc:
                     last_error = exc
-                    if not _is_route_failure(exc):
+                    if not is_route_failure(exc):
                         raise
                     if attempt < route_retry_attempts:
                         sleep_s = route_retry_backoff_base_s * (2 ** (attempt - 1))

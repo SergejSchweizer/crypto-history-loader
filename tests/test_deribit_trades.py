@@ -130,6 +130,45 @@ def test_fetch_trades_range_retries_route_failure_before_success(monkeypatch) ->
     assert calls["n"] == 3
 
 
+def test_fetch_trades_range_falls_back_to_currency_endpoint_and_filters_instrument(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    calls: list[str] = []
+
+    def _fake_get_json(url: str, params: dict[str, object]) -> dict[str, object]:
+        calls.append(url)
+        if "get_last_trades_by_instrument_and_time" in url:
+            raise HttpClientError("Connection error for x: [Errno 113] No route to host")
+        assert params["kind"] == "future"
+        return {
+            "result": {
+                "trades": [
+                    {
+                        "timestamp": 100,
+                        "trade_id": "a",
+                        "instrument_name": "BTC-PERPETUAL",
+                    },
+                    {
+                        "timestamp": 101,
+                        "trade_id": "b",
+                        "instrument_name": "BTC-30JUN26",
+                    },
+                ],
+                "has_more": False,
+            }
+        }
+
+    monkeypatch.setattr(deribit_trades, "get_json", _fake_get_json)
+    rows = deribit_trades.fetch_trades_range(
+        symbol="BTC-PERPETUAL",
+        market="perp",
+        start_open_ms=100,
+        end_open_ms=101,
+        count=10,
+    )
+    assert any("get_last_trades_by_instrument_and_time" in url for url in calls)
+    assert any("get_last_trades_by_currency_and_time" in url for url in calls)
+    assert rows == [{"timestamp": 100, "trade_id": "a", "instrument_name": "BTC-PERPETUAL"}]
+
+
 def test_extract_rows_and_has_more_helpers() -> None:
     payload = {"result": {"trades": [{"timestamp": 1, "trade_id": "a"}, "x"], "has_more": True}}
     assert deribit_trades._extract_result_rows(payload) == [{"timestamp": 1, "trade_id": "a"}]
