@@ -56,6 +56,9 @@ from ingestion.trades import fetch_trades_all_history, fetch_trades_range
 
 __all__ = ["SingleInstanceError", "SingleInstanceLock", "build_parser", "main"]
 _TAIL_DELTA_ONLY = True
+_BRONZE_START_OPEN_MS: int | None = None
+_BRONZE_SYMBOL_START_OPEN_MS: dict[str, int] = {}
+_BRONZE_EXCHANGE_SYMBOL_START_OPEN_MS: dict[str, int] = {}
 _BRONZE_CONFIG_ALIASES: tuple[str, ...] = ("bronze-build", "bronze-ingest", "loader")
 
 
@@ -91,6 +94,9 @@ def _sync_loader_runtime_overrides() -> None:
     loader_any.latest_open_time_in_lake = latest_open_time_in_lake
     loader_any.latest_open_time_in_lake_by_dataset = latest_open_time_in_lake_by_dataset
     loader_any._TAIL_DELTA_ONLY = _TAIL_DELTA_ONLY
+    loader_any._BRONZE_START_OPEN_MS = _BRONZE_START_OPEN_MS
+    loader_any._BRONZE_SYMBOL_START_OPEN_MS = _BRONZE_SYMBOL_START_OPEN_MS
+    loader_any._BRONZE_EXCHANGE_SYMBOL_START_OPEN_MS = _BRONZE_EXCHANGE_SYMBOL_START_OPEN_MS
     loader_any.normalize_storage_symbol = normalize_storage_symbol
     loader_any.interval_to_milliseconds = interval_to_milliseconds
     loader_any.open_interest_interval_to_milliseconds = open_interest_interval_to_milliseconds

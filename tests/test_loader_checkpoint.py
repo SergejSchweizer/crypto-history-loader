@@ -27,7 +27,10 @@ def test_apply_checkpoint_filter_drops_completed_tasks() -> None:
         funding_tasks=funding_tasks,
         trade_tasks=trade_tasks,
         completed=completed,
-        key_serializer=_serialize,
+        candle_key_serializer=_serialize,
+        oi_key_serializer=_serialize,
+        funding_key_serializer=_serialize,
+        trade_key_serializer=_serialize,
     )
     assert pending.candle_tasks == [("deribit", "perp", "ETH", "1m")]
     assert pending.oi_tasks == [("deribit", "BTC", "1m")]

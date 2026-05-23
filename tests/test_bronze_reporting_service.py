@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
-from application.services.bronze_reporting_service import symbol_progress_rows, trade_error_breakdown
+from application.datasets import DatasetTask
+from application.services.bronze_reporting_service import (
+    symbol_progress_rows,
+    symbol_progress_rows_from_dataset_tasks,
+    trade_error_breakdown,
+)
 
 
 def test_trade_error_breakdown_counts_classes() -> None:
@@ -44,3 +49,40 @@ def test_symbol_progress_rows_counts_oi_and_funding_success() -> None:
         trade_results={},
     )
     assert rows == [{"symbol": "BTC", "success": 2, "total": 2, "ratio": 1.0}]
+
+
+def test_symbol_progress_rows_from_dataset_tasks_uses_checkpoint_keys() -> None:
+    tasks = [
+        DatasetTask(
+            exchange="deribit",
+            dataset_type="spot",
+            instrument_type="spot",
+            symbol="BTC",
+            timeframe="1m",
+            market="spot",
+        ),
+        DatasetTask(
+            exchange="deribit",
+            dataset_type="oi",
+            instrument_type="perp",
+            symbol="BTC",
+            timeframe="1m",
+            market="perp",
+        ),
+        DatasetTask(
+            exchange="deribit",
+            dataset_type="perp_trades",
+            instrument_type="perp",
+            symbol="ETH",
+            timeframe="tick",
+            market="perp",
+        ),
+    ]
+    success_keys = {tasks[0].checkpoint_key(), tasks[2].checkpoint_key()}
+
+    rows = symbol_progress_rows_from_dataset_tasks(dataset_tasks=tasks, success_keys=success_keys)
+
+    assert rows == [
+        {"symbol": "BTC", "success": 1, "total": 2, "ratio": 0.5},
+        {"symbol": "ETH", "success": 1, "total": 1, "ratio": 1.0},
+    ]

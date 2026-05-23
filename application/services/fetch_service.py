@@ -970,22 +970,22 @@ def fetch_candle_tasks_parallel(
             candles = cast(
                 list[SpotCandle],
                 run_with_optional_history_chunk(
-                runner=_run_with_optional_timeout,
-                fn=symbol_fetcher,
-                timeout_s=task_timeout_s,
-                heartbeat_s=heartbeat_s,
-                heartbeat=_hb_ohlcv,
-                use_process_timeout=False,
-                kwargs={
-                    "exchange": task.exchange,
-                    "market": task.market,
-                    "symbol": task.symbol,
-                    "timeframe": task.timeframe,
-                    "lake_root": lake_root,
-                    "on_history_chunk": (lambda rows, _task=task: on_task_chunk(_task, rows))
-                    if on_task_chunk is not None
-                    else None,
-                },
+                    runner=_run_with_optional_timeout,
+                    fn=symbol_fetcher,
+                    timeout_s=task_timeout_s,
+                    heartbeat_s=heartbeat_s,
+                    heartbeat=_hb_ohlcv,
+                    use_process_timeout=False,
+                    kwargs={
+                        "exchange": task.exchange,
+                        "market": task.market,
+                        "symbol": task.symbol,
+                        "timeframe": task.timeframe,
+                        "lake_root": lake_root,
+                        "on_history_chunk": (lambda rows, _task=task: on_task_chunk(_task, rows))
+                        if on_task_chunk is not None
+                        else None,
+                    },
                 ),
             )
             elapsed_s = elapsed_seconds(task_started_at)
@@ -1075,20 +1075,20 @@ def fetch_open_interest_tasks_parallel(
             rows = cast(
                 list[OpenInterestPoint],
                 run_with_optional_history_chunk(
-                runner=_run_with_optional_timeout,
-                fn=symbol_fetcher,
-                timeout_s=task_timeout_s,
-                heartbeat_s=heartbeat_s,
-                heartbeat=_heartbeat_oi,
-                use_process_timeout=True,
-                kwargs={
-                    "exchange": task.exchange,
-                    "market": "perp",
-                    "symbol": task.symbol,
-                    "timeframe": task.timeframe,
-                    "lake_root": lake_root,
-                    "on_history_chunk": history_chunk_cb,
-                },
+                    runner=_run_with_optional_timeout,
+                    fn=symbol_fetcher,
+                    timeout_s=task_timeout_s,
+                    heartbeat_s=heartbeat_s,
+                    heartbeat=_heartbeat_oi,
+                    use_process_timeout=True,
+                    kwargs={
+                        "exchange": task.exchange,
+                        "market": "perp",
+                        "symbol": task.symbol,
+                        "timeframe": task.timeframe,
+                        "lake_root": lake_root,
+                        "on_history_chunk": history_chunk_cb,
+                    },
                 ),
             )
             elapsed_s = elapsed_seconds(task_started_at)
@@ -1175,20 +1175,20 @@ def fetch_funding_tasks_parallel(
             rows = cast(
                 list[FundingPoint],
                 run_with_optional_history_chunk(
-                runner=_run_with_optional_timeout,
-                fn=symbol_fetcher,
-                timeout_s=task_timeout_s,
-                heartbeat_s=heartbeat_s,
-                heartbeat=_heartbeat_funding,
-                use_process_timeout=False,
-                kwargs={
-                    "exchange": task.exchange,
-                    "market": "perp",
-                    "symbol": task.symbol,
-                    "timeframe": task.timeframe,
-                    "lake_root": lake_root,
-                    "on_history_chunk": history_chunk_cb,
-                },
+                    runner=_run_with_optional_timeout,
+                    fn=symbol_fetcher,
+                    timeout_s=task_timeout_s,
+                    heartbeat_s=heartbeat_s,
+                    heartbeat=_heartbeat_funding,
+                    use_process_timeout=False,
+                    kwargs={
+                        "exchange": task.exchange,
+                        "market": "perp",
+                        "symbol": task.symbol,
+                        "timeframe": task.timeframe,
+                        "lake_root": lake_root,
+                        "on_history_chunk": history_chunk_cb,
+                    },
                 ),
             )
             elapsed_s = elapsed_seconds(task_started_at)

@@ -64,7 +64,8 @@ def test_auto_mode_fetches_all_history_when_no_lake_data(monkeypatch: pytest.Mon
 
     monkeypatch.setattr(cli, "open_times_in_lake", lambda **kwargs: [])
     monkeypatch.setattr(cli, "latest_open_time_in_lake", lambda **kwargs: None)
-    monkeypatch.setattr(cli, "_TAIL_DELTA_ONLY", True)
+    # Full-history bootstrap path is only taken when tail-only mode is disabled.
+    monkeypatch.setattr(cli, "_TAIL_DELTA_ONLY", False)
     calls: list[dict[str, object]] = []
 
     def fake_fetch_candles_all_history(**kwargs: object) -> list[SpotCandle]:

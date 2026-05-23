@@ -20,6 +20,18 @@ dependencies = [
   "psycopg[binary]>=3.3.4",
 ]
 
+[project.optional-dependencies]
+dev = [
+  "import-linter>=2.7",
+  "mypy>=1.18",
+  "pre-commit>=4.4",
+  "pyright>=1.1.407",
+  "pytest>=9.0",
+  "pytest-cov>=7.0",
+  "ruff>=0.14",
+  "ty>=0.0.1a23",
+]
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = [
@@ -47,3 +59,15 @@ strict = true
 warn_unused_configs = true
 mypy_path = "."
 exclude = ["notebooks/", "tests/", "scripts/"]
+
+[tool.pyright]
+include = ["api", "application", "ingestion", "scripts"]
+exclude = ["tests", "notebooks", ".venv"]
+pythonVersion = "3.11"
+typeCheckingMode = "standard"
+
+[tool.ty.src]
+include = ["api", "application", "ingestion", "scripts"]
+
+[tool.ty.rules]
+redundant-cast = "ignore"

@@ -103,9 +103,7 @@ def run_gold_build(args: argparse.Namespace, logger: logging.Logger) -> None:
     l2_validation_mode = cast(str, getattr(args, "l2_validation_mode", "strict"))
     keep_last_versions = int(getattr(args, "retention_keep_versions", 3))
     if keep_last_versions < 1:
-        raise ValueError(
-            f"Invalid --retention-keep-versions '{keep_last_versions}'. Value must be an integer >= 1"
-        )
+        raise ValueError(f"Invalid --retention-keep-versions '{keep_last_versions}'. Value must be an integer >= 1")
     reports: list[dict[str, object]] = []
 
     dataset_ids = _resolve_dataset_ids(dataset_id)

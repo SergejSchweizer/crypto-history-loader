@@ -32,20 +32,17 @@ def apply_checkpoint_filter(
     funding_tasks: list[FundingTask],
     trade_tasks: list[TradeTask],
     completed: dict[str, set[str]],
-    key_serializer: Callable[[tuple[object, ...]], str],
+    candle_key_serializer: Callable[[CandleTask], str],
+    oi_key_serializer: Callable[[OpenInterestTask], str],
+    funding_key_serializer: Callable[[FundingTask], str],
+    trade_key_serializer: Callable[[TradeTask], str],
 ) -> PendingTaskGroups:
     """Filter task groups against completed checkpoint sets."""
 
-    pending_candles = [
-        task for task in candle_tasks if key_serializer((task[0], task[1], task[2], task[3])) not in completed["candle"]
-    ]
-    pending_oi = [task for task in oi_tasks if key_serializer((task[0], task[1], task[2])) not in completed["oi"]]
-    pending_funding = [
-        task for task in funding_tasks if key_serializer((task[0], task[1], task[2])) not in completed["funding"]
-    ]
-    pending_trades = [
-        task for task in trade_tasks if key_serializer((task[0], task[1], task[2])) not in completed["trade"]
-    ]
+    pending_candles = [task for task in candle_tasks if candle_key_serializer(task) not in completed["candle"]]
+    pending_oi = [task for task in oi_tasks if oi_key_serializer(task) not in completed["oi"]]
+    pending_funding = [task for task in funding_tasks if funding_key_serializer(task) not in completed["funding"]]
+    pending_trades = [task for task in trade_tasks if trade_key_serializer(task) not in completed["trade"]]
     return PendingTaskGroups(
         candle_tasks=pending_candles,
         oi_tasks=pending_oi,

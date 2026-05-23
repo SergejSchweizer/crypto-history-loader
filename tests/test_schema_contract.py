@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from application.datasets import DATASET_REGISTRY, dataset_names_for_task_kind, dataset_spec
 from application.schema import dataset_contract
 
 
@@ -28,3 +29,10 @@ def test_dataset_contract_maps_spot_perp_oi() -> None:
     assert trades.instrument_type == "perp"
     assert option_trades.dataset_type == "option_trades"
     assert option_trades.instrument_type == "option"
+
+
+def test_dataset_registry_covers_contract_names() -> None:
+    assert set(DATASET_REGISTRY) == {"spot", "perp", "oi", "funding", "perp_trades", "option_trades"}
+    assert dataset_spec("perp_trades").bronze_task_kind == "trade"
+    assert dataset_spec("option_trades").symbol_group == "option_trade_symbols"
+    assert dataset_names_for_task_kind("trade") == {"perp_trades", "option_trades"}

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from application.datasets import DatasetTask
 from ingestion.funding import FundingPoint
 from ingestion.open_interest import OpenInterestPoint
 from ingestion.spot import Exchange, Market, SpotCandle
@@ -134,6 +135,7 @@ class BronzeFetchPlanDTO:
     oi_tasks: list[tuple[Exchange, str, str]]
     funding_tasks: list[tuple[Exchange, str, str]]
     trade_tasks: list[tuple[Exchange, TradeMarket, str]]
+    dataset_tasks: list[DatasetTask] = field(default_factory=list)
 
 
 @dataclass(frozen=True)

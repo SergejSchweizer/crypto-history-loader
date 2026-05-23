@@ -173,6 +173,12 @@ AGENTS.md
 | `tests/` | Validation and regression tests |
 | `docs/` | Figures and documentation |
 
+Dataset metadata is centralized in `application/datasets.py`. New Bronze datasets should start with a
+`DatasetSpec` entry that defines the CLI name, storage dataset type, instrument type, symbol group,
+task kind, and default timeframe. Bronze planning derives legacy fetch tuples from these specs, so
+new datasets can share symbol validation, deterministic scheduling, checkpoint fingerprints, and
+reporting behavior instead of duplicating one-off planner logic.
+
 ---
 
 # 4. Installation
@@ -180,6 +186,9 @@ AGENTS.md
 ```bash
 uv sync --extra dev
 ```
+
+The `dev` extra installs the local quality-gate tools used by pre-commit and CI-style checks:
+Ruff, Mypy, Pyright, ty, import-linter, pytest, pytest-cov, and pre-commit.
 
 Runtime configuration uses:
 
@@ -727,7 +736,8 @@ Weitere Gold-Dataset-IDs:
 ```bash
 uv run ruff check .
 uv run mypy .
-uv run ty check .
+uv run pyright --level error
+uv run ty check
 uv run lint-imports --config .importlinter
 uv run python scripts/validate_config_with_pydantic.py --config config.yaml
 uv run pytest

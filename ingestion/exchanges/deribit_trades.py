@@ -8,6 +8,7 @@ import time
 from collections.abc import Callable
 from typing import Any, cast
 
+from ingestion.exchanges.deribit import normalize_symbol
 from ingestion.exchanges.deribit_trade_common import (
     env_float_non_negative,
     env_int_min,
@@ -16,7 +17,6 @@ from ingestion.exchanges.deribit_trade_common import (
     is_route_failure,
     utc_now_ms,
 )
-from ingestion.exchanges.deribit import normalize_symbol
 from ingestion.http_client import HttpClientError, get_json
 
 DERIBIT_TRADES_MAX_PAGE_SIZE = 1000
@@ -114,7 +114,7 @@ def fetch_trades_range(
                 max_pages,
             )
             break
-        params = {
+        params: dict[str, object] = {
             "instrument_name": instrument_name,
             "start_timestamp": cursor,
             "end_timestamp": end_open_ms,
@@ -122,7 +122,7 @@ def fetch_trades_range(
             "sorting": "asc",
         }
         currency = instrument_name.split("-", 1)[0]
-        currency_params = {
+        currency_params: dict[str, object] = {
             "currency": currency,
             "kind": "future",
             "start_timestamp": cursor,
@@ -189,7 +189,7 @@ def fetch_trades_range(
                             continue
                         logger.warning(
                             (
-                            "Deribit perp trades route failure via base_url=%s endpoint=%s instrument=%s "
+                                "Deribit perp trades route failure via base_url=%s endpoint=%s instrument=%s "
                                 "cursor=%s; trying fallback"
                             ),
                             base_url,
