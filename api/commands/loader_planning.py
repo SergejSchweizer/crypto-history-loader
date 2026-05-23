@@ -5,13 +5,13 @@ from __future__ import annotations
 import argparse
 import logging
 from datetime import UTC, datetime
-from typing import Literal, cast
+from typing import cast
 
-from api.commands.loader_dataset_handlers import build_trade_tasks
+from api.commands.loader_dataset_handlers import build_trade_tasks_from_specs
+from application.datasets import CliDataType, DatasetSpec, DatasetTask, dataset_specs
 from application.dto import BronzeFetchPlanDTO
 from ingestion.spot import Exchange, Market, normalize_timeframe
 
-DataType = Literal["spot", "perp", "oi", "funding", "perp_trades", "option_trades"]
 BRONZE_FIXED_TIMEFRAME = "1m"
 
 
@@ -55,36 +55,56 @@ def build_bronze_fetch_plan(args: argparse.Namespace, logger: logging.Logger) ->
     """Build deterministic Bronze task plan shared across all dataset fetchers."""
 
     exchanges = cast(list[Exchange], args.exchanges if args.exchanges else [args.exchange])
-    data_types: list[str] = sorted(cast(list[str], args.market))
-    ohlcv_markets = cast(list[Market], [item for item in data_types if item in {"spot", "perp"}])
+    data_types = sorted(cast(list[CliDataType], args.market))
+    specs = dataset_specs(data_types)
+    ohlcv_markets = cast(list[Market], [spec.market for spec in specs if spec.bronze_task_kind == "ohlcv"])
     symbols, perp_trade_symbols, option_trade_symbols = resolved_symbol_groups(args=args, logger=logger)
 
+    dataset_tasks: list[DatasetTask] = []
     candle_tasks: list[tuple[Exchange, Market, str, str]] = []
     oi_tasks: list[tuple[Exchange, str, str]] = []
     funding_tasks: list[tuple[Exchange, str, str]] = []
     for exchange in sorted(exchanges):
         normalized_timeframe = normalize_timeframe(exchange=exchange, value=BRONZE_FIXED_TIMEFRAME)
         for symbol in symbols:
-            for market in ohlcv_markets:
-                candle_tasks.append((exchange, market, symbol, normalized_timeframe))
-        if "oi" in data_types:
-            for symbol in symbols:
-                oi_tasks.append((exchange, symbol, normalized_timeframe))
-        if "funding" in data_types:
-            for symbol in symbols:
-                funding_tasks.append((exchange, symbol, normalized_timeframe))
+            for spec in specs:
+                if spec.bronze_task_kind != "ohlcv":
+                    continue
+                task = spec.build_task(exchange=exchange, symbol=symbol, timeframe=normalized_timeframe)
+                dataset_tasks.append(task)
+                candle_tasks.append(task.candle_tuple())
+        for spec in specs:
+            if spec.bronze_task_kind in {"ohlcv", "trade"}:
+                continue
+            for symbol in _symbols_for_spec(
+                spec=spec,
+                symbols=symbols,
+                perp_trade_symbols=perp_trade_symbols,
+                option_trade_symbols=option_trade_symbols,
+            ):
+                task = spec.build_task(exchange=exchange, symbol=symbol, timeframe=normalized_timeframe)
+                dataset_tasks.append(task)
+                if spec.bronze_task_kind == "open_interest":
+                    oi_tasks.append(task.interval_tuple())
+                elif spec.bronze_task_kind == "funding":
+                    funding_tasks.append(task.interval_tuple())
 
-    trade_tasks = build_trade_tasks(
+    trade_specs = [spec for spec in specs if spec.bronze_task_kind == "trade"]
+    trade_tasks = build_trade_tasks_from_specs(
         exchanges=sorted(exchanges),
-        perp_trade_symbols=perp_trade_symbols,
-        option_trade_symbols=option_trade_symbols,
-        perp_trades_requested="perp_trades" in data_types,
-        option_trades_requested="option_trades" in data_types,
+        specs=trade_specs,
+        symbols_by_group={
+            "perp_trade_symbols": perp_trade_symbols,
+            "option_trade_symbols": option_trade_symbols,
+        },
     )
+    for exchange, market, symbol in trade_tasks:
+        spec = _trade_spec_for_market(specs=trade_specs, market=market)
+        dataset_tasks.append(spec.build_task(exchange=exchange, symbol=symbol))
 
     return BronzeFetchPlanDTO(
         exchanges=sorted(exchanges),
-        data_types=data_types,
+        data_types=list(data_types),
         ohlcv_markets=ohlcv_markets,
         symbols=symbols,
         perp_trade_symbols=perp_trade_symbols,
@@ -93,7 +113,35 @@ def build_bronze_fetch_plan(args: argparse.Namespace, logger: logging.Logger) ->
         oi_tasks=oi_tasks,
         funding_tasks=funding_tasks,
         trade_tasks=trade_tasks,
+        dataset_tasks=dataset_tasks,
     )
+
+
+def _symbols_for_spec(
+    *,
+    spec: DatasetSpec,
+    symbols: list[str],
+    perp_trade_symbols: list[str],
+    option_trade_symbols: list[str],
+) -> list[str]:
+    """Return the configured symbol group for one registered dataset."""
+
+    if spec.symbol_group == "symbols":
+        return symbols
+    if spec.symbol_group == "perp_trade_symbols":
+        return perp_trade_symbols
+    if spec.symbol_group == "option_trade_symbols":
+        return option_trade_symbols
+    raise ValueError(f"Unsupported symbol group '{spec.symbol_group}'")
+
+
+def _trade_spec_for_market(*, specs: list[DatasetSpec], market: str) -> DatasetSpec:
+    """Return the registered trade spec matching one trade market."""
+
+    for spec in specs:
+        if spec.market == market:
+            return spec
+    raise ValueError(f"No registered trade dataset for market '{market}'")
 
 
 def parse_start_date_to_open_ms(start_date: str | None) -> int | None:

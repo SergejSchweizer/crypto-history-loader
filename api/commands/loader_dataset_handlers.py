@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable
-from typing import Literal, cast
+from typing import cast
 
+from application.datasets import CliDataType, DatasetSpec, dataset_spec
 from ingestion.funding import FundingPoint
 from ingestion.open_interest import OpenInterestPoint
 from ingestion.spot import Exchange, Market, SpotCandle
 from ingestion.trades import OptionTradeTick, TradeMarket, TradeTick
-
-DataType = Literal["spot", "perp", "oi", "funding", "perp_trades", "option_trades"]
 
 
 def build_trade_tasks(
@@ -23,22 +22,51 @@ def build_trade_tasks(
 ) -> list[tuple[Exchange, TradeMarket, str]]:
     """Build trade task tuples with symbol-first round-robin ordering."""
 
-    if not perp_trades_requested and not option_trades_requested:
+    requested_specs: list[DatasetSpec] = []
+    if perp_trades_requested:
+        requested_specs.append(dataset_spec("perp_trades"))
+    if option_trades_requested:
+        requested_specs.append(dataset_spec("option_trades"))
+    return build_trade_tasks_from_specs(
+        exchanges=exchanges,
+        specs=requested_specs,
+        symbols_by_group={
+            "perp_trade_symbols": perp_trade_symbols,
+            "option_trade_symbols": option_trade_symbols,
+        },
+    )
+
+
+def build_trade_tasks_from_specs(
+    *,
+    exchanges: list[Exchange],
+    specs: list[DatasetSpec],
+    symbols_by_group: dict[str, list[str]],
+) -> list[tuple[Exchange, TradeMarket, str]]:
+    """Build trade task tuples from registry specs with symbol-first ordering."""
+
+    if not specs:
         return []
     tasks: list[tuple[Exchange, TradeMarket, str]] = []
     seen_symbols: set[str] = set()
     ordered_symbols: list[str] = []
-    for symbol in [*perp_trade_symbols, *option_trade_symbols]:
-        if symbol in seen_symbols:
-            continue
-        seen_symbols.add(symbol)
-        ordered_symbols.append(symbol)
+    requested_symbols_by_dataset: dict[CliDataType, set[str]] = {}
+    for spec in specs:
+        symbols = symbols_by_group.get(spec.symbol_group, [])
+        requested_symbols_by_dataset[spec.cli_data_type] = set(symbols)
+        for symbol in symbols:
+            if symbol in seen_symbols:
+                continue
+            seen_symbols.add(symbol)
+            ordered_symbols.append(symbol)
     for exchange in exchanges:
         for symbol in ordered_symbols:
-            if perp_trades_requested and symbol in perp_trade_symbols:
-                tasks.append((exchange, "perp", symbol))
-            if option_trades_requested and symbol in option_trade_symbols:
-                tasks.append((exchange, "option", symbol))
+            for spec in specs:
+                if symbol not in requested_symbols_by_dataset[spec.cli_data_type]:
+                    continue
+                if spec.market not in {"spot", "perp", "option"}:
+                    raise ValueError(f"Dataset '{spec.cli_data_type}' is not a trade dataset")
+                tasks.append((exchange, spec.market, symbol))
     return tasks
 
 

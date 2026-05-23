@@ -334,6 +334,34 @@ def test_build_bronze_fetch_plan_is_deterministic_and_sorted() -> None:
     ]
     assert plan.oi_tasks == [("deribit", "BTC", "1m"), ("deribit", "ETH", "1m")]
     assert plan.funding_tasks == [("deribit", "BTC", "1m"), ("deribit", "ETH", "1m")]
+    assert [(task.dataset_type, task.instrument_type) for task in plan.dataset_tasks] == [
+        ("perp", "perp"),
+        ("spot", "spot"),
+        ("perp", "perp"),
+        ("spot", "spot"),
+        ("funding", "perp"),
+        ("funding", "perp"),
+        ("oi", "perp"),
+        ("oi", "perp"),
+    ]
+
+
+def test_dataset_task_key_maps_use_registry_checkpoint_keys() -> None:
+    args = argparse.Namespace(
+        exchange="deribit",
+        exchanges=["deribit"],
+        market=["spot", "oi", "perp_trades"],
+        symbols=["BTC"],
+        perp_trade_symbols=["BTC"],
+        option_trade_symbols=["BTC"],
+    )
+    plan = loader_cmd._build_bronze_fetch_plan(args=args, logger=logging.getLogger("test"))
+    candle_map, oi_map, funding_map, trade_map = loader_cmd._dataset_task_key_maps(plan)
+
+    assert candle_map[("deribit", "spot", "BTC", "1m")] == "deribit|spot|spot|BTC|1m|spot"
+    assert oi_map[("deribit", "BTC", "1m")] == "deribit|oi|perp|BTC|1m|perp"
+    assert ("deribit", "BTC", "1m") not in funding_map
+    assert trade_map[("deribit", "perp", "BTC")] == "deribit|perp_trades|perp|BTC|tick|perp"
 
 
 def test_run_bronze_build_resumes_from_checkpoint_and_clears_on_success(

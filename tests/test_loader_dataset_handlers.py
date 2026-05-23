@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from api.commands.loader_dataset_handlers import build_trade_tasks
+from api.commands.loader_dataset_handlers import build_trade_tasks, build_trade_tasks_from_specs
+from application.datasets import dataset_spec
 
 
 def test_build_trade_tasks_uses_only_perp_market() -> None:
@@ -41,3 +42,20 @@ def test_build_trade_tasks_includes_option_market_when_requested() -> None:
         option_trades_requested=True,
     )
     assert tasks == [("deribit", "perp", "BTC"), ("deribit", "option", "ETH")]
+
+
+def test_build_trade_tasks_from_specs_keeps_symbol_first_ordering() -> None:
+    tasks = build_trade_tasks_from_specs(
+        exchanges=["deribit"],
+        specs=[dataset_spec("perp_trades"), dataset_spec("option_trades")],
+        symbols_by_group={
+            "perp_trade_symbols": ["BTC", "ETH"],
+            "option_trade_symbols": ["BTC"],
+        },
+    )
+
+    assert tasks == [
+        ("deribit", "perp", "BTC"),
+        ("deribit", "option", "BTC"),
+        ("deribit", "perp", "ETH"),
+    ]

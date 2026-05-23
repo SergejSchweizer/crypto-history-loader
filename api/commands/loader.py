@@ -9,7 +9,7 @@ from collections.abc import Callable
 from dataclasses import asdict
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any, Literal, cast
+from typing import Any, cast
 
 from api.commands.loader_bounds import configure_bronze_start_bounds
 from api.commands.loader_checkpoint import apply_checkpoint_filter, has_checkpoint_state
@@ -31,6 +31,7 @@ from api.commands.loader_planning import (
     sanitize_symbols,
 )
 from api.commands.loader_runtime import BronzeRuntimeBoundsContext, resolve_symbol_start_open_ms_bound
+from application.datasets import DATASET_REGISTRY, dataset_spec
 from application.dto import (
     BronzeExecutionPolicyDTO,
     BronzeFetchPlanDTO,
@@ -39,8 +40,11 @@ from application.dto import (
     OpenInterestFetchTaskDTO,
     TradeFetchTaskDTO,
 )
-from application.schema import dataset_contract
-from application.services.bronze_reporting_service import symbol_progress_rows, trade_error_breakdown
+from application.services.bronze_reporting_service import (
+    symbol_progress_rows,
+    symbol_progress_rows_from_dataset_tasks,
+    trade_error_breakdown,
+)
 from application.services.bronze_runtime_service import (
     bronze_checkpoint_fingerprint,
     bronze_checkpoint_path,
@@ -94,12 +98,12 @@ from ingestion.spot import (
 )
 from ingestion.trades import OptionTradeTick, TradeMarket, TradeTick, fetch_trades_all_history, fetch_trades_range
 
-DataType = Literal["spot", "perp", "oi", "funding", "perp_trades", "option_trades"]
 _TAIL_DELTA_ONLY = True
 _BRONZE_START_OPEN_MS: int | None = None
 _BRONZE_SYMBOL_START_OPEN_MS: dict[str, int] = {}
 _BRONZE_EXCHANGE_SYMBOL_START_OPEN_MS: dict[str, int] = {}
-OI_DATASET_TYPE = dataset_contract("oi").dataset_type
+MARKET_CHOICES = tuple(DATASET_REGISTRY.keys())
+OI_DATASET_TYPE = dataset_spec("oi").dataset_type
 
 
 _RUNTIME_BOUNDS_CONTEXT = BronzeRuntimeBoundsContext(
@@ -149,6 +153,65 @@ def _task_key_tuple_to_string(parts: tuple[object, ...]) -> str:
     """Serialize tuple task key to stable checkpoint string."""
 
     return task_key_tuple_to_string(parts)
+
+
+def _dataset_task_key_maps(
+    plan: BronzeFetchPlanDTO,
+) -> tuple[
+    dict[tuple[Exchange, Market, str, str], str],
+    dict[tuple[Exchange, str, str], str],
+    dict[tuple[Exchange, str, str], str],
+    dict[tuple[Exchange, TradeMarket, str], str],
+]:
+    """Return tuple->checkpoint-key mappings derived from registry dataset tasks."""
+
+    candle_map: dict[tuple[Exchange, Market, str, str], str] = {}
+    oi_map: dict[tuple[Exchange, str, str], str] = {}
+    funding_map: dict[tuple[Exchange, str, str], str] = {}
+    trade_map: dict[tuple[Exchange, TradeMarket, str], str] = {}
+    for task in plan.dataset_tasks:
+        key = task.checkpoint_key()
+        if task.dataset_type in {"spot", "perp"}:
+            candle_map[task.candle_tuple()] = key
+        elif task.dataset_type == "oi":
+            oi_map[task.interval_tuple()] = key
+        elif task.dataset_type == "funding":
+            funding_map[task.interval_tuple()] = key
+        elif task.dataset_type in {"perp_trades", "option_trades"}:
+            trade_map[task.trade_tuple()] = key
+    return candle_map, oi_map, funding_map, trade_map
+
+
+def _hydrate_checkpoint_aliases(
+    *,
+    completed: dict[str, set[str]],
+    candle_tasks: list[tuple[Exchange, Market, str, str]],
+    oi_tasks: list[tuple[Exchange, str, str]],
+    funding_tasks: list[tuple[Exchange, str, str]],
+    trade_tasks: list[tuple[Exchange, TradeMarket, str]],
+    candle_key_map: dict[tuple[Exchange, Market, str, str], str],
+    oi_key_map: dict[tuple[Exchange, str, str], str],
+    funding_key_map: dict[tuple[Exchange, str, str], str],
+    trade_key_map: dict[tuple[Exchange, TradeMarket, str], str],
+) -> None:
+    """Augment completed checkpoint keys with registry aliases for backward compatibility."""
+
+    for candle_task in candle_tasks:
+        legacy = _task_key_tuple_to_string((candle_task[0], candle_task[1], candle_task[2], candle_task[3]))
+        if legacy in completed["candle"]:
+            completed["candle"].add(candle_key_map.get(candle_task, legacy))
+    for oi_task in oi_tasks:
+        legacy = _task_key_tuple_to_string((oi_task[0], oi_task[1], oi_task[2]))
+        if legacy in completed["oi"]:
+            completed["oi"].add(oi_key_map.get(oi_task, legacy))
+    for funding_task in funding_tasks:
+        legacy = _task_key_tuple_to_string((funding_task[0], funding_task[1], funding_task[2]))
+        if legacy in completed["funding"]:
+            completed["funding"].add(funding_key_map.get(funding_task, legacy))
+    for trade_task in trade_tasks:
+        legacy = _task_key_tuple_to_string((trade_task[0], trade_task[1], trade_task[2]))
+        if legacy in completed["trade"]:
+            completed["trade"].add(trade_key_map.get(trade_task, legacy))
 
 
 def _bronze_checkpoint_fingerprint(args: argparse.Namespace, plan: BronzeFetchPlanDTO) -> str:
@@ -205,7 +268,7 @@ def _add_ingest_parser(
     parser.add_argument(
         "--market",
         nargs="+",
-        choices=["spot", "perp", "oi", "funding", "perp_trades", "option_trades"],
+        choices=MARKET_CHOICES,
         default=["spot"],
         help="One or more data types to fetch, e.g. --market spot perp oi funding",
     )
@@ -694,12 +757,24 @@ def run_bronze_build(args: argparse.Namespace, logger: logging.Logger) -> None:
             oi_tasks.extend(plan.oi_tasks)
             funding_tasks.extend(plan.funding_tasks)
             trade_tasks.extend(plan.trade_tasks)
+            candle_key_map, oi_key_map, funding_key_map, trade_key_map = _dataset_task_key_maps(plan)
             checkpoint_path = _bronze_checkpoint_path()
             checkpoint_fingerprint = _bronze_checkpoint_fingerprint(args=args, plan=plan)
             checkpoint_completed = _load_bronze_checkpoint(
                 path=checkpoint_path,
                 fingerprint=checkpoint_fingerprint,
                 logger=logger,
+            )
+            _hydrate_checkpoint_aliases(
+                completed=checkpoint_completed,
+                candle_tasks=tasks,
+                oi_tasks=oi_tasks,
+                funding_tasks=funding_tasks,
+                trade_tasks=trade_tasks,
+                candle_key_map=candle_key_map,
+                oi_key_map=oi_key_map,
+                funding_key_map=funding_key_map,
+                trade_key_map=trade_key_map,
             )
 
             pending_tasks = apply_checkpoint_filter(
@@ -708,7 +783,22 @@ def run_bronze_build(args: argparse.Namespace, logger: logging.Logger) -> None:
                 funding_tasks=funding_tasks,
                 trade_tasks=trade_tasks,
                 completed=checkpoint_completed,
-                key_serializer=_task_key_tuple_to_string,
+                candle_key_serializer=lambda task: candle_key_map.get(
+                    task,
+                    _task_key_tuple_to_string((task[0], task[1], task[2], task[3])),
+                ),
+                oi_key_serializer=lambda task: oi_key_map.get(
+                    task,
+                    _task_key_tuple_to_string((task[0], task[1], task[2])),
+                ),
+                funding_key_serializer=lambda task: funding_key_map.get(
+                    task,
+                    _task_key_tuple_to_string((task[0], task[1], task[2])),
+                ),
+                trade_key_serializer=lambda task: trade_key_map.get(
+                    task,
+                    _task_key_tuple_to_string((task[0], task[1], task[2])),
+                ),
             )
             tasks = pending_tasks.candle_tasks
             oi_tasks = pending_tasks.oi_tasks
@@ -747,7 +837,29 @@ def run_bronze_build(args: argparse.Namespace, logger: logging.Logger) -> None:
                 logger.info("Incremental parquet flush enabled during fetch execution")
 
             def _mark_checkpoint_complete(dataset: str, key: tuple[object, ...]) -> None:
-                checkpoint_completed[dataset].add(_task_key_tuple_to_string(key))
+                if dataset == "candle":
+                    serialized_key = candle_key_map.get(
+                        cast(tuple[Exchange, Market, str, str], key),
+                        _task_key_tuple_to_string(key),
+                    )
+                elif dataset == "oi":
+                    serialized_key = oi_key_map.get(
+                        cast(tuple[Exchange, str, str], key),
+                        _task_key_tuple_to_string(key),
+                    )
+                elif dataset == "funding":
+                    serialized_key = funding_key_map.get(
+                        cast(tuple[Exchange, str, str], key),
+                        _task_key_tuple_to_string(key),
+                    )
+                elif dataset == "trade":
+                    serialized_key = trade_key_map.get(
+                        cast(tuple[Exchange, TradeMarket, str], key),
+                        _task_key_tuple_to_string(key),
+                    )
+                else:
+                    serialized_key = _task_key_tuple_to_string(key)
+                checkpoint_completed[dataset].add(serialized_key)
                 _write_bronze_checkpoint(
                     checkpoint_path,
                     fingerprint=checkpoint_fingerprint,
@@ -821,6 +933,28 @@ def run_bronze_build(args: argparse.Namespace, logger: logging.Logger) -> None:
                 _mark_checkpoint_complete("funding", funding_key)
             for trade_key in trade_results:
                 _mark_checkpoint_complete("trade", trade_key)
+            pending_task_keys: set[str] = set()
+            for candle_task in tasks:
+                pending_task_keys.add(candle_key_map.get(candle_task, _task_key_tuple_to_string(candle_task)))
+            for oi_task in oi_tasks:
+                pending_task_keys.add(oi_key_map.get(oi_task, _task_key_tuple_to_string(oi_task)))
+            for funding_task in funding_tasks:
+                pending_task_keys.add(funding_key_map.get(funding_task, _task_key_tuple_to_string(funding_task)))
+            for trade_task in trade_tasks:
+                pending_task_keys.add(trade_key_map.get(trade_task, _task_key_tuple_to_string(trade_task)))
+            success_task_keys: set[str] = set()
+            for candle_key in task_results:
+                success_task_keys.add(candle_key_map.get(candle_key, _task_key_tuple_to_string(candle_key)))
+            for oi_key in oi_results:
+                success_task_keys.add(oi_key_map.get(oi_key, _task_key_tuple_to_string(oi_key)))
+            for funding_key in funding_results:
+                success_task_keys.add(funding_key_map.get(funding_key, _task_key_tuple_to_string(funding_key)))
+            for trade_key in trade_results:
+                success_task_keys.add(trade_key_map.get(trade_key, _task_key_tuple_to_string(trade_key)))
+            fairness_rows = symbol_progress_rows_from_dataset_tasks(
+                dataset_tasks=[task for task in plan.dataset_tasks if task.checkpoint_key() in pending_task_keys],
+                success_keys=success_task_keys,
+            )
             finalize_bronze_output(
                 logger=logger,
                 output=output,
@@ -857,6 +991,7 @@ def run_bronze_build(args: argparse.Namespace, logger: logging.Logger) -> None:
                 populate_funding_output_fn=populate_funding_output,
                 populate_trades_output_fn=populate_trades_output,
                 symbol_progress_rows_fn=symbol_progress_rows,
+                fairness_rows=fairness_rows,
                 trade_error_breakdown_fn=trade_error_breakdown,
                 candle_serializer=_serialize_candle,
                 persist_fn=persist_loader_outputs_dto,

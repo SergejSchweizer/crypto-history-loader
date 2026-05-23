@@ -173,6 +173,12 @@ AGENTS.md
 | `tests/` | Validation and regression tests |
 | `docs/` | Figures and documentation |
 
+Dataset metadata is centralized in `application/datasets.py`. New Bronze datasets should start with a
+`DatasetSpec` entry that defines the CLI name, storage dataset type, instrument type, symbol group,
+task kind, and default timeframe. Bronze planning derives legacy fetch tuples from these specs, so
+new datasets can share symbol validation, deterministic scheduling, checkpoint fingerprints, and
+reporting behavior instead of duplicating one-off planner logic.
+
 ---
 
 # 4. Installation

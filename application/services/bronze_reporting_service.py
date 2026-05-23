@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from application.datasets import DatasetTask
+
 
 def trade_error_breakdown(trade_errors: dict[tuple[str, str, str], str]) -> dict[str, int]:
     """Return classified trade error counts."""
@@ -49,6 +51,31 @@ def symbol_progress_rows(
         symbol_success[symbol] = symbol_success.get(symbol, 0) + 1
     for _exchange, _market, symbol in trade_results:
         symbol_success[symbol] = symbol_success.get(symbol, 0) + 1
+
+    return [
+        {
+            "symbol": symbol,
+            "success": symbol_success.get(symbol, 0),
+            "total": total,
+            "ratio": round(symbol_success.get(symbol, 0) / total, 4) if total > 0 else 0.0,
+        }
+        for symbol, total in sorted(symbol_totals.items())
+    ]
+
+
+def symbol_progress_rows_from_dataset_tasks(
+    *,
+    dataset_tasks: list[DatasetTask],
+    success_keys: set[str],
+) -> list[dict[str, object]]:
+    """Return per-symbol progress rows using registry-driven dataset task identities."""
+
+    symbol_totals: dict[str, int] = {}
+    symbol_success: dict[str, int] = {}
+    for task in dataset_tasks:
+        symbol_totals[task.symbol] = symbol_totals.get(task.symbol, 0) + 1
+        if task.checkpoint_key() in success_keys:
+            symbol_success[task.symbol] = symbol_success.get(task.symbol, 0) + 1
 
     return [
         {

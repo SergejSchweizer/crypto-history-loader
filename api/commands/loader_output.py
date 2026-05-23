@@ -348,6 +348,7 @@ def finalize_bronze_output(
     populate_funding_output_fn: Callable[..., None],
     populate_trades_output_fn: Callable[..., None],
     symbol_progress_rows_fn: Callable[..., list[dict[str, object]]],
+    fairness_rows: list[dict[str, object]] | None,
     trade_error_breakdown_fn: Callable[[dict[tuple[str, str, str], str]], dict[str, int]],
     candle_serializer: Callable[[SpotCandle], dict[str, object]],
     persist_fn: Callable[..., object] = persist_loader_outputs_dto,
@@ -364,16 +365,18 @@ def finalize_bronze_output(
         len(trade_results),
         len(trade_errors),
     )
-    fairness = symbol_progress_rows_fn(
-        candle_tasks=cast(list[tuple[str, str, str, str]], tasks),
-        oi_tasks=cast(list[tuple[str, str, str]], oi_tasks),
-        funding_tasks=cast(list[tuple[str, str, str]], funding_tasks),
-        trade_tasks=cast(list[tuple[str, str, str]], trade_tasks),
-        candle_results=cast(dict[tuple[str, str, str, str], object], task_results),
-        oi_results=cast(dict[tuple[str, str, str], object], oi_results),
-        funding_results=cast(dict[tuple[str, str, str], object], funding_results),
-        trade_results=cast(dict[tuple[str, str, str], object], trade_results),
-    )
+    fairness = fairness_rows
+    if fairness is None:
+        fairness = symbol_progress_rows_fn(
+            candle_tasks=cast(list[tuple[str, str, str, str]], tasks),
+            oi_tasks=cast(list[tuple[str, str, str]], oi_tasks),
+            funding_tasks=cast(list[tuple[str, str, str]], funding_tasks),
+            trade_tasks=cast(list[tuple[str, str, str]], trade_tasks),
+            candle_results=cast(dict[tuple[str, str, str, str], object], task_results),
+            oi_results=cast(dict[tuple[str, str, str], object], oi_results),
+            funding_results=cast(dict[tuple[str, str, str], object], funding_results),
+            trade_results=cast(dict[tuple[str, str, str], object], trade_results),
+        )
     if fairness:
         logger.info("Bronze per-symbol progress: %s", fairness)
 

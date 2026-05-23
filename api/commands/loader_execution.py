@@ -3,10 +3,49 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from typing import TypeVar, cast
 
 T = TypeVar("T")
+
+
+@dataclass(frozen=True)
+class _TaskGroupConfig:
+    """Runtime dispatch contract for one Bronze task group."""
+
+    name: str
+    tasks: Sequence[tuple[str, ...]] | None
+    fetch_fn: Callable[..., object]
+    task_param_name: str
+    concurrency: int
+    on_task_complete: object | None
+    on_task_chunk: object | None
+
+
+def _fetch_group(
+    *,
+    config: _TaskGroupConfig,
+    lake_root: str,
+    logger: logging.Logger,
+) -> tuple[dict[tuple[str, ...], list[T]], dict[tuple[str, ...], str]]:
+    """Fetch one configured task group with a shared call shape."""
+
+    group_tasks = list(config.tasks or [])
+    if not group_tasks:
+        return {}, {}
+    kwargs: dict[str, object] = {
+        config.task_param_name: group_tasks,
+        "lake_root": lake_root,
+        "concurrency": config.concurrency,
+        "logger": logger,
+        "on_task_complete": config.on_task_complete,
+        "on_task_chunk": config.on_task_chunk,
+    }
+    return cast(
+        tuple[dict[tuple[str, ...], list[T]], dict[tuple[str, ...], str]],
+        config.fetch_fn(**kwargs),
+    )
 
 
 def fetch_all_task_groups(
@@ -54,65 +93,60 @@ def fetch_all_task_groups(
     trade_results: dict[tuple[str, str, str], list[T]] = {}
     trade_errors: dict[tuple[str, str, str], str] = {}
 
-    if candle_tasks:
-        candle_rows, candle_errors = cast(
-            tuple[dict[tuple[str, str, str, str], list[T]], dict[tuple[str, str, str, str], str]],
-            fetch_candles_fn(
-                tasks=candle_tasks,
-                lake_root=lake_root,
-                concurrency=candle_concurrency,
-                logger=logger,
-                on_task_complete=on_candle_task_complete,
-                on_task_chunk=on_candle_task_chunk,
-            ),
-        )
-        task_results.update(candle_rows)
-        task_errors.update(candle_errors)
-
-    if oi_tasks:
-        oi_rows, oi_task_errors = cast(
-            tuple[dict[tuple[str, str, str], list[T]], dict[tuple[str, str, str], str]],
-            fetch_oi_fn(
-                oi_tasks=oi_tasks,
-                lake_root=lake_root,
-                concurrency=oi_concurrency,
-                logger=logger,
-                on_task_complete=on_oi_task_complete,
-                on_task_chunk=on_oi_task_chunk,
-            ),
-        )
-        oi_results.update(oi_rows)
-        oi_errors.update(oi_task_errors)
-
-    if funding_tasks:
-        funding_rows, funding_task_errors = cast(
-            tuple[dict[tuple[str, str, str], list[T]], dict[tuple[str, str, str], str]],
-            fetch_funding_fn(
-                funding_tasks=funding_tasks,
-                lake_root=lake_root,
-                concurrency=funding_concurrency,
-                logger=logger,
-                on_task_complete=on_funding_task_complete,
-                on_task_chunk=on_funding_task_chunk,
-            ),
-        )
-        funding_results.update(funding_rows)
-        funding_errors.update(funding_task_errors)
-
-    if trade_tasks:
-        trade_rows, trade_task_errors = cast(
-            tuple[dict[tuple[str, str, str], list[T]], dict[tuple[str, str, str], str]],
-            fetch_trades_fn(
-                trade_tasks=trade_tasks,
-                lake_root=lake_root,
-                concurrency=trade_concurrency,
-                logger=logger,
-                on_task_complete=on_trade_task_complete,
-                on_task_chunk=on_trade_task_chunk,
-            ),
-        )
-        trade_results.update(trade_rows)
-        trade_errors.update(trade_task_errors)
+    group_configs = (
+        _TaskGroupConfig(
+            name="candle",
+            tasks=candle_tasks,
+            fetch_fn=fetch_candles_fn,
+            task_param_name="tasks",
+            concurrency=candle_concurrency,
+            on_task_complete=on_candle_task_complete,
+            on_task_chunk=on_candle_task_chunk,
+        ),
+        _TaskGroupConfig(
+            name="oi",
+            tasks=oi_tasks,
+            fetch_fn=fetch_oi_fn,
+            task_param_name="oi_tasks",
+            concurrency=oi_concurrency,
+            on_task_complete=on_oi_task_complete,
+            on_task_chunk=on_oi_task_chunk,
+        ),
+        _TaskGroupConfig(
+            name="funding",
+            tasks=funding_tasks,
+            fetch_fn=fetch_funding_fn,
+            task_param_name="funding_tasks",
+            concurrency=funding_concurrency,
+            on_task_complete=on_funding_task_complete,
+            on_task_chunk=on_funding_task_chunk,
+        ),
+        _TaskGroupConfig(
+            name="trade",
+            tasks=trade_tasks,
+            fetch_fn=fetch_trades_fn,
+            task_param_name="trade_tasks",
+            concurrency=trade_concurrency,
+            on_task_complete=on_trade_task_complete,
+            on_task_chunk=on_trade_task_chunk,
+        ),
+    )
+    for config in group_configs:
+        rows: dict[tuple[str, ...], list[T]]
+        errors: dict[tuple[str, ...], str]
+        rows, errors = _fetch_group(config=config, lake_root=lake_root, logger=logger)
+        if config.name == "candle":
+            task_results.update(cast(dict[tuple[str, str, str, str], list[T]], rows))
+            task_errors.update(cast(dict[tuple[str, str, str, str], str], errors))
+        elif config.name == "oi":
+            oi_results.update(cast(dict[tuple[str, str, str], list[T]], rows))
+            oi_errors.update(cast(dict[tuple[str, str, str], str], errors))
+        elif config.name == "funding":
+            funding_results.update(cast(dict[tuple[str, str, str], list[T]], rows))
+            funding_errors.update(cast(dict[tuple[str, str, str], str], errors))
+        else:
+            trade_results.update(cast(dict[tuple[str, str, str], list[T]], rows))
+            trade_errors.update(cast(dict[tuple[str, str, str], str], errors))
 
     return (
         task_results,
