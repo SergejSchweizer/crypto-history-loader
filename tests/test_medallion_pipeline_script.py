@@ -46,7 +46,7 @@ def test_build_steps_uses_configured_market_args_with_trades(tmp_path: Path) -> 
     assert "perp_trades" in args
 
 
-def test_build_steps_bronze_enforces_one_month_start_date_when_missing(
+def test_build_steps_bronze_enforces_six_month_start_date_when_missing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     module = _load_pipeline_module()
@@ -54,7 +54,7 @@ def test_build_steps_bronze_enforces_one_month_start_date_when_missing(
     main_path.write_text("print('ok')\n", encoding="utf-8")
     config_path = tmp_path / "config.yaml"
     config_path.write_text("x: 1\n", encoding="utf-8")
-    monkeypatch.setattr(module, "_one_month_ago_utc_date", lambda _now: "2026-04-16")
+    monkeypatch.setattr(module, "_six_months_ago_utc_date", lambda _now: "2026-04-16")
     cfg = {
         "medallion-pipeline": {
             "execution_order": ["bronze"],
@@ -78,7 +78,7 @@ def test_build_steps_bronze_clamps_older_date_bounds(tmp_path: Path, monkeypatch
     main_path.write_text("print('ok')\n", encoding="utf-8")
     config_path = tmp_path / "config.yaml"
     config_path.write_text("x: 1\n", encoding="utf-8")
-    monkeypatch.setattr(module, "_one_month_ago_utc_date", lambda _now: "2026-04-16")
+    monkeypatch.setattr(module, "_six_months_ago_utc_date", lambda _now: "2026-04-16")
     cfg = {
         "medallion-pipeline": {
             "execution_order": ["bronze"],

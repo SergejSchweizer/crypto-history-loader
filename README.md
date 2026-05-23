@@ -643,11 +643,28 @@ uv run python main.py bronze-build \
   --symbols BTC ETH SOL
 ```
 
+`--debug` is a global CLI flag and must be placed before the command name:
+
+```bash
+uv run python main.py --debug bronze-build --market spot
+```
+
 Trade datasets can use independent symbol defaults and overrides:
 
 - `--symbols` applies to `spot`, `perp`, `oi`, `funding`
 - `--perp-trade-symbols` applies to `perp_trades` (default: `BTC ETH SOL`)
 - `--option-trade-symbols` applies to `option_trades` (default: `BTC ETH SOL`)
+
+Example: fetch only trade datasets and persist parquet outputs:
+
+```bash
+uv run python main.py --debug bronze-build \
+  --market perp_trades option_trades \
+  --perp-trade-symbols BTC ETH SOL \
+  --option-trade-symbols BTC ETH SOL \
+  --save-parquet-lake \
+  --no-json-output
+```
 
 ### Bronze Resume Checkpoint
 

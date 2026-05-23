@@ -94,21 +94,25 @@ def _build_steps(*, main_path: Path, config_path: Path, config_data: dict[str, A
             raise ValueError(f"medallion-pipeline.{layer_name}.cli_args must be a list")
         cli_args = [str(token) for token in cli_args_raw]
         if layer_name == "bronze" and command == "bronze-build":
-            cli_args = _enforce_one_month_download_window(cli_args)
+            cli_args = _enforce_six_month_download_window(cli_args)
 
         cmd = [str(main_path), "--config", str(config_path), command, *cli_args]
         steps.append(PipelineStep(name=layer_name, args=cmd))
     return steps
 
 
-def _one_month_ago_utc_date(today_utc: datetime) -> str:
-    """Return YYYY-MM-DD for one calendar month before ``today_utc``."""
+def _six_months_ago_utc_date(today_utc: datetime) -> str:
+    """Return YYYY-MM-DD for six calendar months before ``today_utc``."""
 
     year = today_utc.year
     month = today_utc.month
     day = today_utc.day
-    prev_year = year - 1 if month == 1 else year
-    prev_month = 12 if month == 1 else month - 1
+    target_month_index = month - 6
+    prev_year = year
+    while target_month_index <= 0:
+        target_month_index += 12
+        prev_year -= 1
+    prev_month = target_month_index
     prev_month_last_day = calendar.monthrange(prev_year, prev_month)[1]
     prev_day = min(day, prev_month_last_day)
     return datetime(prev_year, prev_month, prev_day, tzinfo=UTC).strftime("%Y-%m-%d")
@@ -133,10 +137,10 @@ def _clamp_symbol_date_entries(entries: list[str], *, lower_bound: str) -> list[
     return clamped
 
 
-def _enforce_one_month_download_window(cli_args: list[str]) -> list[str]:
-    """Ensure Bronze CLI date boundaries do not request more than one month of history."""
+def _enforce_six_month_download_window(cli_args: list[str]) -> list[str]:
+    """Ensure Bronze CLI date boundaries do not request more than six months of history."""
 
-    lower_bound = _one_month_ago_utc_date(datetime.now(UTC))
+    lower_bound = _six_months_ago_utc_date(datetime.now(UTC))
     rewritten: list[str] = []
     i = 0
     has_start_date = False
