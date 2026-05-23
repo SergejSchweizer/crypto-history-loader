@@ -50,14 +50,14 @@ def run_export_descriptive_stats(args: argparse.Namespace, logger: logging.Logge
     frame = cast(
         pl.DataFrame,
         load_combined_dataframe_from_lake(
-        lake_root=cast(str, args.lake_root),
-        exchanges=cast(list[str] | None, args.exchanges),
-        symbols=cast(list[str] | None, args.symbols),
-        timeframes=cast(list[str] | None, args.timeframes),
-        instrument_types=cast(list[str] | None, args.instrument_types),
-        start_time=start_time,
-        end_time=end_time,
-        include_open_interest=False,
+            lake_root=cast(str, args.lake_root),
+            exchanges=cast(list[str] | None, args.exchanges),
+            symbols=cast(list[str] | None, args.symbols),
+            timeframes=cast(list[str] | None, args.timeframes),
+            instrument_types=cast(list[str] | None, args.instrument_types),
+            start_time=start_time,
+            end_time=end_time,
+            include_open_interest=False,
         ),
     )
 

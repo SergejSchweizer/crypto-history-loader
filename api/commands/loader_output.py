@@ -5,14 +5,45 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Protocol, cast
 
-from application.dto import FundingFetchTaskDTO, LoaderStorageDTO, OpenInterestFetchTaskDTO, PersistOptionsDTO, TradeFetchTaskDTO
+from application.dto import (
+    FundingFetchTaskDTO,
+    LoaderStorageDTO,
+    OpenInterestFetchTaskDTO,
+    PersistOptionsDTO,
+    TradeFetchTaskDTO,
+)
 from application.services.storage_service import persist_loader_outputs_dto
 from ingestion.funding import FundingPoint
 from ingestion.open_interest import OpenInterestPoint
 from ingestion.spot import Exchange, Market, SpotCandle
 from ingestion.trades import OptionTradeTick, TradeMarket, TradeTick
+
+
+class _LakeArgs(Protocol):
+    save_parquet_lake: bool
+    lake_root: str
+
+
+class _PersistResult(Protocol):
+    parquet_files: list[str]
+
+    def to_output_dict(self) -> dict[str, object]: ...
+
+
+class _CandleTaskLike(Protocol):
+    @property
+    def exchange(self) -> Any: ...
+
+    @property
+    def market(self) -> Any: ...
+
+    @property
+    def symbol(self) -> str: ...
+
+    @property
+    def timeframe(self) -> str: ...
 
 
 def _extract_date_partition(file_path: str) -> str | None:
@@ -72,89 +103,207 @@ class IncrementalPersistor:
                 day,
             )
 
-    def _persist_candle_task(self, task: object, rows: list[SpotCandle], logger: logging.Logger) -> None:
+    def _persist_candle_task(self, task: _CandleTaskLike, rows: list[SpotCandle], logger: logging.Logger) -> None:
         if not rows:
             return
-        t = task
-        storage_result = self.persist_fn(
-            storage=LoaderStorageDTO(candles={t.market: {t.exchange: {t.symbol.upper(): rows}}}),
-            options=PersistOptionsDTO(save_parquet_lake=True, lake_root=self.lake_root, oi_requested=False, funding_requested=False, trades_requested=False),
+        storage_result = cast(
+            _PersistResult,
+            self.persist_fn(
+                storage=LoaderStorageDTO(
+                    candles={
+                        cast(Market, task.market): {
+                            cast(Exchange, task.exchange): {task.symbol.upper(): rows},
+                        },
+                    },
+                ),
+                options=PersistOptionsDTO(
+                    save_parquet_lake=True,
+                    lake_root=self.lake_root,
+                    oi_requested=False,
+                    funding_requested=False,
+                    trades_requested=False,
+                ),
+            ),
         )
         self.incremental_parquet_files.extend(storage_result.parquet_files)
-        self._log_new_daily_partitions(logger=logger, data_type="ohlcv", exchange=t.exchange, market=t.market, symbol=t.symbol, timeframe=t.timeframe, parquet_files=storage_result.parquet_files)
+        self._log_new_daily_partitions(
+            logger=logger,
+            data_type="ohlcv",
+            exchange=task.exchange,
+            market=task.market,
+            symbol=task.symbol,
+            timeframe=task.timeframe,
+            parquet_files=storage_result.parquet_files,
+        )
 
-    def _persist_oi_task(self, task: OpenInterestFetchTaskDTO, rows: list[OpenInterestPoint], logger: logging.Logger) -> None:
+    def _persist_oi_task(
+        self,
+        task: OpenInterestFetchTaskDTO,
+        rows: list[OpenInterestPoint],
+        logger: logging.Logger,
+    ) -> None:
         if not rows:
             return
-        storage_result = self.persist_fn(
-            storage=LoaderStorageDTO(open_interest={"perp": {task.exchange: {task.symbol.upper(): rows}}}),
-            options=PersistOptionsDTO(save_parquet_lake=True, lake_root=self.lake_root, oi_requested=True, funding_requested=False, trades_requested=False),
+        storage_result = cast(
+            _PersistResult,
+            self.persist_fn(
+                storage=LoaderStorageDTO(open_interest={"perp": {task.exchange: {task.symbol.upper(): rows}}}),
+                options=PersistOptionsDTO(
+                    save_parquet_lake=True,
+                    lake_root=self.lake_root,
+                    oi_requested=True,
+                    funding_requested=False,
+                    trades_requested=False,
+                ),
+            ),
         )
         self.incremental_parquet_files.extend(storage_result.parquet_files)
-        self._log_new_daily_partitions(logger=logger, data_type="oi", exchange=task.exchange, market="perp", symbol=task.symbol, timeframe=task.timeframe, parquet_files=storage_result.parquet_files)
+        self._log_new_daily_partitions(
+            logger=logger,
+            data_type="oi",
+            exchange=task.exchange,
+            market="perp",
+            symbol=task.symbol,
+            timeframe=task.timeframe,
+            parquet_files=storage_result.parquet_files,
+        )
 
-    def _persist_funding_task(self, task: FundingFetchTaskDTO, rows: list[FundingPoint], logger: logging.Logger) -> None:
+    def _persist_funding_task(
+        self,
+        task: FundingFetchTaskDTO,
+        rows: list[FundingPoint],
+        logger: logging.Logger,
+    ) -> None:
         if not rows:
             return
-        storage_result = self.persist_fn(
-            storage=LoaderStorageDTO(funding={"perp": {task.exchange: {task.symbol.upper(): rows}}}),
-            options=PersistOptionsDTO(save_parquet_lake=True, lake_root=self.lake_root, oi_requested=False, funding_requested=True, trades_requested=False),
+        storage_result = cast(
+            _PersistResult,
+            self.persist_fn(
+                storage=LoaderStorageDTO(funding={"perp": {task.exchange: {task.symbol.upper(): rows}}}),
+                options=PersistOptionsDTO(
+                    save_parquet_lake=True,
+                    lake_root=self.lake_root,
+                    oi_requested=False,
+                    funding_requested=True,
+                    trades_requested=False,
+                ),
+            ),
         )
         self.incremental_parquet_files.extend(storage_result.parquet_files)
-        self._log_new_daily_partitions(logger=logger, data_type="funding", exchange=task.exchange, market="perp", symbol=task.symbol, timeframe=task.timeframe, parquet_files=storage_result.parquet_files)
+        self._log_new_daily_partitions(
+            logger=logger,
+            data_type="funding",
+            exchange=task.exchange,
+            market="perp",
+            symbol=task.symbol,
+            timeframe=task.timeframe,
+            parquet_files=storage_result.parquet_files,
+        )
 
-    def _persist_trade_task(self, task: TradeFetchTaskDTO, rows: list[TradeTick | OptionTradeTick], logger: logging.Logger) -> None:
+    def _persist_trade_task(
+        self,
+        task: TradeFetchTaskDTO,
+        rows: list[TradeTick | OptionTradeTick],
+        logger: logging.Logger,
+    ) -> None:
         if not rows:
             return
-        storage_result = self.persist_fn(
-            storage=LoaderStorageDTO(trades={task.market: {task.exchange: {task.symbol.upper(): rows}}}),
-            options=PersistOptionsDTO(save_parquet_lake=True, lake_root=self.lake_root, oi_requested=False, funding_requested=False, trades_requested=True),
+        storage_result = cast(
+            _PersistResult,
+            self.persist_fn(
+                storage=LoaderStorageDTO(trades={task.market: {task.exchange: {task.symbol.upper(): rows}}}),
+                options=PersistOptionsDTO(
+                    save_parquet_lake=True,
+                    lake_root=self.lake_root,
+                    oi_requested=False,
+                    funding_requested=False,
+                    trades_requested=True,
+                ),
+            ),
         )
         self.incremental_parquet_files.extend(storage_result.parquet_files)
-        self._log_new_daily_partitions(logger=logger, data_type="option_trades" if task.market == "option" else "perp_trades", exchange=task.exchange, market=task.market, symbol=task.symbol, timeframe="tick", parquet_files=storage_result.parquet_files)
+        self._log_new_daily_partitions(
+            logger=logger,
+            data_type="option_trades" if task.market == "option" else "perp_trades",
+            exchange=task.exchange,
+            market=task.market,
+            symbol=task.symbol,
+            timeframe="tick",
+            parquet_files=storage_result.parquet_files,
+        )
 
-    def on_candle_task_complete(self, task: object, rows: list[SpotCandle], logger: logging.Logger) -> None:
+    def on_candle_task_complete(self, task: _CandleTaskLike, rows: list[SpotCandle], logger: logging.Logger) -> None:
         if (task.exchange, task.market, task.symbol, task.timeframe) in self.streamed_candle_tasks:
             return
         self._persist_candle_task(task, rows, logger)
 
-    def on_oi_task_complete(self, task: OpenInterestFetchTaskDTO, rows: list[OpenInterestPoint], logger: logging.Logger) -> None:
+    def on_oi_task_complete(
+        self,
+        task: OpenInterestFetchTaskDTO,
+        rows: list[OpenInterestPoint],
+        logger: logging.Logger,
+    ) -> None:
         if (task.exchange, task.symbol, task.timeframe) in self.streamed_oi_tasks:
             return
         self._persist_oi_task(task, rows, logger)
 
-    def on_funding_task_complete(self, task: FundingFetchTaskDTO, rows: list[FundingPoint], logger: logging.Logger) -> None:
+    def on_funding_task_complete(
+        self,
+        task: FundingFetchTaskDTO,
+        rows: list[FundingPoint],
+        logger: logging.Logger,
+    ) -> None:
         if (task.exchange, task.symbol, task.timeframe) in self.streamed_funding_tasks:
             return
         self._persist_funding_task(task, rows, logger)
 
-    def on_trade_task_complete(self, task: TradeFetchTaskDTO, rows: list[TradeTick | OptionTradeTick], logger: logging.Logger) -> None:
+    def on_trade_task_complete(
+        self,
+        task: TradeFetchTaskDTO,
+        rows: list[TradeTick | OptionTradeTick],
+        logger: logging.Logger,
+    ) -> None:
         if (task.exchange, task.market, task.symbol) in self.streamed_trade_tasks:
             return
         self._persist_trade_task(task, rows, logger)
 
-    def on_candle_task_chunk(self, task: object, rows: list[SpotCandle], logger: logging.Logger) -> None:
+    def on_candle_task_chunk(self, task: _CandleTaskLike, rows: list[SpotCandle], logger: logging.Logger) -> None:
         if not rows:
             return
         self.streamed_candle_tasks.add((task.exchange, task.market, task.symbol, task.timeframe))
         self._persist_candle_task(task, rows, logger)
         self.mark_checkpoint_complete("candle", (task.exchange, task.market, task.symbol, task.timeframe))
 
-    def on_oi_task_chunk(self, task: OpenInterestFetchTaskDTO, rows: list[OpenInterestPoint], logger: logging.Logger) -> None:
+    def on_oi_task_chunk(
+        self,
+        task: OpenInterestFetchTaskDTO,
+        rows: list[OpenInterestPoint],
+        logger: logging.Logger,
+    ) -> None:
         if not rows:
             return
         self.streamed_oi_tasks.add((task.exchange, task.symbol, task.timeframe))
         self._persist_oi_task(task, rows, logger)
         self.mark_checkpoint_complete("oi", (task.exchange, task.symbol, task.timeframe))
 
-    def on_funding_task_chunk(self, task: FundingFetchTaskDTO, rows: list[FundingPoint], logger: logging.Logger) -> None:
+    def on_funding_task_chunk(
+        self,
+        task: FundingFetchTaskDTO,
+        rows: list[FundingPoint],
+        logger: logging.Logger,
+    ) -> None:
         if not rows:
             return
         self.streamed_funding_tasks.add((task.exchange, task.symbol, task.timeframe))
         self._persist_funding_task(task, rows, logger)
         self.mark_checkpoint_complete("funding", (task.exchange, task.symbol, task.timeframe))
 
-    def on_trade_task_chunk(self, task: TradeFetchTaskDTO, rows: list[TradeTick | OptionTradeTick], logger: logging.Logger) -> None:
+    def on_trade_task_chunk(
+        self,
+        task: TradeFetchTaskDTO,
+        rows: list[TradeTick | OptionTradeTick],
+        logger: logging.Logger,
+    ) -> None:
         if not rows:
             return
         self.streamed_trade_tasks.add((task.exchange, task.market, task.symbol))
@@ -188,7 +337,7 @@ def finalize_bronze_output(
     funding_for_storage: dict[Market, dict[str, dict[str, list[FundingPoint]]]],
     trades_for_storage: dict[TradeMarket, dict[str, dict[str, list[TradeTick | OptionTradeTick]]]],
     ohlcv_markets: list[Market],
-    args: Any,
+    args: _LakeArgs,
     incremental_parquet_on_fetch: bool,
     incremental_parquet_files: list[str],
     oi_dataset_type: str,
@@ -204,7 +353,8 @@ def finalize_bronze_output(
     persist_fn: Callable[..., object] = persist_loader_outputs_dto,
 ) -> None:
     logger.info(
-        "Fetch summary spot/perp: success=%s failed=%s | oi: success=%s failed=%s | funding: success=%s failed=%s | trades: success=%s failed=%s",
+        "Fetch summary spot/perp: success=%s failed=%s | oi: success=%s failed=%s | "
+        "funding: success=%s failed=%s | trades: success=%s failed=%s",
         len(task_results),
         len(task_errors),
         len(oi_results),
@@ -227,19 +377,62 @@ def finalize_bronze_output(
     if fairness:
         logger.info("Bronze per-symbol progress: %s", fairness)
 
-    populate_ohlcv_output_fn(output=output, tasks=tasks, task_results=task_results, task_errors=task_errors, multi_market=multi_market, candle_serializer=candle_serializer, candles_for_storage=candles_for_storage)
+    populate_ohlcv_output_fn(
+        output=output,
+        tasks=tasks,
+        task_results=task_results,
+        task_errors=task_errors,
+        multi_market=multi_market,
+        candle_serializer=candle_serializer,
+        candles_for_storage=candles_for_storage,
+    )
     if oi_requested:
-        populate_oi_output_fn(output=output, tasks=oi_tasks, results=oi_results, errors=oi_errors, multi_market=multi_market, storage=open_interest_for_storage)
+        populate_oi_output_fn(
+            output=output,
+            tasks=oi_tasks,
+            results=oi_results,
+            errors=oi_errors,
+            multi_market=multi_market,
+            storage=open_interest_for_storage,
+        )
     if funding_requested:
-        populate_funding_output_fn(output=output, tasks=funding_tasks, results=funding_results, errors=funding_errors, multi_market=multi_market, storage=funding_for_storage)
+        populate_funding_output_fn(
+            output=output,
+            tasks=funding_tasks,
+            results=funding_results,
+            errors=funding_errors,
+            multi_market=multi_market,
+            storage=funding_for_storage,
+        )
     if perp_trades_requested or option_trades_requested:
-        populate_trades_output_fn(output=output, tasks=trade_tasks, results=trade_results, errors=trade_errors, multi_market=multi_market, storage=trades_for_storage)
+        populate_trades_output_fn(
+            output=output,
+            tasks=trade_tasks,
+            results=trade_results,
+            errors=trade_errors,
+            multi_market=multi_market,
+            storage=trades_for_storage,
+        )
 
     if args.save_parquet_lake and not incremental_parquet_on_fetch:
         try:
-            storage_result = persist_fn(
-                storage=LoaderStorageDTO(candles=candles_for_storage, open_interest=open_interest_for_storage, funding=funding_for_storage, trades=trades_for_storage),
-                options=PersistOptionsDTO(save_parquet_lake=True, lake_root=cast(str, args.lake_root), oi_requested=oi_requested, funding_requested=funding_requested, trades_requested=(perp_trades_requested or option_trades_requested)),
+            storage_result = cast(
+                _PersistResult,
+                persist_fn(
+                    storage=LoaderStorageDTO(
+                        candles=candles_for_storage,
+                        open_interest=open_interest_for_storage,
+                        funding=funding_for_storage,
+                        trades=trades_for_storage,
+                    ),
+                    options=PersistOptionsDTO(
+                        save_parquet_lake=True,
+                        lake_root=args.lake_root,
+                        oi_requested=oi_requested,
+                        funding_requested=funding_requested,
+                        trades_requested=perp_trades_requested or option_trades_requested,
+                    ),
+                ),
             )
             output.update(storage_result.to_output_dict())
         except Exception as exc:  # noqa: BLE001
@@ -263,7 +456,11 @@ def finalize_bronze_output(
             selected_dataset_types.add("perp_trades")
         if option_trades_requested:
             selected_dataset_types.add("option_trades")
-        repaired_parquet_files = ensure_bronze_sidecars_fn(lake_root=cast(str, args.lake_root), dataset_types=sorted(selected_dataset_types), log_fn=logger.info)
+        repaired_parquet_files = ensure_bronze_sidecars_fn(
+            lake_root=args.lake_root,
+            dataset_types=sorted(selected_dataset_types),
+            log_fn=logger.info,
+        )
         if repaired_parquet_files:
             parquet_files = sorted(set(parquet_files).union(repaired_parquet_files))
             output["_parquet_files"] = parquet_files
@@ -273,9 +470,18 @@ def finalize_bronze_output(
     if perp_trades_requested or option_trades_requested:
         breakdown = trade_error_breakdown_fn(cast(dict[tuple[str, str, str], str], trade_errors))
         output["_trade_error_breakdown"] = breakdown
-        trade_parquet_files = sorted({str(Path(path).resolve()) for path in cast(list[str], output.get("_parquet_files", [])) if ("dataset_type=perp_trades" in path or "dataset_type=option_trades" in path) and path.endswith(".parquet")})
+        trade_parquet_files = sorted(
+            {
+                str(Path(path).resolve())
+                for path in cast(list[str], output.get("_parquet_files", []))
+                if ("dataset_type=perp_trades" in path or "dataset_type=option_trades" in path)
+                and path.endswith(".parquet")
+            }
+        )
         logger.info(
-            "Trades bronze summary tasks_total=%s tasks_success=%s tasks_failed=%s failed_net_unreachable=%s failed_net_timeout=%s failed_other=%s rows_total=%s parquet_files_written=%s lake_root=%s",
+            "Trades bronze summary tasks_total=%s tasks_success=%s tasks_failed=%s "
+            "failed_net_unreachable=%s failed_net_timeout=%s failed_other=%s rows_total=%s "
+            "parquet_files_written=%s lake_root=%s",
             len(trade_tasks),
             len(trade_tasks) - breakdown["total"],
             breakdown["total"],
@@ -284,7 +490,7 @@ def finalize_bronze_output(
             breakdown["other"],
             sum(len(rows) for rows in trade_results.values()),
             len(trade_parquet_files),
-            cast(str, args.lake_root),
+            args.lake_root,
         )
         if trade_parquet_files:
             logger.info("Trades bronze parquet files: %s", trade_parquet_files)

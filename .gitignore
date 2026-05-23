@@ -12,6 +12,7 @@
 !Makefile
 !main.py
 !pyproject.toml
+!uv.lock
 !.pre-commit-config.yaml
 
 # Source and test trees.
@@ -23,6 +24,8 @@
 !ingestion/**
 !infra/
 !infra/**
+!scripts/
+!scripts/**
 !tests/
 !tests/**
 

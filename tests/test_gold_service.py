@@ -1593,12 +1593,7 @@ def test_build_gold_uses_latest_similar_silver_dataset_variant(tmp_path: Path) -
         / "BTC-USDC_2026_05.parquet"
     )
     fresh_spot = (
-        silver
-        / "dataset_type=spot"
-        / f"exchange={exchange}"
-        / "symbol=BTC"
-        / "timeframe=1m"
-        / "BTC_2026_05.parquet"
+        silver / "dataset_type=spot" / f"exchange={exchange}" / "symbol=BTC" / "timeframe=1m" / "BTC_2026_05.parquet"
     )
     stale_spot.parent.mkdir(parents=True, exist_ok=True)
     fresh_spot.parent.mkdir(parents=True, exist_ok=True)

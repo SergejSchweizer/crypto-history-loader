@@ -181,6 +181,9 @@ AGENTS.md
 uv sync --extra dev
 ```
 
+The `dev` extra installs the local quality-gate tools used by pre-commit and CI-style checks:
+Ruff, Mypy, Pyright, ty, import-linter, pytest, pytest-cov, and pre-commit.
+
 Runtime configuration uses:
 
 ```text
@@ -727,7 +730,8 @@ Weitere Gold-Dataset-IDs:
 ```bash
 uv run ruff check .
 uv run mypy .
-uv run ty check .
+uv run pyright --level error
+uv run ty check
 uv run lint-imports --config .importlinter
 uv run python scripts/validate_config_with_pydantic.py --config config.yaml
 uv run pytest

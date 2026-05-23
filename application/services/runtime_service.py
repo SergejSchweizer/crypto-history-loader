@@ -149,6 +149,7 @@ def configure_logging(module_name: str = "crypto-market-loader", *, debug: bool 
         log_dir = Path(os.getenv("DEPTH_SYNC_LOG_DIR", DEFAULT_LOG_DIR))
         default_name = f"{safe_module_name}.log" if safe_module_name else DEFAULT_LOG_FILE
         log_path = log_dir / default_name
+    file_handler: TimedRotatingFileHandler | None = None
     try:
         log_path.parent.mkdir(parents=True, exist_ok=True)
         file_handler = TimedRotatingFileHandler(
@@ -172,8 +173,8 @@ def configure_logging(module_name: str = "crypto-market-loader", *, debug: bool 
     root_logger = logging.getLogger()
     if not root_logger.handlers:
         root_logger.setLevel(logging.DEBUG if debug else logging.INFO)
-        root_logger.addHandler(file_handler if "file_handler" in locals() else stream_handler)
-        if "file_handler" in locals():
+        root_logger.addHandler(file_handler if file_handler is not None else stream_handler)
+        if file_handler is not None:
             root_logger.addHandler(stream_handler)
 
     if debug:

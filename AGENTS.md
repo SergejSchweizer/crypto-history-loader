@@ -54,7 +54,9 @@ Always active across all modules and workflows.
 - [MUST] Keep operational docs aligned with behavior changes.
 - [MUST] Use one shared logfile path defined in `config.yaml`.
 - [MUST] Use one consistent log structure across modules.
+- [MUST] Do not comment obvious code.
 - [SHOULD] Add comments for non-obvious decisions, invariants, and tradeoffs.
+- [MUST] Comments and docstrings explain non-obvious decisions, invariants, edge cases, tradeoffs, external system assumptions, and failure handling.
 - [SHOULD] Avoid comments that only restate obvious code.
 - [MUST] Enforce deny-by-default `.gitignore` patterns, with minimal explicit allowlist.
 
@@ -88,6 +90,13 @@ Applies to system design, module boundaries, refactors, scalability, reliability
 
 ## Rules
 
+- [SHOULD] Enforce architecture rules with automated tests.
+- [MUST] Required architecture checks include forbidden dependency directions.
+- [MUST] Required architecture checks include circular imports.
+- [MUST] Required architecture checks include infrastructure leaking into domain logic.
+- [MUST] Required architecture checks include presentation or API layers importing persistence internals.
+- [MUST] Required architecture checks include shared utilities becoming dependency-heavy.
+- [SHOULD] Use `import-linter` or dedicated architecture tests to enforce architecture constraints.
 - [MUST] Define contract shape first (types, schema, invariants), then implement.
 - [MUST] Keep dependency direction from policy and domain to implementation details.
 - [MUST] Keep ownership explicit for each module (inputs, outputs, side effects).
@@ -123,14 +132,18 @@ Applies to system design, module boundaries, refactors, scalability, reliability
 
 - Escalate before large boundary shifts or contract versioning decisions.
 
-## Code Review
+## Code Quality Gates
 
 ## Scope
 
-Applies to reviews, PR preparation, and quality-gate validation before merge.
+Applies to review readiness, PR preparation, and pre-merge quality-gate validation.
 
 ## Rules
 
+- [MUST] All repositories using this baseline enforce quality gates through pre-commit and CI.
+- [MUST] Pre-commit and CI enforce the same logical checks.
+- [SHOULD] A change that passes locally also passes in CI without additional manual steps.
+- [MUST] CI is the final authority for merge readiness.
 - [MUST] Prioritize correctness and regression risk over style.
 - [MUST] Validate contract and schema integrity and boundary discipline.
 - [MUST] Flag operational risk (idempotency, restartability, observability).
@@ -138,6 +151,8 @@ Applies to reviews, PR preparation, and quality-gate validation before merge.
 - [MUST] Use explicit typing and return types on public interfaces.
 - [SHOULD] Require docstrings for non-trivial modules and functions.
 - [MUST] Run lint, format, typing, tests, and coverage checks before merge when practical.
+- [MUST] Required quality-gate checks include Ruff linting, Ruff formatting check, Pyright strict type checking, Pytest, coverage threshold, docstring checks, import boundary checks, and architecture tests.
+- [MUST] Agents must not bypass checks with `--no-verify` unless explicitly instructed by the human maintainer.
 
 ## Review Findings Format
 
@@ -171,7 +186,7 @@ Applies to reviews, PR preparation, and quality-gate validation before merge.
 
 - `ruff check .`
 - `ruff format --check .`
-- `mypy .` or `pyright`
+- `pyright --level error`
 - `pytest -q`
 
 ## Testing
@@ -228,6 +243,91 @@ Applies when adding or changing tests, fixing bugs, refactoring behavior, adding
 
 - Escalate if deterministic reproduction is not possible without production-only dependencies.
 
+## Python Tooling
+
+## Scope
+
+Applies to Python quality tooling, typing, formatting, and local validation commands.
+
+## Rules
+
+- [MUST] Python code is fully typed.
+- [MUST] Public functions have explicit parameter and return types.
+- [MUST] Implicit `Any` is not allowed.
+- [MUST] Untyped public APIs are not allowed.
+- [MUST] Every `# type: ignore` includes a precise explanation.
+- [MUST] Runtime data crossing boundaries uses typed DTOs, dataclasses, Pydantic models, TypedDicts, or explicit schemas.
+- [MUST] Prefer making invalid states unrepresentable.
+- [MUST] Configure Python tooling primarily in `pyproject.toml`.
+- [SHOULD] Configure `ruff`, `pyright`, `pytest`, `coverage`, and docstring tooling via `pyproject.toml` when supported.
+- [SHOULD] Avoid scattered configuration files unless a tool does not support `pyproject.toml`.
+- [MUST] Keep code compatible with the configured formatter, linter, type checker, and test runner.
+- [MUST] Use type hints consistently, including explicit return types for public interfaces.
+- [MUST] Public modules, public classes, public functions, CLIs, and architectural boundaries have concise docstrings.
+- [MUST] Keep import boundaries compatible with repository rules when boundary tooling is configured.
+- [SHOULD] Prefer one canonical command sequence for local validation to reduce drift across contributors.
+
+## Agent Action Checklist
+
+- Run lint and format checks before finalizing changes.
+- Run type checks for modified modules.
+- Run targeted tests first, then broader tests when practical.
+- Report any tool that could not be run and why.
+
+## Definition of Done
+
+- Lint, format, typing, and test signals are green or explicitly documented.
+- Public interfaces stay typed and understandable.
+
+## Verification Commands
+
+- `ruff check .`
+- `ruff format --check .`
+- `mypy .` or `pyright`
+- `pytest -q`
+
+## Agent Workflow
+
+## Scope
+
+Applies to day-to-day agent execution flow for implementation, debugging, and delivery.
+
+## Rules
+
+- [MUST] Before changing code, inspect relevant files.
+- [MUST] Before changing code, identify the smallest safe change.
+- [MUST] Preserve existing public contracts unless explicitly asked to change them.
+- [MUST] Add or update tests for behavioral changes.
+- [MUST] Run relevant quality gates.
+- [MUST] Report any checks that could not be executed.
+- [MUST] Do not introduce large rewrites when a targeted change is sufficient.
+- [MUST] Understand intended behavior and scope before editing.
+- [MUST] Prefer the smallest safe change that resolves the issue.
+- [MUST] Keep behavior stable during refactors unless a change is intentional and documented.
+- [MUST] Update tests and documentation in the same change set for behavior changes.
+- [MUST] During debugging, run CLI commands with `--debug` where available and analyze logfile output while scripts run.
+- [SHOULD] Add targeted diagnostic logs when they improve failure isolation.
+
+## Agent Action Checklist
+
+- Reproduce issue with deterministic inputs.
+- Identify impacted contracts, side effects, and test scope.
+- Implement minimal fix or focused improvement.
+- Validate with quality gates and tests.
+- Summarize risks, residual gaps, and follow-up work.
+
+## Definition of Done
+
+- Requested change is implemented and validated.
+- Debug and failure paths are observable.
+- Docs and tests match the updated behavior.
+
+## Verification Commands
+
+- `pytest -q`
+- `ruff check .`
+- `ruff format --check .`
+
 ## Security
 
 ## Scope
@@ -267,6 +367,41 @@ Applies to configuration, credentials, secrets handling, runtime environment, ex
 - Error handling safe and actionable.
 - Third-party boundaries enforced.
 
-## End Goal
+## Release and Sync
 
-Repositories using these instructions remain production-grade, reproducible, understandable, and extensible.
+## Scope
+
+Applies to pre-commit synchronization, release readiness, and repository-wide instruction consistency.
+
+## Rules
+
+- [MUST] `AGENTS.md` is generated from `fragments/*.md`.
+- [MUST] Agents must not edit `AGENTS.md` directly.
+- [MUST] All durable instruction changes must be made in the corresponding fragment file.
+- [MUST] After modifying fragments, regenerate `AGENTS.md` and verify generated output is deterministic.
+- [MUST] Keep `AGENTS.md` synchronized with fragment source files.
+- [MUST] Keep pre-commit sync behavior non-blocking when network access is unavailable.
+- [MUST] Keep generated repository instructions deterministic and reproducible.
+- [SHOULD] Keep release scope focused and include rollback or mitigation notes for operational risk.
+- [MUST] Disclose skipped quality checks and unresolved risks before release.
+
+## Agent Action Checklist
+
+- Confirm fragments are the source of truth.
+- Never edit `AGENTS.md` directly for durable policy updates.
+- Regenerate or sync `AGENTS.md` after fragment updates.
+- Verify determinism by re-running generation and confirming no diff.
+- Verify pre-commit sync hook still points to the managed sync script.
+- Validate release notes include testing status and known gaps.
+
+## Definition of Done
+
+- `AGENTS.md` matches current fragment set.
+- Sync path is operational and documented.
+- Release state includes quality-gate and risk visibility.
+
+## Verification Commands
+
+- `python scripts/sync_agents.py`
+- `git diff -- AGENTS.md fragments`
+- `pytest -q`

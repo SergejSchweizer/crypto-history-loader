@@ -1097,9 +1097,13 @@ def load_combined_dataframe_from_lake(
             oi_frames.append(frame)
 
         if oi_frames:
-            oi_frame = pl.concat(oi_frames, how="diagonal_relaxed").sort(by=["open_time"]).unique(
-                subset=["exchange", "instrument_type", "symbol", "timeframe", "open_time"],
-                keep="last",
+            oi_frame = (
+                pl.concat(oi_frames, how="diagonal_relaxed")
+                .sort(by=["open_time"])
+                .unique(
+                    subset=["exchange", "instrument_type", "symbol", "timeframe", "open_time"],
+                    keep="last",
+                )
             )
             oi_frame = oi_frame.select(
                 [
