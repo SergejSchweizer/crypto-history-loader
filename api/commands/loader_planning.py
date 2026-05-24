@@ -64,6 +64,8 @@ def build_bronze_fetch_plan(args: argparse.Namespace, logger: logging.Logger) ->
     candle_tasks: list[tuple[Exchange, Market, str, str]] = []
     oi_tasks: list[tuple[Exchange, str, str]] = []
     funding_tasks: list[tuple[Exchange, str, str]] = []
+    historical_volatility_tasks: list[tuple[Exchange, str, str]] = []
+    volatility_index_data_tasks: list[tuple[Exchange, str, str]] = []
     for exchange in sorted(exchanges):
         normalized_timeframe = normalize_timeframe(exchange=exchange, value=BRONZE_FIXED_TIMEFRAME)
         for symbol in symbols:
@@ -88,6 +90,10 @@ def build_bronze_fetch_plan(args: argparse.Namespace, logger: logging.Logger) ->
                     oi_tasks.append(task.interval_tuple())
                 elif spec.bronze_task_kind == "funding":
                     funding_tasks.append(task.interval_tuple())
+                elif spec.dataset_type == "historical_volatility":
+                    historical_volatility_tasks.append(task.interval_tuple())
+                elif spec.dataset_type == "volatility_index_data":
+                    volatility_index_data_tasks.append(task.interval_tuple())
 
     trade_specs = [spec for spec in specs if spec.bronze_task_kind == "trade"]
     trade_tasks = build_trade_tasks_from_specs(
@@ -112,6 +118,8 @@ def build_bronze_fetch_plan(args: argparse.Namespace, logger: logging.Logger) ->
         candle_tasks=candle_tasks,
         oi_tasks=oi_tasks,
         funding_tasks=funding_tasks,
+        historical_volatility_tasks=historical_volatility_tasks,
+        volatility_index_data_tasks=volatility_index_data_tasks,
         trade_tasks=trade_tasks,
         dataset_tasks=dataset_tasks,
     )

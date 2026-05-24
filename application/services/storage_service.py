@@ -11,10 +11,12 @@ from ingestion.lake import (
     save_open_interest_parquet_lake,
     save_spot_candles_parquet_lake,
     save_trades_parquet_lake,
+    save_volatility_parquet_lake,
 )
 from ingestion.open_interest import OpenInterestPoint
 from ingestion.spot import Market, SpotCandle
 from ingestion.trades import OptionTradeTick, TradeMarket, TradeTick
+from ingestion.volatility import VolatilityPoint
 
 
 def persist_loader_outputs_dto(
@@ -24,6 +26,7 @@ def persist_loader_outputs_dto(
     save_oi_lake_fn: Callable[..., list[str]] = save_open_interest_parquet_lake,
     save_funding_lake_fn: Callable[..., list[str]] = save_funding_parquet_lake,
     save_trades_lake_fn: Callable[..., list[str]] = save_trades_parquet_lake,
+    save_volatility_lake_fn: Callable[..., list[str]] = save_volatility_parquet_lake,
 ) -> PersistResultDTO:
     """Persist fetched datasets to parquet lake."""
 
@@ -55,6 +58,26 @@ def persist_loader_outputs_dto(
                         lake_root=options.lake_root,
                     )
                 )
+        if options.historical_volatility_requested:
+            for market_key, volatility_by_exchange in storage.historical_volatility.items():
+                result.parquet_files.extend(
+                    save_volatility_lake_fn(
+                        volatility_by_exchange=volatility_by_exchange,
+                        market=market_key,
+                        dataset_type="historical_volatility",
+                        lake_root=options.lake_root,
+                    )
+                )
+        if options.volatility_index_data_requested:
+            for market_key, volatility_by_exchange in storage.volatility_index_data.items():
+                result.parquet_files.extend(
+                    save_volatility_lake_fn(
+                        volatility_by_exchange=volatility_by_exchange,
+                        market=market_key,
+                        dataset_type="volatility_index_data",
+                        lake_root=options.lake_root,
+                    )
+                )
         if options.trades_requested:
             for trade_market_key, trades_by_exchange in storage.trades.items():
                 result.parquet_files.extend(
@@ -75,6 +98,8 @@ def persist_loader_outputs(
     lake_root: str,
     oi_requested: bool,
     funding_for_storage: dict[Market, dict[str, dict[str, list[FundingPoint]]]] | None = None,
+    historical_volatility_for_storage: dict[Market, dict[str, dict[str, list[VolatilityPoint]]]] | None = None,
+    volatility_index_data_for_storage: dict[Market, dict[str, dict[str, list[VolatilityPoint]]]] | None = None,
     save_spot_lake_fn: Callable[..., list[str]] = save_spot_candles_parquet_lake,
     save_oi_lake_fn: Callable[..., list[str]] = save_open_interest_parquet_lake,
     save_funding_lake_fn: Callable[..., list[str]] = save_funding_parquet_lake,
@@ -89,6 +114,8 @@ def persist_loader_outputs(
             candles=candles_for_storage,
             open_interest=open_interest_for_storage,
             funding=funding_for_storage or {},
+            historical_volatility=historical_volatility_for_storage or {},
+            volatility_index_data=volatility_index_data_for_storage or {},
             trades=trades_for_storage or {},
         ),
         options=PersistOptionsDTO(
@@ -96,6 +123,8 @@ def persist_loader_outputs(
             lake_root=lake_root,
             oi_requested=oi_requested,
             funding_requested=bool(funding_for_storage),
+            historical_volatility_requested=bool(historical_volatility_for_storage),
+            volatility_index_data_requested=bool(volatility_index_data_for_storage),
             trades_requested=trades_requested,
         ),
         save_spot_lake_fn=save_spot_lake_fn,

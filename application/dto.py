@@ -9,6 +9,7 @@ from ingestion.funding import FundingPoint
 from ingestion.open_interest import OpenInterestPoint
 from ingestion.spot import Exchange, Market, SpotCandle
 from ingestion.trades import OptionTradeTick, TradeMarket, TradeTick
+from ingestion.volatility import VolatilityPoint
 
 
 @dataclass(frozen=True)
@@ -55,6 +56,16 @@ class FundingFetchTaskDTO:
     exchange: Exchange
     symbol: str
     timeframe: str
+
+
+@dataclass(frozen=True)
+class VolatilityFetchTaskDTO:
+    """One volatility fetch task request."""
+
+    exchange: Exchange
+    symbol: str
+    timeframe: str
+    dataset_type: str
 
 
 @dataclass(frozen=True)
@@ -109,6 +120,14 @@ class FundingFetchResultDTO:
 
 
 @dataclass
+class VolatilityFetchResultDTO:
+    """Volatility fetch outcomes keyed by task tuple."""
+
+    rows: dict[tuple[Exchange, str, str], list[VolatilityPoint]] = field(default_factory=dict)
+    errors: dict[tuple[Exchange, str, str], str] = field(default_factory=dict)
+
+
+@dataclass
 class TradeFetchResultDTO:
     """Trades fetch outcomes keyed by task tuple."""
 
@@ -134,6 +153,8 @@ class BronzeFetchPlanDTO:
     candle_tasks: list[tuple[Exchange, Market, str, str]]
     oi_tasks: list[tuple[Exchange, str, str]]
     funding_tasks: list[tuple[Exchange, str, str]]
+    historical_volatility_tasks: list[tuple[Exchange, str, str]]
+    volatility_index_data_tasks: list[tuple[Exchange, str, str]]
     trade_tasks: list[tuple[Exchange, TradeMarket, str]]
     dataset_tasks: list[DatasetTask] = field(default_factory=list)
 
@@ -163,6 +184,8 @@ class LoaderStorageDTO:
     candles: dict[Market, dict[str, dict[str, list[SpotCandle]]]] = field(default_factory=dict)
     open_interest: dict[Market, dict[str, dict[str, list[OpenInterestPoint]]]] = field(default_factory=dict)
     funding: dict[Market, dict[str, dict[str, list[FundingPoint]]]] = field(default_factory=dict)
+    historical_volatility: dict[Market, dict[str, dict[str, list[VolatilityPoint]]]] = field(default_factory=dict)
+    volatility_index_data: dict[Market, dict[str, dict[str, list[VolatilityPoint]]]] = field(default_factory=dict)
     trades: dict[TradeMarket, dict[str, dict[str, list[TradeTick | OptionTradeTick]]]] = field(default_factory=dict)
 
 
@@ -184,6 +207,8 @@ class PersistOptionsDTO:
     lake_root: str
     oi_requested: bool
     funding_requested: bool = False
+    historical_volatility_requested: bool = False
+    volatility_index_data_requested: bool = False
     trades_requested: bool = False
 
 

@@ -13,10 +13,12 @@ from ingestion.lake import (
     save_open_interest_parquet_lake,
     save_spot_candles_parquet_lake,
     save_trades_parquet_lake,
+    save_volatility_parquet_lake,
 )
 from ingestion.open_interest import OpenInterestPoint
 from ingestion.spot import SpotCandle
 from ingestion.trades import OptionTradeTick, TradeTick
+from ingestion.volatility import VolatilityPoint
 
 
 def test_bronze_spot_schema_contract_order(tmp_path: Path) -> None:
@@ -120,3 +122,25 @@ def test_bronze_option_trades_schema_contract_fields(tmp_path: Path) -> None:
     assert "expiry" in schema.names
     assert "strike" in schema.names
     assert "option_type" in schema.names
+
+
+def test_bronze_historical_volatility_schema_contract_fields(tmp_path: Path) -> None:
+    row = VolatilityPoint(
+        exchange="deribit",
+        symbol="BTC",
+        interval="1m",
+        open_time=datetime(2026, 5, 1, 0, 0, tzinfo=UTC),
+        close_time=datetime(2026, 5, 1, 0, 0, tzinfo=UTC),
+        value=55.2,
+        source_endpoint="public_get_historical_volatility",
+        dataset_type="historical_volatility",
+    )
+    files = save_volatility_parquet_lake(
+        {"deribit": {"BTC": [row]}},
+        market="perp",
+        dataset_type="historical_volatility",
+        lake_root=str(tmp_path),
+    )
+    schema = pq.ParquetFile(files[0]).schema_arrow
+    assert "value" in schema.names
+    assert "source_endpoint" in schema.names

@@ -8,10 +8,29 @@ from typing import Literal, cast
 from ingestion.spot import Exchange, Market
 from ingestion.trades import TradeMarket
 
-CliDataType = Literal["spot", "perp", "oi", "funding", "perp_trades", "option_trades"]
-DatasetType = Literal["spot", "perp", "oi", "funding", "perp_trades", "option_trades", "l2_orderbook"]
+CliDataType = Literal[
+    "spot",
+    "perp",
+    "oi",
+    "funding",
+    "perp_trades",
+    "option_trades",
+    "historical_volatility",
+    "volatility_index_data",
+]
+DatasetType = Literal[
+    "spot",
+    "perp",
+    "oi",
+    "funding",
+    "perp_trades",
+    "option_trades",
+    "historical_volatility",
+    "volatility_index_data",
+    "l2_orderbook",
+]
 InstrumentType = Literal["spot", "perp", "option"]
-BronzeTaskKind = Literal["ohlcv", "open_interest", "funding", "trade"]
+BronzeTaskKind = Literal["ohlcv", "open_interest", "funding", "trade", "volatility"]
 SymbolGroup = Literal["symbols", "perp_trade_symbols", "option_trade_symbols"]
 
 
@@ -136,6 +155,22 @@ DATASET_REGISTRY: dict[CliDataType, DatasetSpec] = {
         symbol_group="option_trade_symbols",
         default_timeframe="tick",
         market="option",
+    ),
+    "historical_volatility": DatasetSpec(
+        cli_data_type="historical_volatility",
+        dataset_type="historical_volatility",
+        instrument_type="perp",
+        bronze_task_kind="volatility",
+        symbol_group="symbols",
+        market="perp",
+    ),
+    "volatility_index_data": DatasetSpec(
+        cli_data_type="volatility_index_data",
+        dataset_type="volatility_index_data",
+        instrument_type="perp",
+        bronze_task_kind="volatility",
+        symbol_group="symbols",
+        market="perp",
     ),
 }
 

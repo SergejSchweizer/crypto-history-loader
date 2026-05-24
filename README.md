@@ -139,6 +139,8 @@ Exchange APIs
 | Open Interest | Aggregate leveraged exposure |
 | Tick Trades | Historical trade-by-trade prints (REST backfill) |
 | Option Tick Trades | Historical option trade prints (REST backfill) |
+| Historical Volatility | Deribit historical volatility time series |
+| Volatility Index Data | Deribit DVOL-style index series |
 
 Current exchange support:
 

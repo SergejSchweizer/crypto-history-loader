@@ -62,22 +62,54 @@ def load_bronze_checkpoint(path: Path, fingerprint: str, logger: logging.Logger)
     """Load matching Bronze checkpoint completed-task sets."""
 
     if not path.exists():
-        return {"candle": set(), "oi": set(), "funding": set(), "trade": set()}
+        return {
+            "candle": set(),
+            "oi": set(),
+            "funding": set(),
+            "historical_volatility": set(),
+            "volatility_index_data": set(),
+            "trade": set(),
+        }
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except Exception as exc:  # noqa: BLE001
         logger.warning("Ignoring unreadable Bronze checkpoint '%s': %s", path, exc)
-        return {"candle": set(), "oi": set(), "funding": set(), "trade": set()}
+        return {
+            "candle": set(),
+            "oi": set(),
+            "funding": set(),
+            "historical_volatility": set(),
+            "volatility_index_data": set(),
+            "trade": set(),
+        }
     if not isinstance(payload, dict) or payload.get("fingerprint") != fingerprint:
         logger.info("Ignoring stale Bronze checkpoint '%s' (fingerprint mismatch)", path)
-        return {"candle": set(), "oi": set(), "funding": set(), "trade": set()}
+        return {
+            "candle": set(),
+            "oi": set(),
+            "funding": set(),
+            "historical_volatility": set(),
+            "volatility_index_data": set(),
+            "trade": set(),
+        }
     completed = payload.get("completed")
     if not isinstance(completed, dict):
-        return {"candle": set(), "oi": set(), "funding": set(), "trade": set()}
+        return {
+            "candle": set(),
+            "oi": set(),
+            "funding": set(),
+            "historical_volatility": set(),
+            "volatility_index_data": set(),
+            "trade": set(),
+        }
     return {
         "candle": set(str(value) for value in cast(list[object], completed.get("candle", []))),
         "oi": set(str(value) for value in cast(list[object], completed.get("oi", []))),
         "funding": set(str(value) for value in cast(list[object], completed.get("funding", []))),
+        "historical_volatility": set(
+            str(value) for value in cast(list[object], completed.get("historical_volatility", []))
+        ),
+        "volatility_index_data": set(str(value) for value in cast(list[object], completed.get("volatility_index_data", []))),
         "trade": set(str(value) for value in cast(list[object], completed.get("trade", []))),
     }
 

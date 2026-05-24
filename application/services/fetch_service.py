@@ -19,6 +19,8 @@ from application.dto import (
     OpenInterestFetchTaskDTO,
     TradeFetchResultDTO,
     TradeFetchTaskDTO,
+    VolatilityFetchResultDTO,
+    VolatilityFetchTaskDTO,
 )
 from application.schema import dataset_contract
 from application.services.fetch_bootstrap import fetch_bootstrap_history_rows, fetch_bounded_daily_rows
@@ -50,6 +52,11 @@ from ingestion.spot import (
     normalize_storage_symbol,
 )
 from ingestion.trades import OptionTradeTick, TradeMarket, TradeTick, fetch_trades_all_history, fetch_trades_range
+from ingestion.volatility import (
+    VolatilityPoint,
+    normalize_volatility_timeframe,
+    volatility_interval_to_milliseconds,
+)
 
 OI_DATASET_TYPE = dataset_contract("oi").dataset_type
 TTimeout = TypeVar("TTimeout")
@@ -921,6 +928,153 @@ def fetch_symbol_trades(
     return _dedupe_sort_trade_rows(filtered)
 
 
+def fetch_symbol_volatility(
+    exchange: Exchange,
+    market: Market,
+    symbol: str,
+    timeframe: str,
+    lake_root: str,
+    *,
+    dataset_type: str,
+    open_times_reader: Callable[..., list[datetime]] = open_times_in_lake_by_dataset,
+    timeframe_normalizer: Callable[..., str] = normalize_volatility_timeframe,
+    interval_ms_resolver: Callable[..., int] = volatility_interval_to_milliseconds,
+    now_open_resolver: Callable[..., int] = _last_closed_open_ms,
+    ranges_builder: Callable[..., list[tuple[int, int]]] = _missing_ranges_ms,
+    history_fetcher: Callable[..., list[VolatilityPoint]],
+    range_fetcher: Callable[..., list[VolatilityPoint]],
+    latest_open_time_reader: Callable[..., datetime | None] | None = None,
+    tail_delta_only: bool = False,
+    on_history_chunk: Callable[[list[VolatilityPoint]], None] | None = None,
+    start_open_ms_bound: int | None = None,
+) -> list[VolatilityPoint]:
+    """Fetch one volatility dataset for one symbol with bootstrap/gap-fill behavior."""
+
+    if market != "perp":
+        return []
+
+    normalized_interval = timeframe_normalizer(exchange=exchange, value=timeframe)
+    interval_ms = interval_ms_resolver(exchange=exchange, interval=normalized_interval)
+    end_open_ms = now_open_resolver(interval_ms=interval_ms)
+    if start_open_ms_bound is not None and end_open_ms < start_open_ms_bound:
+        return []
+
+    if tail_delta_only:
+        latest_reader = latest_open_time_reader
+        if latest_reader is None:
+            raise ValueError("latest_open_time_reader is required when tail_delta_only is enabled")
+        latest_open_time = latest_reader(
+            lake_root=lake_root,
+            dataset_type=dataset_type,
+            market=market,
+            exchange=exchange,
+            symbol=symbol.upper(),
+            timeframe=normalized_interval,
+        )
+        if latest_open_time is None:
+            if start_open_ms_bound is not None:
+                return _fetch_bounded_daily_rows(
+                    start_open_ms_bound=start_open_ms_bound,
+                    end_open_ms=end_open_ms,
+                    range_fetcher=range_fetcher,
+                    fetch_kwargs={
+                        "exchange": exchange,
+                        "symbol": symbol,
+                        "interval": normalized_interval,
+                        "market": market,
+                    },
+                    on_history_chunk=on_history_chunk,
+                )
+            return _fetch_bootstrap_history_rows(
+                history_fetcher=history_fetcher,
+                fetch_kwargs={
+                    "exchange": exchange,
+                    "symbol": symbol,
+                    "interval": normalized_interval,
+                    "market": market,
+                },
+                on_history_chunk=on_history_chunk,
+                start_open_ms_bound=start_open_ms_bound,
+            )
+        start_open_ms = int(latest_open_time.timestamp() * 1000) + interval_ms
+        if start_open_ms_bound is not None:
+            start_open_ms = max(start_open_ms, start_open_ms_bound)
+        if start_open_ms > end_open_ms:
+            return []
+        fetched_rows = range_fetcher(
+            exchange=exchange,
+            symbol=symbol,
+            interval=normalized_interval,
+            start_open_ms=start_open_ms,
+            end_open_ms=end_open_ms,
+            market=market,
+        )
+        unique_by_open_time = {item.open_time: item for item in fetched_rows}
+        return [unique_by_open_time[key] for key in sorted(unique_by_open_time)]
+
+    stored_open_times = open_times_reader(
+        lake_root=lake_root,
+        dataset_type=dataset_type,
+        market=market,
+        exchange=exchange,
+        symbol=symbol.upper(),
+        timeframe=normalized_interval,
+    )
+    if not stored_open_times:
+        if start_open_ms_bound is not None:
+            return _fetch_bounded_daily_rows(
+                start_open_ms_bound=start_open_ms_bound,
+                end_open_ms=end_open_ms,
+                range_fetcher=range_fetcher,
+                fetch_kwargs={
+                    "exchange": exchange,
+                    "symbol": symbol,
+                    "interval": normalized_interval,
+                    "market": market,
+                },
+                on_history_chunk=on_history_chunk,
+            )
+        return _fetch_bootstrap_history_rows(
+            history_fetcher=history_fetcher,
+            fetch_kwargs={
+                "exchange": exchange,
+                "symbol": symbol,
+                "interval": normalized_interval,
+                "market": market,
+            },
+            on_history_chunk=on_history_chunk,
+            start_open_ms_bound=start_open_ms_bound,
+        )
+    if end_open_ms < int(min(stored_open_times).timestamp() * 1000):
+        return []
+
+    missing_ranges = _build_missing_ranges_with_optional_head_gap(
+        existing_open_times=stored_open_times,
+        interval_ms=interval_ms,
+        end_open_ms=end_open_ms,
+        start_open_ms_bound=start_open_ms_bound,
+        ranges_builder=ranges_builder,
+    )
+    if not missing_ranges:
+        return []
+
+    fetched: list[VolatilityPoint] = []
+    for start_open_ms, gap_end_ms in _ranges_in_random_order(missing_ranges):
+        fetched.extend(
+            range_fetcher(
+                exchange=exchange,
+                symbol=symbol,
+                interval=normalized_interval,
+                start_open_ms=start_open_ms,
+                end_open_ms=gap_end_ms,
+                market=market,
+            )
+        )
+
+    unique_by_open_time = {item.open_time: item for item in fetched}
+    return [unique_by_open_time[key] for key in sorted(unique_by_open_time)]
+
+
 def fetch_candle_tasks_parallel(
     tasks: list[CandleFetchTaskDTO],
     lake_root: str,
@@ -1216,6 +1370,101 @@ def fetch_funding_tasks_parallel(
             )
             task_errors[key] = str(exc)
     return FundingFetchResultDTO(rows=task_results, errors=task_errors)
+
+
+def fetch_volatility_tasks_parallel(
+    tasks: list[VolatilityFetchTaskDTO],
+    lake_root: str,
+    concurrency: int,
+    logger: logging.Logger,
+    symbol_fetcher: Callable[..., list[VolatilityPoint]],
+    shared_semaphore: object | None = None,
+    on_task_complete: Callable[[VolatilityFetchTaskDTO, list[VolatilityPoint]], None] | None = None,
+    on_task_chunk: Callable[[VolatilityFetchTaskDTO, list[VolatilityPoint]], None] | None = None,
+) -> VolatilityFetchResultDTO:
+    """Fetch volatility tasks sequentially."""
+
+    del concurrency, shared_semaphore
+    total_tasks = len(tasks)
+    task_results: dict[tuple[Exchange, str, str], list[VolatilityPoint]] = {}
+    task_errors: dict[tuple[Exchange, str, str], str] = {}
+    task_timeout_s = _task_timeout_seconds()
+    heartbeat_s = _heartbeat_seconds()
+    for idx, task in enumerate(tasks, start=1):
+        logger.info(
+            "Fetch start [%s/%s] type=%s exchange=%s market=perp symbol=%s timeframe=%s mode=%s",
+            idx,
+            total_tasks,
+            task.dataset_type,
+            task.exchange,
+            task.symbol,
+            task.timeframe,
+            "auto-bootstrap-or-gap-fill",
+        )
+        key = (task.exchange, task.symbol, task.timeframe)
+        task_started_at = datetime.now(UTC)
+        history_chunk_cb: Callable[[list[VolatilityPoint]], None] | None = None
+        if on_task_chunk is not None:
+            task_for_chunk = task
+
+            def _history_chunk_volatility(
+                values: list[VolatilityPoint],
+                _task: VolatilityFetchTaskDTO = task_for_chunk,
+            ) -> None:
+                on_task_chunk(_task, values)
+
+            history_chunk_cb = _history_chunk_volatility
+
+        def _heartbeat_volatility(elapsed_s: int) -> None:
+            del elapsed_s
+
+        try:
+            rows = cast(
+                list[VolatilityPoint],
+                run_with_optional_history_chunk(
+                    runner=_run_with_optional_timeout,
+                    fn=symbol_fetcher,
+                    timeout_s=task_timeout_s,
+                    heartbeat_s=heartbeat_s,
+                    heartbeat=_heartbeat_volatility,
+                    use_process_timeout=False,
+                    kwargs={
+                        "exchange": task.exchange,
+                        "market": "perp",
+                        "symbol": task.symbol,
+                        "timeframe": task.timeframe,
+                        "lake_root": lake_root,
+                        "on_history_chunk": history_chunk_cb,
+                    },
+                ),
+            )
+            elapsed_s = elapsed_seconds(task_started_at)
+            logger.info(
+                "Fetch done [%s/%s] type=%s exchange=%s market=perp symbol=%s timeframe=%s rows=%s elapsed_s=%s",
+                idx,
+                total_tasks,
+                task.dataset_type,
+                task.exchange,
+                task.symbol,
+                task.timeframe,
+                len(rows),
+                elapsed_s,
+            )
+            task_results[key] = rows
+            if on_task_complete is not None:
+                on_task_complete(task, rows)
+        except Exception as exc:  # noqa: BLE001
+            elapsed_s = elapsed_seconds(task_started_at)
+            logger.exception(
+                "Fetch error type=%s exchange=%s market=perp symbol=%s timeframe=%s elapsed_s=%s",
+                task.dataset_type,
+                task.exchange,
+                task.symbol,
+                task.timeframe,
+                elapsed_s,
+            )
+            task_errors[key] = str(exc)
+    return VolatilityFetchResultDTO(rows=task_results, errors=task_errors)
 
 
 def fetch_trade_tasks_parallel(

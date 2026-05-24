@@ -10,6 +10,7 @@ from ingestion.funding import FundingPoint
 from ingestion.open_interest import OpenInterestPoint
 from ingestion.spot import Exchange, Market, SpotCandle
 from ingestion.trades import OptionTradeTick, TradeMarket, TradeTick
+from ingestion.volatility import VolatilityPoint
 
 
 def build_trade_tasks(
@@ -201,6 +202,48 @@ def populate_funding_output(
                 "funding_rate": item.funding_rate,
                 "index_price": item.index_price,
                 "mark_price": item.mark_price,
+            }
+            for item in rows
+        ]
+        by_market = storage.setdefault("perp", {})
+        by_exchange = by_market.setdefault(exchange, {})
+        by_exchange[symbol_key] = rows
+
+
+def populate_volatility_output(
+    *,
+    output: dict[str, object],
+    tasks: Iterable[tuple[Exchange, str, str]],
+    results: dict[tuple[Exchange, str, str], list[VolatilityPoint]],
+    errors: dict[tuple[Exchange, str, str], str],
+    multi_market: bool,
+    storage: dict[Market, dict[str, dict[str, list[VolatilityPoint]]]],
+    dataset_key: str,
+) -> None:
+    """Populate JSON output and storage bucket for volatility tasks."""
+
+    for exchange, symbol, timeframe in tasks:
+        symbol_key = symbol.upper()
+        key = (exchange, symbol, timeframe)
+        exchange_output = cast(dict[str, object], output[exchange])
+        if multi_market:
+            market_bucket = cast(dict[str, object], exchange_output.setdefault(dataset_key, {}))
+        else:
+            market_bucket = exchange_output
+        if key in errors:
+            market_bucket[symbol_key] = {"error": errors[key]}
+            continue
+        rows = results.get(key, [])
+        market_bucket[symbol_key] = [
+            {
+                "exchange": item.exchange,
+                "symbol": item.symbol,
+                "interval": item.interval,
+                "open_time": item.open_time.isoformat(),
+                "close_time": item.close_time.isoformat(),
+                "value": item.value,
+                "source_endpoint": item.source_endpoint,
+                "dataset_type": item.dataset_type,
             }
             for item in rows
         ]
