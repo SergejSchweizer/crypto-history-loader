@@ -10,7 +10,7 @@ from pathlib import Path
 
 LOGGER_NAME = "crypto_market_loader"
 DEFAULT_LOG_DIR = ".logs"
-DEFAULT_LOG_FILE = "crypto-market-loader.log"
+DEFAULT_LOG_FILE = "crypto-history-loader.log"
 DEFAULT_FETCH_CONCURRENCY = 4
 MAX_FETCH_CONCURRENCY = 8
 
@@ -110,7 +110,7 @@ class SingleInstanceLock:
         except BlockingIOError as exc:
             os.close(self._fd)
             self._fd = None
-            raise SingleInstanceError("Another crypto-market-loader instance is already running. Exiting.") from exc
+            raise SingleInstanceError("Another crypto-history-loader instance is already running. Exiting.") from exc
         os.ftruncate(self._fd, 0)
         os.write(self._fd, str(os.getpid()).encode("utf-8"))
         return self
@@ -127,10 +127,10 @@ def _safe_log_module_name(module_name: str) -> str:
     """Return a filesystem-safe log module name."""
 
     normalized = module_name.strip().replace("/", "-").replace("\\", "-")
-    return normalized or "crypto-market-loader"
+    return normalized or "crypto-history-loader"
 
 
-def configure_logging(module_name: str = "crypto-market-loader", *, debug: bool = False) -> logging.Logger:
+def configure_logging(module_name: str = "crypto-history-loader", *, debug: bool = False) -> logging.Logger:
     """Configure process logging with daily rotation and 30-day retention."""
 
     safe_module_name = _safe_log_module_name(module_name)
@@ -142,7 +142,7 @@ def configure_logging(module_name: str = "crypto-market-loader", *, debug: bool 
     logger.propagate = False
     formatter = logging.Formatter("%(asctime)s %(levelname)s %(message)s")
     log_file_env = os.getenv("DEPTH_SYNC_LOG_FILE", "").strip()
-    use_explicit_log_file = bool(log_file_env) and safe_module_name in {"", "crypto-market-loader"}
+    use_explicit_log_file = bool(log_file_env) and safe_module_name in {"", "crypto-history-loader"}
     if use_explicit_log_file:
         log_path = Path(log_file_env)
     else:

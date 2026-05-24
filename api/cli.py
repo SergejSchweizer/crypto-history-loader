@@ -116,7 +116,7 @@ def _sync_loader_runtime_overrides() -> None:
 def build_parser() -> argparse.ArgumentParser:
     """Create top-level CLI parser."""
 
-    parser = argparse.ArgumentParser(description="crypto-market-loader CLI")
+    parser = argparse.ArgumentParser(description="crypto-history-loader CLI")
     parser.add_argument(
         "--config",
         default="config.yaml",

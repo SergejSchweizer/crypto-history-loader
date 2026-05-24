@@ -172,9 +172,9 @@ def test_log_path_from_config_dir_and_default(tmp_path: Path) -> None:
     module = _load_pipeline_module()
     cfg = {"env": {"DEPTH_SYNC_LOG_DIR": str(tmp_path / "xlogs")}}
     out = module._log_path_from_config(config_data=cfg, repo_root=tmp_path)
-    assert out == (tmp_path / "xlogs" / "crypto-market-loader.log").resolve()
+    assert out == (tmp_path / "xlogs" / "crypto-history-loader.log").resolve()
     out_default = module._log_path_from_config(config_data={}, repo_root=tmp_path)
-    assert out_default == (tmp_path / ".run" / "logs" / "crypto-market-loader.log").resolve()
+    assert out_default == (tmp_path / ".run" / "logs" / "crypto-history-loader.log").resolve()
 
 
 def test_lock_acquire_and_release(tmp_path: Path) -> None:

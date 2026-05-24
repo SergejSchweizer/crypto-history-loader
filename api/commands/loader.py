@@ -724,7 +724,7 @@ def run_bronze_build(args: argparse.Namespace, logger: logging.Logger) -> None:
         )
 
     try:
-        with SingleInstanceLock(".run/crypto-market-loader.lock"):
+        with SingleInstanceLock(".run/crypto-history-loader.lock"):
             plan = _build_bronze_fetch_plan(args=args, logger=logger)
             exchanges = plan.exchanges
             ohlcv_markets = plan.ohlcv_markets

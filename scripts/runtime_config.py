@@ -47,7 +47,7 @@ def read_logfile_from_config(config_path: Path | None = None) -> Path:
 
         configured_dir = env_config.get("DEPTH_SYNC_LOG_DIR")
         if isinstance(configured_dir, str) and configured_dir.strip():
-            return Path(configured_dir.strip()) / "crypto-market-loader.log"
+            return Path(configured_dir.strip()) / "crypto-history-loader.log"
 
     raise ValueError(
         "config.yaml must define 'env.DEPTH_SYNC_LOG_FILE', 'env.DEPTH_SYNC_LOG_DIR', or top-level 'logfile'"

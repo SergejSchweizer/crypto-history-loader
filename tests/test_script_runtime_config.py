@@ -20,7 +20,7 @@ def test_read_logfile_from_config_uses_log_dir_default_name(tmp_path: Path) -> N
     config_path = tmp_path / "config.yaml"
     config_path.write_text("env:\n  DEPTH_SYNC_LOG_DIR: .logs\n", encoding="utf-8")
 
-    assert read_logfile_from_config(config_path) == Path(".logs") / "crypto-market-loader.log"
+    assert read_logfile_from_config(config_path) == Path(".logs") / "crypto-history-loader.log"
 
 
 def test_read_logfile_from_config_keeps_legacy_top_level_logfile(tmp_path: Path) -> None:

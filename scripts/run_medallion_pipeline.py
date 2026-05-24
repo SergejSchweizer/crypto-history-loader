@@ -184,8 +184,8 @@ def _log_path_from_config(*, config_data: dict[str, Any], repo_root: Path) -> Pa
             return Path(configured_file.strip()).resolve()
         configured_dir = env_cfg.get("DEPTH_SYNC_LOG_DIR")
         if isinstance(configured_dir, str) and configured_dir.strip():
-            return (Path(configured_dir.strip()) / "crypto-market-loader.log").resolve()
-    return (repo_root / ".run" / "logs" / "crypto-market-loader.log").resolve()
+            return (Path(configured_dir.strip()) / "crypto-history-loader.log").resolve()
+    return (repo_root / ".run" / "logs" / "crypto-history-loader.log").resolve()
 
 
 def _run_pipeline(

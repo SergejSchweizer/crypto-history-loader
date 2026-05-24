@@ -1,4 +1,4 @@
-# crypto-market-loader
+# crypto-history-loader
 
 Production-grade cryptocurrency market data ingestion, normalization, feature engineering, and dataset generation framework for quantitative research and systematic trading.
 
@@ -6,7 +6,7 @@ Production-grade cryptocurrency market data ingestion, normalization, feature en
 
 # Table Of Contents
 
-- [crypto-market-loader](#crypto-market-loader)
+- [crypto-history-loader](#crypto-history-loader)
 - [Table Of Contents](#table-of-contents)
 - [1. Project Goals](#1-project-goals)
 - [2. System Overview](#2-system-overview)
@@ -67,7 +67,7 @@ Production-grade cryptocurrency market data ingestion, normalization, feature en
 
 # 1. Project Goals
 
-`crypto-market-loader` is designed as a reproducible market data platform for cryptocurrency quantitative research.
+`crypto-history-loader` is designed as a reproducible market data platform for cryptocurrency quantitative research.
 
 Primary goals:
 

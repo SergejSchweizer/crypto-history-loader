@@ -279,7 +279,7 @@ toml = [
 ]
 
 [[package]]
-name = "crypto-market-loader"
+name = "crypto-history-loader"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
