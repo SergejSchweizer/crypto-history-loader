@@ -1,4 +1,5 @@
 """Gold transformation service for per-symbol model-ready datasets."""
+# pyright: reportUnknownMemberType=false, reportUnknownVariableType=false, reportUnknownArgumentType=false
 
 from __future__ import annotations
 
@@ -919,7 +920,7 @@ def _write_feature_distribution_plot(
         series_df = frame.select(["timestamp_m1", col]).sort("timestamp_m1")
         values_all = series_df.get_column(col).to_list()
         ts = series_df.get_column("timestamp_m1").to_list()
-        arr_non_null, arr_plot_normalized, missing_values = _normalized_series(values_all)
+        arr_non_null, arr_plot_normalized, _missing_values = _normalized_series(values_all)
         left_ax = fig.add_subplot(grid[idx + 1, 0])
         right_ax = fig.add_subplot(grid[idx + 1, 1])
 
@@ -1344,8 +1345,8 @@ def build_gold_for_symbol(
         symbol=symbol,
         rows_out=merged.height,
         columns=cols,
-        min_timestamp=manifest_payload["min_timestamp"],
-        max_timestamp=manifest_payload["max_timestamp"],
+        min_timestamp=str(manifest_payload["min_timestamp"]) if manifest_payload["min_timestamp"] is not None else None,
+        max_timestamp=str(manifest_payload["max_timestamp"]) if manifest_payload["max_timestamp"] is not None else None,
         parquet_path=str(parquet_path.resolve()),
         manifest_path=written_manifest,
         plot_path=written_plot,

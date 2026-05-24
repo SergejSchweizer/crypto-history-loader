@@ -22,7 +22,7 @@ def sanitize_symbols(raw_symbols: object, logger: logging.Logger) -> list[str]:
         raise ValueError("Symbols must be provided as a list")
     cleaned: list[str] = []
     dropped = 0
-    for raw in raw_symbols:
+    for raw in cast(list[object], raw_symbols):
         if not isinstance(raw, str):
             dropped += 1
             continue

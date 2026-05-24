@@ -24,6 +24,12 @@ from api.commands.loader_execution import fetch_all_task_groups as fetch_all_tas
 from api.commands.loader_output import IncrementalPersistor, finalize_bronze_output
 from api.commands.loader_planning import (
     build_bronze_fetch_plan,
+    canonical_symbol_key,
+    parse_exchange_symbol_start_dates,
+    parse_start_date_to_open_ms,
+    parse_symbol_start_dates,
+    resolved_symbol_groups,
+    sanitize_symbols,
 )
 from api.commands.loader_runtime import BronzeRuntimeBoundsContext, resolve_symbol_start_open_ms_bound
 from application.datasets import DATASET_REGISTRY, dataset_spec
@@ -114,6 +120,10 @@ tail_delta_only = True
 bronze_start_open_ms: int | None = None
 bronze_symbol_start_open_ms: dict[str, int] = {}
 bronze_exchange_symbol_start_open_ms: dict[str, int] = {}
+_TAIL_DELTA_ONLY = True
+_BRONZE_START_OPEN_MS: int | None = None
+_BRONZE_SYMBOL_START_OPEN_MS: dict[str, int] = {}
+_BRONZE_EXCHANGE_SYMBOL_START_OPEN_MS: dict[str, int] = {}
 MARKET_CHOICES = tuple(DATASET_REGISTRY.keys())
 OI_DATASET_TYPE = dataset_spec("oi").dataset_type
 
@@ -124,17 +134,33 @@ runtime_bounds_context = BronzeRuntimeBoundsContext(
     symbol_start_open_ms={},
     exchange_symbol_start_open_ms={},
 )
+_last_closed_open_ms = last_closed_open_ms
+_missing_ranges_ms = missing_ranges_ms
 
 
 def _current_runtime_bounds_context() -> BronzeRuntimeBoundsContext:
     """Return effective runtime bounds context with legacy global fallback."""
 
     return BronzeRuntimeBoundsContext(
-        tail_delta_only=tail_delta_only,
-        global_start_open_ms=bronze_start_open_ms,
-        symbol_start_open_ms=bronze_symbol_start_open_ms,
-        exchange_symbol_start_open_ms=bronze_exchange_symbol_start_open_ms,
+        tail_delta_only=_TAIL_DELTA_ONLY,
+        global_start_open_ms=_BRONZE_START_OPEN_MS,
+        symbol_start_open_ms=_BRONZE_SYMBOL_START_OPEN_MS,
+        exchange_symbol_start_open_ms=_BRONZE_EXCHANGE_SYMBOL_START_OPEN_MS,
     )
+
+
+def _sanitize_symbols(raw_symbols: object, logger: logging.Logger) -> list[str]:  # pyright: ignore[reportUnusedFunction]
+    """Return validated symbol list, dropping null/blank/non-string entries."""
+
+    return sanitize_symbols(raw_symbols=raw_symbols, logger=logger)
+
+
+def _resolved_symbol_groups(  # pyright: ignore[reportUnusedFunction]
+    args: argparse.Namespace, logger: logging.Logger
+) -> tuple[list[str], list[str], list[str]]:
+    """Return deterministically ordered symbol groups for Bronze task planning."""
+
+    return resolved_symbol_groups(args=args, logger=logger)
 
 
 def _build_bronze_fetch_plan(args: argparse.Namespace, logger: logging.Logger) -> BronzeFetchPlanDTO:
@@ -395,8 +421,8 @@ def _fetch_symbol_candles(
         open_times_reader=open_times_in_lake,
         symbol_normalizer=normalize_storage_symbol,
         interval_ms_resolver=interval_to_milliseconds,
-        now_open_resolver=last_closed_open_ms,
-        ranges_builder=missing_ranges_ms,
+        now_open_resolver=_last_closed_open_ms,
+        ranges_builder=_missing_ranges_ms,
         history_fetcher=fetch_candles_all_history,
         range_fetcher=fetch_candles_range,
         latest_open_time_reader=latest_open_time_in_lake,
@@ -424,8 +450,8 @@ def _fetch_symbol_open_interest(
         timeframe_normalizer=normalize_open_interest_timeframe,
         symbol_normalizer=normalize_storage_symbol,
         interval_ms_resolver=open_interest_interval_to_milliseconds,
-        now_open_resolver=last_closed_open_ms,
-        ranges_builder=missing_ranges_ms,
+        now_open_resolver=_last_closed_open_ms,
+        ranges_builder=_missing_ranges_ms,
         history_fetcher=fetch_open_interest_all_history,
         range_fetcher=fetch_open_interest_range,
         latest_open_time_reader=latest_open_time_in_lake_by_dataset,
@@ -453,8 +479,8 @@ def _fetch_symbol_funding(
         timeframe_normalizer=normalize_funding_timeframe,
         symbol_normalizer=normalize_storage_symbol,
         interval_ms_resolver=funding_interval_to_milliseconds,
-        now_open_resolver=last_closed_open_ms,
-        ranges_builder=missing_ranges_ms,
+        now_open_resolver=_last_closed_open_ms,
+        ranges_builder=_missing_ranges_ms,
         history_fetcher=fetch_funding_all_history,
         range_fetcher=fetch_funding_range,
         latest_open_time_reader=latest_open_time_in_lake_by_dataset,
@@ -482,8 +508,8 @@ def _fetch_symbol_historical_volatility(
         open_times_reader=open_times_in_lake_by_dataset,
         timeframe_normalizer=normalize_volatility_timeframe,
         interval_ms_resolver=volatility_interval_to_milliseconds,
-        now_open_resolver=last_closed_open_ms,
-        ranges_builder=missing_ranges_ms,
+        now_open_resolver=_last_closed_open_ms,
+        ranges_builder=_missing_ranges_ms,
         history_fetcher=fetch_historical_volatility_all_history,
         range_fetcher=fetch_historical_volatility_range,
         latest_open_time_reader=latest_open_time_in_lake_by_dataset,
@@ -511,8 +537,8 @@ def _fetch_symbol_volatility_index_data(
         open_times_reader=open_times_in_lake_by_dataset,
         timeframe_normalizer=normalize_volatility_timeframe,
         interval_ms_resolver=volatility_interval_to_milliseconds,
-        now_open_resolver=last_closed_open_ms,
-        ranges_builder=missing_ranges_ms,
+        now_open_resolver=_last_closed_open_ms,
+        ranges_builder=_missing_ranges_ms,
         history_fetcher=fetch_volatility_index_all_history,
         range_fetcher=fetch_volatility_index_range,
         latest_open_time_reader=latest_open_time_in_lake_by_dataset,
@@ -562,6 +588,7 @@ def _configure_bronze_start_bounds(args: argparse.Namespace, logger: logging.Log
     """Initialize Bronze start-bound globals from CLI/config args and emit boundary logs."""
 
     global bronze_start_open_ms, bronze_symbol_start_open_ms, bronze_exchange_symbol_start_open_ms
+    global _BRONZE_START_OPEN_MS, _BRONZE_SYMBOL_START_OPEN_MS, _BRONZE_EXCHANGE_SYMBOL_START_OPEN_MS
     global runtime_bounds_context
     (
         bronze_start_open_ms,
@@ -572,11 +599,40 @@ def _configure_bronze_start_bounds(args: argparse.Namespace, logger: logging.Log
         logger=logger,
     )
     runtime_bounds_context = BronzeRuntimeBoundsContext(
-        tail_delta_only=bool(getattr(args, "tail_delta_only", tail_delta_only)),
+        tail_delta_only=bool(getattr(args, "tail_delta_only", _TAIL_DELTA_ONLY)),
         global_start_open_ms=bronze_start_open_ms,
         symbol_start_open_ms=bronze_symbol_start_open_ms,
         exchange_symbol_start_open_ms=bronze_exchange_symbol_start_open_ms,
     )
+    _BRONZE_START_OPEN_MS = bronze_start_open_ms  # pyright: ignore[reportConstantRedefinition]
+    _BRONZE_SYMBOL_START_OPEN_MS = bronze_symbol_start_open_ms  # pyright: ignore[reportConstantRedefinition]
+    _BRONZE_EXCHANGE_SYMBOL_START_OPEN_MS = bronze_exchange_symbol_start_open_ms  # pyright: ignore[reportConstantRedefinition]
+
+
+def _parse_start_date_to_open_ms(start_date: str | None) -> int | None:  # pyright: ignore[reportUnusedFunction]
+    """Parse inclusive UTC start date ``YYYY-MM-DD`` to epoch milliseconds."""
+
+    return parse_start_date_to_open_ms(start_date=start_date)
+
+
+def _canonical_symbol_key(symbol: str) -> str:  # pyright: ignore[reportUnusedFunction]
+    """Return canonical base symbol key for per-symbol start-date matching."""
+
+    return canonical_symbol_key(symbol=symbol)
+
+
+def _parse_symbol_start_dates(entries: list[str] | None) -> dict[str, int]:  # pyright: ignore[reportUnusedFunction]
+    """Parse ``SYMBOL=YYYY-MM-DD`` entries into canonical symbol->epoch-ms map."""
+
+    return parse_symbol_start_dates(entries=entries)
+
+
+def _parse_exchange_symbol_start_dates(  # pyright: ignore[reportUnusedFunction]
+    entries: list[str] | None,
+) -> dict[str, int]:
+    """Parse ``EXCHANGE:SYMBOL=YYYY-MM-DD`` entries into canonical exchange:symbol->epoch-ms map."""
+
+    return parse_exchange_symbol_start_dates(entries=entries)
 
 
 def _fetch_candle_tasks_parallel(
@@ -857,8 +913,9 @@ def _fetch_all_task_groups(
 def run_bronze_build(args: argparse.Namespace, logger: logging.Logger) -> None:
     """Run bronze-build command."""
 
-    global tail_delta_only
+    global tail_delta_only, _TAIL_DELTA_ONLY
     tail_delta_only = bool(args.tail_delta_only)
+    _TAIL_DELTA_ONLY = tail_delta_only  # pyright: ignore[reportConstantRedefinition]
     _configure_bronze_start_bounds(args=args, logger=logger)
     if tail_delta_only:
         rolling_bound = datetime.now(UTC) - timedelta(days=30)
@@ -917,87 +974,99 @@ def run_bronze_build(args: argparse.Namespace, logger: logging.Logger) -> None:
                 volatility_index_data_key_map,
                 trade_key_map,
             ) = _dataset_task_key_maps(plan)
+            checkpoint_enabled = (
+                bool(args.save_parquet_lake) if bool(getattr(args, "_invoked_via_cli", False)) else True
+            )
             checkpoint_path = _bronze_checkpoint_path()
             checkpoint_fingerprint = _bronze_checkpoint_fingerprint(args=args, plan=plan)
-            checkpoint_completed = _load_bronze_checkpoint(
-                path=checkpoint_path,
-                fingerprint=checkpoint_fingerprint,
-                logger=logger,
-            )
-            _hydrate_checkpoint_aliases(
-                completed=checkpoint_completed,
-                candle_tasks=tasks,
-                oi_tasks=oi_tasks,
-                funding_tasks=funding_tasks,
-                historical_volatility_tasks=historical_volatility_tasks,
-                volatility_index_data_tasks=volatility_index_data_tasks,
-                trade_tasks=trade_tasks,
-                candle_key_map=candle_key_map,
-                oi_key_map=oi_key_map,
-                funding_key_map=funding_key_map,
-                historical_volatility_key_map=historical_volatility_key_map,
-                volatility_index_data_key_map=volatility_index_data_key_map,
-                trade_key_map=trade_key_map,
-            )
-
-            pending_tasks = apply_checkpoint_filter(
-                candle_tasks=tasks,
-                oi_tasks=oi_tasks,
-                funding_tasks=funding_tasks,
-                historical_volatility_tasks=historical_volatility_tasks,
-                volatility_index_data_tasks=volatility_index_data_tasks,
-                trade_tasks=trade_tasks,
-                completed=checkpoint_completed,
-                candle_key_serializer=lambda task: candle_key_map.get(
-                    task,
-                    _task_key_tuple_to_string((task[0], task[1], task[2], task[3])),
-                ),
-                oi_key_serializer=lambda task: oi_key_map.get(
-                    task,
-                    _task_key_tuple_to_string((task[0], task[1], task[2])),
-                ),
-                funding_key_serializer=lambda task: funding_key_map.get(
-                    task,
-                    _task_key_tuple_to_string((task[0], task[1], task[2])),
-                ),
-                historical_volatility_key_serializer=lambda task: historical_volatility_key_map.get(
-                    task,
-                    _task_key_tuple_to_string((task[0], task[1], task[2])),
-                ),
-                volatility_index_data_key_serializer=lambda task: volatility_index_data_key_map.get(
-                    task,
-                    _task_key_tuple_to_string((task[0], task[1], task[2])),
-                ),
-                trade_key_serializer=lambda task: trade_key_map.get(
-                    task,
-                    _task_key_tuple_to_string((task[0], task[1], task[2])),
-                ),
-            )
-            tasks = pending_tasks.candle_tasks
-            oi_tasks = pending_tasks.oi_tasks
-            funding_tasks = pending_tasks.funding_tasks
-            historical_volatility_tasks = pending_tasks.historical_volatility_tasks
-            volatility_index_data_tasks = pending_tasks.volatility_index_data_tasks
-            trade_tasks = pending_tasks.trade_tasks
-            if has_checkpoint_state(checkpoint_completed):
-                logger.info(
-                    (
-                        "Resuming from Bronze checkpoint '%s' pending_tasks candle=%s oi=%s funding=%s "
-                        "historical_volatility=%s volatility_index_data=%s trade=%s"
-                    ),
-                    checkpoint_path,
-                    len(tasks),
-                    len(oi_tasks),
-                    len(funding_tasks),
-                    len(historical_volatility_tasks),
-                    len(volatility_index_data_tasks),
-                    len(trade_tasks),
+            checkpoint_completed: dict[str, set[str]] = {
+                "candle": set(),
+                "oi": set(),
+                "funding": set(),
+                "historical_volatility": set(),
+                "volatility_index_data": set(),
+                "trade": set(),
+            }
+            if checkpoint_enabled:
+                checkpoint_completed = _load_bronze_checkpoint(
+                    path=checkpoint_path,
+                    fingerprint=checkpoint_fingerprint,
+                    logger=logger,
                 )
-            _write_bronze_checkpoint(
-                checkpoint_path,
-                fingerprint=checkpoint_fingerprint,
-                completed=checkpoint_completed,
-            )
+                _hydrate_checkpoint_aliases(
+                    completed=checkpoint_completed,
+                    candle_tasks=tasks,
+                    oi_tasks=oi_tasks,
+                    funding_tasks=funding_tasks,
+                    historical_volatility_tasks=historical_volatility_tasks,
+                    volatility_index_data_tasks=volatility_index_data_tasks,
+                    trade_tasks=trade_tasks,
+                    candle_key_map=candle_key_map,
+                    oi_key_map=oi_key_map,
+                    funding_key_map=funding_key_map,
+                    historical_volatility_key_map=historical_volatility_key_map,
+                    volatility_index_data_key_map=volatility_index_data_key_map,
+                    trade_key_map=trade_key_map,
+                )
+
+                pending_tasks = apply_checkpoint_filter(
+                    candle_tasks=tasks,
+                    oi_tasks=oi_tasks,
+                    funding_tasks=funding_tasks,
+                    historical_volatility_tasks=historical_volatility_tasks,
+                    volatility_index_data_tasks=volatility_index_data_tasks,
+                    trade_tasks=trade_tasks,
+                    completed=checkpoint_completed,
+                    candle_key_serializer=lambda task: candle_key_map.get(
+                        task,
+                        _task_key_tuple_to_string((task[0], task[1], task[2], task[3])),
+                    ),
+                    oi_key_serializer=lambda task: oi_key_map.get(
+                        task,
+                        _task_key_tuple_to_string((task[0], task[1], task[2])),
+                    ),
+                    funding_key_serializer=lambda task: funding_key_map.get(
+                        task,
+                        _task_key_tuple_to_string((task[0], task[1], task[2])),
+                    ),
+                    historical_volatility_key_serializer=lambda task: historical_volatility_key_map.get(
+                        task,
+                        _task_key_tuple_to_string((task[0], task[1], task[2])),
+                    ),
+                    volatility_index_data_key_serializer=lambda task: volatility_index_data_key_map.get(
+                        task,
+                        _task_key_tuple_to_string((task[0], task[1], task[2])),
+                    ),
+                    trade_key_serializer=lambda task: trade_key_map.get(
+                        task,
+                        _task_key_tuple_to_string((task[0], task[1], task[2])),
+                    ),
+                )
+                tasks = pending_tasks.candle_tasks
+                oi_tasks = pending_tasks.oi_tasks
+                funding_tasks = pending_tasks.funding_tasks
+                historical_volatility_tasks = pending_tasks.historical_volatility_tasks
+                volatility_index_data_tasks = pending_tasks.volatility_index_data_tasks
+                trade_tasks = pending_tasks.trade_tasks
+                if has_checkpoint_state(checkpoint_completed):
+                    logger.info(
+                        (
+                            "Resuming from Bronze checkpoint '%s' pending_tasks candle=%s oi=%s funding=%s "
+                            "historical_volatility=%s volatility_index_data=%s trade=%s"
+                        ),
+                        checkpoint_path,
+                        len(tasks),
+                        len(oi_tasks),
+                        len(funding_tasks),
+                        len(historical_volatility_tasks),
+                        len(volatility_index_data_tasks),
+                        len(trade_tasks),
+                    )
+                _write_bronze_checkpoint(
+                    checkpoint_path,
+                    fingerprint=checkpoint_fingerprint,
+                    completed=checkpoint_completed,
+                )
 
             policy = _build_bronze_execution_policy()
             candle_concurrency = policy.candle_concurrency
@@ -1051,11 +1120,12 @@ def run_bronze_build(args: argparse.Namespace, logger: logging.Logger) -> None:
                 else:
                     serialized_key = _task_key_tuple_to_string(key)
                 checkpoint_completed[dataset].add(serialized_key)
-                _write_bronze_checkpoint(
-                    checkpoint_path,
-                    fingerprint=checkpoint_fingerprint,
-                    completed=checkpoint_completed,
-                )
+                if checkpoint_enabled:
+                    _write_bronze_checkpoint(
+                        checkpoint_path,
+                        fingerprint=checkpoint_fingerprint,
+                        completed=checkpoint_completed,
+                    )
 
             incremental_persistor = IncrementalPersistor(
                 lake_root=cast(str, args.lake_root),
@@ -1248,7 +1318,7 @@ def run_bronze_build(args: argparse.Namespace, logger: logging.Logger) -> None:
 
             if not args.no_json_output:
                 print(json.dumps(output, indent=2))
-            if not (
+            if checkpoint_enabled and not (
                 task_errors
                 or oi_errors
                 or funding_errors
@@ -1258,7 +1328,7 @@ def run_bronze_build(args: argparse.Namespace, logger: logging.Logger) -> None:
             ):
                 checkpoint_path.unlink(missing_ok=True)
                 logger.info("Cleared Bronze checkpoint '%s' after successful run", checkpoint_path)
-            else:
+            elif checkpoint_enabled:
                 logger.warning(
                     "Retaining Bronze checkpoint '%s' for resume; failures remain",
                     checkpoint_path,

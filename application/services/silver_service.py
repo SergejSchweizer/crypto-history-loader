@@ -8,7 +8,11 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from application.services.gold_service import _feature_hash, _feature_metadata, _write_feature_distribution_plot
+from application.services.gold_service import (  # pyright: ignore[reportPrivateUsage]
+    _feature_hash,  # pyright: ignore[reportPrivateUsage]
+    _feature_metadata,  # pyright: ignore[reportPrivateUsage]
+    _write_feature_distribution_plot,  # pyright: ignore[reportPrivateUsage]
+)
 
 
 def _require_polars() -> Any:

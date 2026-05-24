@@ -14,7 +14,7 @@ import polars as pl
 from ingestion.lake import load_combined_dataframe_from_lake
 
 
-def add_export_descriptive_stats_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+def add_export_descriptive_stats_parser(subparsers: Any) -> None:
     """Register ``export-descriptive-stats`` parser."""
 
     parser = subparsers.add_parser(

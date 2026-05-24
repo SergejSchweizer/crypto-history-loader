@@ -26,7 +26,10 @@ from application.schema import dataset_contract
 from application.services.fetch_bootstrap import fetch_bootstrap_history_rows, fetch_bounded_daily_rows
 from application.services.fetch_executors import elapsed_seconds, run_with_optional_history_chunk
 from application.services.fetch_runtime_policy import heartbeat_seconds, task_timeout_seconds
-from application.services.gapfill_service import _last_closed_open_ms, _missing_ranges_ms
+from application.services.gapfill_service import (  # pyright: ignore[reportPrivateUsage]
+    _last_closed_open_ms,  # pyright: ignore[reportPrivateUsage]
+    _missing_ranges_ms,  # pyright: ignore[reportPrivateUsage]
+)
 from ingestion.funding import (
     FundingPoint,
     fetch_funding_all_history,
@@ -98,7 +101,7 @@ def _dedupe_sort_trade_rows(rows: list[TradeTick | OptionTradeTick]) -> list[Tra
     return [unique[key] for key in sorted(unique)]
 
 
-def _row_open_time_ms(row: TRow) -> int:
+def _row_open_time_ms(row: object) -> int:
     """Return row open timestamp in epoch milliseconds."""
 
     row_any = cast(Any, row)
@@ -310,18 +313,15 @@ def _run_with_optional_timeout(
         result_queue.close()
         result_queue.join_thread()
         return _run_inline_with_heartbeat()
-    deadline = None if timeout_s is None else (time.monotonic() + timeout_s)
+    deadline = time.monotonic() + timeout_s
     try:
         while True:
-            if deadline is not None:
-                remaining = deadline - time.monotonic()
-                if remaining <= 0:
-                    process.terminate()
-                    process.join(timeout=2)
-                    raise TimeoutError(f"Fetch task timed out after {timeout_s:.1f}s")
-                wait_s = min(max(0.1, heartbeat_s), remaining)
-            else:
-                wait_s = max(0.1, heartbeat_s)
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                process.terminate()
+                process.join(timeout=2)
+                raise TimeoutError(f"Fetch task timed out after {timeout_s:.1f}s")
+            wait_s = min(max(0.1, heartbeat_s), remaining)
 
             process.join(timeout=wait_s)
             if process.is_alive():
@@ -1121,26 +1121,32 @@ def fetch_candle_tasks_parallel(
             del elapsed_s, ex, mk, sy, tf
 
         try:
-            candles = cast(
-                list[SpotCandle],
-                run_with_optional_history_chunk(
-                    runner=_run_with_optional_timeout,
-                    fn=symbol_fetcher,
-                    timeout_s=task_timeout_s,
-                    heartbeat_s=heartbeat_s,
-                    heartbeat=_hb_ohlcv,
-                    use_process_timeout=False,
-                    kwargs={
-                        "exchange": task.exchange,
-                        "market": task.market,
-                        "symbol": task.symbol,
-                        "timeframe": task.timeframe,
-                        "lake_root": lake_root,
-                        "on_history_chunk": (lambda rows, _task=task: on_task_chunk(_task, rows))
-                        if on_task_chunk is not None
-                        else None,
-                    },
-                ),
+            history_chunk_cb: Callable[[list[SpotCandle]], None] | None = None
+            if on_task_chunk is not None:
+                task_for_chunk = task
+
+                def _history_chunk_ohlcv(
+                    values: list[SpotCandle],
+                    _task: CandleFetchTaskDTO = task_for_chunk,
+                ) -> None:
+                    on_task_chunk(_task, values)
+
+                history_chunk_cb = _history_chunk_ohlcv
+            candles = run_with_optional_history_chunk(
+                runner=_run_with_optional_timeout,
+                fn=symbol_fetcher,
+                timeout_s=task_timeout_s,
+                heartbeat_s=heartbeat_s,
+                heartbeat=_hb_ohlcv,
+                use_process_timeout=False,
+                kwargs={
+                    "exchange": task.exchange,
+                    "market": task.market,
+                    "symbol": task.symbol,
+                    "timeframe": task.timeframe,
+                    "lake_root": lake_root,
+                    "on_history_chunk": history_chunk_cb,
+                },
             )
             elapsed_s = elapsed_seconds(task_started_at)
             logger.info(
@@ -1226,24 +1232,21 @@ def fetch_open_interest_tasks_parallel(
             del elapsed_s, ex, sy, tf
 
         try:
-            rows = cast(
-                list[OpenInterestPoint],
-                run_with_optional_history_chunk(
-                    runner=_run_with_optional_timeout,
-                    fn=symbol_fetcher,
-                    timeout_s=task_timeout_s,
-                    heartbeat_s=heartbeat_s,
-                    heartbeat=_heartbeat_oi,
-                    use_process_timeout=True,
-                    kwargs={
-                        "exchange": task.exchange,
-                        "market": "perp",
-                        "symbol": task.symbol,
-                        "timeframe": task.timeframe,
-                        "lake_root": lake_root,
-                        "on_history_chunk": history_chunk_cb,
-                    },
-                ),
+            rows = run_with_optional_history_chunk(
+                runner=_run_with_optional_timeout,
+                fn=symbol_fetcher,
+                timeout_s=task_timeout_s,
+                heartbeat_s=heartbeat_s,
+                heartbeat=_heartbeat_oi,
+                use_process_timeout=True,
+                kwargs={
+                    "exchange": task.exchange,
+                    "market": "perp",
+                    "symbol": task.symbol,
+                    "timeframe": task.timeframe,
+                    "lake_root": lake_root,
+                    "on_history_chunk": history_chunk_cb,
+                },
             )
             elapsed_s = elapsed_seconds(task_started_at)
             logger.info(
@@ -1326,24 +1329,21 @@ def fetch_funding_tasks_parallel(
             del elapsed_s, ex, sy, tf
 
         try:
-            rows = cast(
-                list[FundingPoint],
-                run_with_optional_history_chunk(
-                    runner=_run_with_optional_timeout,
-                    fn=symbol_fetcher,
-                    timeout_s=task_timeout_s,
-                    heartbeat_s=heartbeat_s,
-                    heartbeat=_heartbeat_funding,
-                    use_process_timeout=False,
-                    kwargs={
-                        "exchange": task.exchange,
-                        "market": "perp",
-                        "symbol": task.symbol,
-                        "timeframe": task.timeframe,
-                        "lake_root": lake_root,
-                        "on_history_chunk": history_chunk_cb,
-                    },
-                ),
+            rows = run_with_optional_history_chunk(
+                runner=_run_with_optional_timeout,
+                fn=symbol_fetcher,
+                timeout_s=task_timeout_s,
+                heartbeat_s=heartbeat_s,
+                heartbeat=_heartbeat_funding,
+                use_process_timeout=False,
+                kwargs={
+                    "exchange": task.exchange,
+                    "market": "perp",
+                    "symbol": task.symbol,
+                    "timeframe": task.timeframe,
+                    "lake_root": lake_root,
+                    "on_history_chunk": history_chunk_cb,
+                },
             )
             elapsed_s = elapsed_seconds(task_started_at)
             logger.info(
@@ -1419,24 +1419,21 @@ def fetch_volatility_tasks_parallel(
             del elapsed_s
 
         try:
-            rows = cast(
-                list[VolatilityPoint],
-                run_with_optional_history_chunk(
-                    runner=_run_with_optional_timeout,
-                    fn=symbol_fetcher,
-                    timeout_s=task_timeout_s,
-                    heartbeat_s=heartbeat_s,
-                    heartbeat=_heartbeat_volatility,
-                    use_process_timeout=False,
-                    kwargs={
-                        "exchange": task.exchange,
-                        "market": "perp",
-                        "symbol": task.symbol,
-                        "timeframe": task.timeframe,
-                        "lake_root": lake_root,
-                        "on_history_chunk": history_chunk_cb,
-                    },
-                ),
+            rows = run_with_optional_history_chunk(
+                runner=_run_with_optional_timeout,
+                fn=symbol_fetcher,
+                timeout_s=task_timeout_s,
+                heartbeat_s=heartbeat_s,
+                heartbeat=_heartbeat_volatility,
+                use_process_timeout=False,
+                kwargs={
+                    "exchange": task.exchange,
+                    "market": "perp",
+                    "symbol": task.symbol,
+                    "timeframe": task.timeframe,
+                    "lake_root": lake_root,
+                    "on_history_chunk": history_chunk_cb,
+                },
             )
             elapsed_s = elapsed_seconds(task_started_at)
             logger.info(
@@ -1511,6 +1508,17 @@ def fetch_trade_tasks_parallel(
             del elapsed_s, ex, mk, sy
 
         try:
+            history_chunk_cb: Callable[[list[TradeTick | OptionTradeTick]], None] | None = None
+            if on_task_chunk is not None:
+                task_for_chunk = task
+
+                def _history_chunk_trades(
+                    values: list[TradeTick | OptionTradeTick],
+                    _task: TradeFetchTaskDTO = task_for_chunk,
+                ) -> None:
+                    on_task_chunk(_task, values)
+
+                history_chunk_cb = _history_chunk_trades
             rows = _run_with_optional_timeout(
                 symbol_fetcher,
                 timeout_s=task_timeout_s,
@@ -1520,7 +1528,7 @@ def fetch_trade_tasks_parallel(
                 market=task.market,
                 symbol=task.symbol,
                 lake_root=lake_root,
-                on_history_chunk=(lambda chunk, _task=task: on_task_chunk(_task, chunk)) if on_task_chunk else None,
+                on_history_chunk=history_chunk_cb,
             )
             elapsed_s = elapsed_seconds(started_at)
             logger.info(

@@ -1,4 +1,5 @@
 """Parquet lake writing utilities for fetched market data."""
+# pyright: reportUnknownMemberType=false, reportUnknownVariableType=false, reportUnknownArgumentType=false
 
 from __future__ import annotations
 
@@ -13,7 +14,10 @@ from pathlib import Path
 from typing import Any, cast
 
 from application.schema import dataset_contract
-from application.services.gold_service import _feature_metadata, _write_feature_distribution_plot
+from application.services.gold_service import (  # pyright: ignore[reportPrivateUsage]
+    _feature_metadata,  # pyright: ignore[reportPrivateUsage]
+    _write_feature_distribution_plot,  # pyright: ignore[reportPrivateUsage]
+)
 from ingestion.funding import FundingPoint
 from ingestion.open_interest import OpenInterestPoint
 from ingestion.spot import SpotCandle

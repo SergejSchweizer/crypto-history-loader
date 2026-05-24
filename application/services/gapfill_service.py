@@ -5,7 +5,9 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 
-def _last_closed_open_ms(interval_ms: int, now_utc: datetime | None = None) -> int:
+def _last_closed_open_ms(  # pyright: ignore[reportUnusedFunction]
+    interval_ms: int, now_utc: datetime | None = None
+) -> int:
     """Return open timestamp (ms) of latest fully closed candle."""
 
     now = now_utc or datetime.now(UTC)
@@ -13,7 +15,7 @@ def _last_closed_open_ms(interval_ms: int, now_utc: datetime | None = None) -> i
     return ((now_ms // interval_ms) - 1) * interval_ms
 
 
-def _missing_ranges_ms(
+def _missing_ranges_ms(  # pyright: ignore[reportUnusedFunction]
     existing_open_times: list[datetime],
     interval_ms: int,
     end_open_ms: int,

@@ -6,7 +6,7 @@ import argparse
 import json
 import logging
 from collections.abc import Callable
-from typing import cast
+from typing import Any, cast
 
 from application.services.silver_service import (
     SilverBuildReport,
@@ -33,7 +33,7 @@ _MARKET_DISCOVERY_CONFIG: dict[str, tuple[str, str, str]] = {
 }
 
 
-def add_silver_build_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+def add_silver_build_parser(subparsers: Any) -> None:
     """Register ``silver-build`` parser."""
 
     parser = subparsers.add_parser("silver-build", help="Build silver monthly parquet outputs from bronze data")

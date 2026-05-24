@@ -5,12 +5,12 @@ from __future__ import annotations
 import argparse
 import json
 import logging
-from typing import cast
+from typing import Any, cast
 
 from ingestion.spot import Exchange, list_supported_intervals
 
 
-def add_list_spot_timeframes_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+def add_list_spot_timeframes_parser(subparsers: Any) -> None:
     """Register ``list-spot-timeframes`` parser."""
 
     parser = subparsers.add_parser("list-spot-timeframes", help="List exchange-supported candle timeframes")

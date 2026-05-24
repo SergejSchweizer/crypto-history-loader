@@ -18,6 +18,7 @@ from api.commands.stats import add_export_descriptive_stats_parser, run_export_d
 from api.commands.timeframes import add_list_spot_timeframes_parser, run_list_spot_timeframes
 from application.services import gapfill_service
 from application.services.config_validation import validate_runtime_config
+from application.services.fetch_service import fetch_symbol_candles
 from application.services.runtime_service import (
     SingleInstanceError,
     SingleInstanceLock,
@@ -60,6 +61,8 @@ _BRONZE_START_OPEN_MS: int | None = None
 _BRONZE_SYMBOL_START_OPEN_MS: dict[str, int] = {}
 _BRONZE_EXCHANGE_SYMBOL_START_OPEN_MS: dict[str, int] = {}
 _BRONZE_CONFIG_ALIASES: tuple[str, ...] = ("bronze-build", "bronze-ingest", "loader")
+_last_closed_open_ms = gapfill_service._last_closed_open_ms  # pyright: ignore[reportPrivateUsage]
+_missing_ranges_ms = gapfill_service._missing_ranges_ms  # pyright: ignore[reportPrivateUsage]
 
 
 # Backward-compatible wrappers used by tests.
@@ -70,13 +73,22 @@ def _fetch_symbol_candles(  # pyright: ignore[reportUnusedFunction]
     timeframe: str,
     lake_root: str,
 ) -> list[SpotCandle]:
-    _sync_loader_runtime_overrides()
-    return loader_cmd._fetch_symbol_candles(  # pyright: ignore[reportPrivateUsage]
+    return fetch_symbol_candles(
         exchange=exchange,
         market=market,
         symbol=symbol,
         timeframe=timeframe,
         lake_root=lake_root,
+        open_times_reader=open_times_in_lake,
+        symbol_normalizer=normalize_storage_symbol,
+        interval_ms_resolver=interval_to_milliseconds,
+        now_open_resolver=_last_closed_open_ms,
+        ranges_builder=_missing_ranges_ms,
+        history_fetcher=fetch_candles_all_history,
+        range_fetcher=fetch_candles_range,
+        latest_open_time_reader=latest_open_time_in_lake,
+        tail_delta_only=_TAIL_DELTA_ONLY,
+        start_open_ms_bound=_BRONZE_START_OPEN_MS,
     )
 
 
@@ -87,8 +99,8 @@ def _sync_loader_runtime_overrides() -> None:
     loader_any.SingleInstanceLock = SingleInstanceLock
     loader_any.SingleInstanceError = SingleInstanceError
     loader_any.fetch_concurrency = fetch_concurrency
-    loader_any._last_closed_open_ms = gapfill_service._last_closed_open_ms  # pyright: ignore[reportPrivateUsage]
-    loader_any._missing_ranges_ms = gapfill_service._missing_ranges_ms  # pyright: ignore[reportPrivateUsage]
+    loader_any._last_closed_open_ms = _last_closed_open_ms
+    loader_any._missing_ranges_ms = _missing_ranges_ms
     loader_any.open_times_in_lake = open_times_in_lake
     loader_any.open_times_in_lake_by_dataset = open_times_in_lake_by_dataset
     loader_any.latest_open_time_in_lake = latest_open_time_in_lake
@@ -221,6 +233,9 @@ def _apply_yaml_defaults(
             if raw_key == "debug":
                 # Keep debug as an explicit CLI-only switch.
                 continue
+            if raw_key == "save_parquet_lake":
+                # Keep Bronze parquet writes as an explicit CLI-only switch.
+                continue
             if raw_key in explicit_dests or not hasattr(args, raw_key):
                 continue
             setattr(args, raw_key, value)
@@ -277,6 +292,7 @@ def main() -> None:
     logger.info("Command start: %s", args.command)
 
     if args.command == "bronze-build":
+        args._invoked_via_cli = True
         _sync_loader_runtime_overrides()
         loader_cmd.run_bronze_build(args=args, logger=logger)
     elif args.command == "silver-build":
