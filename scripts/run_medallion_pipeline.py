@@ -13,7 +13,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import cast
 
 
 @dataclass(frozen=True)
@@ -42,7 +42,7 @@ def _default_repo_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
-def _load_yaml(path: Path) -> dict[str, Any]:
+def _load_yaml(path: Path) -> dict[str, object]:
     """Load YAML mapping from config path."""
 
     try:
@@ -55,20 +55,21 @@ def _load_yaml(path: Path) -> dict[str, Any]:
         return {}
     if not isinstance(loaded, dict):
         raise ValueError("config file must contain a top-level mapping")
-    return loaded
+    return cast(dict[str, object], loaded)
 
 
-def _build_steps(*, main_path: Path, config_path: Path, config_data: dict[str, Any]) -> list[PipelineStep]:
+def _build_steps(*, main_path: Path, config_path: Path, config_data: dict[str, object]) -> list[PipelineStep]:
     """Build pipeline command sequence from config."""
 
     pipeline_cfg = config_data.get("medallion-pipeline")
     if not isinstance(pipeline_cfg, dict):
         raise ValueError("config missing required section: medallion-pipeline")
+    pipeline_map = cast(dict[str, object], pipeline_cfg)
 
-    order_raw = pipeline_cfg.get("execution_order")
+    order_raw = pipeline_map.get("execution_order")
     if not isinstance(order_raw, list) or not order_raw:
         raise ValueError("medallion-pipeline.execution_order must be a non-empty list")
-    execution_order = [str(name).strip() for name in order_raw if str(name).strip()]
+    execution_order = [str(name).strip() for name in cast(list[object], order_raw) if str(name).strip()]
     valid_layers = {"bronze", "silver", "gold"}
     invalid = [name for name in execution_order if name not in valid_layers]
     if invalid:
@@ -78,21 +79,22 @@ def _build_steps(*, main_path: Path, config_path: Path, config_data: dict[str, A
 
     steps: list[PipelineStep] = []
     for layer_name in execution_order:
-        layer_cfg = pipeline_cfg.get(layer_name)
+        layer_cfg = pipeline_map.get(layer_name)
         if not isinstance(layer_cfg, dict):
             raise ValueError(f"medallion-pipeline.{layer_name} must be a mapping")
-        enabled = bool(layer_cfg.get("enabled", True))
+        layer_map = cast(dict[str, object], layer_cfg)
+        enabled = bool(layer_map.get("enabled", True))
         if not enabled:
             continue
 
-        command = str(layer_cfg.get("command", "")).strip()
+        command = str(layer_map.get("command", "")).strip()
         if not command:
             raise ValueError(f"medallion-pipeline.{layer_name}.command is required")
 
-        cli_args_raw = layer_cfg.get("cli_args", [])
+        cli_args_raw = layer_map.get("cli_args", [])
         if not isinstance(cli_args_raw, list):
             raise ValueError(f"medallion-pipeline.{layer_name}.cli_args must be a list")
-        cli_args = [str(token) for token in cli_args_raw]
+        cli_args = [str(token) for token in cast(list[object], cli_args_raw)]
         if layer_name == "bronze" and command == "bronze-build":
             cli_args = _ensure_bronze_market_datasets(cli_args)
             cli_args = _enforce_six_month_download_window(cli_args)
@@ -214,15 +216,16 @@ def _ensure_bronze_market_datasets(
     return rewritten
 
 
-def _log_path_from_config(*, config_data: dict[str, Any], repo_root: Path) -> Path:
+def _log_path_from_config(*, config_data: dict[str, object], repo_root: Path) -> Path:
     """Resolve module-specific log file path from config env mapping."""
 
     env_cfg = config_data.get("env")
     if isinstance(env_cfg, dict):
-        configured_file = env_cfg.get("DEPTH_SYNC_LOG_FILE")
+        env_map = cast(dict[str, object], env_cfg)
+        configured_file = env_map.get("DEPTH_SYNC_LOG_FILE")
         if isinstance(configured_file, str) and configured_file.strip():
             return (Path(configured_file.strip()).resolve().parent / "run-medallion-pipeline.log").resolve()
-        configured_dir = env_cfg.get("DEPTH_SYNC_LOG_DIR")
+        configured_dir = env_map.get("DEPTH_SYNC_LOG_DIR")
         if isinstance(configured_dir, str) and configured_dir.strip():
             return (Path(configured_dir.strip()) / "run-medallion-pipeline.log").resolve()
     return (repo_root / ".run" / "logs" / "run-medallion-pipeline.log").resolve()

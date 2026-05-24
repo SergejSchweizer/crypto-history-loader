@@ -24,12 +24,6 @@ from api.commands.loader_execution import fetch_all_task_groups as fetch_all_tas
 from api.commands.loader_output import IncrementalPersistor, finalize_bronze_output
 from api.commands.loader_planning import (
     build_bronze_fetch_plan,
-    canonical_symbol_key,
-    parse_exchange_symbol_start_dates,
-    parse_start_date_to_open_ms,
-    parse_symbol_start_dates,
-    resolved_symbol_groups,
-    sanitize_symbols,
 )
 from api.commands.loader_runtime import BronzeRuntimeBoundsContext, resolve_symbol_start_open_ms_bound
 from application.datasets import DATASET_REGISTRY, dataset_spec
@@ -63,11 +57,16 @@ from application.services.fetch_service import (
     fetch_symbol_funding,
     fetch_symbol_open_interest,
     fetch_symbol_trades,
+    fetch_symbol_volatility,
     fetch_trade_tasks_parallel,
     fetch_volatility_tasks_parallel,
-    fetch_symbol_volatility,
 )
-from application.services.gapfill_service import _last_closed_open_ms, _missing_ranges_ms
+from application.services.gapfill_service import (
+    _last_closed_open_ms as last_closed_open_ms,  # pyright: ignore[reportPrivateUsage]
+)
+from application.services.gapfill_service import (
+    _missing_ranges_ms as missing_ranges_ms,  # pyright: ignore[reportPrivateUsage]
+)
 from application.services.runtime_service import SingleInstanceError, SingleInstanceLock, fetch_concurrency
 from application.services.storage_service import persist_loader_outputs_dto
 from ingestion.funding import (
@@ -111,15 +110,15 @@ from ingestion.volatility import (
     volatility_interval_to_milliseconds,
 )
 
-_TAIL_DELTA_ONLY = True
-_BRONZE_START_OPEN_MS: int | None = None
-_BRONZE_SYMBOL_START_OPEN_MS: dict[str, int] = {}
-_BRONZE_EXCHANGE_SYMBOL_START_OPEN_MS: dict[str, int] = {}
+tail_delta_only = True
+bronze_start_open_ms: int | None = None
+bronze_symbol_start_open_ms: dict[str, int] = {}
+bronze_exchange_symbol_start_open_ms: dict[str, int] = {}
 MARKET_CHOICES = tuple(DATASET_REGISTRY.keys())
 OI_DATASET_TYPE = dataset_spec("oi").dataset_type
 
 
-_RUNTIME_BOUNDS_CONTEXT = BronzeRuntimeBoundsContext(
+runtime_bounds_context = BronzeRuntimeBoundsContext(
     tail_delta_only=True,
     global_start_open_ms=None,
     symbol_start_open_ms={},
@@ -131,23 +130,11 @@ def _current_runtime_bounds_context() -> BronzeRuntimeBoundsContext:
     """Return effective runtime bounds context with legacy global fallback."""
 
     return BronzeRuntimeBoundsContext(
-        tail_delta_only=_TAIL_DELTA_ONLY,
-        global_start_open_ms=_BRONZE_START_OPEN_MS,
-        symbol_start_open_ms=_BRONZE_SYMBOL_START_OPEN_MS,
-        exchange_symbol_start_open_ms=_BRONZE_EXCHANGE_SYMBOL_START_OPEN_MS,
+        tail_delta_only=tail_delta_only,
+        global_start_open_ms=bronze_start_open_ms,
+        symbol_start_open_ms=bronze_symbol_start_open_ms,
+        exchange_symbol_start_open_ms=bronze_exchange_symbol_start_open_ms,
     )
-
-
-def _sanitize_symbols(raw_symbols: object, logger: logging.Logger) -> list[str]:
-    """Return validated symbol list, dropping null/blank/non-string entries."""
-
-    return sanitize_symbols(raw_symbols=raw_symbols, logger=logger)
-
-
-def _resolved_symbol_groups(args: argparse.Namespace, logger: logging.Logger) -> tuple[list[str], list[str], list[str]]:
-    """Return deterministically ordered symbol groups for Bronze task planning."""
-
-    return resolved_symbol_groups(args=args, logger=logger)
 
 
 def _build_bronze_fetch_plan(args: argparse.Namespace, logger: logging.Logger) -> BronzeFetchPlanDTO:
@@ -283,7 +270,7 @@ def _sidecar_path_list(parquet_files: list[str], suffix: str) -> list[str]:
 
 
 def _add_ingest_parser(
-    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
+    subparsers: Any,
     *,
     command_name: str,
     help_text: str,
@@ -372,7 +359,7 @@ def _add_ingest_parser(
     )
 
 
-def add_bronze_build_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+def add_bronze_build_parser(subparsers: Any) -> None:
     """Register canonical ``bronze-build`` parser."""
 
     _add_ingest_parser(
@@ -389,16 +376,6 @@ def _serialize_candle(candle: SpotCandle) -> dict[str, object]:
         if isinstance(value, datetime):
             data[key] = value.isoformat()
     return data
-
-
-def _extract_date_partition(file_path: str) -> str | None:
-    """Extract ``YYYY-MM-DD`` from parquet partition path segment ``date=YYYY-MM-DD``."""
-
-    marker = "/date="
-    if marker not in file_path:
-        return None
-    tail = file_path.split(marker, 1)[1]
-    return tail.split("/", 1)[0] if tail else None
 
 
 def _fetch_symbol_candles(
@@ -418,12 +395,12 @@ def _fetch_symbol_candles(
         open_times_reader=open_times_in_lake,
         symbol_normalizer=normalize_storage_symbol,
         interval_ms_resolver=interval_to_milliseconds,
-        now_open_resolver=_last_closed_open_ms,
-        ranges_builder=_missing_ranges_ms,
+        now_open_resolver=last_closed_open_ms,
+        ranges_builder=missing_ranges_ms,
         history_fetcher=fetch_candles_all_history,
         range_fetcher=fetch_candles_range,
         latest_open_time_reader=latest_open_time_in_lake,
-        tail_delta_only=_TAIL_DELTA_ONLY,
+        tail_delta_only=tail_delta_only,
         on_history_chunk=on_history_chunk,
         start_open_ms_bound=_symbol_start_open_ms_bound(exchange=exchange, symbol=symbol),
     )
@@ -447,12 +424,12 @@ def _fetch_symbol_open_interest(
         timeframe_normalizer=normalize_open_interest_timeframe,
         symbol_normalizer=normalize_storage_symbol,
         interval_ms_resolver=open_interest_interval_to_milliseconds,
-        now_open_resolver=_last_closed_open_ms,
-        ranges_builder=_missing_ranges_ms,
+        now_open_resolver=last_closed_open_ms,
+        ranges_builder=missing_ranges_ms,
         history_fetcher=fetch_open_interest_all_history,
         range_fetcher=fetch_open_interest_range,
         latest_open_time_reader=latest_open_time_in_lake_by_dataset,
-        tail_delta_only=_TAIL_DELTA_ONLY,
+        tail_delta_only=tail_delta_only,
         on_history_chunk=on_history_chunk,
         start_open_ms_bound=_symbol_start_open_ms_bound(exchange=exchange, symbol=symbol),
     )
@@ -476,12 +453,12 @@ def _fetch_symbol_funding(
         timeframe_normalizer=normalize_funding_timeframe,
         symbol_normalizer=normalize_storage_symbol,
         interval_ms_resolver=funding_interval_to_milliseconds,
-        now_open_resolver=_last_closed_open_ms,
-        ranges_builder=_missing_ranges_ms,
+        now_open_resolver=last_closed_open_ms,
+        ranges_builder=missing_ranges_ms,
         history_fetcher=fetch_funding_all_history,
         range_fetcher=fetch_funding_range,
         latest_open_time_reader=latest_open_time_in_lake_by_dataset,
-        tail_delta_only=_TAIL_DELTA_ONLY,
+        tail_delta_only=tail_delta_only,
         on_history_chunk=on_history_chunk,
         start_open_ms_bound=_symbol_start_open_ms_bound(exchange=exchange, symbol=symbol),
     )
@@ -505,12 +482,12 @@ def _fetch_symbol_historical_volatility(
         open_times_reader=open_times_in_lake_by_dataset,
         timeframe_normalizer=normalize_volatility_timeframe,
         interval_ms_resolver=volatility_interval_to_milliseconds,
-        now_open_resolver=_last_closed_open_ms,
-        ranges_builder=_missing_ranges_ms,
+        now_open_resolver=last_closed_open_ms,
+        ranges_builder=missing_ranges_ms,
         history_fetcher=fetch_historical_volatility_all_history,
         range_fetcher=fetch_historical_volatility_range,
         latest_open_time_reader=latest_open_time_in_lake_by_dataset,
-        tail_delta_only=_TAIL_DELTA_ONLY,
+        tail_delta_only=tail_delta_only,
         on_history_chunk=on_history_chunk,
         start_open_ms_bound=_symbol_start_open_ms_bound(exchange=exchange, symbol=symbol),
     )
@@ -534,12 +511,12 @@ def _fetch_symbol_volatility_index_data(
         open_times_reader=open_times_in_lake_by_dataset,
         timeframe_normalizer=normalize_volatility_timeframe,
         interval_ms_resolver=volatility_interval_to_milliseconds,
-        now_open_resolver=_last_closed_open_ms,
-        ranges_builder=_missing_ranges_ms,
+        now_open_resolver=last_closed_open_ms,
+        ranges_builder=missing_ranges_ms,
         history_fetcher=fetch_volatility_index_all_history,
         range_fetcher=fetch_volatility_index_range,
         latest_open_time_reader=latest_open_time_in_lake_by_dataset,
-        tail_delta_only=_TAIL_DELTA_ONLY,
+        tail_delta_only=tail_delta_only,
         on_history_chunk=on_history_chunk,
         start_open_ms_bound=_symbol_start_open_ms_bound(exchange=exchange, symbol=symbol),
     )
@@ -561,34 +538,10 @@ def _fetch_symbol_trades(
         history_fetcher=fetch_trades_all_history,
         range_fetcher=fetch_trades_range,
         latest_open_time_reader=latest_open_time_in_lake_by_dataset,
-        tail_delta_only=_TAIL_DELTA_ONLY,
+        tail_delta_only=tail_delta_only,
         on_history_chunk=on_history_chunk,
         start_open_ms_bound=_symbol_start_open_ms_bound(exchange=exchange, symbol=symbol),
     )
-
-
-def _parse_start_date_to_open_ms(start_date: str | None) -> int | None:
-    """Parse inclusive UTC start date ``YYYY-MM-DD`` to epoch milliseconds."""
-
-    return parse_start_date_to_open_ms(start_date=start_date)
-
-
-def _canonical_symbol_key(symbol: str) -> str:
-    """Return canonical base symbol key for per-symbol start-date matching."""
-
-    return canonical_symbol_key(symbol=symbol)
-
-
-def _parse_symbol_start_dates(entries: list[str] | None) -> dict[str, int]:
-    """Parse ``SYMBOL=YYYY-MM-DD`` entries into canonical symbol->epoch-ms map."""
-
-    return parse_symbol_start_dates(entries=entries)
-
-
-def _parse_exchange_symbol_start_dates(entries: list[str] | None) -> dict[str, int]:
-    """Parse ``EXCHANGE:SYMBOL=YYYY-MM-DD`` entries into canonical exchange:symbol->epoch-ms map."""
-
-    return parse_exchange_symbol_start_dates(entries=entries)
 
 
 def _symbol_start_open_ms_bound(exchange: Exchange, symbol: str) -> int | None:
@@ -608,21 +561,21 @@ def _symbol_start_open_ms_bound(exchange: Exchange, symbol: str) -> int | None:
 def _configure_bronze_start_bounds(args: argparse.Namespace, logger: logging.Logger) -> None:
     """Initialize Bronze start-bound globals from CLI/config args and emit boundary logs."""
 
-    global _BRONZE_START_OPEN_MS, _BRONZE_SYMBOL_START_OPEN_MS, _BRONZE_EXCHANGE_SYMBOL_START_OPEN_MS
-    global _RUNTIME_BOUNDS_CONTEXT
+    global bronze_start_open_ms, bronze_symbol_start_open_ms, bronze_exchange_symbol_start_open_ms
+    global runtime_bounds_context
     (
-        _BRONZE_START_OPEN_MS,
-        _BRONZE_SYMBOL_START_OPEN_MS,
-        _BRONZE_EXCHANGE_SYMBOL_START_OPEN_MS,
+        bronze_start_open_ms,
+        bronze_symbol_start_open_ms,
+        bronze_exchange_symbol_start_open_ms,
     ) = configure_bronze_start_bounds(
         args=args,
         logger=logger,
     )
-    _RUNTIME_BOUNDS_CONTEXT = BronzeRuntimeBoundsContext(
-        tail_delta_only=bool(getattr(args, "tail_delta_only", _TAIL_DELTA_ONLY)),
-        global_start_open_ms=_BRONZE_START_OPEN_MS,
-        symbol_start_open_ms=_BRONZE_SYMBOL_START_OPEN_MS,
-        exchange_symbol_start_open_ms=_BRONZE_EXCHANGE_SYMBOL_START_OPEN_MS,
+    runtime_bounds_context = BronzeRuntimeBoundsContext(
+        tail_delta_only=bool(getattr(args, "tail_delta_only", tail_delta_only)),
+        global_start_open_ms=bronze_start_open_ms,
+        symbol_start_open_ms=bronze_symbol_start_open_ms,
+        exchange_symbol_start_open_ms=bronze_exchange_symbol_start_open_ms,
     )
 
 
@@ -809,8 +762,10 @@ def _fetch_all_task_groups(
     on_candle_task_complete: Callable[[CandleFetchTaskDTO, list[SpotCandle]], None] | None = None,
     on_oi_task_complete: Callable[[OpenInterestFetchTaskDTO, list[OpenInterestPoint]], None] | None = None,
     on_funding_task_complete: Callable[[FundingFetchTaskDTO, list[FundingPoint]], None] | None = None,
-    on_historical_volatility_task_complete: Callable[[VolatilityFetchTaskDTO, list[VolatilityPoint]], None] | None = None,
-    on_volatility_index_data_task_complete: Callable[[VolatilityFetchTaskDTO, list[VolatilityPoint]], None] | None = None,
+    on_historical_volatility_task_complete: Callable[[VolatilityFetchTaskDTO, list[VolatilityPoint]], None]
+    | None = None,
+    on_volatility_index_data_task_complete: Callable[[VolatilityFetchTaskDTO, list[VolatilityPoint]], None]
+    | None = None,
     trade_tasks: list[tuple[Exchange, TradeMarket, str]] | None = None,
     trade_concurrency: int = 1,
     on_trade_task_complete: Callable[[TradeFetchTaskDTO, list[TradeTick | OptionTradeTick]], None] | None = None,
@@ -902,10 +857,10 @@ def _fetch_all_task_groups(
 def run_bronze_build(args: argparse.Namespace, logger: logging.Logger) -> None:
     """Run bronze-build command."""
 
-    global _TAIL_DELTA_ONLY
-    _TAIL_DELTA_ONLY = bool(args.tail_delta_only)
+    global tail_delta_only
+    tail_delta_only = bool(args.tail_delta_only)
     _configure_bronze_start_bounds(args=args, logger=logger)
-    if _TAIL_DELTA_ONLY:
+    if tail_delta_only:
         rolling_bound = datetime.now(UTC) - timedelta(days=30)
         logger.info(
             "Bronze default tail-mode cap enabled max_missing_window_days=30 rolling_start_utc=%s",

@@ -40,7 +40,7 @@ def download_text(url: str) -> str:
 
 
 def build_agents_content() -> str:
-    parts = []
+    parts: list[str] = []
     for fragment in FRAGMENTS:
         url = f"{RAW_BASE_URL}/{fragment}"
         LOGGER.info("Downloading %s", url)

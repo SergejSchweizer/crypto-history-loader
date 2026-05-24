@@ -64,10 +64,10 @@ exclude = ["notebooks/", "tests/", "scripts/"]
 include = ["api", "application", "ingestion", "scripts"]
 exclude = ["tests", "notebooks", ".venv"]
 pythonVersion = "3.11"
-typeCheckingMode = "standard"
+typeCheckingMode = "strict"
 
 [tool.ty.src]
 include = ["api", "application", "ingestion", "scripts"]
 
 [tool.ty.rules]
-redundant-cast = "ignore"
+redundant-cast = "error"

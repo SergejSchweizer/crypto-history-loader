@@ -244,25 +244,39 @@ class IncrementalPersistor:
     ) -> None:
         if not rows:
             return
-        storage_kwargs: dict[str, object]
-        options_kwargs: dict[str, object] = {
-            "save_parquet_lake": True,
-            "lake_root": self.lake_root,
-            "oi_requested": False,
-            "funding_requested": False,
-            "trades_requested": False,
-        }
+        options = PersistOptionsDTO(
+            save_parquet_lake=True,
+            lake_root=self.lake_root,
+            oi_requested=False,
+            funding_requested=False,
+            trades_requested=False,
+        )
+        storage = LoaderStorageDTO()
         if task.dataset_type == "historical_volatility":
-            storage_kwargs = {"historical_volatility": {"perp": {task.exchange: {task.symbol.upper(): rows}}}}
-            options_kwargs["historical_volatility_requested"] = True
+            storage.historical_volatility = {"perp": {task.exchange: {task.symbol.upper(): rows}}}
+            options = PersistOptionsDTO(
+                save_parquet_lake=True,
+                lake_root=self.lake_root,
+                oi_requested=False,
+                funding_requested=False,
+                historical_volatility_requested=True,
+                trades_requested=False,
+            )
         else:
-            storage_kwargs = {"volatility_index_data": {"perp": {task.exchange: {task.symbol.upper(): rows}}}}
-            options_kwargs["volatility_index_data_requested"] = True
+            storage.volatility_index_data = {"perp": {task.exchange: {task.symbol.upper(): rows}}}
+            options = PersistOptionsDTO(
+                save_parquet_lake=True,
+                lake_root=self.lake_root,
+                oi_requested=False,
+                funding_requested=False,
+                volatility_index_data_requested=True,
+                trades_requested=False,
+            )
         storage_result = cast(
             _PersistResult,
             self.persist_fn(
-                storage=LoaderStorageDTO(**storage_kwargs),
-                options=PersistOptionsDTO(**options_kwargs),
+                storage=storage,
+                options=options,
             ),
         )
         self.incremental_parquet_files.extend(storage_result.parquet_files)

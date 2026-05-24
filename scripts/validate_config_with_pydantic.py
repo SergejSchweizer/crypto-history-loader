@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+from typing import cast
 
 import yaml  # type: ignore[import-untyped]
 
@@ -19,7 +20,7 @@ def main() -> int:
     payload = yaml.safe_load(config_path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
         raise ValueError("config file must contain a top-level mapping")
-    validate_runtime_config(payload)
+    validate_runtime_config(cast(dict[str, object], payload))
     return 0
 
 

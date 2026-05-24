@@ -16,8 +16,8 @@ from api.commands.loader import add_bronze_build_parser
 from api.commands.silver import add_silver_build_parser, run_silver_build
 from api.commands.stats import add_export_descriptive_stats_parser, run_export_descriptive_stats
 from api.commands.timeframes import add_list_spot_timeframes_parser, run_list_spot_timeframes
+from application.services import gapfill_service
 from application.services.config_validation import validate_runtime_config
-from application.services.gapfill_service import _last_closed_open_ms, _missing_ranges_ms
 from application.services.runtime_service import (
     SingleInstanceError,
     SingleInstanceLock,
@@ -63,7 +63,7 @@ _BRONZE_CONFIG_ALIASES: tuple[str, ...] = ("bronze-build", "bronze-ingest", "loa
 
 
 # Backward-compatible wrappers used by tests.
-def _fetch_symbol_candles(
+def _fetch_symbol_candles(  # pyright: ignore[reportUnusedFunction]
     exchange: Exchange,
     market: Market,
     symbol: str,
@@ -71,7 +71,7 @@ def _fetch_symbol_candles(
     lake_root: str,
 ) -> list[SpotCandle]:
     _sync_loader_runtime_overrides()
-    return loader_cmd._fetch_symbol_candles(
+    return loader_cmd._fetch_symbol_candles(  # pyright: ignore[reportPrivateUsage]
         exchange=exchange,
         market=market,
         symbol=symbol,
@@ -87,8 +87,8 @@ def _sync_loader_runtime_overrides() -> None:
     loader_any.SingleInstanceLock = SingleInstanceLock
     loader_any.SingleInstanceError = SingleInstanceError
     loader_any.fetch_concurrency = fetch_concurrency
-    loader_any._last_closed_open_ms = _last_closed_open_ms
-    loader_any._missing_ranges_ms = _missing_ranges_ms
+    loader_any._last_closed_open_ms = gapfill_service._last_closed_open_ms  # pyright: ignore[reportPrivateUsage]
+    loader_any._missing_ranges_ms = gapfill_service._missing_ranges_ms  # pyright: ignore[reportPrivateUsage]
     loader_any.open_times_in_lake = open_times_in_lake
     loader_any.open_times_in_lake_by_dataset = open_times_in_lake_by_dataset
     loader_any.latest_open_time_in_lake = latest_open_time_in_lake
@@ -178,10 +178,12 @@ def _subparser_for_command(parser: argparse.ArgumentParser, command: str) -> arg
     """Return subparser object for selected command."""
 
     for action in parser._actions:
-        if isinstance(action, argparse._SubParsersAction):
-            candidate = action.choices.get(command)
-            if isinstance(candidate, argparse.ArgumentParser):
-                return candidate
+        choices = cast(dict[str, argparse.ArgumentParser] | None, getattr(action, "choices", None))
+        if not isinstance(choices, dict):
+            continue
+        candidate = choices.get(command)
+        if isinstance(candidate, argparse.ArgumentParser):
+            return candidate
     return None
 
 
@@ -215,9 +217,7 @@ def _apply_yaml_defaults(
     def _apply_mapping_defaults(section: object) -> None:
         if not isinstance(section, dict):
             return
-        for raw_key, value in section.items():
-            if not isinstance(raw_key, str):
-                continue
+        for raw_key, value in cast(dict[str, object], section).items():
             if raw_key == "debug":
                 # Keep debug as an explicit CLI-only switch.
                 continue
@@ -229,15 +229,16 @@ def _apply_yaml_defaults(
     _apply_mapping_defaults(_resolve_command_config(command=command, config=config))
 
 
-def _resolve_command_config(command: str, config: dict[str, object]) -> object:
+def _resolve_command_config(command: str, config: dict[str, object]) -> dict[str, object] | None:
     """Resolve command config section, including legacy aliases."""
 
     if command != "bronze-build":
-        return config.get(command)
+        section = config.get(command)
+        return cast(dict[str, object], section) if isinstance(section, dict) else None
     for candidate in _BRONZE_CONFIG_ALIASES:
         section = config.get(candidate)
         if isinstance(section, dict):
-            return section
+            return cast(dict[str, object], section)
     return None
 
 
@@ -247,9 +248,7 @@ def _apply_env_from_config(config: dict[str, object]) -> None:
     env_config = config.get("env")
     if not isinstance(env_config, dict):
         return
-    for raw_key, value in env_config.items():
-        if not isinstance(raw_key, str):
-            continue
+    for raw_key, value in cast(dict[str, object], env_config).items():
         if value is None:
             continue
         os.environ[raw_key] = str(value)

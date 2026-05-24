@@ -12,6 +12,78 @@ from ingestion.trades import OptionTradeTick, TradeMarket, TradeTick
 from ingestion.volatility import VolatilityPoint
 
 
+def _empty_candle_rows() -> dict[tuple[Exchange, Market, str, str], list[SpotCandle]]:
+    return {}
+
+
+def _empty_candle_errors() -> dict[tuple[Exchange, Market, str, str], str]:
+    return {}
+
+
+def _empty_open_interest_rows() -> dict[tuple[Exchange, str, str], list[OpenInterestPoint]]:
+    return {}
+
+
+def _empty_open_interest_errors() -> dict[tuple[Exchange, str, str], str]:
+    return {}
+
+
+def _empty_funding_rows() -> dict[tuple[Exchange, str, str], list[FundingPoint]]:
+    return {}
+
+
+def _empty_funding_errors() -> dict[tuple[Exchange, str, str], str]:
+    return {}
+
+
+def _empty_volatility_rows() -> dict[tuple[Exchange, str, str], list[VolatilityPoint]]:
+    return {}
+
+
+def _empty_volatility_errors() -> dict[tuple[Exchange, str, str], str]:
+    return {}
+
+
+def _empty_trade_rows() -> dict[tuple[Exchange, TradeMarket, str], list[TradeTick | OptionTradeTick]]:
+    return {}
+
+
+def _empty_trade_errors() -> dict[tuple[Exchange, TradeMarket, str], str]:
+    return {}
+
+
+def _empty_dataset_tasks() -> list[DatasetTask]:
+    return []
+
+
+def _empty_candle_storage() -> dict[Market, dict[str, dict[str, list[SpotCandle]]]]:
+    return {}
+
+
+def _empty_open_interest_storage() -> dict[Market, dict[str, dict[str, list[OpenInterestPoint]]]]:
+    return {}
+
+
+def _empty_funding_storage() -> dict[Market, dict[str, dict[str, list[FundingPoint]]]]:
+    return {}
+
+
+def _empty_historical_volatility_storage() -> dict[Market, dict[str, dict[str, list[VolatilityPoint]]]]:
+    return {}
+
+
+def _empty_volatility_index_data_storage() -> dict[Market, dict[str, dict[str, list[VolatilityPoint]]]]:
+    return {}
+
+
+def _empty_trade_storage() -> dict[TradeMarket, dict[str, dict[str, list[TradeTick | OptionTradeTick]]]]:
+    return {}
+
+
+def _empty_parquet_files() -> list[str]:
+    return []
+
+
 @dataclass(frozen=True)
 class CandleFetchTaskDTO:
     """One OHLCV fetch task request.
@@ -87,8 +159,8 @@ class CandleFetchResultDTO:
         ```
     """
 
-    rows: dict[tuple[Exchange, Market, str, str], list[SpotCandle]] = field(default_factory=dict)
-    errors: dict[tuple[Exchange, Market, str, str], str] = field(default_factory=dict)
+    rows: dict[tuple[Exchange, Market, str, str], list[SpotCandle]] = field(default_factory=_empty_candle_rows)
+    errors: dict[tuple[Exchange, Market, str, str], str] = field(default_factory=_empty_candle_errors)
 
 
 @dataclass
@@ -101,8 +173,8 @@ class OpenInterestFetchResultDTO:
         ```
     """
 
-    rows: dict[tuple[Exchange, str, str], list[OpenInterestPoint]] = field(default_factory=dict)
-    errors: dict[tuple[Exchange, str, str], str] = field(default_factory=dict)
+    rows: dict[tuple[Exchange, str, str], list[OpenInterestPoint]] = field(default_factory=_empty_open_interest_rows)
+    errors: dict[tuple[Exchange, str, str], str] = field(default_factory=_empty_open_interest_errors)
 
 
 @dataclass
@@ -115,24 +187,26 @@ class FundingFetchResultDTO:
         ```
     """
 
-    rows: dict[tuple[Exchange, str, str], list[FundingPoint]] = field(default_factory=dict)
-    errors: dict[tuple[Exchange, str, str], str] = field(default_factory=dict)
+    rows: dict[tuple[Exchange, str, str], list[FundingPoint]] = field(default_factory=_empty_funding_rows)
+    errors: dict[tuple[Exchange, str, str], str] = field(default_factory=_empty_funding_errors)
 
 
 @dataclass
 class VolatilityFetchResultDTO:
     """Volatility fetch outcomes keyed by task tuple."""
 
-    rows: dict[tuple[Exchange, str, str], list[VolatilityPoint]] = field(default_factory=dict)
-    errors: dict[tuple[Exchange, str, str], str] = field(default_factory=dict)
+    rows: dict[tuple[Exchange, str, str], list[VolatilityPoint]] = field(default_factory=_empty_volatility_rows)
+    errors: dict[tuple[Exchange, str, str], str] = field(default_factory=_empty_volatility_errors)
 
 
 @dataclass
 class TradeFetchResultDTO:
     """Trades fetch outcomes keyed by task tuple."""
 
-    rows: dict[tuple[Exchange, TradeMarket, str], list[TradeTick | OptionTradeTick]] = field(default_factory=dict)
-    errors: dict[tuple[Exchange, TradeMarket, str], str] = field(default_factory=dict)
+    rows: dict[tuple[Exchange, TradeMarket, str], list[TradeTick | OptionTradeTick]] = field(
+        default_factory=_empty_trade_rows
+    )
+    errors: dict[tuple[Exchange, TradeMarket, str], str] = field(default_factory=_empty_trade_errors)
 
 
 @dataclass(frozen=True)
@@ -156,7 +230,7 @@ class BronzeFetchPlanDTO:
     historical_volatility_tasks: list[tuple[Exchange, str, str]]
     volatility_index_data_tasks: list[tuple[Exchange, str, str]]
     trade_tasks: list[tuple[Exchange, TradeMarket, str]]
-    dataset_tasks: list[DatasetTask] = field(default_factory=list)
+    dataset_tasks: list[DatasetTask] = field(default_factory=_empty_dataset_tasks)
 
 
 @dataclass(frozen=True)
@@ -181,12 +255,20 @@ class LoaderStorageDTO:
         ```
     """
 
-    candles: dict[Market, dict[str, dict[str, list[SpotCandle]]]] = field(default_factory=dict)
-    open_interest: dict[Market, dict[str, dict[str, list[OpenInterestPoint]]]] = field(default_factory=dict)
-    funding: dict[Market, dict[str, dict[str, list[FundingPoint]]]] = field(default_factory=dict)
-    historical_volatility: dict[Market, dict[str, dict[str, list[VolatilityPoint]]]] = field(default_factory=dict)
-    volatility_index_data: dict[Market, dict[str, dict[str, list[VolatilityPoint]]]] = field(default_factory=dict)
-    trades: dict[TradeMarket, dict[str, dict[str, list[TradeTick | OptionTradeTick]]]] = field(default_factory=dict)
+    candles: dict[Market, dict[str, dict[str, list[SpotCandle]]]] = field(default_factory=_empty_candle_storage)
+    open_interest: dict[Market, dict[str, dict[str, list[OpenInterestPoint]]]] = field(
+        default_factory=_empty_open_interest_storage
+    )
+    funding: dict[Market, dict[str, dict[str, list[FundingPoint]]]] = field(default_factory=_empty_funding_storage)
+    historical_volatility: dict[Market, dict[str, dict[str, list[VolatilityPoint]]]] = field(
+        default_factory=_empty_historical_volatility_storage
+    )
+    volatility_index_data: dict[Market, dict[str, dict[str, list[VolatilityPoint]]]] = field(
+        default_factory=_empty_volatility_index_data_storage
+    )
+    trades: dict[TradeMarket, dict[str, dict[str, list[TradeTick | OptionTradeTick]]]] = field(
+        default_factory=_empty_trade_storage
+    )
 
 
 @dataclass(frozen=True)
@@ -222,7 +304,7 @@ class PersistResultDTO:
         ```
     """
 
-    parquet_files: list[str] = field(default_factory=list)
+    parquet_files: list[str] = field(default_factory=_empty_parquet_files)
 
     def to_output_dict(self) -> dict[str, object]:
         """Convert DTO to existing CLI output keys."""

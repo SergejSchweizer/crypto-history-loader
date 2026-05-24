@@ -130,6 +130,8 @@ def test_dataset_specs_symbol_normalization_and_hash_helpers() -> None:
     assert _feature_source_dataset("funding_rate_last_known") == "funding_1m_feature"
     assert _feature_source_dataset("trades_open_price") == "perp_trades_1m_feature"
     assert _feature_source_dataset("option_trades_open_price") == "option_trades_1m_feature"
+    assert _feature_source_dataset("historical_volatility_value") == "historical_volatility_observed"
+    assert _feature_source_dataset("volatility_index_value") == "volatility_index_data_observed"
     assert _feature_source_dataset("l2_coverage_ratio") == "gold_merged"
     assert _feature_source_dataset("custom_col") == "gold_merged"
 
@@ -254,6 +256,41 @@ def _write_option_trades_1m_feature_month(
     _write_silver_month(
         root,
         dataset_type="option_trades_1m_feature",
+        exchange=exchange,
+        symbol=symbol,
+        timeframe="1m",
+        month=month,
+        rows=rows,
+    )
+
+
+def _write_volatility_observed_month(
+    root: Path,
+    *,
+    dataset_type: str,
+    exchange: str,
+    symbol: str,
+    month: str,
+    timestamps: list[datetime],
+) -> None:
+    rows: list[dict[str, object]] = []
+    for idx, ts in enumerate(timestamps):
+        rows.append(
+            {
+                "timestamp": ts,
+                "exchange": exchange,
+                "symbol": symbol,
+                "instrument_type": "perp",
+                "dataset_type": dataset_type.replace("_observed", ""),
+                "volatility_value": 50.0 + idx,
+                "volatility_source_timestamp": ts,
+                "ingested_at": ts,
+                "source_endpoint": "public_volatility",
+            }
+        )
+    _write_silver_month(
+        root,
+        dataset_type=dataset_type,
         exchange=exchange,
         symbol=symbol,
         timeframe="1m",
@@ -402,6 +439,22 @@ def test_build_gold_for_symbol_writes_hashed_parquet_and_manifest(tmp_path: Path
         month="2026-05",
         timestamps=[t0, t1],
     )
+    _write_volatility_observed_month(
+        silver,
+        dataset_type="historical_volatility_observed",
+        exchange=exchange,
+        symbol="BTC-PERPETUAL",
+        month="2026-05",
+        timestamps=[t0, t1],
+    )
+    _write_volatility_observed_month(
+        silver,
+        dataset_type="volatility_index_data_observed",
+        exchange=exchange,
+        symbol="BTC-PERPETUAL",
+        month="2026-05",
+        timestamps=[t0, t1],
+    )
 
     assert discover_gold_symbols(str(silver), exchange) == [symbol]
 
@@ -441,6 +494,8 @@ def test_build_gold_for_symbol_writes_hashed_parquet_and_manifest(tmp_path: Path
     assert "funding_1m_feature" in payload["source_silver_datasets"]
     assert "perp_trades_1m_feature" in payload["source_silver_datasets"]
     assert "option_trades_1m_feature" in payload["source_silver_datasets"]
+    assert "historical_volatility_observed" in payload["source_silver_datasets"]
+    assert "volatility_index_data_observed" in payload["source_silver_datasets"]
     assert payload["source_silver_datasets"]["spot_1m"]["source_symbols"] == ["BTC"]
     assert payload["source_silver_datasets"]["perp_1m"]["source_symbols"] == ["BTC"]
     assert "feature_metadata" in payload
@@ -568,6 +623,38 @@ def test_build_gold_for_symbol_normalizes_input_symbol(tmp_path: Path) -> None:
                 }
             ],
         ),
+        (
+            "historical_volatility_observed",
+            [
+                {
+                    "timestamp": t0,
+                    "exchange": exchange,
+                    "symbol": "BTC",
+                    "instrument_type": "perp",
+                    "dataset_type": "historical_volatility",
+                    "volatility_value": 50.0,
+                    "volatility_source_timestamp": t0,
+                    "ingested_at": t0,
+                    "source_endpoint": "public_volatility",
+                }
+            ],
+        ),
+        (
+            "volatility_index_data_observed",
+            [
+                {
+                    "timestamp": t0,
+                    "exchange": exchange,
+                    "symbol": "BTC",
+                    "instrument_type": "perp",
+                    "dataset_type": "volatility_index_data",
+                    "volatility_value": 70.0,
+                    "volatility_source_timestamp": t0,
+                    "ingested_at": t0,
+                    "source_endpoint": "public_volatility",
+                }
+            ],
+        ),
     ]:
         _write_silver_month(
             silver,
@@ -607,6 +694,22 @@ def test_build_gold_for_symbol_trades_only_dataset(tmp_path: Path) -> None:
         silver,
         exchange=exchange,
         symbol=symbol,
+        month="2026-05",
+        timestamps=[t0, t1],
+    )
+    _write_volatility_observed_month(
+        silver,
+        dataset_type="historical_volatility_observed",
+        exchange=exchange,
+        symbol="BTC-PERPETUAL",
+        month="2026-05",
+        timestamps=[t0, t1],
+    )
+    _write_volatility_observed_month(
+        silver,
+        dataset_type="volatility_index_data_observed",
+        exchange=exchange,
+        symbol="BTC-PERPETUAL",
         month="2026-05",
         timestamps=[t0, t1],
     )
@@ -887,6 +990,22 @@ def test_build_gold_hybrid_full_l2_contains_l2_features(tmp_path: Path) -> None:
         month="2026-05",
         timestamps=[t0, t1],
     )
+    _write_volatility_observed_month(
+        silver,
+        dataset_type="historical_volatility_observed",
+        exchange=exchange,
+        symbol="BTC-PERPETUAL",
+        month="2026-05",
+        timestamps=[t0, t1],
+    )
+    _write_volatility_observed_month(
+        silver,
+        dataset_type="volatility_index_data_observed",
+        exchange=exchange,
+        symbol="BTC-PERPETUAL",
+        month="2026-05",
+        timestamps=[t0, t1],
+    )
     _write_l2_gold_parquet(
         gold,
         symbol=symbol,
@@ -1051,6 +1170,22 @@ def test_build_gold_hybrid_full_l2_uses_requested_exchange_l2(tmp_path: Path) ->
         silver,
         exchange=exchange,
         symbol=symbol,
+        month="2026-05",
+        timestamps=[t0, t1],
+    )
+    _write_volatility_observed_month(
+        silver,
+        dataset_type="historical_volatility_observed",
+        exchange=exchange,
+        symbol="BTC-PERPETUAL",
+        month="2026-05",
+        timestamps=[t0, t1],
+    )
+    _write_volatility_observed_month(
+        silver,
+        dataset_type="volatility_index_data_observed",
+        exchange=exchange,
+        symbol="BTC-PERPETUAL",
         month="2026-05",
         timestamps=[t0, t1],
     )
@@ -1231,6 +1366,22 @@ def test_build_gold_hybrid_full_l2_rejects_invalid_l2_coverage_ratio(tmp_path: P
         month="2026-05",
         timestamps=[t0, t1],
     )
+    _write_volatility_observed_month(
+        silver,
+        dataset_type="historical_volatility_observed",
+        exchange=exchange,
+        symbol="BTC-PERPETUAL",
+        month="2026-05",
+        timestamps=[t0, t1],
+    )
+    _write_volatility_observed_month(
+        silver,
+        dataset_type="volatility_index_data_observed",
+        exchange=exchange,
+        symbol="BTC-PERPETUAL",
+        month="2026-05",
+        timestamps=[t0, t1],
+    )
     _write_l2_gold_parquet(
         gold,
         symbol=symbol,
@@ -1388,6 +1539,22 @@ def test_build_gold_hybrid_full_l2_lenient_drops_invalid_rows(tmp_path: Path) ->
         silver,
         exchange=exchange,
         symbol=symbol,
+        month="2026-05",
+        timestamps=[t0, t1],
+    )
+    _write_volatility_observed_month(
+        silver,
+        dataset_type="historical_volatility_observed",
+        exchange=exchange,
+        symbol="BTC-PERPETUAL",
+        month="2026-05",
+        timestamps=[t0, t1],
+    )
+    _write_volatility_observed_month(
+        silver,
+        dataset_type="volatility_index_data_observed",
+        exchange=exchange,
+        symbol="BTC-PERPETUAL",
         month="2026-05",
         timestamps=[t0, t1],
     )
@@ -1555,6 +1722,22 @@ def test_build_gold_full_keeps_minute_grid_and_reports_missing_values(tmp_path: 
         silver,
         exchange=exchange,
         symbol=symbol,
+        month="2026-05",
+        timestamps=[t0, t2],
+    )
+    _write_volatility_observed_month(
+        silver,
+        dataset_type="historical_volatility_observed",
+        exchange=exchange,
+        symbol="BTC-PERPETUAL",
+        month="2026-05",
+        timestamps=[t0, t2],
+    )
+    _write_volatility_observed_month(
+        silver,
+        dataset_type="volatility_index_data_observed",
+        exchange=exchange,
+        symbol="BTC-PERPETUAL",
         month="2026-05",
         timestamps=[t0, t2],
     )

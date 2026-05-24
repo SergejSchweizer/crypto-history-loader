@@ -21,6 +21,8 @@ _FULL_MARKET_REQUIREMENTS: list[tuple[str, str]] = [
     ("funding_1m_feature", "1m"),
     ("perp_trades_1m_feature", "1m"),
     ("option_trades_1m_feature", "1m"),
+    ("historical_volatility_observed", "1m"),
+    ("volatility_index_data_observed", "1m"),
 ]
 GOLD_DATASET_SPECS: dict[str, dict[str, object]] = {
     "gold.market.perp_trades.m1": {
@@ -636,6 +638,46 @@ def _prepare_option_trades(pl: Any, frame: Any, symbol: str) -> Any:
     )
 
 
+def _prepare_historical_volatility(pl: Any, frame: Any, symbol: str) -> Any:
+    return (
+        frame.with_columns(
+            [
+                pl.col("timestamp").cast(pl.Datetime(time_unit="us", time_zone="UTC")).alias("timestamp_m1"),
+                pl.lit(symbol).alias("symbol"),
+            ]
+        )
+        .select(
+            [
+                "timestamp_m1",
+                "exchange",
+                "symbol",
+                pl.col("volatility_value").cast(pl.Float64).alias("historical_volatility_value"),
+            ]
+        )
+        .sort("timestamp_m1")
+    )
+
+
+def _prepare_volatility_index_data(pl: Any, frame: Any, symbol: str) -> Any:
+    return (
+        frame.with_columns(
+            [
+                pl.col("timestamp").cast(pl.Datetime(time_unit="us", time_zone="UTC")).alias("timestamp_m1"),
+                pl.lit(symbol).alias("symbol"),
+            ]
+        )
+        .select(
+            [
+                "timestamp_m1",
+                "exchange",
+                "symbol",
+                pl.col("volatility_value").cast(pl.Float64).alias("volatility_index_value"),
+            ]
+        )
+        .sort("timestamp_m1")
+    )
+
+
 def _prepare_dataset_frame(pl: Any, dataset_type: str, frame: Any, symbol: str) -> Any:
     dataset_preparers: dict[str, Any] = {
         "spot": lambda: _prepare_spot_or_perp(pl, frame, "spot", symbol),
@@ -644,6 +686,8 @@ def _prepare_dataset_frame(pl: Any, dataset_type: str, frame: Any, symbol: str) 
         "funding_1m_feature": lambda: _prepare_funding(pl, frame, symbol),
         "perp_trades_1m_feature": lambda: _prepare_trades(pl, frame, symbol),
         "option_trades_1m_feature": lambda: _prepare_option_trades(pl, frame, symbol),
+        "historical_volatility_observed": lambda: _prepare_historical_volatility(pl, frame, symbol),
+        "volatility_index_data_observed": lambda: _prepare_volatility_index_data(pl, frame, symbol),
         "gold_l2_m1": lambda: _prepare_l2(pl, frame, symbol),
     }
     preparer = dataset_preparers.get(dataset_type)
@@ -702,7 +746,11 @@ def _sample_frame_for_plot(frame: Any) -> Any:
 def _ordered_numeric_columns(frame: Any) -> list[str]:
     numeric_cols = [col for col, dtype in zip(frame.columns, frame.dtypes, strict=False) if dtype.is_numeric()]
     market_cols = [col for col in numeric_cols if col.startswith(("spot_", "perp_"))]
-    derived_cols = [col for col in numeric_cols if col.startswith(("oi_", "funding_"))]
+    derived_cols = [
+        col
+        for col in numeric_cols
+        if col.startswith(("oi_", "funding_", "historical_volatility_", "volatility_index_"))
+    ]
     l2_cols = [col for col in numeric_cols if col.startswith("l2_")]
     other_cols = [col for col in numeric_cols if col not in set(market_cols + derived_cols + l2_cols)]
     return [*market_cols, *derived_cols, *l2_cols, *other_cols]
@@ -1026,6 +1074,10 @@ def _feature_source_dataset(column_name: str) -> str:
         return "funding_1m_feature"
     if column_name.startswith("trades_"):
         return "perp_trades_1m_feature"
+    if column_name.startswith("historical_volatility_"):
+        return "historical_volatility_observed"
+    if column_name.startswith("volatility_index_"):
+        return "volatility_index_data_observed"
     return "gold_merged"
 
 

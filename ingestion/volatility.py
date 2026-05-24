@@ -88,7 +88,9 @@ def _canonical_currency(symbol: str) -> str:
     return upper
 
 
-def _parse_historical_volatility_row(exchange: Exchange, symbol: str, interval: str, row: dict[str, object]) -> VolatilityPoint:
+def _parse_historical_volatility_row(
+    exchange: Exchange, symbol: str, interval: str, row: dict[str, object]
+) -> VolatilityPoint:
     ts_ms = int(cast(Any, row.get("timestamp", 0)))
     open_time = datetime.fromtimestamp(ts_ms / 1000, tz=UTC)
     return VolatilityPoint(
@@ -103,7 +105,9 @@ def _parse_historical_volatility_row(exchange: Exchange, symbol: str, interval: 
     )
 
 
-def _parse_volatility_index_row(exchange: Exchange, symbol: str, interval: str, row: dict[str, object]) -> VolatilityPoint:
+def _parse_volatility_index_row(
+    exchange: Exchange, symbol: str, interval: str, row: dict[str, object]
+) -> VolatilityPoint:
     ts_ms = int(cast(Any, row.get("timestamp", 0)))
     open_time = datetime.fromtimestamp(ts_ms / 1000, tz=UTC)
     return VolatilityPoint(

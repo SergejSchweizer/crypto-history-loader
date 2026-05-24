@@ -19,6 +19,7 @@ Production-grade cryptocurrency market data ingestion, normalization, feature en
   - [5.1 Bronze Layer](#51-bronze-layer)
   - [5.2 Silver Layer](#52-silver-layer)
   - [5.3 Gold Layer](#53-gold-layer)
+  - [5.4 Layer Transitions](#54-layer-transitions)
 - [6. Dataset Definitions](#6-dataset-definitions)
   - [6.1 Spot OHLCV](#61-spot-ohlcv)
   - [6.2 Perpetual OHLCV](#62-perpetual-ohlcv)
@@ -40,12 +41,6 @@ Production-grade cryptocurrency market data ingestion, normalization, feature en
   - [gold.market.full.m1](#goldmarketfullm1)
   - [gold.hybrid.full\_l2.m1](#goldhybridfull_l2m1)
 - [9. Recommended Additional Features](#9-recommended-additional-features)
-- [10. Missing Datasets And Future Extensions](#10-missing-datasets-and-future-extensions)
-  - [L2 Order Book Data](#l2-order-book-data)
-  - [Liquidation Data](#liquidation-data)
-  - [Trade-Level Data](#trade-level-data)
-  - [Options Surface Data](#options-surface-data)
-  - [Cross-Exchange Data](#cross-exchange-data)
 - [11. Storage Layout](#11-storage-layout)
   - [Bronze Layout](#bronze-layout)
   - [Silver Layout](#silver-layout)
@@ -225,6 +220,8 @@ Bronze stores:
 - OHLCV candles
 - funding events
 - open interest observations
+- historical volatility observations
+- volatility index observations
 - tick trades (historical REST backfill)
 - option tick trades (historical REST backfill)
 
@@ -255,6 +252,20 @@ Responsibilities:
 - versioned datasets
 - plot generation
 - manifests/provenance
+
+## 5.4 Layer Transitions
+
+Bronze to Silver transition:
+
+- input: append-only normalized Bronze partitions
+- processing: deterministic aggregations and feature derivations per dataset spec
+- output: schema-stable Silver feature tables partitioned by dataset and time
+
+Silver to Gold transition:
+
+- input: required Silver feature families for each Gold dataset contract
+- processing: canonical 1-minute alignment, joins, and latest-source selection
+- output: versioned Gold datasets with manifests and reproducible provenance
 
 ---
 
@@ -535,61 +546,12 @@ Recommended regime features:
 
 ---
 
-# 10. Missing Datasets And Future Extensions
-
-## L2 Order Book Data
-
-Highest-priority extension.
-
-Enables:
-
-- microstructure modeling
-- execution research
-- liquidity imbalance features
-
-## Liquidation Data
-
-Important for crypto markets.
-
-Captures:
-
-- forced flows
-- liquidation cascades
-- leverage flushes
-
-## Trade-Level Data
-
-Enables:
-
-- signed volume
-- order flow imbalance
-- VPIN-style metrics
-
-## Options Surface Data
-
-Provides:
-
-- implied volatility
-- skew
-- term structure
-- volatility expectations
-
-## Cross-Exchange Data
-
-Currently missing but highly valuable:
-
-- Binance vs Deribit spreads
-- fragmented liquidity indicators
-- cross-exchange funding divergence
-
----
-
 # 11. Storage Layout
 
 ## Bronze Layout
 
 ```text
-dataset_type=spot|perp|oi|funding|perp_trades|option_trades/
+dataset_type=spot|perp|oi|funding|historical_volatility|volatility_index_data|perp_trades|option_trades/
   exchange=<exchange>/
   instrument_type=<spot|perp>/
   symbol=<symbol>/
@@ -635,6 +597,11 @@ uv run python scripts/run_medallion_pipeline.py --config config.yaml
 This script runs all three layers in sequence (`bronze-build` -> `silver-build` -> `gold-build`)
 using `medallion-pipeline` settings from `config.yaml`. It also enforces a non-blocking single-run
 lock via `.run/full-pipeline.lock` and writes a shared append-only pipeline log.
+
+Current default behavior in `scripts/run_medallion_pipeline.py`:
+
+- Bronze `--market` is auto-enriched to include both `historical_volatility` and `volatility_index_data`.
+- Bronze date bounds are clamped to a rolling six-month window (`--start-date` and symbol date overrides).
 
 ## Bronze Build
 
@@ -719,6 +686,17 @@ uv run python main.py silver-build \
   --timeframe 1m
 ```
 
+Silver currently builds observed datasets for:
+
+- `spot_observed`
+- `perp_observed`
+- `oi_observed`
+- `funding_observed`
+- `historical_volatility_observed`
+- `volatility_index_data_observed`
+- `perp_trades_observed` and `perp_trades_1m_feature`
+- `option_trades_observed` and `option_trades_1m_feature`
+
 ## Gold Build
 
 ```bash
@@ -728,6 +706,9 @@ uv run python main.py gold-build \
   --exchange deribit \
   --dataset-id gold.market.full.m1
 ```
+
+Gold contracts currently include `historical_volatility_observed` and `volatility_index_data_observed`
+as required upstream feature families where applicable.
 
 Source selection policy for gold combinations:
 
@@ -742,10 +723,10 @@ Gold retention policy:
 - Configure via `gold-build.retention_keep_versions` in `config.yaml` or override with
   `--retention-keep-versions`.
 
-Weitere Gold-Dataset-IDs:
+Additional Gold Dataset IDs:
 
-- `gold.market.perp_trades.m1` (perp-trade-flow Features only)
-- `gold.market.option_trades.m1` (nur option-trade-flow Features)
+- `gold.market.perp_trades.m1` (perp trade flow features only)
+- `gold.market.option_trades.m1` (option trade flow features only)
 - `gold.market.core.m1`
 - `gold.market.core_funding.m1`
 - `gold.hybrid.full_l2.m1`
@@ -834,6 +815,11 @@ Recommended tooling:
 - mypy
 - ty
 - pyright
+
+Current default type-check policy is strict:
+
+- `mypy`: `strict = true`
+- `pyright`: `typeCheckingMode = "strict"`
 
 ---
 

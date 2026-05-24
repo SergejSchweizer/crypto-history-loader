@@ -41,11 +41,12 @@ def read_logfile_from_config(config_path: Path | None = None) -> Path:
 
     env_config = config.get("env")
     if isinstance(env_config, dict):
-        configured_file = env_config.get("DEPTH_SYNC_LOG_FILE")
+        env_values = cast(dict[str, object], env_config)
+        configured_file = env_values.get("DEPTH_SYNC_LOG_FILE")
         if isinstance(configured_file, str) and configured_file.strip():
             return Path(configured_file.strip())
 
-        configured_dir = env_config.get("DEPTH_SYNC_LOG_DIR")
+        configured_dir = env_values.get("DEPTH_SYNC_LOG_DIR")
         if isinstance(configured_dir, str) and configured_dir.strip():
             return Path(configured_dir.strip()) / "crypto-history-loader.log"
 

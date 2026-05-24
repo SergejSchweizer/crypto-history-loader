@@ -360,7 +360,9 @@ def test_dataset_task_key_maps_use_registry_checkpoint_keys() -> None:
         option_trade_symbols=["BTC"],
     )
     plan = loader_cmd._build_bronze_fetch_plan(args=args, logger=logging.getLogger("test"))
-    candle_map, oi_map, funding_map, historical_vol_map, vol_index_map, trade_map = loader_cmd._dataset_task_key_maps(plan)
+    candle_map, oi_map, funding_map, historical_vol_map, vol_index_map, trade_map = loader_cmd._dataset_task_key_maps(
+        plan
+    )
 
     assert candle_map[("deribit", "spot", "BTC", "1m")] == "deribit|spot|spot|BTC|1m|spot"
     assert oi_map[("deribit", "BTC", "1m")] == "deribit|oi|perp|BTC|1m|perp"

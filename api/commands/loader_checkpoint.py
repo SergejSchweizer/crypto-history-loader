@@ -49,10 +49,14 @@ def apply_checkpoint_filter(
     pending_oi = [task for task in oi_tasks if oi_key_serializer(task) not in completed["oi"]]
     pending_funding = [task for task in funding_tasks if funding_key_serializer(task) not in completed["funding"]]
     pending_historical_volatility = [
-        task for task in historical_volatility_tasks if historical_volatility_key_serializer(task) not in completed["historical_volatility"]
+        task
+        for task in historical_volatility_tasks
+        if historical_volatility_key_serializer(task) not in completed["historical_volatility"]
     ]
     pending_volatility_index_data = [
-        task for task in volatility_index_data_tasks if volatility_index_data_key_serializer(task) not in completed["volatility_index_data"]
+        task
+        for task in volatility_index_data_tasks
+        if volatility_index_data_key_serializer(task) not in completed["volatility_index_data"]
     ]
     pending_trades = [task for task in trade_tasks if trade_key_serializer(task) not in completed["trade"]]
     return PendingTaskGroups(
@@ -68,4 +72,7 @@ def apply_checkpoint_filter(
 def has_checkpoint_state(completed: dict[str, set[str]]) -> bool:
     """Return whether any checkpoint category has completed entries."""
 
-    return any(completed[name] for name in ("candle", "oi", "funding", "historical_volatility", "volatility_index_data", "trade"))
+    return any(
+        completed[name]
+        for name in ("candle", "oi", "funding", "historical_volatility", "volatility_index_data", "trade")
+    )
