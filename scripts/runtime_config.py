@@ -52,3 +52,18 @@ def read_logfile_from_config(config_path: Path | None = None) -> Path:
     raise ValueError(
         "config.yaml must define 'env.DEPTH_SYNC_LOG_FILE', 'env.DEPTH_SYNC_LOG_DIR', or top-level 'logfile'"
     )
+
+
+def read_log_directory_from_config(config_path: Path | None = None) -> Path:
+    """Read the base log directory from config.yaml."""
+
+    logfile_path = read_logfile_from_config(config_path)
+    return logfile_path.parent if logfile_path.parent != Path("") else Path(".")
+
+
+def module_logfile_from_config(module_name: str, config_path: Path | None = None) -> Path:
+    """Return one module-specific logfile path under configured log directory."""
+
+    normalized = module_name.strip().replace("/", "-").replace("\\", "-")
+    safe_name = normalized or "crypto-history-loader"
+    return read_log_directory_from_config(config_path) / f"{safe_name}.log"

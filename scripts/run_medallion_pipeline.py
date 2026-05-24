@@ -94,6 +94,7 @@ def _build_steps(*, main_path: Path, config_path: Path, config_data: dict[str, A
             raise ValueError(f"medallion-pipeline.{layer_name}.cli_args must be a list")
         cli_args = [str(token) for token in cli_args_raw]
         if layer_name == "bronze" and command == "bronze-build":
+            cli_args = _ensure_bronze_market_datasets(cli_args)
             cli_args = _enforce_six_month_download_window(cli_args)
 
         cmd = [str(main_path), "--config", str(config_path), command, *cli_args]
@@ -174,18 +175,57 @@ def _enforce_six_month_download_window(cli_args: list[str]) -> list[str]:
     return rewritten
 
 
+def _ensure_bronze_market_datasets(
+    cli_args: list[str],
+    required_datasets: tuple[str, ...] = ("historical_volatility", "volatility_index_data"),
+) -> list[str]:
+    """Ensure Bronze CLI args include required ``--market`` dataset tokens."""
+
+    rewritten: list[str] = []
+    i = 0
+    market_handled = False
+
+    while i < len(cli_args):
+        token = cli_args[i]
+        if token != "--market":
+            rewritten.append(token)
+            i += 1
+            continue
+
+        market_handled = True
+        rewritten.append(token)
+        i += 1
+        seen: set[str] = set()
+        market_values: list[str] = []
+        while i < len(cli_args) and not cli_args[i].startswith("--"):
+            value = cli_args[i].strip()
+            if value and value not in seen:
+                seen.add(value)
+                market_values.append(value)
+            i += 1
+
+        for dataset in required_datasets:
+            if dataset not in seen:
+                market_values.append(dataset)
+        rewritten.extend(market_values)
+
+    if not market_handled:
+        rewritten.extend(["--market", *required_datasets])
+    return rewritten
+
+
 def _log_path_from_config(*, config_data: dict[str, Any], repo_root: Path) -> Path:
-    """Resolve shared log file path from config env mapping."""
+    """Resolve module-specific log file path from config env mapping."""
 
     env_cfg = config_data.get("env")
     if isinstance(env_cfg, dict):
         configured_file = env_cfg.get("DEPTH_SYNC_LOG_FILE")
         if isinstance(configured_file, str) and configured_file.strip():
-            return Path(configured_file.strip()).resolve()
+            return (Path(configured_file.strip()).resolve().parent / "run-medallion-pipeline.log").resolve()
         configured_dir = env_cfg.get("DEPTH_SYNC_LOG_DIR")
         if isinstance(configured_dir, str) and configured_dir.strip():
-            return (Path(configured_dir.strip()) / "crypto-history-loader.log").resolve()
-    return (repo_root / ".run" / "logs" / "crypto-history-loader.log").resolve()
+            return (Path(configured_dir.strip()) / "run-medallion-pipeline.log").resolve()
+    return (repo_root / ".run" / "logs" / "run-medallion-pipeline.log").resolve()
 
 
 def _run_pipeline(

@@ -11,6 +11,7 @@ from pathlib import Path
 LOGGER_NAME = "crypto_market_loader"
 DEFAULT_LOG_DIR = ".logs"
 DEFAULT_LOG_FILE = "crypto-history-loader.log"
+LOG_FORMAT = "%(asctime)s | %(levelname)s | %(name)s | %(message)s"
 DEFAULT_FETCH_CONCURRENCY = 4
 MAX_FETCH_CONCURRENCY = 8
 
@@ -140,15 +141,14 @@ def configure_logging(module_name: str = "crypto-history-loader", *, debug: bool
 
     logger.setLevel(logging.DEBUG if debug else logging.INFO)
     logger.propagate = False
-    formatter = logging.Formatter("%(asctime)s %(levelname)s %(message)s")
+    formatter = logging.Formatter(LOG_FORMAT)
     log_file_env = os.getenv("DEPTH_SYNC_LOG_FILE", "").strip()
-    use_explicit_log_file = bool(log_file_env) and safe_module_name in {"", "crypto-history-loader"}
-    if use_explicit_log_file:
-        log_path = Path(log_file_env)
+    if log_file_env:
+        log_dir = Path(log_file_env).parent
     else:
         log_dir = Path(os.getenv("DEPTH_SYNC_LOG_DIR", DEFAULT_LOG_DIR))
-        default_name = f"{safe_module_name}.log" if safe_module_name else DEFAULT_LOG_FILE
-        log_path = log_dir / default_name
+    default_name = f"{safe_module_name}.log" if safe_module_name else DEFAULT_LOG_FILE
+    log_path = log_dir / default_name
     file_handler: TimedRotatingFileHandler | None = None
     try:
         log_path.parent.mkdir(parents=True, exist_ok=True)

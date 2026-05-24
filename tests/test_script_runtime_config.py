@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from scripts.runtime_config import read_logfile_from_config
+from scripts.runtime_config import module_logfile_from_config, read_logfile_from_config
 
 
 def test_read_logfile_from_config_prefers_explicit_log_file(tmp_path: Path) -> None:
@@ -36,3 +36,10 @@ def test_read_logfile_from_config_requires_log_destination(tmp_path: Path) -> No
 
     with pytest.raises(ValueError, match="DEPTH_SYNC_LOG_FILE"):
         read_logfile_from_config(config_path)
+
+
+def test_module_logfile_from_config_uses_configured_directory(tmp_path: Path) -> None:
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text("env:\n  DEPTH_SYNC_LOG_FILE: custom/run.log\n", encoding="utf-8")
+
+    assert module_logfile_from_config("agents-sync", config_path) == Path("custom") / "agents-sync.log"

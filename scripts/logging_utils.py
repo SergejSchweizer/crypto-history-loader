@@ -4,35 +4,41 @@
 from __future__ import annotations
 
 import logging
+from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
 
-from scripts.runtime_config import read_logfile_from_config
+from scripts.runtime_config import module_logfile_from_config
 
 LOG_FORMAT = "%(asctime)s | %(levelname)s | %(name)s | %(message)s"
-_LOGGING_CONFIGURED = False
 
 
 def configure_logger(name: str, config_path: Path | None = None) -> logging.Logger:
-    """Configure and return a module logger using shared config.yaml logfile."""
+    """Configure and return a module logger with module-specific logfile."""
 
-    global _LOGGING_CONFIGURED
+    logger = logging.getLogger(name)
+    if logger.handlers:
+        return logger
 
-    logfile_path = read_logfile_from_config(config_path)
+    logfile_path = module_logfile_from_config(name, config_path)
     logfile_path.parent.mkdir(parents=True, exist_ok=True)
+    formatter = logging.Formatter(LOG_FORMAT)
 
-    root_logger = logging.getLogger()
-    if not _LOGGING_CONFIGURED:
-        formatter = logging.Formatter(LOG_FORMAT)
-        file_handler = logging.FileHandler(logfile_path, encoding="utf-8")
-        file_handler.setFormatter(formatter)
+    file_handler = TimedRotatingFileHandler(
+        filename=logfile_path,
+        when="midnight",
+        interval=1,
+        backupCount=30,
+        encoding="utf-8",
+        utc=True,
+    )
+    file_handler.suffix = "%Y-%m-%d"
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
 
-        stream_handler = logging.StreamHandler()
-        stream_handler.setFormatter(formatter)
+    stream_handler = logging.StreamHandler()
+    stream_handler.setFormatter(formatter)
+    logger.addHandler(stream_handler)
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
 
-        root_logger.handlers.clear()
-        root_logger.addHandler(file_handler)
-        root_logger.addHandler(stream_handler)
-        root_logger.setLevel(logging.INFO)
-        _LOGGING_CONFIGURED = True
-
-    return logging.getLogger(name)
+    return logger

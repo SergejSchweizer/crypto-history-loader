@@ -44,6 +44,30 @@ def test_build_steps_uses_configured_market_args_with_trades(tmp_path: Path) -> 
     args = steps[0].args
     assert "--market" in args
     assert "perp_trades" in args
+    assert "historical_volatility" in args
+    assert "volatility_index_data" in args
+
+
+def test_build_steps_bronze_adds_required_market_datasets_when_missing_market_flag(tmp_path: Path) -> None:
+    module = _load_pipeline_module()
+    main_path = tmp_path / "main.py"
+    main_path.write_text("print('ok')\n", encoding="utf-8")
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text("x: 1\n", encoding="utf-8")
+    cfg = {
+        "medallion-pipeline": {
+            "execution_order": ["bronze"],
+            "bronze": {
+                "enabled": True,
+                "command": "bronze-build",
+                "cli_args": ["--symbols", "BTC", "ETH"],
+            },
+        }
+    }
+    steps = module._build_steps(main_path=main_path, config_path=config_path, config_data=cfg)
+    args = steps[0].args
+    market_idx = args.index("--market")
+    assert args[market_idx + 1 : market_idx + 3] == ["historical_volatility", "volatility_index_data"]
 
 
 def test_build_steps_bronze_enforces_six_month_start_date_when_missing(
@@ -112,7 +136,7 @@ def test_log_path_from_config_prefers_explicit_log_file(tmp_path: Path) -> None:
     module = _load_pipeline_module()
     cfg = {"env": {"DEPTH_SYNC_LOG_FILE": str(tmp_path / "logs" / "pipeline.log")}}
     out = module._log_path_from_config(config_data=cfg, repo_root=tmp_path)
-    assert out == (tmp_path / "logs" / "pipeline.log").resolve()
+    assert out == (tmp_path / "logs" / "run-medallion-pipeline.log").resolve()
 
 
 def test_build_steps_validation_errors(tmp_path: Path) -> None:
@@ -172,9 +196,9 @@ def test_log_path_from_config_dir_and_default(tmp_path: Path) -> None:
     module = _load_pipeline_module()
     cfg = {"env": {"DEPTH_SYNC_LOG_DIR": str(tmp_path / "xlogs")}}
     out = module._log_path_from_config(config_data=cfg, repo_root=tmp_path)
-    assert out == (tmp_path / "xlogs" / "crypto-history-loader.log").resolve()
+    assert out == (tmp_path / "xlogs" / "run-medallion-pipeline.log").resolve()
     out_default = module._log_path_from_config(config_data={}, repo_root=tmp_path)
-    assert out_default == (tmp_path / ".run" / "logs" / "crypto-history-loader.log").resolve()
+    assert out_default == (tmp_path / ".run" / "logs" / "run-medallion-pipeline.log").resolve()
 
 
 def test_lock_acquire_and_release(tmp_path: Path) -> None:

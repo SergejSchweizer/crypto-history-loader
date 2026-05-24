@@ -86,3 +86,25 @@ def test_configure_logging_ignores_global_file_override_for_module_logger(
             logger.removeHandler(handler)
             handler.close()
         logging.getLogger("crypto_market_loader.silver-build").handlers.clear()
+
+
+def test_configure_logging_uses_unified_format_with_module_name(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Logger formatter should include module logger name for unified cross-module logs."""
+
+    monkeypatch.setenv("DEPTH_SYNC_LOG_DIR", str(tmp_path))
+    logger = configure_logging(module_name="gold-build")
+    try:
+        formats = [
+            cast(str, cast(Any, handler).formatter._fmt)  # noqa: SLF001
+            for handler in logger.handlers
+            if getattr(handler, "formatter", None) is not None
+        ]
+        assert any("%(name)s" in item for item in formats)
+    finally:
+        for handler in list(logger.handlers):
+            logger.removeHandler(handler)
+            handler.close()
+        logging.getLogger("crypto_market_loader.gold-build").handlers.clear()
