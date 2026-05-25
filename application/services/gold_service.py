@@ -526,7 +526,7 @@ def _read_dataset_frame(
 ) -> Any:
     pl = _require_polars()
     dataset_root = Path(silver_root) / f"dataset_type={dataset_type}" / f"exchange={exchange}"
-    candidate_dirs: list[tuple[float, Path]] = []
+    candidate_files: list[Path] = []
     symbol_dirs = sorted(dataset_root.glob(f"symbol=*/timeframe={timeframe}"))
     for sym_dir in symbol_dirs:
         sym_segment = sym_dir.parent.name
@@ -535,18 +535,11 @@ def _read_dataset_frame(
         raw_symbol = sym_segment.split("=", 1)[1]
         if normalize_symbol(raw_symbol) != symbol:
             continue
-        dir_files = sorted(sym_dir.glob("**/*.parquet"))
-        if not dir_files:
-            continue
-        latest_mtime = max(path.stat().st_mtime for path in dir_files)
-        candidate_dirs.append((latest_mtime, sym_dir))
-    if not candidate_dirs:
+        candidate_files.extend(path for path in sorted(sym_dir.glob("**/*.parquet")) if path.is_file())
+    if not candidate_files:
         raise ValueError(f"Missing silver dataset for symbol={symbol}: {dataset_type}")
-    _, selected_dir = max(candidate_dirs, key=lambda item: (item[0], str(item[1])))
-    files = sorted(selected_dir.glob("**/*.parquet"))
-    if not files:
-        raise ValueError(f"Missing silver dataset for symbol={symbol}: {dataset_type}")
-    frame = pl.read_parquet([str(path) for path in files])
+    selected_file = max(candidate_files, key=lambda path: (path.stat().st_mtime, str(path)))
+    frame = pl.read_parquet(str(selected_file))
     return frame
 
 
@@ -770,11 +763,7 @@ def _sample_frame_for_plot(frame: Any) -> Any:
 def _ordered_numeric_columns(frame: Any) -> list[str]:
     numeric_cols = [col for col, dtype in zip(frame.columns, frame.dtypes, strict=False) if dtype.is_numeric()]
     market_cols = [col for col in numeric_cols if col.startswith(("spot_", "perp_"))]
-    derived_cols = [
-        col
-        for col in numeric_cols
-        if col.startswith(("oi_", "funding_", "volatility_index_"))
-    ]
+    derived_cols = [col for col in numeric_cols if col.startswith(("oi_", "funding_", "volatility_index_"))]
     l2_cols = [col for col in numeric_cols if col.startswith("l2_")]
     other_cols = [col for col in numeric_cols if col not in set(market_cols + derived_cols + l2_cols)]
     return [*market_cols, *derived_cols, *l2_cols, *other_cols]

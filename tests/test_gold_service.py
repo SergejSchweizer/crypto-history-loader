@@ -510,6 +510,94 @@ def test_build_gold_for_symbol_writes_hashed_parquet_and_manifest(tmp_path: Path
     assert "build_id" in payload
 
 
+def test_build_gold_uses_latest_silver_artifacts_only(tmp_path: Path) -> None:
+    silver = tmp_path / "silver"
+    gold = tmp_path / "gold"
+    symbol = "BTC"
+    exchange = "deribit"
+    t0 = datetime(2026, 5, 1, 0, 0, tzinfo=UTC)
+    t1 = datetime(2026, 5, 1, 0, 1, tzinfo=UTC)
+
+    spot_timeframe_dir = silver / "dataset_type=spot" / f"exchange={exchange}" / "symbol=BTC_USDC" / "timeframe=1m"
+    spot_timeframe_dir.mkdir(parents=True, exist_ok=True)
+    old_spot_path = spot_timeframe_dir / "BTC_2026_05_old.parquet"
+    new_spot_path = spot_timeframe_dir / "BTC_2026_05_new.parquet"
+    pl.DataFrame(
+        [
+            {
+                "open_time": t0,
+                "exchange": exchange,
+                "symbol": symbol,
+                "open_price": 1.0,
+                "high_price": 1.0,
+                "low_price": 1.0,
+                "close_price": 1.0,
+                "volume": 10.0,
+            },
+            {
+                "open_time": t1,
+                "exchange": exchange,
+                "symbol": symbol,
+                "open_price": 9.0,
+                "high_price": 9.0,
+                "low_price": 9.0,
+                "close_price": 9.0,
+                "volume": 11.0,
+            },
+        ]
+    ).write_parquet(old_spot_path)
+    pl.DataFrame(
+        [
+            {
+                "open_time": t0,
+                "exchange": exchange,
+                "symbol": symbol,
+                "open_price": 2.0,
+                "high_price": 2.0,
+                "low_price": 2.0,
+                "close_price": 2.0,
+                "volume": 20.0,
+            }
+        ]
+    ).write_parquet(new_spot_path)
+    now = datetime.now().timestamp()
+    os.utime(old_spot_path, (now - 120.0, now - 120.0))
+    os.utime(new_spot_path, (now, now))
+
+    _write_silver_month(
+        silver,
+        dataset_type="perp",
+        exchange=exchange,
+        symbol="BTC-PERPETUAL",
+        timeframe="1m",
+        month="2026-05",
+        rows=[
+            {
+                "open_time": t0,
+                "exchange": exchange,
+                "symbol": symbol,
+                "open_price": 10.0,
+                "high_price": 10.0,
+                "low_price": 10.0,
+                "close_price": 10.0,
+                "volume": 100.0,
+            }
+        ],
+    )
+
+    report = build_gold_for_symbol(
+        silver_root=str(silver),
+        gold_root=str(gold),
+        exchange=exchange,
+        symbol=symbol,
+        dataset_id="gold.market.core.m1",
+    )
+    assert report.rows_out == 1
+
+    payload = json.loads(_require_manifest_path(report).read_text(encoding="utf-8"))
+    assert payload["source_silver_datasets"]["spot_1m"]["rows"] == 1
+
+
 def test_build_gold_for_symbol_normalizes_input_symbol(tmp_path: Path) -> None:
     silver = tmp_path / "silver"
     gold = tmp_path / "gold"
