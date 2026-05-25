@@ -1181,11 +1181,7 @@ def run_bronze_build(args: argparse.Namespace, logger: logging.Logger) -> None:
             if not args.no_json_output:
                 print(json.dumps(output, indent=2))
             if checkpoint_enabled and not (
-                task_errors
-                or oi_errors
-                or funding_errors
-                or volatility_index_data_errors
-                or trade_errors
+                task_errors or oi_errors or funding_errors or volatility_index_data_errors or trade_errors
             ):
                 checkpoint_path.unlink(missing_ok=True)
                 logger.info("Cleared Bronze checkpoint '%s' after successful run", checkpoint_path)
