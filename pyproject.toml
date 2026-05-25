@@ -3,7 +3,7 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "crypto-market-loader"
+name = "crypto-history-loader"
 version = "0.1.0"
 description = "Framework for crypto market data ingestion"
 readme = "README.md"

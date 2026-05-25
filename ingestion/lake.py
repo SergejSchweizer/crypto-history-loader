@@ -73,7 +73,7 @@ def partition_path(lake_root: str, dataset_type: DatasetType, key: PartitionKey)
 
 
 def _partition_data_files(partition_root: Path) -> list[Path]:
-    """Return bronze partition parquet files, supporting new and legacy layouts."""
+    """Return bronze partition parquet files, supporting current and previous layouts."""
 
     files = {
         *partition_root.glob("year=*/month=*/date=*/data.parquet"),
@@ -83,7 +83,7 @@ def _partition_data_files(partition_root: Path) -> list[Path]:
 
 
 def _dataset_data_files(lake_root: str, dataset_type: str) -> list[Path]:
-    """Return dataset parquet files across new and legacy bronze layouts."""
+    """Return dataset parquet files across current and previous bronze layouts."""
 
     root = Path(lake_root)
     files = {

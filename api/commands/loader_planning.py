@@ -39,11 +39,14 @@ def sanitize_symbols(raw_symbols: object, logger: logging.Logger) -> list[str]:
 
 
 def resolved_symbol_groups(args: argparse.Namespace, logger: logging.Logger) -> tuple[list[str], list[str], list[str]]:
-    """Return deterministically ordered symbol groups for Bronze task planning."""
+    """Return deterministically ordered symbol groups for Bronze task planning.
+
+    All dataset groups currently resolve from ``--symbols``.
+    """
 
     validated_symbols = sorted(sanitize_symbols(cast(object, args.symbols), logger=logger))
-    validated_perp_trade_symbols = sorted(sanitize_symbols(cast(object, args.perp_trade_symbols), logger=logger))
-    validated_option_trade_symbols = sorted(sanitize_symbols(cast(object, args.option_trade_symbols), logger=logger))
+    validated_perp_trade_symbols = list(validated_symbols)
+    validated_option_trade_symbols = list(validated_symbols)
     return (
         validated_symbols,
         validated_perp_trade_symbols,
@@ -55,7 +58,10 @@ def build_bronze_fetch_plan(args: argparse.Namespace, logger: logging.Logger) ->
     """Build deterministic Bronze task plan shared across all dataset fetchers."""
 
     exchanges = cast(list[Exchange], args.exchanges if args.exchanges else [args.exchange])
-    data_types = sorted(cast(list[CliDataType], args.market))
+    selected = getattr(args, "dataset", getattr(args, "market", None))
+    if selected is None:
+        raise ValueError("Missing dataset selection. Provide --dataset.")
+    data_types = sorted(cast(list[CliDataType], selected))
     specs = dataset_specs(data_types)
     ohlcv_markets = cast(list[Market], [spec.market for spec in specs if spec.bronze_task_kind == "ohlcv"])
     symbols, perp_trade_symbols, option_trade_symbols = resolved_symbol_groups(args=args, logger=logger)

@@ -1,6 +1,8 @@
-# crypto-market-loader
+# CRYPTO-HISTORY-LOADER
 
 Production-grade cryptocurrency market data ingestion, normalization, feature engineering, and dataset generation framework for quantitative research and systematic trading.
+
+Author: Sergej Schweizer
 
 ---
 
@@ -61,27 +63,10 @@ Core design principles (aligned with `AGENTS.md`):
 
 ### 3.1 Medallion Layers
 
-```text
-Exchange APIs
-      |
-      v
-+----------------+
-| Bronze Layer   |
-| Raw normalized |
-+----------------+
-      |
-      v
-+----------------+
-| Silver Layer   |
-| Feature tables |
-+----------------+
-      |
-      v
-+----------------+
-| Gold Layer     |
-| ML datasets    |
-+----------------+
-```
+The system uses a medallion pipeline in which exchange API data is first persisted in Bronze as
+normalized, append-oriented raw records, then transformed in Silver into canonical time-aligned
+feature datasets, and finally published in Gold as versioned, model-ready joins with deterministic
+processing, explicit contracts, and restart-safe execution guarantees.
 
 ### 3.2 Layer Responsibilities
 
@@ -111,14 +96,37 @@ Gold:
 
 ### 4.1 Supported Domains
 
-| Dataset | Description |
-|---|---|
-| Spot OHLCV | Physical spot market |
-| Perpetual OHLCV | Leveraged perpetual futures |
-| Funding | Long/short positioning pressure |
-| Open Interest | Aggregate leveraged exposure |
-| Tick Trades | Historical trade-by-trade prints (REST backfill) |
-| Option Tick Trades | Historical option trade prints (REST backfill) |
+Supported ingest domains are defined by `DATASET_REGISTRY` in `application/datasets.py`.
+
+### Domain Groups
+
+OHLCV:
+
+| CLI Domain | Bronze `dataset_type` | Instrument Type | Task Kind | Default Timeframe | Symbol Source | Description |
+|---|---|---|---|---|---|---|
+| `spot` | `spot` | `spot` | `ohlcv` | `1m` | `--symbols` | Physical spot OHLCV candles |
+| `perp` | `perp` | `perp` | `ohlcv` | `1m` | `--symbols` | Perpetual futures OHLCV candles |
+
+Interval State:
+
+| CLI Domain | Bronze `dataset_type` | Instrument Type | Task Kind | Default Timeframe | Symbol Source | Description |
+|---|---|---|---|---|---|---|
+| `oi` | `oi` | `perp` | `open_interest` | `1m` | `--symbols` | Open-interest observations |
+| `funding` | `funding` | `perp` | `funding` | `1m`* | `--symbols` | Funding-rate observations (stored at native cadence) |
+
+Trade Ticks:
+
+| CLI Domain | Bronze `dataset_type` | Instrument Type | Task Kind | Default Timeframe | Symbol Source | Description |
+|---|---|---|---|---|---|---|
+| `perp_trades` | `perp_trades` | `perp` | `trade` | `tick` | `--symbols` | Historical perpetual trade ticks |
+| `option_trades` | `option_trades` | `option` | `trade` | `tick` | `--symbols` | Historical option trade ticks |
+
+\* Funding input accepts `1m`/`m1` aliases but normalizes to Deribit-native `8h` events.
+
+### CLI Contract
+
+- `bronze-build --dataset` choices: `spot perp oi funding perp_trades option_trades`
+- `--symbols` applies to all selected datasets (`spot`, `perp`, `oi`, `funding`, `perp_trades`, `option_trades`)
 
 ### 4.2 Current Exchange and Symbols
 
@@ -481,7 +489,12 @@ chmod 600 config.yaml
 ### 9.1 Full Medallion Pipeline
 
 ```bash
-uv run python scripts/run_medallion_pipeline.py --config config.yaml
+uv run python main.py silver-build \
+  --bronze-root lake/bronze \
+  --silver-root lake/silver \
+  --exchange deribit \
+  --dataset spot perp oi funding perp_trades option_trades \
+  --timeframe 1m
 ```
 
 This executes all layers in sequence (`bronze-build` -> `silver-build` -> `gold-build`) using
@@ -495,10 +508,11 @@ Operational behavior:
 ### 9.2 Bronze Build
 
 ```bash
-uv run python main.py bronze-build \
+uv run python main.py gold-build \
+  --silver-root lake/silver \
+  --gold-root lake/gold \
   --exchange deribit \
-  --market spot perp oi funding perp_trades option_trades \
-  --symbols BTC ETH SOL
+  --dataset-id gold.market.full.m1
 ```
 
 Trade dataset symbol controls:
@@ -544,14 +558,7 @@ uv run python scripts/check_legacy_trades_dataset.py --lake-root lake/bronze
 
 ### 9.3 Silver Build
 
-```bash
-uv run python main.py silver-build \
-  --bronze-root lake/bronze \
-  --silver-root lake/silver \
-  --exchange deribit \
-  --market spot perp oi funding perp_trades option_trades \
-  --timeframe 1m
-```
+Gold source selection:
 
 ### 9.4 Gold Build
 
@@ -669,13 +676,7 @@ Operational priorities:
 
 Recommended tooling:
 
-- pytest
-- ruff
-- mypy
-- ty
-- pyright
-
----
+Near-term execution order:
 
 ## 13. Extensions and Roadmap
 

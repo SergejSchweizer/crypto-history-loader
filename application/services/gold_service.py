@@ -379,7 +379,7 @@ def _dataset_includes_l2(dataset_id: str) -> bool:
 def _read_latest_l2_gold_frame(*, l2_root: str, exchange: str, symbol: str) -> tuple[Any, Path]:
     pl = _require_polars()
     root = Path(l2_root)
-    # Support either a direct L2 artifact root or a root containing the legacy dataset folder.
+    # Support either a direct L2 artifact root or a root containing the previous dataset folder.
     nested = root / "dataset_id=gold.l2.micro.m1"
     if nested.exists():
         root = nested
