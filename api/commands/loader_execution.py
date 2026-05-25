@@ -51,7 +51,6 @@ def fetch_all_task_groups(
     candle_tasks: list[tuple[str, str, str, str]],
     oi_tasks: list[tuple[str, str, str]],
     funding_tasks: list[tuple[str, str, str]],
-    historical_volatility_tasks: list[tuple[str, str, str]],
     volatility_index_data_tasks: list[tuple[str, str, str]],
     trade_tasks: list[tuple[str, str, str]] | None,
     lake_root: str,
@@ -64,26 +63,21 @@ def fetch_all_task_groups(
     fetch_candles_fn: Callable[..., object],
     fetch_oi_fn: Callable[..., object],
     fetch_funding_fn: Callable[..., object],
-    fetch_historical_volatility_fn: Callable[..., object],
     fetch_volatility_index_data_fn: Callable[..., object],
     fetch_trades_fn: Callable[..., object],
     on_candle_task_complete: Callable[[object, list[object]], None] | None = None,
     on_oi_task_complete: Callable[[object, list[object]], None] | None = None,
     on_funding_task_complete: Callable[[object, list[object]], None] | None = None,
-    on_historical_volatility_task_complete: Callable[[object, list[object]], None] | None = None,
     on_volatility_index_data_task_complete: Callable[[object, list[object]], None] | None = None,
     on_trade_task_complete: Callable[[object, list[object]], None] | None = None,
     on_candle_task_chunk: Callable[[object, list[object]], None] | None = None,
     on_oi_task_chunk: Callable[[object, list[object]], None] | None = None,
     on_funding_task_chunk: Callable[[object, list[object]], None] | None = None,
-    on_historical_volatility_task_chunk: Callable[[object, list[object]], None] | None = None,
     on_volatility_index_data_task_chunk: Callable[[object, list[object]], None] | None = None,
     on_trade_task_chunk: Callable[[object, list[object]], None] | None = None,
 ) -> tuple[
     dict[tuple[str, str, str, str], list[object]],
     dict[tuple[str, str, str, str], str],
-    dict[tuple[str, str, str], list[object]],
-    dict[tuple[str, str, str], str],
     dict[tuple[str, str, str], list[object]],
     dict[tuple[str, str, str], str],
     dict[tuple[str, str, str], list[object]],
@@ -101,8 +95,6 @@ def fetch_all_task_groups(
     oi_errors: dict[tuple[str, str, str], str] = {}
     funding_results: dict[tuple[str, str, str], list[object]] = {}
     funding_errors: dict[tuple[str, str, str], str] = {}
-    historical_volatility_results: dict[tuple[str, str, str], list[object]] = {}
-    historical_volatility_errors: dict[tuple[str, str, str], str] = {}
     volatility_index_data_results: dict[tuple[str, str, str], list[object]] = {}
     volatility_index_data_errors: dict[tuple[str, str, str], str] = {}
     trade_results: dict[tuple[str, str, str], list[object]] = {}
@@ -137,15 +129,6 @@ def fetch_all_task_groups(
             on_task_chunk=on_funding_task_chunk,
         ),
         _TaskGroupConfig(
-            name="historical_volatility",
-            tasks=historical_volatility_tasks,
-            fetch_fn=fetch_historical_volatility_fn,
-            task_param_name="volatility_tasks",
-            concurrency=volatility_concurrency,
-            on_task_complete=on_historical_volatility_task_complete,
-            on_task_chunk=on_historical_volatility_task_chunk,
-        ),
-        _TaskGroupConfig(
             name="volatility_index_data",
             tasks=volatility_index_data_tasks,
             fetch_fn=fetch_volatility_index_data_fn,
@@ -177,9 +160,6 @@ def fetch_all_task_groups(
         elif config.name == "funding":
             funding_results.update(cast(dict[tuple[str, str, str], list[object]], rows))
             funding_errors.update(cast(dict[tuple[str, str, str], str], errors))
-        elif config.name == "historical_volatility":
-            historical_volatility_results.update(cast(dict[tuple[str, str, str], list[object]], rows))
-            historical_volatility_errors.update(cast(dict[tuple[str, str, str], str], errors))
         elif config.name == "volatility_index_data":
             volatility_index_data_results.update(cast(dict[tuple[str, str, str], list[object]], rows))
             volatility_index_data_errors.update(cast(dict[tuple[str, str, str], str], errors))
@@ -194,8 +174,6 @@ def fetch_all_task_groups(
         oi_errors,
         funding_results,
         funding_errors,
-        historical_volatility_results,
-        historical_volatility_errors,
         volatility_index_data_results,
         volatility_index_data_errors,
         trade_results,

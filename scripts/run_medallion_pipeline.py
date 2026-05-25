@@ -97,7 +97,8 @@ def _build_steps(*, main_path: Path, config_path: Path, config_data: dict[str, o
         cli_args = [str(token) for token in cast(list[object], cli_args_raw)]
         if layer_name == "bronze" and command == "bronze-build":
             cli_args = _ensure_bronze_market_datasets(cli_args)
-            cli_args = _enforce_six_month_download_window(cli_args)
+            cli_args = _enforce_oldest_missing_start_window(cli_args)
+            cli_args = _ensure_full_gap_fill(cli_args)
 
         cmd = [str(main_path), "--config", str(config_path), command, *cli_args]
         steps.append(PipelineStep(name=layer_name, args=cmd))
@@ -121,65 +122,85 @@ def _six_months_ago_utc_date(today_utc: datetime) -> str:
     return datetime(prev_year, prev_month, prev_day, tzinfo=UTC).strftime("%Y-%m-%d")
 
 
-def _clamp_date_lower_bound(value: str, lower_bound: str) -> str:
-    """Clamp YYYY-MM-DD value to be no earlier than ``lower_bound``."""
-
-    return lower_bound if value < lower_bound else value
+_DATE_TOKEN_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
-def _clamp_symbol_date_entries(entries: list[str], *, lower_bound: str) -> list[str]:
-    """Clamp ``SYMBOL=YYYY-MM-DD`` or ``EXCHANGE:SYMBOL=YYYY-MM-DD`` tokens."""
+def _is_date_token(value: str) -> bool:
+    """Return whether token is an ISO UTC date (YYYY-MM-DD)."""
 
-    clamped: list[str] = []
-    for item in entries:
-        if "=" not in item:
-            clamped.append(item)
+    return bool(_DATE_TOKEN_RE.fullmatch(value.strip()))
+
+
+def _extract_oldest_start_date(cli_args: list[str]) -> str | None:
+    """Return oldest date found in --start-date and symbol date override tokens."""
+
+    dates: list[str] = []
+    i = 0
+    while i < len(cli_args):
+        token = cli_args[i]
+        if token == "--start-date":
+            if i + 1 < len(cli_args) and not cli_args[i + 1].startswith("--") and _is_date_token(cli_args[i + 1]):
+                dates.append(cli_args[i + 1])
+                i += 2
+                continue
+        if token in {"--symbol-start-dates", "--exchange-symbol-start-dates"}:
+            i += 1
+            while i < len(cli_args) and not cli_args[i].startswith("--"):
+                item = cli_args[i]
+                if "=" in item:
+                    maybe_date = item.split("=", 1)[1].strip()
+                    if _is_date_token(maybe_date):
+                        dates.append(maybe_date)
+                i += 1
             continue
-        key, date_part = item.split("=", 1)
-        clamped.append(f"{key}={_clamp_date_lower_bound(date_part, lower_bound)}")
-    return clamped
+        i += 1
+    if not dates:
+        return None
+    return min(dates)
 
 
-def _enforce_six_month_download_window(cli_args: list[str]) -> list[str]:
-    """Ensure Bronze CLI date boundaries do not request more than six months of history."""
+def _enforce_oldest_missing_start_window(cli_args: list[str]) -> list[str]:
+    """Set Bronze start-date to oldest configured missing date across symbols/datasets."""
 
-    lower_bound = _six_months_ago_utc_date(datetime.now(UTC))
+    oldest = _extract_oldest_start_date(cli_args)
+    if oldest is None:
+        oldest = _six_months_ago_utc_date(datetime.now(UTC))
+
     rewritten: list[str] = []
     i = 0
-    has_start_date = False
+    start_date_written = False
 
     while i < len(cli_args):
         token = cli_args[i]
         if token == "--start-date":
-            has_start_date = True
-            rewritten.append(token)
-            if i + 1 < len(cli_args) and not cli_args[i + 1].startswith("--"):
-                rewritten.append(_clamp_date_lower_bound(cli_args[i + 1], lower_bound))
-                i += 2
-            else:
-                rewritten.append(lower_bound)
-                i += 1
-            continue
-        if token in {"--symbol-start-dates", "--exchange-symbol-start-dates"}:
-            rewritten.append(token)
+            if not start_date_written:
+                rewritten.extend(["--start-date", oldest])
+                start_date_written = True
             i += 1
-            values: list[str] = []
-            while i < len(cli_args) and not cli_args[i].startswith("--"):
-                values.append(cli_args[i])
+            if i < len(cli_args) and not cli_args[i].startswith("--"):
                 i += 1
-            rewritten.extend(_clamp_symbol_date_entries(values, lower_bound=lower_bound))
             continue
         rewritten.append(token)
         i += 1
 
-    if not has_start_date:
-        rewritten.extend(["--start-date", lower_bound])
+    if not start_date_written:
+        rewritten.extend(["--start-date", oldest])
+    return rewritten
+
+
+def _ensure_full_gap_fill(cli_args: list[str]) -> list[str]:
+    """Ensure Bronze runs in full-gap-fill mode for missing-history backfill."""
+
+    if "--full-gap-fill" in cli_args:
+        return cli_args
+    rewritten = [token for token in cli_args if token != "--tail-delta-only"]
+    rewritten.append("--full-gap-fill")
     return rewritten
 
 
 def _ensure_bronze_market_datasets(
     cli_args: list[str],
-    required_datasets: tuple[str, ...] = ("historical_volatility", "volatility_index_data"),
+    required_datasets: tuple[str, ...] = ("volatility_index_data",),
 ) -> list[str]:
     """Ensure Bronze CLI args include required ``--market`` dataset tokens."""
 

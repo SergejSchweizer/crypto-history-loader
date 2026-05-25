@@ -15,7 +15,6 @@ CliDataType = Literal[
     "funding",
     "perp_trades",
     "option_trades",
-    "historical_volatility",
     "volatility_index_data",
 ]
 DatasetType = Literal[
@@ -25,7 +24,6 @@ DatasetType = Literal[
     "funding",
     "perp_trades",
     "option_trades",
-    "historical_volatility",
     "volatility_index_data",
     "l2_orderbook",
 ]
@@ -155,14 +153,6 @@ DATASET_REGISTRY: dict[CliDataType, DatasetSpec] = {
         symbol_group="option_trade_symbols",
         default_timeframe="tick",
         market="option",
-    ),
-    "historical_volatility": DatasetSpec(
-        cli_data_type="historical_volatility",
-        dataset_type="historical_volatility",
-        instrument_type="perp",
-        bronze_task_kind="volatility",
-        symbol_group="symbols",
-        market="perp",
     ),
     "volatility_index_data": DatasetSpec(
         cli_data_type="volatility_index_data",

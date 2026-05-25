@@ -188,7 +188,7 @@ def test_run_silver_build_builds_volatility_observed_datasets(
         bronze_root="lake/bronze",
         silver_root="lake/silver",
         exchange="deribit",
-        market=["historical_volatility", "volatility_index_data"],
+        market=["volatility_index_data"],
         symbols=None,
         timeframe="1m",
         manifest=False,
@@ -198,11 +198,9 @@ def test_run_silver_build_builds_volatility_observed_datasets(
     silver_cmd.run_silver_build(args=args, logger=logging.getLogger("test"))
 
     assert captured == [
-        ("historical_volatility", "1m", "perp"),
         ("volatility_index_data", "1m", "perp"),
     ]
     assert built == [
-        ("historical_volatility", "historical_volatility_observed"),
         ("volatility_index_data", "volatility_index_data_observed"),
     ]
 

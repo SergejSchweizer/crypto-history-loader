@@ -11,7 +11,7 @@ from ingestion.exchanges import deribit_volatility
 from ingestion.http_client import HttpClientError
 from ingestion.spot import Exchange, Market
 
-VolatilityDatasetType = Literal["historical_volatility", "volatility_index"]
+VolatilityDatasetType = Literal["volatility_index"]
 
 
 @dataclass(frozen=True)
@@ -88,23 +88,6 @@ def _canonical_currency(symbol: str) -> str:
     return upper
 
 
-def _parse_historical_volatility_row(
-    exchange: Exchange, symbol: str, interval: str, row: dict[str, object]
-) -> VolatilityPoint:
-    ts_ms = int(cast(Any, row.get("timestamp", 0)))
-    open_time = datetime.fromtimestamp(ts_ms / 1000, tz=UTC)
-    return VolatilityPoint(
-        exchange=exchange,
-        symbol=_canonical_currency(symbol),
-        interval=interval,
-        open_time=open_time,
-        close_time=open_time,
-        value=float(cast(Any, row.get("volatility", 0.0))),
-        source_endpoint="public_get_historical_volatility",
-        dataset_type="historical_volatility",
-    )
-
-
 def _parse_volatility_index_row(
     exchange: Exchange, symbol: str, interval: str, row: dict[str, object]
 ) -> VolatilityPoint:
@@ -120,57 +103,6 @@ def _parse_volatility_index_row(
         source_endpoint="public_get_volatility_index_data",
         dataset_type="volatility_index",
     )
-
-
-def fetch_historical_volatility_all_history(
-    exchange: Exchange,
-    symbol: str,
-    interval: str,
-    market: Market,
-    on_history_chunk: Callable[[list[VolatilityPoint]], None] | None = None,
-) -> list[VolatilityPoint]:
-    """Fetch all available historical volatility rows."""
-
-    if market != "perp":
-        return []
-    normalized_interval = normalize_volatility_timeframe(exchange=exchange, value=interval)
-    if exchange != "deribit":
-        return []
-    try:
-        rows = deribit_volatility.fetch_historical_volatility_all(currency=_canonical_currency(symbol))
-    except HttpClientError:
-        return []
-    points = [_parse_historical_volatility_row(exchange, symbol, normalized_interval, row) for row in rows]
-    if on_history_chunk is not None and points:
-        on_history_chunk(points)
-        return []
-    return points
-
-
-def fetch_historical_volatility_range(
-    exchange: Exchange,
-    symbol: str,
-    interval: str,
-    start_open_ms: int,
-    end_open_ms: int,
-    market: Market,
-) -> list[VolatilityPoint]:
-    """Fetch historical volatility rows by inclusive open-time range."""
-
-    if market != "perp":
-        return []
-    normalized_interval = normalize_volatility_timeframe(exchange=exchange, value=interval)
-    if exchange != "deribit":
-        return []
-    try:
-        rows = deribit_volatility.fetch_historical_volatility_range(
-            currency=_canonical_currency(symbol),
-            start_open_ms=start_open_ms,
-            end_open_ms=end_open_ms,
-        )
-    except HttpClientError:
-        return []
-    return [_parse_historical_volatility_row(exchange, symbol, normalized_interval, row) for row in rows]
 
 
 def fetch_volatility_index_all_history(

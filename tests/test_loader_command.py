@@ -421,7 +421,6 @@ def test_run_bronze_build_resumes_from_checkpoint_and_clears_on_success(
             "candle": {"deribit|spot|BTC|1m"},
             "oi": set(),
             "funding": set(),
-            "historical_volatility": set(),
             "volatility_index_data": set(),
             "trade": set(),
         },

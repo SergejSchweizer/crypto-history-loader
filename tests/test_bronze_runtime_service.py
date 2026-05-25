@@ -22,7 +22,6 @@ def _plan() -> BronzeFetchPlanDTO:
         candle_tasks=[("deribit", "spot", "BTC", "1m")],
         oi_tasks=[],
         funding_tasks=[],
-        historical_volatility_tasks=[],
         volatility_index_data_tasks=[],
         trade_tasks=[],
     )
@@ -37,7 +36,6 @@ def test_load_checkpoint_handles_unreadable_stale_and_missing_completed(tmp_path
         "candle": set(),
         "oi": set(),
         "funding": set(),
-        "historical_volatility": set(),
         "volatility_index_data": set(),
         "trade": set(),
     }
@@ -47,7 +45,6 @@ def test_load_checkpoint_handles_unreadable_stale_and_missing_completed(tmp_path
         "candle": set(),
         "oi": set(),
         "funding": set(),
-        "historical_volatility": set(),
         "volatility_index_data": set(),
         "trade": set(),
     }
@@ -57,7 +54,6 @@ def test_load_checkpoint_handles_unreadable_stale_and_missing_completed(tmp_path
         "candle": set(),
         "oi": set(),
         "funding": set(),
-        "historical_volatility": set(),
         "volatility_index_data": set(),
         "trade": set(),
     }
@@ -80,7 +76,6 @@ def test_fingerprint_and_write_checkpoint_roundtrip(tmp_path: Path) -> None:
         "candle": {"a"},
         "oi": set(),
         "funding": set(),
-        "historical_volatility": set(),
         "volatility_index_data": set(),
         "trade": {"b"},
     }

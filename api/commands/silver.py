@@ -28,7 +28,6 @@ _MARKET_DISCOVERY_CONFIG: dict[str, tuple[str, str, str]] = {
     "oi": ("oi", "perp", "1m"),
     "perp_trades": ("perp_trades", "perp", "tick"),
     "option_trades": ("option_trades", "option", "tick"),
-    "historical_volatility": ("historical_volatility", "perp", "1m"),
     "volatility_index_data": ("volatility_index_data", "perp", "1m"),
 }
 
@@ -50,7 +49,6 @@ def add_silver_build_parser(subparsers: Any) -> None:
             "funding",
             "perp_trades",
             "option_trades",
-            "historical_volatility",
             "volatility_index_data",
         ],
         default=[
@@ -60,7 +58,6 @@ def add_silver_build_parser(subparsers: Any) -> None:
             "funding",
             "perp_trades",
             "option_trades",
-            "historical_volatility",
             "volatility_index_data",
         ],
     )
@@ -206,19 +203,6 @@ def run_silver_build(args: argparse.Namespace, logger: logging.Logger) -> None:
             feature.rows_out,
         )
 
-    def _run_historical_volatility(symbol: str) -> None:
-        observed = build_volatility_observed_for_symbol(
-            bronze_root=bronze_root,
-            silver_root=silver_root,
-            exchange=exchange,
-            symbol=symbol,
-            timeframe=timeframe,
-            bronze_dataset_type="historical_volatility",
-            output_dataset_type="historical_volatility_observed",
-        )
-        _append_report("historical_volatility_observed", symbol, observed)
-        logger.info("Silver historical volatility report written symbol=%s observed_rows=%s", symbol, observed.rows_out)
-
     def _run_volatility_index_data(symbol: str) -> None:
         observed = build_volatility_observed_for_symbol(
             bronze_root=bronze_root,
@@ -255,7 +239,6 @@ def run_silver_build(args: argparse.Namespace, logger: logging.Logger) -> None:
         "oi": _run_oi,
         "perp_trades": _run_trades,
         "option_trades": _run_option_trades,
-        "historical_volatility": _run_historical_volatility,
         "volatility_index_data": _run_volatility_index_data,
     }
 

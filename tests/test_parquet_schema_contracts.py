@@ -124,7 +124,7 @@ def test_bronze_option_trades_schema_contract_fields(tmp_path: Path) -> None:
     assert "option_type" in schema.names
 
 
-def test_bronze_historical_volatility_schema_contract_fields(tmp_path: Path) -> None:
+def test_bronze_volatility_index_data_schema_contract_fields(tmp_path: Path) -> None:
     row = VolatilityPoint(
         exchange="deribit",
         symbol="BTC",
@@ -132,13 +132,13 @@ def test_bronze_historical_volatility_schema_contract_fields(tmp_path: Path) -> 
         open_time=datetime(2026, 5, 1, 0, 0, tzinfo=UTC),
         close_time=datetime(2026, 5, 1, 0, 0, tzinfo=UTC),
         value=55.2,
-        source_endpoint="public_get_historical_volatility",
-        dataset_type="historical_volatility",
+        source_endpoint="public_get_volatility_index_data",
+        dataset_type="volatility_index_data",
     )
     files = save_volatility_parquet_lake(
         {"deribit": {"BTC": [row]}},
         market="perp",
-        dataset_type="historical_volatility",
+        dataset_type="volatility_index_data",
         lake_root=str(tmp_path),
     )
     schema = pq.ParquetFile(files[0]).schema_arrow

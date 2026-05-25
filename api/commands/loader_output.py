@@ -74,7 +74,6 @@ class IncrementalPersistor:
         self.streamed_candle_tasks: set[tuple[Exchange, Market, str, str]] = set()
         self.streamed_oi_tasks: set[tuple[Exchange, str, str]] = set()
         self.streamed_funding_tasks: set[tuple[Exchange, str, str]] = set()
-        self.streamed_historical_volatility_tasks: set[tuple[Exchange, str, str]] = set()
         self.streamed_volatility_index_data_tasks: set[tuple[Exchange, str, str]] = set()
         self.streamed_trade_tasks: set[tuple[Exchange, TradeMarket, str]] = set()
 
@@ -249,29 +248,10 @@ class IncrementalPersistor:
             lake_root=self.lake_root,
             oi_requested=False,
             funding_requested=False,
+            volatility_index_data_requested=True,
             trades_requested=False,
         )
-        storage = LoaderStorageDTO()
-        if task.dataset_type == "historical_volatility":
-            storage.historical_volatility = {"perp": {task.exchange: {task.symbol.upper(): rows}}}
-            options = PersistOptionsDTO(
-                save_parquet_lake=True,
-                lake_root=self.lake_root,
-                oi_requested=False,
-                funding_requested=False,
-                historical_volatility_requested=True,
-                trades_requested=False,
-            )
-        else:
-            storage.volatility_index_data = {"perp": {task.exchange: {task.symbol.upper(): rows}}}
-            options = PersistOptionsDTO(
-                save_parquet_lake=True,
-                lake_root=self.lake_root,
-                oi_requested=False,
-                funding_requested=False,
-                volatility_index_data_requested=True,
-                trades_requested=False,
-            )
+        storage = LoaderStorageDTO(volatility_index_data={"perp": {task.exchange: {task.symbol.upper(): rows}}})
         storage_result = cast(
             _PersistResult,
             self.persist_fn(
@@ -324,16 +304,6 @@ class IncrementalPersistor:
         if (task.exchange, task.market, task.symbol) in self.streamed_trade_tasks:
             return
         self._persist_trade_task(task, rows, logger)
-
-    def on_historical_volatility_task_complete(
-        self,
-        task: VolatilityFetchTaskDTO,
-        rows: list[VolatilityPoint],
-        logger: logging.Logger,
-    ) -> None:
-        if (task.exchange, task.symbol, task.timeframe) in self.streamed_historical_volatility_tasks:
-            return
-        self._persist_volatility_task(task, rows, logger)
 
     def on_volatility_index_data_task_complete(
         self,
@@ -388,18 +358,6 @@ class IncrementalPersistor:
         self._persist_trade_task(task, rows, logger)
         self.mark_checkpoint_complete("trade", (task.exchange, task.market, task.symbol))
 
-    def on_historical_volatility_task_chunk(
-        self,
-        task: VolatilityFetchTaskDTO,
-        rows: list[VolatilityPoint],
-        logger: logging.Logger,
-    ) -> None:
-        if not rows:
-            return
-        self.streamed_historical_volatility_tasks.add((task.exchange, task.symbol, task.timeframe))
-        self._persist_volatility_task(task, rows, logger)
-        self.mark_checkpoint_complete("historical_volatility", (task.exchange, task.symbol, task.timeframe))
-
     def on_volatility_index_data_task_chunk(
         self,
         task: VolatilityFetchTaskDTO,
@@ -420,7 +378,6 @@ def finalize_bronze_output(
     tasks: list[tuple[Exchange, Market, str, str]],
     oi_tasks: list[tuple[Exchange, str, str]],
     funding_tasks: list[tuple[Exchange, str, str]],
-    historical_volatility_tasks: list[tuple[Exchange, str, str]],
     volatility_index_data_tasks: list[tuple[Exchange, str, str]],
     trade_tasks: list[tuple[Exchange, TradeMarket, str]],
     task_results: dict[tuple[Exchange, Market, str, str], list[SpotCandle]],
@@ -429,8 +386,6 @@ def finalize_bronze_output(
     oi_errors: dict[tuple[Exchange, str, str], str],
     funding_results: dict[tuple[Exchange, str, str], list[FundingPoint]],
     funding_errors: dict[tuple[Exchange, str, str], str],
-    historical_volatility_results: dict[tuple[Exchange, str, str], list[VolatilityPoint]],
-    historical_volatility_errors: dict[tuple[Exchange, str, str], str],
     volatility_index_data_results: dict[tuple[Exchange, str, str], list[VolatilityPoint]],
     volatility_index_data_errors: dict[tuple[Exchange, str, str], str],
     trade_results: dict[tuple[Exchange, TradeMarket, str], list[TradeTick | OptionTradeTick]],
@@ -438,14 +393,12 @@ def finalize_bronze_output(
     multi_market: bool,
     oi_requested: bool,
     funding_requested: bool,
-    historical_volatility_requested: bool,
     volatility_index_data_requested: bool,
     perp_trades_requested: bool,
     option_trades_requested: bool,
     candles_for_storage: dict[Market, dict[str, dict[str, list[SpotCandle]]]],
     open_interest_for_storage: dict[Market, dict[str, dict[str, list[OpenInterestPoint]]]],
     funding_for_storage: dict[Market, dict[str, dict[str, list[FundingPoint]]]],
-    historical_volatility_for_storage: dict[Market, dict[str, dict[str, list[VolatilityPoint]]]],
     volatility_index_data_for_storage: dict[Market, dict[str, dict[str, list[VolatilityPoint]]]],
     trades_for_storage: dict[TradeMarket, dict[str, dict[str, list[TradeTick | OptionTradeTick]]]],
     ohlcv_markets: list[Market],
@@ -468,16 +421,13 @@ def finalize_bronze_output(
 ) -> None:
     logger.info(
         "Fetch summary spot/perp: success=%s failed=%s | oi: success=%s failed=%s | "
-        "funding: success=%s failed=%s | historical_volatility: success=%s failed=%s | "
-        "volatility_index_data: success=%s failed=%s | trades: success=%s failed=%s",
+        "funding: success=%s failed=%s | volatility_index_data: success=%s failed=%s | trades: success=%s failed=%s",
         len(task_results),
         len(task_errors),
         len(oi_results),
         len(oi_errors),
         len(funding_results),
         len(funding_errors),
-        len(historical_volatility_results),
-        len(historical_volatility_errors),
         len(volatility_index_data_results),
         len(volatility_index_data_errors),
         len(trade_results),
@@ -489,16 +439,11 @@ def finalize_bronze_output(
             candle_tasks=cast(list[tuple[str, str, str, str]], tasks),
             oi_tasks=cast(list[tuple[str, str, str]], oi_tasks),
             funding_tasks=cast(list[tuple[str, str, str]], funding_tasks),
-            historical_volatility_tasks=cast(list[tuple[str, str, str]], historical_volatility_tasks),
             volatility_index_data_tasks=cast(list[tuple[str, str, str]], volatility_index_data_tasks),
             trade_tasks=cast(list[tuple[str, str, str]], trade_tasks),
             candle_results=cast(dict[tuple[str, str, str, str], object], task_results),
             oi_results=cast(dict[tuple[str, str, str], object], oi_results),
             funding_results=cast(dict[tuple[str, str, str], object], funding_results),
-            historical_volatility_results=cast(
-                dict[tuple[str, str, str], object],
-                historical_volatility_results,
-            ),
             volatility_index_data_results=cast(
                 dict[tuple[str, str, str], object],
                 volatility_index_data_results,
@@ -535,16 +480,6 @@ def finalize_bronze_output(
             multi_market=multi_market,
             storage=funding_for_storage,
         )
-    if historical_volatility_requested:
-        populate_volatility_output_fn(
-            output=output,
-            tasks=historical_volatility_tasks,
-            results=historical_volatility_results,
-            errors=historical_volatility_errors,
-            multi_market=multi_market,
-            storage=historical_volatility_for_storage,
-            dataset_key="historical_volatility",
-        )
     if volatility_index_data_requested:
         populate_volatility_output_fn(
             output=output,
@@ -574,7 +509,6 @@ def finalize_bronze_output(
                         candles=candles_for_storage,
                         open_interest=open_interest_for_storage,
                         funding=funding_for_storage,
-                        historical_volatility=historical_volatility_for_storage,
                         volatility_index_data=volatility_index_data_for_storage,
                         trades=trades_for_storage,
                     ),
@@ -583,7 +517,6 @@ def finalize_bronze_output(
                         lake_root=args.lake_root,
                         oi_requested=oi_requested,
                         funding_requested=funding_requested,
-                        historical_volatility_requested=historical_volatility_requested,
                         volatility_index_data_requested=volatility_index_data_requested,
                         trades_requested=perp_trades_requested or option_trades_requested,
                     ),
@@ -607,8 +540,6 @@ def finalize_bronze_output(
             selected_dataset_types.add(oi_dataset_type)
         if funding_requested:
             selected_dataset_types.add("funding")
-        if historical_volatility_requested:
-            selected_dataset_types.add("historical_volatility")
         if volatility_index_data_requested:
             selected_dataset_types.add("volatility_index_data")
         if perp_trades_requested:

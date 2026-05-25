@@ -44,7 +44,6 @@ def test_build_steps_uses_configured_market_args_with_trades(tmp_path: Path) -> 
     args = steps[0].args
     assert "--market" in args
     assert "perp_trades" in args
-    assert "historical_volatility" in args
     assert "volatility_index_data" in args
 
 
@@ -67,10 +66,10 @@ def test_build_steps_bronze_adds_required_market_datasets_when_missing_market_fl
     steps = module._build_steps(main_path=main_path, config_path=config_path, config_data=cfg)
     args = steps[0].args
     market_idx = args.index("--market")
-    assert args[market_idx + 1 : market_idx + 3] == ["historical_volatility", "volatility_index_data"]
+    assert args[market_idx + 1] == "volatility_index_data"
 
 
-def test_build_steps_bronze_enforces_six_month_start_date_when_missing(
+def test_build_steps_bronze_sets_start_date_to_fallback_and_enables_full_gap_fill_when_missing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     module = _load_pipeline_module()
@@ -94,9 +93,13 @@ def test_build_steps_bronze_enforces_six_month_start_date_when_missing(
     assert "--start-date" in steps[0].args
     idx = steps[0].args.index("--start-date")
     assert steps[0].args[idx + 1] == "2026-04-16"
+    assert "--full-gap-fill" in steps[0].args
+    assert "--tail-delta-only" not in steps[0].args
 
 
-def test_build_steps_bronze_clamps_older_date_bounds(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_build_steps_bronze_uses_oldest_configured_date_and_preserves_symbol_bounds(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     module = _load_pipeline_module()
     main_path = tmp_path / "main.py"
     main_path.write_text("print('ok')\n", encoding="utf-8")
@@ -124,12 +127,13 @@ def test_build_steps_bronze_clamps_older_date_bounds(tmp_path: Path, monkeypatch
     steps = module._build_steps(main_path=main_path, config_path=config_path, config_data=cfg)
     args = steps[0].args
     start_idx = args.index("--start-date")
-    assert args[start_idx + 1] == "2026-04-16"
+    assert args[start_idx + 1] == "2020-01-01"
     sym_idx = args.index("--symbol-start-dates")
-    assert args[sym_idx + 1] == "BTC=2026-04-16"
+    assert args[sym_idx + 1] == "BTC=2021-01-01"
     assert args[sym_idx + 2] == "ETH=2026-05-10"
     ex_idx = args.index("--exchange-symbol-start-dates")
-    assert args[ex_idx + 1] == "deribit:SOL=2026-04-16"
+    assert args[ex_idx + 1] == "deribit:SOL=2020-01-01"
+    assert "--full-gap-fill" in args
 
 
 def test_log_path_from_config_prefers_explicit_log_file(tmp_path: Path) -> None:

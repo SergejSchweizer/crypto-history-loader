@@ -15,7 +15,6 @@ _EMPTY_CHECKPOINT: dict[str, set[str]] = {
     "candle": set(),
     "oi": set(),
     "funding": set(),
-    "historical_volatility": set(),
     "volatility_index_data": set(),
     "trade": set(),
 }
@@ -91,9 +90,6 @@ def load_bronze_checkpoint(path: Path, fingerprint: str, logger: logging.Logger)
         "candle": set(str(value) for value in cast(list[object], completed.get("candle", []))),
         "oi": set(str(value) for value in cast(list[object], completed.get("oi", []))),
         "funding": set(str(value) for value in cast(list[object], completed.get("funding", []))),
-        "historical_volatility": set(
-            str(value) for value in cast(list[object], completed.get("historical_volatility", []))
-        ),
         "volatility_index_data": set(
             str(value) for value in cast(list[object], completed.get("volatility_index_data", []))
         ),

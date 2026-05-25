@@ -37,7 +37,6 @@ from api.cli import build_parser
         (["silver-build", "--exchange", "deribit"], {"exchange": "deribit"}),
         (["silver-build", "--market", "spot"], {"market": ["spot"]}),
         (["silver-build", "--market", "option_trades"], {"market": ["option_trades"]}),
-        (["silver-build", "--market", "historical_volatility"], {"market": ["historical_volatility"]}),
         (["silver-build", "--market", "volatility_index_data"], {"market": ["volatility_index_data"]}),
         (["silver-build", "--symbols", "BTC"], {"symbols": ["BTC"]}),
         (["silver-build", "--timeframe", "1m"], {"timeframe": "1m"}),

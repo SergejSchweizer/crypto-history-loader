@@ -896,14 +896,14 @@ def test_build_volatility_observed_for_symbol(tmp_path: Path) -> None:
     rows = [
         {
             "schema_version": "v1",
-            "dataset_type": "historical_volatility",
+            "dataset_type": "volatility_index_data",
             "exchange": "Deribit",
             "symbol": symbol,
             "instrument_type": "perp",
             "event_time": datetime(2026, 5, 1, 0, 0, tzinfo=UTC),
             "ingested_at": datetime(2026, 5, 1, 0, 0, 30, tzinfo=UTC),
             "run_id": "r1",
-            "source_endpoint": "public_get_historical_volatility",
+            "source_endpoint": "public_get_volatility_index_data",
             "open_time": datetime(2026, 5, 1, 0, 0, tzinfo=UTC),
             "close_time": datetime(2026, 5, 1, 0, 0, tzinfo=UTC),
             "timeframe": "1m",
@@ -912,14 +912,14 @@ def test_build_volatility_observed_for_symbol(tmp_path: Path) -> None:
         },
         {
             "schema_version": "v1",
-            "dataset_type": "historical_volatility",
+            "dataset_type": "volatility_index_data",
             "exchange": "Deribit",
             "symbol": symbol,
             "instrument_type": "perp",
             "event_time": datetime(2026, 5, 1, 0, 0, tzinfo=UTC),
             "ingested_at": datetime(2026, 5, 1, 0, 0, 40, tzinfo=UTC),
             "run_id": "r2",
-            "source_endpoint": "public_get_historical_volatility",
+            "source_endpoint": "public_get_volatility_index_data",
             "open_time": datetime(2026, 5, 1, 0, 0, tzinfo=UTC),
             "close_time": datetime(2026, 5, 1, 0, 0, tzinfo=UTC),
             "timeframe": "1m",
@@ -928,14 +928,14 @@ def test_build_volatility_observed_for_symbol(tmp_path: Path) -> None:
         },
         {
             "schema_version": "v1",
-            "dataset_type": "historical_volatility",
+            "dataset_type": "volatility_index_data",
             "exchange": "Deribit",
             "symbol": symbol,
             "instrument_type": "perp",
             "event_time": datetime(2026, 5, 1, 0, 1, tzinfo=UTC),
             "ingested_at": datetime(2026, 5, 1, 0, 1, 30, tzinfo=UTC),
             "run_id": "r3",
-            "source_endpoint": "public_get_historical_volatility",
+            "source_endpoint": "public_get_volatility_index_data",
             "open_time": datetime(2026, 5, 1, 0, 1, tzinfo=UTC),
             "close_time": datetime(2026, 5, 1, 0, 1, tzinfo=UTC),
             "timeframe": "1m",
@@ -945,14 +945,14 @@ def test_build_volatility_observed_for_symbol(tmp_path: Path) -> None:
     ]
     _write_bronze_day_file(
         bronze,
-        market="historical_volatility",
+        market="volatility_index_data",
         exchange="deribit",
         symbol=symbol,
         timeframe="1m",
         month="2026-05",
         day="2026-05-01",
         rows=rows,
-        dataset_type="historical_volatility",
+        dataset_type="volatility_index_data",
         instrument_type="perp",
     )
 
@@ -962,10 +962,10 @@ def test_build_volatility_observed_for_symbol(tmp_path: Path) -> None:
         exchange="deribit",
         symbol=symbol,
         timeframe="1m",
-        bronze_dataset_type="historical_volatility",
-        output_dataset_type="historical_volatility_observed",
+        bronze_dataset_type="volatility_index_data",
+        output_dataset_type="volatility_index_data_observed",
     )
-    assert report.dataset == "historical_volatility_observed"
+    assert report.dataset == "volatility_index_data_observed"
     assert report.rows_in == 3
     assert report.rows_out == 1
     assert report.duplicates_removed == 1
@@ -974,7 +974,7 @@ def test_build_volatility_observed_for_symbol(tmp_path: Path) -> None:
 
     out_file = (
         silver
-        / "dataset_type=historical_volatility_observed"
+        / "dataset_type=volatility_index_data_observed"
         / "exchange=deribit"
         / "symbol=BTC"
         / "timeframe=1m"

@@ -22,7 +22,6 @@ class PendingTaskGroups:
     candle_tasks: list[CandleTask]
     oi_tasks: list[OpenInterestTask]
     funding_tasks: list[FundingTask]
-    historical_volatility_tasks: list[FundingTask]
     volatility_index_data_tasks: list[FundingTask]
     trade_tasks: list[TradeTask]
 
@@ -32,14 +31,12 @@ def apply_checkpoint_filter(
     candle_tasks: list[CandleTask],
     oi_tasks: list[OpenInterestTask],
     funding_tasks: list[FundingTask],
-    historical_volatility_tasks: list[FundingTask],
     volatility_index_data_tasks: list[FundingTask],
     trade_tasks: list[TradeTask],
     completed: dict[str, set[str]],
     candle_key_serializer: Callable[[CandleTask], str],
     oi_key_serializer: Callable[[OpenInterestTask], str],
     funding_key_serializer: Callable[[FundingTask], str],
-    historical_volatility_key_serializer: Callable[[FundingTask], str],
     volatility_index_data_key_serializer: Callable[[FundingTask], str],
     trade_key_serializer: Callable[[TradeTask], str],
 ) -> PendingTaskGroups:
@@ -48,11 +45,6 @@ def apply_checkpoint_filter(
     pending_candles = [task for task in candle_tasks if candle_key_serializer(task) not in completed["candle"]]
     pending_oi = [task for task in oi_tasks if oi_key_serializer(task) not in completed["oi"]]
     pending_funding = [task for task in funding_tasks if funding_key_serializer(task) not in completed["funding"]]
-    pending_historical_volatility = [
-        task
-        for task in historical_volatility_tasks
-        if historical_volatility_key_serializer(task) not in completed["historical_volatility"]
-    ]
     pending_volatility_index_data = [
         task
         for task in volatility_index_data_tasks
@@ -63,7 +55,6 @@ def apply_checkpoint_filter(
         candle_tasks=pending_candles,
         oi_tasks=pending_oi,
         funding_tasks=pending_funding,
-        historical_volatility_tasks=pending_historical_volatility,
         volatility_index_data_tasks=pending_volatility_index_data,
         trade_tasks=pending_trades,
     )
@@ -72,7 +63,4 @@ def apply_checkpoint_filter(
 def has_checkpoint_state(completed: dict[str, set[str]]) -> bool:
     """Return whether any checkpoint category has completed entries."""
 
-    return any(
-        completed[name]
-        for name in ("candle", "oi", "funding", "historical_volatility", "volatility_index_data", "trade")
-    )
+    return any(completed[name] for name in ("candle", "oi", "funding", "volatility_index_data", "trade"))

@@ -68,10 +68,6 @@ def _empty_funding_storage() -> dict[Market, dict[str, dict[str, list[FundingPoi
     return {}
 
 
-def _empty_historical_volatility_storage() -> dict[Market, dict[str, dict[str, list[VolatilityPoint]]]]:
-    return {}
-
-
 def _empty_volatility_index_data_storage() -> dict[Market, dict[str, dict[str, list[VolatilityPoint]]]]:
     return {}
 
@@ -227,7 +223,6 @@ class BronzeFetchPlanDTO:
     candle_tasks: list[tuple[Exchange, Market, str, str]]
     oi_tasks: list[tuple[Exchange, str, str]]
     funding_tasks: list[tuple[Exchange, str, str]]
-    historical_volatility_tasks: list[tuple[Exchange, str, str]]
     volatility_index_data_tasks: list[tuple[Exchange, str, str]]
     trade_tasks: list[tuple[Exchange, TradeMarket, str]]
     dataset_tasks: list[DatasetTask] = field(default_factory=_empty_dataset_tasks)
@@ -260,9 +255,6 @@ class LoaderStorageDTO:
         default_factory=_empty_open_interest_storage
     )
     funding: dict[Market, dict[str, dict[str, list[FundingPoint]]]] = field(default_factory=_empty_funding_storage)
-    historical_volatility: dict[Market, dict[str, dict[str, list[VolatilityPoint]]]] = field(
-        default_factory=_empty_historical_volatility_storage
-    )
     volatility_index_data: dict[Market, dict[str, dict[str, list[VolatilityPoint]]]] = field(
         default_factory=_empty_volatility_index_data_storage
     )
@@ -289,7 +281,6 @@ class PersistOptionsDTO:
     lake_root: str
     oi_requested: bool
     funding_requested: bool = False
-    historical_volatility_requested: bool = False
     volatility_index_data_requested: bool = False
     trades_requested: bool = False
 

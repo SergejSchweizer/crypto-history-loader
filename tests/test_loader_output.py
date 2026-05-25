@@ -82,7 +82,7 @@ def _trade_tick(symbol: str = "BTC") -> TradeTick:
     )
 
 
-def _vol_point(symbol: str = "BTC", dataset_type: str = "historical_volatility") -> VolatilityPoint:
+def _vol_point(symbol: str = "BTC", dataset_type: str = "volatility_index_data") -> VolatilityPoint:
     return VolatilityPoint(
         exchange="deribit",
         symbol=symbol,
@@ -90,7 +90,7 @@ def _vol_point(symbol: str = "BTC", dataset_type: str = "historical_volatility")
         open_time=datetime(2026, 5, 1, 0, 0, tzinfo=UTC),
         close_time=datetime(2026, 5, 1, 0, 0, tzinfo=UTC),
         value=55.0,
-        source_endpoint="public_get_historical_volatility",
+        source_endpoint="public_get_volatility_index_data",
         dataset_type=dataset_type,  # type: ignore[arg-type]
     )
 
@@ -141,7 +141,7 @@ def test_incremental_persistor_persists_volatility_variants_with_expected_option
     def _persist_fn(**kwargs: object) -> PersistResultDTO:
         persist_calls.append(dict(kwargs))
         return PersistResultDTO(
-            parquet_files=["lake/bronze/dataset_type=historical_volatility/date=2026-05-01/data.parquet"]
+            parquet_files=["lake/bronze/dataset_type=volatility_index_data/date=2026-05-01/data.parquet"]
         )
 
     persistor = IncrementalPersistor(
@@ -152,20 +152,18 @@ def test_incremental_persistor_persists_volatility_variants_with_expected_option
     logger = logging.getLogger("test_loader_output_vol")
 
     hv_task = VolatilityFetchTaskDTO(
-        exchange="deribit", symbol="BTC", timeframe="1m", dataset_type="historical_volatility"
+        exchange="deribit", symbol="BTC", timeframe="1m", dataset_type="volatility_index_data"
     )
     vi_task = VolatilityFetchTaskDTO(
         exchange="deribit", symbol="BTC", timeframe="1m", dataset_type="volatility_index_data"
     )
 
-    persistor.on_historical_volatility_task_chunk(hv_task, [_vol_point(dataset_type="historical_volatility")], logger)
+    persistor.on_volatility_index_data_task_chunk(hv_task, [_vol_point(dataset_type="volatility_index_data")], logger)
     persistor.on_volatility_index_data_task_chunk(vi_task, [_vol_point(dataset_type="volatility_index")], logger)
 
     hv_options = persist_calls[0]["options"]
     vi_options = persist_calls[1]["options"]
-    assert hv_options.historical_volatility_requested is True
-    assert hv_options.volatility_index_data_requested is False
-    assert vi_options.historical_volatility_requested is False
+    assert hv_options.volatility_index_data_requested is True
     assert vi_options.volatility_index_data_requested is True
 
 
@@ -178,7 +176,6 @@ def test_finalize_bronze_output_writes_sidecars_and_trade_summary() -> None:
     oi = _oi_point()
     funding = _funding_point()
     trade = _trade_tick()
-    hv = _vol_point(dataset_type="historical_volatility")
     vi = _vol_point(dataset_type="volatility_index")
 
     candle_task = ("deribit", "spot", "BTC", "1m")
@@ -193,7 +190,7 @@ def test_finalize_bronze_output_writes_sidecars_and_trade_summary() -> None:
         return PersistResultDTO(
             parquet_files=[
                 "lake/bronze/dataset_type=perp_trades/date=2026-05-01/data.parquet",
-                "lake/bronze/dataset_type=historical_volatility/date=2026-05-01/data.parquet",
+                "lake/bronze/dataset_type=volatility_index_data/date=2026-05-01/data.parquet",
             ]
         )
 
@@ -203,7 +200,6 @@ def test_finalize_bronze_output_writes_sidecars_and_trade_summary() -> None:
         tasks=[candle_task],
         oi_tasks=[vol_task],
         funding_tasks=[vol_task],
-        historical_volatility_tasks=[vol_task],
         volatility_index_data_tasks=[vol_task],
         trade_tasks=[trade_task],
         task_results={candle_task: [candle]},
@@ -212,8 +208,6 @@ def test_finalize_bronze_output_writes_sidecars_and_trade_summary() -> None:
         oi_errors={},
         funding_results={vol_task: [funding]},
         funding_errors={},
-        historical_volatility_results={vol_task: [hv]},
-        historical_volatility_errors={},
         volatility_index_data_results={vol_task: [vi]},
         volatility_index_data_errors={},
         trade_results={trade_task: [trade]},
@@ -221,14 +215,12 @@ def test_finalize_bronze_output_writes_sidecars_and_trade_summary() -> None:
         multi_market=True,
         oi_requested=True,
         funding_requested=True,
-        historical_volatility_requested=True,
         volatility_index_data_requested=True,
         perp_trades_requested=True,
         option_trades_requested=False,
         candles_for_storage={"spot": {"deribit": {"BTC": [candle]}}},
         open_interest_for_storage={"perp": {"deribit": {"BTC": [oi]}}},
         funding_for_storage={"perp": {"deribit": {"BTC": [funding]}}},
-        historical_volatility_for_storage={"perp": {"deribit": {"BTC": [hv]}}},
         volatility_index_data_for_storage={"perp": {"deribit": {"BTC": [vi]}}},
         trades_for_storage={"perp": {"deribit": {"BTC": [trade]}}},
         ohlcv_markets=["spot"],
@@ -273,7 +265,7 @@ def test_finalize_bronze_output_handles_parquet_errors_and_option_trades() -> No
     logger = logging.getLogger("test_loader_output_finalize_error")
 
     hv_task = VolatilityFetchTaskDTO(
-        exchange="deribit", symbol="BTC", timeframe="1m", dataset_type="historical_volatility"
+        exchange="deribit", symbol="BTC", timeframe="1m", dataset_type="volatility_index_data"
     )
     vi_task = VolatilityFetchTaskDTO(
         exchange="deribit", symbol="BTC", timeframe="1m", dataset_type="volatility_index_data"
@@ -286,9 +278,9 @@ def test_finalize_bronze_output_handles_parquet_errors_and_option_trades() -> No
             parquet_files=["lake/bronze/dataset_type=option_trades/date=2026-05-01/data.parquet"]
         ),
     )
-    persistor.on_historical_volatility_task_complete(
+    persistor.on_volatility_index_data_task_complete(
         hv_task,
-        [_vol_point(dataset_type="historical_volatility")],
+        [_vol_point(dataset_type="volatility_index_data")],
         logger,
     )
     persistor.on_volatility_index_data_task_complete(
@@ -306,7 +298,6 @@ def test_finalize_bronze_output_handles_parquet_errors_and_option_trades() -> No
         tasks=[],
         oi_tasks=[],
         funding_tasks=[],
-        historical_volatility_tasks=[],
         volatility_index_data_tasks=[],
         trade_tasks=[("deribit", "option", "BTC")],
         task_results={},
@@ -315,8 +306,6 @@ def test_finalize_bronze_output_handles_parquet_errors_and_option_trades() -> No
         oi_errors={},
         funding_results={},
         funding_errors={},
-        historical_volatility_results={},
-        historical_volatility_errors={},
         volatility_index_data_results={},
         volatility_index_data_errors={},
         trade_results={},
@@ -324,14 +313,12 @@ def test_finalize_bronze_output_handles_parquet_errors_and_option_trades() -> No
         multi_market=True,
         oi_requested=False,
         funding_requested=False,
-        historical_volatility_requested=False,
         volatility_index_data_requested=False,
         perp_trades_requested=False,
         option_trades_requested=True,
         candles_for_storage={},
         open_interest_for_storage={},
         funding_for_storage={},
-        historical_volatility_for_storage={},
         volatility_index_data_for_storage={},
         trades_for_storage={},
         ohlcv_markets=[],
@@ -393,9 +380,9 @@ def test_incremental_persistor_complete_paths_and_empty_chunk_noops() -> None:
     persistor.on_trade_task_complete(
         TradeFetchTaskDTO(exchange="deribit", market="perp", symbol="BTC"), [_trade_tick()], logger
     )
-    persistor.on_historical_volatility_task_complete(
-        VolatilityFetchTaskDTO(exchange="deribit", symbol="BTC", timeframe="1m", dataset_type="historical_volatility"),
-        [_vol_point(dataset_type="historical_volatility")],
+    persistor.on_volatility_index_data_task_complete(
+        VolatilityFetchTaskDTO(exchange="deribit", symbol="BTC", timeframe="1m", dataset_type="volatility_index_data"),
+        [_vol_point(dataset_type="volatility_index_data")],
         logger,
     )
     persistor.on_volatility_index_data_task_complete(
@@ -411,8 +398,8 @@ def test_incremental_persistor_complete_paths_and_empty_chunk_noops() -> None:
     persistor.on_oi_task_chunk(OpenInterestFetchTaskDTO(exchange="deribit", symbol="BTC", timeframe="1m"), [], logger)
     persistor.on_funding_task_chunk(FundingFetchTaskDTO(exchange="deribit", symbol="BTC", timeframe="8h"), [], logger)
     persistor.on_trade_task_chunk(TradeFetchTaskDTO(exchange="deribit", market="perp", symbol="BTC"), [], logger)
-    persistor.on_historical_volatility_task_chunk(
-        VolatilityFetchTaskDTO(exchange="deribit", symbol="BTC", timeframe="1m", dataset_type="historical_volatility"),
+    persistor.on_volatility_index_data_task_chunk(
+        VolatilityFetchTaskDTO(exchange="deribit", symbol="BTC", timeframe="1m", dataset_type="volatility_index_data"),
         [],
         logger,
     )

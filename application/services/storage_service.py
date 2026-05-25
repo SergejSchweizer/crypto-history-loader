@@ -58,16 +58,6 @@ def persist_loader_outputs_dto(
                         lake_root=options.lake_root,
                     )
                 )
-        if options.historical_volatility_requested:
-            for market_key, volatility_by_exchange in storage.historical_volatility.items():
-                result.parquet_files.extend(
-                    save_volatility_lake_fn(
-                        volatility_by_exchange=volatility_by_exchange,
-                        market=market_key,
-                        dataset_type="historical_volatility",
-                        lake_root=options.lake_root,
-                    )
-                )
         if options.volatility_index_data_requested:
             for market_key, volatility_by_exchange in storage.volatility_index_data.items():
                 result.parquet_files.extend(
@@ -98,7 +88,6 @@ def persist_loader_outputs(
     lake_root: str,
     oi_requested: bool,
     funding_for_storage: dict[Market, dict[str, dict[str, list[FundingPoint]]]] | None = None,
-    historical_volatility_for_storage: dict[Market, dict[str, dict[str, list[VolatilityPoint]]]] | None = None,
     volatility_index_data_for_storage: dict[Market, dict[str, dict[str, list[VolatilityPoint]]]] | None = None,
     save_spot_lake_fn: Callable[..., list[str]] = save_spot_candles_parquet_lake,
     save_oi_lake_fn: Callable[..., list[str]] = save_open_interest_parquet_lake,
@@ -114,7 +103,6 @@ def persist_loader_outputs(
             candles=candles_for_storage,
             open_interest=open_interest_for_storage,
             funding=funding_for_storage or {},
-            historical_volatility=historical_volatility_for_storage or {},
             volatility_index_data=volatility_index_data_for_storage or {},
             trades=trades_for_storage or {},
         ),
@@ -123,7 +111,6 @@ def persist_loader_outputs(
             lake_root=lake_root,
             oi_requested=oi_requested,
             funding_requested=bool(funding_for_storage),
-            historical_volatility_requested=bool(historical_volatility_for_storage),
             volatility_index_data_requested=bool(volatility_index_data_for_storage),
             trades_requested=trades_requested,
         ),
