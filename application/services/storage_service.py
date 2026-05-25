@@ -82,7 +82,7 @@ def persist_loader_outputs(
     trades_requested: bool = False,
     save_trades_lake_fn: Callable[..., list[str]] = save_trades_parquet_lake,
 ) -> dict[str, object]:
-    """Backward-compatible wrapper that returns legacy dict output."""
+    """Compatibility wrapper that returns dict output for existing callers."""
 
     dto = persist_loader_outputs_dto(
         storage=LoaderStorageDTO(

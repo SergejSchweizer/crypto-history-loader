@@ -116,7 +116,7 @@ def _sync_loader_runtime_overrides() -> None:
 def build_parser() -> argparse.ArgumentParser:
     """Create top-level CLI parser."""
 
-    parser = argparse.ArgumentParser(description="crypto-market-loader CLI")
+    parser = argparse.ArgumentParser(description="crypto-history-loader CLI")
     parser.add_argument(
         "--config",
         default="config.yaml",
@@ -146,10 +146,12 @@ def _load_yaml_config(path: str) -> dict[str, object]:
         raise ValueError(f"Config path '{config_path}' must be a regular file")
 
     file_mode = stat.S_IMODE(config_path.stat().st_mode)
-    if file_mode & 0o007:
+    # Block world-writable/executable config files; allow world-readable files
+    # so default repository checkouts remain usable across environments.
+    if file_mode & 0o003:
         raise PermissionError(
             f"Insecure permissions on '{config_path}' ({oct(file_mode)}). "
-            "Remove all permissions for 'others' (recommended: chmod 600 config.yaml)."
+            "Remove write/execute permissions for 'others' (recommended: chmod 644 or 640 config.yaml)."
         )
     try:
         import yaml  # type: ignore[import-untyped]
@@ -230,7 +232,7 @@ def _apply_yaml_defaults(
 
 
 def _resolve_command_config(command: str, config: dict[str, object]) -> object:
-    """Resolve command config section, including legacy aliases."""
+    """Resolve command config section, including compatibility aliases."""
 
     if command != "bronze-build":
         return config.get(command)

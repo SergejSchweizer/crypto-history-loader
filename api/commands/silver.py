@@ -38,7 +38,7 @@ def add_silver_build_parser(subparsers: argparse._SubParsersAction[argparse.Argu
     parser.add_argument("--silver-root", default="lake/silver", help="Silver lake root")
     parser.add_argument("--exchange", choices=["deribit"], default="deribit")
     parser.add_argument(
-        "--market",
+        "--dataset",
         nargs="+",
         choices=["spot", "perp", "oi", "funding", "perp_trades", "option_trades"],
         default=["spot", "perp", "oi", "funding", "perp_trades", "option_trades"],
@@ -218,7 +218,10 @@ def run_silver_build(args: argparse.Namespace, logger: logging.Logger) -> None:
         discovery_timeframe = default_timeframe if configured_timeframe == "1m" else configured_timeframe
         return bronze_dataset, bronze_instrument, discovery_timeframe
 
-    for market in cast(list[str], args.market):
+    selected = getattr(args, "dataset", getattr(args, "market", None))
+    if selected is None:
+        raise ValueError("Missing dataset selection. Provide --dataset.")
+    for market in cast(list[str], selected):
         symbols = cast(list[str] | None, args.symbols)
         bronze_dataset, bronze_instrument, discovery_timeframe = _discovery_params_for_market(market, timeframe)
         effective_symbols = symbols or discover_symbols(

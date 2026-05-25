@@ -115,7 +115,7 @@ _RUNTIME_BOUNDS_CONTEXT = BronzeRuntimeBoundsContext(
 
 
 def _current_runtime_bounds_context() -> BronzeRuntimeBoundsContext:
-    """Return effective runtime bounds context with legacy global fallback."""
+    """Return effective runtime bounds context with global fallback support."""
 
     return BronzeRuntimeBoundsContext(
         tail_delta_only=_TAIL_DELTA_ONLY,
@@ -197,21 +197,21 @@ def _hydrate_checkpoint_aliases(
     """Augment completed checkpoint keys with registry aliases for backward compatibility."""
 
     for candle_task in candle_tasks:
-        legacy = _task_key_tuple_to_string((candle_task[0], candle_task[1], candle_task[2], candle_task[3]))
-        if legacy in completed["candle"]:
-            completed["candle"].add(candle_key_map.get(candle_task, legacy))
+        prior_key = _task_key_tuple_to_string((candle_task[0], candle_task[1], candle_task[2], candle_task[3]))
+        if prior_key in completed["candle"]:
+            completed["candle"].add(candle_key_map.get(candle_task, prior_key))
     for oi_task in oi_tasks:
-        legacy = _task_key_tuple_to_string((oi_task[0], oi_task[1], oi_task[2]))
-        if legacy in completed["oi"]:
-            completed["oi"].add(oi_key_map.get(oi_task, legacy))
+        prior_key = _task_key_tuple_to_string((oi_task[0], oi_task[1], oi_task[2]))
+        if prior_key in completed["oi"]:
+            completed["oi"].add(oi_key_map.get(oi_task, prior_key))
     for funding_task in funding_tasks:
-        legacy = _task_key_tuple_to_string((funding_task[0], funding_task[1], funding_task[2]))
-        if legacy in completed["funding"]:
-            completed["funding"].add(funding_key_map.get(funding_task, legacy))
+        prior_key = _task_key_tuple_to_string((funding_task[0], funding_task[1], funding_task[2]))
+        if prior_key in completed["funding"]:
+            completed["funding"].add(funding_key_map.get(funding_task, prior_key))
     for trade_task in trade_tasks:
-        legacy = _task_key_tuple_to_string((trade_task[0], trade_task[1], trade_task[2]))
-        if legacy in completed["trade"]:
-            completed["trade"].add(trade_key_map.get(trade_task, legacy))
+        prior_key = _task_key_tuple_to_string((trade_task[0], trade_task[1], trade_task[2]))
+        if prior_key in completed["trade"]:
+            completed["trade"].add(trade_key_map.get(trade_task, prior_key))
 
 
 def _bronze_checkpoint_fingerprint(args: argparse.Namespace, plan: BronzeFetchPlanDTO) -> str:
@@ -266,29 +266,17 @@ def _add_ingest_parser(
         help="Optional list of exchanges to fetch in one run",
     )
     parser.add_argument(
-        "--market",
+        "--dataset",
         nargs="+",
         choices=MARKET_CHOICES,
         default=["spot"],
-        help="One or more data types to fetch, e.g. --market spot perp oi funding",
+        help="One or more data types to fetch, e.g. --dataset spot perp oi funding",
     )
     parser.add_argument(
         "--symbols",
         nargs="+",
-        default=["BTCUSDT", "ETHUSDT"],
-        help="Symbols or instrument aliases (exchange specific)",
-    )
-    parser.add_argument(
-        "--perp-trade-symbols",
-        nargs="+",
         default=["BTC", "ETH", "SOL"],
-        help="Symbols for perp_trades ingestion (independent from --symbols).",
-    )
-    parser.add_argument(
-        "--option-trade-symbols",
-        nargs="+",
-        default=["BTC", "ETH", "SOL"],
-        help="Symbols for option_trades ingestion (independent from --symbols).",
+        help="Symbols used for all selected markets/datasets.",
     )
     parser.set_defaults(tail_delta_only=True)
     parser.add_argument(
@@ -724,7 +712,7 @@ def run_bronze_build(args: argparse.Namespace, logger: logging.Logger) -> None:
         )
 
     try:
-        with SingleInstanceLock(".run/crypto-market-loader.lock"):
+        with SingleInstanceLock(".run/crypto-history-loader.lock"):
             plan = _build_bronze_fetch_plan(args=args, logger=logger)
             exchanges = plan.exchanges
             ohlcv_markets = plan.ohlcv_markets

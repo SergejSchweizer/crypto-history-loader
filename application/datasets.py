@@ -42,19 +42,19 @@ class DatasetTask:
         )
 
     def candle_tuple(self) -> tuple[Exchange, Market, str, str]:
-        """Convert an OHLCV task to the legacy candle tuple contract."""
+        """Convert an OHLCV task to the tuple contract used by candle fetchers."""
 
         if self.market not in {"spot", "perp"}:
             raise ValueError(f"Dataset task '{self.dataset_type}' is not an OHLCV task")
         return (self.exchange, cast(Market, self.market), self.symbol, self.timeframe)
 
     def interval_tuple(self) -> tuple[Exchange, str, str]:
-        """Convert an interval task to the legacy exchange/symbol/timeframe tuple."""
+        """Convert an interval task to the exchange/symbol/timeframe tuple contract."""
 
         return (self.exchange, self.symbol, self.timeframe)
 
     def trade_tuple(self) -> tuple[Exchange, TradeMarket, str]:
-        """Convert a trade task to the legacy exchange/market/symbol tuple."""
+        """Convert a trade task to the exchange/market/symbol tuple contract."""
 
         if self.market not in {"spot", "perp", "option"}:
             raise ValueError(f"Dataset task '{self.dataset_type}' is not a trade task")

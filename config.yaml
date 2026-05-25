@@ -21,15 +21,13 @@ export-descriptive-stats:
 
 bronze-build:
   exchange: deribit
-  market: [spot, perp, oi, funding, perp_trades, option_trades, volatility_index_data]
+  dataset: [spot, perp, oi, funding, perp_trades, option_trades]
   start_date: "2018-08-14"
   symbol_start_dates:
     - BTC=2018-08-14
     - ETH=2019-03-14
     - SOL=2022-03-15
   symbols: [BTC, ETH, SOL]
-  perp_trade_symbols: [BTC, ETH, SOL]
-  option_trade_symbols: [BTC, ETH, SOL]
   save_parquet_lake: true
   no_json_output: true
 
@@ -41,23 +39,14 @@ medallion-pipeline:
     cli_args:
       - --exchanges
       - deribit
-      - --market
+      - --dataset
       - spot
       - perp
       - oi
       - funding
       - perp_trades
       - option_trades
-      - volatility_index_data
       - --symbols
-      - BTC
-      - ETH
-      - SOL
-      - --perp-trade-symbols
-      - BTC
-      - ETH
-      - SOL
-      - --option-trade-symbols
       - BTC
       - ETH
       - SOL
@@ -67,14 +56,13 @@ medallion-pipeline:
     enabled: true
     command: silver-build
     cli_args:
-      - --market
+      - --dataset
       - spot
       - perp
       - funding
       - oi
       - perp_trades
       - option_trades
-      - volatility_index_data
       - --manifest
       - --plot
       - --no-json-output

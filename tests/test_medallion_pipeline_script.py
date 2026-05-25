@@ -33,7 +33,7 @@ def test_build_steps_uses_configured_market_args_with_trades(tmp_path: Path) -> 
             "bronze": {
                 "enabled": True,
                 "command": "bronze-build",
-                "cli_args": ["--market", "spot", "perp", "oi", "funding", "perp_trades"],
+                "cli_args": ["--dataset", "spot", "perp", "oi", "funding", "perp_trades"],
             },
             "silver": {"enabled": False, "command": "silver-build", "cli_args": []},
             "gold": {"enabled": False, "command": "gold-build", "cli_args": []},
@@ -42,7 +42,7 @@ def test_build_steps_uses_configured_market_args_with_trades(tmp_path: Path) -> 
     steps = module._build_steps(main_path=main_path, config_path=config_path, config_data=cfg)
     assert len(steps) == 1
     args = steps[0].args
-    assert "--market" in args
+    assert "--dataset" in args
     assert "perp_trades" in args
 
 
@@ -61,7 +61,7 @@ def test_build_steps_bronze_enforces_one_month_start_date_when_missing(
             "bronze": {
                 "enabled": True,
                 "command": "bronze-build",
-                "cli_args": ["--market", "spot", "perp"],
+                "cli_args": ["--dataset", "spot", "perp"],
             },
         }
     }
@@ -172,9 +172,9 @@ def test_log_path_from_config_dir_and_default(tmp_path: Path) -> None:
     module = _load_pipeline_module()
     cfg = {"env": {"DEPTH_SYNC_LOG_DIR": str(tmp_path / "xlogs")}}
     out = module._log_path_from_config(config_data=cfg, repo_root=tmp_path)
-    assert out == (tmp_path / "xlogs" / "crypto-market-loader.log").resolve()
+    assert out == (tmp_path / "xlogs" / "crypto-history-loader.log").resolve()
     out_default = module._log_path_from_config(config_data={}, repo_root=tmp_path)
-    assert out_default == (tmp_path / ".run" / "logs" / "crypto-market-loader.log").resolve()
+    assert out_default == (tmp_path / ".run" / "logs" / "crypto-history-loader.log").resolve()
 
 
 def test_lock_acquire_and_release(tmp_path: Path) -> None:

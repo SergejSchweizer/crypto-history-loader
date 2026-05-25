@@ -1,99 +1,42 @@
-# crypto-market-loader
+# CRYPTO-HISTORY-LOADER
 
 Production-grade cryptocurrency market data ingestion, normalization, feature engineering, and dataset generation framework for quantitative research and systematic trading.
+
+Author: Sergej Schweizer
 
 ---
 
 # Table Of Contents
 
-- [crypto-market-loader](#crypto-market-loader)
+- [CRYPTO-HISTORY-LOADER](#crypto-history-loader)
 - [Table Of Contents](#table-of-contents)
-- [1. Project Goals](#1-project-goals)
-- [2. System Overview](#2-system-overview)
-  - [2.1 Core Design Principles](#21-core-design-principles)
-  - [2.2 Medallion Architecture](#22-medallion-architecture)
-  - [2.3 Supported Data Domains](#23-supported-data-domains)
-- [3. Repository Structure](#3-repository-structure)
-- [4. Installation](#4-installation)
-- [5. Pipeline Architecture](#5-pipeline-architecture)
-  - [5.1 Bronze Layer](#51-bronze-layer)
-  - [5.2 Silver Layer](#52-silver-layer)
-  - [5.3 Gold Layer](#53-gold-layer)
-- [6. Dataset Definitions](#6-dataset-definitions)
-  - [6.1 Spot OHLCV](#61-spot-ohlcv)
-  - [6.2 Perpetual OHLCV](#62-perpetual-ohlcv)
-  - [6.3 Open Interest](#63-open-interest)
-  - [6.4 Funding Rate](#64-funding-rate)
-  - [6.5 Tick Trades](#65-tick-trades)
-- [7. Quantitative Interpretation Of Features](#7-quantitative-interpretation-of-features)
-  - [Price Features](#price-features)
-  - [Volume Features](#volume-features)
-  - [Trade Flow Features](#trade-flow-features)
-  - [Funding Features](#funding-features)
-  - [Open Interest Features](#open-interest-features)
-  - [Cross-Market Features](#cross-market-features)
-- [8. Gold Dataset Definitions](#8-gold-dataset-definitions)
-  - [gold.market.option_trades.m1](#goldmarketoption_tradesm1)
-  - [gold.market.perp_trades.m1](#goldmarketperp_tradesm1)
-  - [gold.market.core.m1](#goldmarketcorem1)
-  - [gold.market.core\_funding.m1](#goldmarketcore_fundingm1)
-  - [gold.market.full.m1](#goldmarketfullm1)
-  - [gold.hybrid.full\_l2.m1](#goldhybridfull_l2m1)
-- [9. Recommended Additional Features](#9-recommended-additional-features)
-- [10. Missing Datasets And Future Extensions](#10-missing-datasets-and-future-extensions)
-  - [L2 Order Book Data](#l2-order-book-data)
-  - [Liquidation Data](#liquidation-data)
-  - [Trade-Level Data](#trade-level-data)
-  - [Options Surface Data](#options-surface-data)
-  - [Cross-Exchange Data](#cross-exchange-data)
-- [11. Storage Layout](#11-storage-layout)
-  - [Bronze Layout](#bronze-layout)
-  - [Silver Layout](#silver-layout)
-  - [Gold Layout](#gold-layout)
-- [12. Example Commands](#12-example-commands)
-  - [Full Medallion Pipeline (Bronze+Silver+Gold)](#full-medallion-pipeline-bronzesilvergold)
-  - [Bronze Build](#bronze-build)
-  - [Silver Build](#silver-build)
-  - [Gold Build](#gold-build)
-- [13. Quant Research Usage](#13-quant-research-usage)
-  - [Regime Detection](#regime-detection)
-  - [Market-Neutral Strategies](#market-neutral-strategies)
-  - [Forecasting](#forecasting)
-  - [Reinforcement Learning](#reinforcement-learning)
-- [14. Engineering Standards](#14-engineering-standards)
-- [15. Roadmap](#15-roadmap)
+- [1. System Overview](#1-system-overview)
+  - [1.1 Core Design Principles](#11-core-design-principles)
+  - [1.2 Medallion Architecture](#12-medallion-architecture)
+  - [1.3 Supported Data Domains](#13-supported-data-domains)
+- [2. Repository Structure](#2-repository-structure)
+- [3. Installation](#3-installation)
+  - [3.1 System prerequisites](#31-system-prerequisites)
+  - [3.2 Python environment setup](#32-python-environment-setup)
+- [4. Raw Datasets](#4-raw-datasets)
+  - [4.1 Spot (`dataset_type=spot`)](#41-spot-dataset_typespot)
+  - [4.2 Perpetual (`dataset_type=perp`)](#42-perpetual-dataset_typeperp)
+  - [4.3 Open Interest (`dataset_type=oi`)](#43-open-interest-dataset_typeoi)
+  - [4.4 Funding (`dataset_type=funding`)](#44-funding-dataset_typefunding)
+  - [4.5 Perpetual Trades (`dataset_type=perp_trades`)](#45-perpetual-trades-dataset_typeperp_trades)
+  - [4.6 Option Trades (`dataset_type=option_trades`)](#46-option-trades-dataset_typeoption_trades)
+- [5. Example Commands](#5-example-commands)
+  - [5.1 End-to-End Pipeline](#51-end-to-end-pipeline)
+  - [5.2 Layer Commands](#52-layer-commands)
+  - [5.3 Operational Notes](#53-operational-notes)
+  - [5.4 Quality Checks](#54-quality-checks)
+- [7. Roadmap](#7-roadmap)
 
 ---
 
-# 1. Project Goals
+# 1. System Overview
 
-`crypto-market-loader` is designed as a reproducible market data platform for cryptocurrency quantitative research.
-
-Primary goals:
-
-- deterministic ingestion
-- schema-stable parquet datasets
-- reproducible feature engineering
-- medallion architecture separation
-- ML-ready dataset generation
-- scalable historical backfills
-- quantitative research workflows
-
-The repository is intended for:
-
-- systematic trading
-- market-neutral research
-- volatility forecasting
-- HMM regime detection
-- reinforcement learning
-- feature engineering pipelines
-- derivatives analytics
-
----
-
-# 2. System Overview
-
-## 2.1 Core Design Principles
+## 1.1 Core Design Principles
 
 The repository follows the engineering principles defined in `AGENTS.md`:
 
@@ -105,40 +48,46 @@ The repository follows the engineering principles defined in `AGENTS.md`:
 - explicit interfaces
 - production-grade architecture
 
-## 2.2 Medallion Architecture
+## 1.2 Medallion Architecture
 
-```text
-Exchange APIs
-      |
-      v
-+----------------+
-| Bronze Layer   |
-| Raw normalized |
-+----------------+
-      |
-      v
-+----------------+
-| Silver Layer   |
-| Feature tables |
-+----------------+
-      |
-      v
-+----------------+
-| Gold Layer     |
-| ML datasets    |
-+----------------+
-```
+The system uses a medallion pipeline in which exchange API data is first persisted in Bronze as
+normalized, append-oriented raw records, then transformed in Silver into canonical time-aligned
+feature datasets, and finally published in Gold as versioned, model-ready joins with deterministic
+processing, explicit contracts, and restart-safe execution guarantees.
 
-## 2.3 Supported Data Domains
+## 1.3 Supported Data Domains
 
-| Dataset | Description |
-|---|---|
-| Spot OHLCV | Physical spot market |
-| Perpetual OHLCV | Leveraged perpetual futures |
-| Funding | Long/short positioning pressure |
-| Open Interest | Aggregate leveraged exposure |
-| Tick Trades | Historical trade-by-trade prints (REST backfill) |
-| Option Tick Trades | Historical option trade prints (REST backfill) |
+Supported ingest domains are defined by `DATASET_REGISTRY` in `application/datasets.py`.
+
+### Domain Groups
+
+OHLCV:
+
+| CLI Domain | Bronze `dataset_type` | Instrument Type | Task Kind | Default Timeframe | Symbol Source | Description |
+|---|---|---|---|---|---|---|
+| `spot` | `spot` | `spot` | `ohlcv` | `1m` | `--symbols` | Physical spot OHLCV candles |
+| `perp` | `perp` | `perp` | `ohlcv` | `1m` | `--symbols` | Perpetual futures OHLCV candles |
+
+Interval State:
+
+| CLI Domain | Bronze `dataset_type` | Instrument Type | Task Kind | Default Timeframe | Symbol Source | Description |
+|---|---|---|---|---|---|---|
+| `oi` | `oi` | `perp` | `open_interest` | `1m` | `--symbols` | Open-interest observations |
+| `funding` | `funding` | `perp` | `funding` | `1m`* | `--symbols` | Funding-rate observations (stored at native cadence) |
+
+Trade Ticks:
+
+| CLI Domain | Bronze `dataset_type` | Instrument Type | Task Kind | Default Timeframe | Symbol Source | Description |
+|---|---|---|---|---|---|---|
+| `perp_trades` | `perp_trades` | `perp` | `trade` | `tick` | `--symbols` | Historical perpetual trade ticks |
+| `option_trades` | `option_trades` | `option` | `trade` | `tick` | `--symbols` | Historical option trade ticks |
+
+\* Funding input accepts `1m`/`m1` aliases but normalizes to Deribit-native `8h` events.
+
+### CLI Contract
+
+- `bronze-build --dataset` choices: `spot perp oi funding perp_trades option_trades`
+- `--symbols` applies to all selected datasets (`spot`, `perp`, `oi`, `funding`, `perp_trades`, `option_trades`)
 
 Current exchange support:
 
@@ -152,38 +101,50 @@ Primary symbols:
 
 ---
 
-# 3. Repository Structure
+# 2. Repository Structure
 
 ```text
 api/
 application/
 ingestion/
+scripts/
+lake/
 docs/
 tests/
+agents/
+config.yaml
+pyproject.toml
+main.py
 README.md
-REPORT.md
 AGENTS.md
 ```
 
-| Directory | Responsibility |
+| Path | Responsibility |
 |---|---|
 | `api/` | CLI entrypoints |
-| `application/` | Pipeline orchestration |
-| `ingestion/` | Exchange connectors |
+| `application/` | Pipeline orchestration and service-layer business logic |
+| `ingestion/` | Exchange adapters, parsing, storage IO, and source-facing contracts |
+| `scripts/` | Operational scripts (pipeline runner, validation, maintenance helpers) |
+| `lake/` | Local medallion storage roots (for example `lake/bronze`, `lake/silver`, `lake/gold`) |
 | `tests/` | Validation and regression tests |
-| `docs/` | Figures and documentation |
+| `docs/` | Documentation assets (figures, tables, reference materials) |
+| `agents/` | Agent-policy source fragments and synchronization helpers |
+| `config.yaml` | Canonical runtime configuration |
+| `pyproject.toml` | Project metadata and Python tooling configuration |
+| `main.py` | Python entrypoint wrapper for CLI execution |
+| `AGENTS.md` | Generated repository operating policy (do not edit directly) |
 
 Dataset metadata is centralized in `application/datasets.py`. New Bronze datasets should start with a
 `DatasetSpec` entry that defines the CLI name, storage dataset type, instrument type, symbol group,
-task kind, and default timeframe. Bronze planning derives legacy fetch tuples from these specs, so
+task kind, and default timeframe. Bronze planning derives fetch tuples from these specs, so
 new datasets can share symbol validation, deterministic scheduling, checkpoint fingerprints, and
 reporting behavior instead of duplicating one-off planner logic.
 
 ---
 
-# 4. Installation
+# 3. Installation
 
-## 4.1 System prerequisites
+## 3.1 System prerequisites
 
 Because this repository is used heavily with GitHub workflows, install both `git` and the GitHub CLI
 (`gh`) on every development machine (Linux and Windows) before running project setup.
@@ -209,7 +170,7 @@ git --version
 gh --version
 ```
 
-## 4.2 Python environment setup
+## 3.2 Python environment setup
 
 ```bash
 uv sync --extra dev
@@ -232,503 +193,198 @@ chmod 600 config.yaml
 
 ---
 
-# 5. Pipeline Architecture
+# 4. Raw Datasets
 
-## 5.1 Bronze Layer
+Raw ingests are defined by `application/datasets.py` and persisted by Bronze writers in
+`ingestion/lake.py`. The repository currently ingests six raw dataset types:
+`spot`, `perp`, `oi`, `funding`, `perp_trades`, and `option_trades`.
 
-Bronze stores raw normalized exchange data.
+All datasets share structural metadata columns:
+`schema_version`, `dataset_type`, `exchange`, `symbol`, `instrument_type`, `event_time`,
+`ingested_at`, `run_id`, `source_endpoint`, `open_time`, `close_time`, `timeframe`.
 
-Properties:
+Coverage reference for missing statistics in this section:
+- Start: first observed day per dataset series
+- End: `2026-05-25` (inclusive)
+- Missing %: missing calendar days / expected calendar days
 
-- append-oriented
-- deterministic
-- audit-friendly
-- minimal transformations
-- preserves source fidelity
+## 4.1 Spot (`dataset_type=spot`)
 
-Bronze stores:
+Market role: physical spot-market state, baseline for directional and volatility context.
+Relationship: joins with `perp` by symbol and minute to compute basis; anchors Gold core joins.
+Raw ingestion granularity: `1m` candles.
 
-- OHLCV candles
-- funding events
-- open interest observations
-- tick trades (historical REST backfill)
-- option tick trades (historical REST backfill)
+| Column | Unit | Market meaning | Relationship to other datasets/columns |
+|---|---|---|---|
+| `open_price` | quote/base price | First trade price in interval; opening equilibrium. | Used with `close_price` for returns; compared with `perp.close_price` for basis state. |
+| `high_price` | quote/base price | Maximum traded price; upside excursion. | Paired with `low_price` for range-volatility features. |
+| `low_price` | quote/base price | Minimum traded price; downside excursion. | Combined with `high_price` for intrabar stress/range diagnostics. |
+| `close_price` | quote/base price | Last traded price; end-of-interval mark. | Primary aligned price in Silver/Gold joins. |
+| `volume` | base-asset units | Traded base quantity; participation intensity. | Compared with perp/trades flow volumes for regime analysis. |
+| `quote_volume` | quote-currency units | Traded notional volume. | Complements `volume` for average execution/notional flow inference. |
+| `trade_count` | count | Number of executions in interval. | Coarse activity proxy compared with tick-level trade datasets. |
+| `origin_payload` | JSON/object | Full source-shaped raw record for audit/replay. | Backstop for reconciliation and schema-drift debugging. |
 
-## 5.2 Silver Layer
+Coverage:
 
-Silver transforms raw records into engineered feature datasets.
+| Exchange | Symbol | Timeframe | Start Date | End Date | Missing Days | Missing % |
+|---|---|---|---|---|---:|---:|
+| `deribit` | `BTC_USDC` | `1m` | `2023-04-24` | `2026-05-25` | 0 | 0.00% |
+| `deribit` | `ETH_USDC` | `1m` | `2023-04-24` | `2026-05-25` | 0 | 0.00% |
+| `deribit` | `SOL_USDC` | `1m` | `2024-02-27` | `2026-05-25` | 0 | 0.00% |
 
-Responsibilities:
+## 4.2 Perpetual (`dataset_type=perp`)
 
-- rolling statistics
-- volatility features
-- funding transformations
-- OI transformations
-- trade-tick to 1m aggregation
-- canonical resampling
-- forward filling
-- feature manifests
+Market role: leveraged perpetual-futures state with faster leverage-driven price discovery.
+Relationship: interpreted with `funding` and `oi` for crowding/leverage regimes; joined with `spot`
+for basis and premium state.
+Raw ingestion granularity: `1m` candles.
 
-## 5.3 Gold Layer
+| Column | Unit | Market meaning | Relationship to other datasets/columns |
+|---|---|---|---|
+| `open_price` | USD (or quote/base) | Opening perpetual mark for interval. | Used against spot prices to infer carry and dislocation. |
+| `high_price` | USD (or quote/base) | Intrabar maximum price. | Coupled with OI/funding shifts to detect squeeze conditions. |
+| `low_price` | USD (or quote/base) | Intrabar minimum price. | Combined with OI drawdowns for liquidation diagnostics. |
+| `close_price` | USD (or quote/base) | End-of-interval perpetual mark. | Canonical join key with funding/OI minute features. |
+| `volume` | contracts/base units | Leveraged venue traded size. | Compared with spot volume and tick-flow aggregates for speculation intensity. |
+| `quote_volume` | quote-currency units | Perpetual notional turnover. | Used for cross-market notional participation diagnostics. |
+| `trade_count` | count | Number of perp executions. | Coarse complement to `perp_trades` microstructure rows. |
+| `origin_payload` | JSON/object | Full source-shaped raw record for audit/replay. | Reconciliation source for derived Silver features. |
 
-Gold produces final modeling datasets.
+Coverage:
 
-Responsibilities:
+| Exchange | Symbol | Timeframe | Start Date | End Date | Missing Days | Missing % |
+|---|---|---|---|---|---:|---:|
+| `deribit` | `BTC-PERPETUAL` | `1m` | `2018-08-14` | `2026-05-25` | 27 | 0.95% |
+| `deribit` | `ETH-PERPETUAL` | `1m` | `2019-03-14` | `2026-05-25` | 12 | 0.46% |
+| `deribit` | `SOL-PERPETUAL` | `1m` | `2022-04-29` | `2026-05-25` | 11 | 0.74% |
 
-- canonical 1-minute alignment
-- joining feature families
-- latest-source selection for equivalent upstream variants (newest artifact per required dataset)
-- versioned datasets
-- plot generation
-- manifests/provenance
+## 4.3 Open Interest (`dataset_type=oi`)
 
----
+Market role: outstanding leveraged exposure stock.
+Relationship: interpreted jointly with `perp` returns and `funding` to classify leverage build-up,
+covering, and liquidation regimes.
+Raw ingestion granularity: `1m` observations.
 
-# 6. Dataset Definitions
+| Column | Unit | Market meaning | Relationship to other datasets/columns |
+|---|---|---|---|
+| `open_interest` | contracts | Total open positions at timestamp. | Combined with price direction from `perp` to classify position flow regime. |
+| `open_interest_value` | quote-currency notional | Monetary exposure form of OI. | Scales raw OI for cross-period comparability and risk sizing. |
 
-## 6.1 Spot OHLCV
+Coverage:
 
-Represents the underlying physical market.
+| Exchange | Symbol | Timeframe | Start Date | End Date | Missing Days | Missing % |
+|---|---|---|---|---|---:|---:|
+| `deribit` | `BTC-PERPETUAL` | `1m` | `2018-08-15` | `2026-05-25` | 0 | 0.00% |
+| `deribit` | `ETH-PERPETUAL` | `1m` | `2019-03-15` | `2026-05-25` | 0 | 0.00% |
+| `deribit` | `SOL-PERPETUAL` | `1m` | `2022-03-16` | `2026-05-25` | 0 | 0.00% |
 
-Typical fields:
+## 4.4 Funding (`dataset_type=funding`)
 
-| Field | Meaning |
-|---|---|
-| open | First traded price |
-| high | Highest traded price |
-| low | Lowest traded price |
-| close | Last traded price |
-| volume | Base asset turnover |
+Market role: periodic long-short transfer/carry state.
+Relationship: enriches perp/spot state with crowding and carry; interpreted with OI for leverage
+imbalance.
+Raw ingestion granularity: native `8h` funding events.
 
-Quantitative importance:
+| Column | Unit | Market meaning | Relationship to other datasets/columns |
+|---|---|---|---|
+| `funding_rate` | fraction per `8h` event | Funding transfer rate between longs and shorts. | Combined with OI/perp moves for crowding and squeeze diagnostics. |
+| `index_price` | USD | External fair-value index around funding event. | Baseline for mark/index dislocation and premium state. |
+| `mark_price` | USD | Exchange mark reference around funding timestamp. | Compared with index/perp close for premium and stress features. |
 
-- baseline market direction
-- volatility estimation
-- trend structure
-- lead/lag modeling
-- spot/perp basis analysis
+Coverage:
 
-## 6.2 Perpetual OHLCV
+| Exchange | Symbol | Timeframe | Start Date | End Date | Missing Days | Missing % |
+|---|---|---|---|---|---:|---:|
+| `deribit` | `BTC-PERPETUAL` | `8h` | `2023-04-24` | `2026-05-25` | 0 | 0.00% |
+| `deribit` | `ETH-PERPETUAL` | `8h` | `2023-04-24` | `2026-05-25` | 0 | 0.00% |
+| `deribit` | `SOL-PERPETUAL` | `8h` | `2024-02-27` | `2026-05-25` | 0 | 0.00% |
 
-Represents leveraged perpetual futures trading.
+## 4.5 Perpetual Trades (`dataset_type=perp_trades`)
 
-Important because perpetuals often lead spot markets during:
+Market role: tick-level perpetual execution flow and aggressor pressure.
+Relationship: aggregated into `perp_trades_1m_feature` and joined with `spot/perp/oi/funding` in
+Gold (`gold.market.perp_trades.m1`, `gold.market.full.m1`).
+Raw ingestion granularity: `tick` (per trade execution).
 
-- liquidations
-- leverage expansions
-- speculative squeezes
-- volatility events
+| Column | Unit | Market meaning | Relationship to other datasets/columns |
+|---|---|---|---|
+| `trade_id` | identifier | Unique trade execution id. | Deduplication and idempotent replay key. |
+| `price` | USD (or quote/base) | Executed trade price. | Aggregated into 1m OHLC path for flow features. |
+| `quantity` | contracts/base units | Executed size per trade. | Aggregates into directional and intensity flow metrics. |
+| `side` | category (`buy`/`sell`/`unknown`) | Aggressor side proxy. | Basis for buy/sell imbalance and participation skew. |
+| `is_maker` | boolean | Maker-side indicator proxy. | Liquidity-provision vs taker-pressure diagnostics. |
 
-Potential feature groups:
+Coverage:
 
-| Feature | Interpretation |
-|---|---|
-| perp returns | Leveraged directional pressure |
-| perp volume | Speculative participation |
-| basis vs spot | Carry and leverage state |
-| volatility | Market stress |
+| Exchange | Symbol | Timeframe | Start Date | End Date | Missing Days | Missing % |
+|---|---|---|---|---|---:|---:|
+| `deribit` | `BTC-PERPETUAL` | `tick` | `2023-01-01` | `2026-05-24` | 1093 | 88.07% |
+| `deribit` | `ETH-PERPETUAL` | `tick` | `2023-04-25` | `2026-05-24` | 1093 | 96.98% |
 
-## 6.3 Open Interest
+## 4.6 Option Trades (`dataset_type=option_trades`)
 
-Open Interest measures total leveraged exposure.
+Market role: tick-level options execution flow with contract metadata.
+Relationship: aggregated into `option_trades_1m_feature`; joins at underlying level (`BTC`, `ETH`)
+with spot/perp state in Gold (`gold.market.option_trades.m1`, `gold.market.full.m1`).
+Raw ingestion granularity: `tick` (per trade execution).
 
-Important conceptual distinction:
+| Column | Unit | Market meaning | Relationship to other datasets/columns |
+|---|---|---|---|
+| `trade_id` | identifier | Unique option trade id. | Deduplication/replay identity. |
+| `price` | option premium (quote units) | Executed option premium. | Aggregated into option-flow pressure features. |
+| `quantity` | contracts | Number of option contracts traded. | Volume and participation proxy for options activity. |
+| `side` | category (`buy`/`sell`/`unknown`) | Aggressor side proxy. | Supports directional option-flow imbalance features. |
+| `is_maker` | boolean | Maker-side indicator proxy. | Liquidity-taking vs provision context. |
+| `instrument_name` | contract code | Full exchange contract identifier. | Parent for `expiry`, `strike`, `option_type` extraction. |
+| `expiry` | contract expiry code | Option maturity bucket. | Used with timestamp for term-structure activity mapping. |
+| `strike` | strike price (USD) | Contract strike level. | Combined with underlying spot/perp for moneyness context. |
+| `option_type` | category (`call`/`put`/`unknown`) | Contract payoff side. | Enables call/put activity skew features. |
 
-| Concept | Meaning |
-|---|---|
-| observed OI | Native exchange observation |
-| OI 1m feature | Forward-filled modeling feature |
+Coverage:
 
-Quantitative interpretation:
-
-| Price | OI | Meaning |
-|---|---|
-| Up | Up | New longs entering |
-| Down | Up | New shorts entering |
-| Up | Down | Short covering |
-| Down | Down | Long liquidation |
-
-OI is extremely important for:
-
-- leverage regime detection
-- squeeze prediction
-- volatility forecasting
-- systemic stress estimation
-
-## 6.4 Funding Rate
-
-Funding transfers capital between longs and shorts.
-
-Interpretation:
-
-| Funding State | Market Meaning |
-|---|---|
-| Positive funding | Long crowding |
-| Negative funding | Short crowding |
-| Neutral funding | Balanced positioning |
-
-Funding is highly valuable for:
-
-- carry strategies
-- market-neutral trading
-- crowding analysis
-- mean reversion systems
-- regime detection
-
-## 6.5 Tick Trades
-
-Tick trades represent per-execution market prints.
-
-Silver builds `perp_trades_1m_feature` from tick data and derives:
-
-| Feature | Meaning |
-|---|---|
-| open/high/low/close | Minute-level trade-price path |
-| volume / quote_volume | Executed flow intensity |
-| trade_count | Activity/participation |
-| buy/sell volume + counts | Directional aggressor pressure proxy |
-| buy_volume_share | Buy-side flow dominance |
-
-For options, Silver builds the analogous `option_trades_1m_feature` from `option_trades_observed`.
+| Exchange | Symbol | Timeframe | Start Date | End Date | Missing Days | Missing % |
+|---|---|---|---|---|---:|---:|
+| `deribit` | `BTC` | `tick` | `2018-08-14` | `2026-05-24` | 1171 | 41.20% |
+| `deribit` | `ETH` | `tick` | `2023-04-25` | `2026-05-24` | 882 | 78.26% |
 
 ---
 
-# 7. Quantitative Interpretation Of Features
+# 5. Example Commands
 
-## Price Features
-
-Describe:
-
-- trend
-- momentum
-- volatility clustering
-- regime shifts
-
-## Volume Features
-
-Describe:
-
-- participation intensity
-- speculative activity
-- stress conditions
-- liquidity conditions
-
-## Trade Flow Features
-
-Describe:
-
-- execution-level pressure
-- buy/sell imbalance
-- participation bursts
-- short-horizon microstructure regime shifts
-
-## Funding Features
-
-Describe:
-
-- directional crowding
-- leverage imbalance
-- carry state
-- sentiment extremes
-
-## Open Interest Features
-
-Describe:
-
-- leverage expansion
-- leverage unwinds
-- liquidation risk
-- structural market stress
-
-## Cross-Market Features
-
-Most powerful features usually come from interactions:
-
-| Combination | Interpretation |
-|---|---|
-| spot/perp spread | Futures premium |
-| funding + OI | Crowded leverage |
-| OI + volatility | Fragile market state |
-| volume + funding | Speculative frenzy |
-
----
-
-# 8. Gold Dataset Definitions
-
-## gold.market.perp_trades.m1
-
-Contains:
-
-- trades (tick-to-1m flow features)
-
-Use cases:
-
-- flow-only modeling
-- execution pressure analysis
-- trade-activity regime signals
-
-## gold.market.option_trades.m1
-
-Contains:
-
-- option trades (tick-to-1m flow features)
-
-Use cases:
-
-- option flow regime modeling
-- options activity pressure analysis
-- option/perp flow comparison studies
-
-## gold.market.core.m1
-
-Contains:
-
-- spot features
-- perpetual features
-
-Use cases:
-
-- forecasting
-- volatility models
-- regime detection
-
-## gold.market.core_funding.m1
-
-Adds:
-
-- funding features
-
-Use cases:
-
-- carry modeling
-- crowding analysis
-- market-neutral systems
-
-## gold.market.full.m1
-
-Adds:
-
-- open interest
-- funding
-- trades (tick-to-1m flow features)
-- option trades (tick-to-1m flow features)
-- full derivatives state
-
-Use cases:
-
-- advanced ML
-- systemic risk modeling
-- leverage-state analysis
-- flow-aware leverage-state modeling
-
-## gold.hybrid.full_l2.m1
-
-Extends gold datasets with L2 order book features.
-Includes spot/perp/funding/open-interest/perp-trades-derived 1m features plus L2.
-
-Potential L2 features:
-
-| Feature | Meaning |
-|---|---|
-| bid/ask imbalance | Liquidity pressure |
-| spread | Market quality |
-| order flow imbalance | Aggressive flow |
-| microprice | Near-term directional bias |
-
----
-
-# 9. Recommended Additional Features
-
-Strong future feature candidates:
-
-| Feature | Importance |
-|---|---|
-| rolling z-scores | Regime normalization |
-| realized volatility | Risk estimation |
-| EWMA statistics | Adaptive state |
-| entropy measures | Market disorder |
-| rolling correlations | Dependency structure |
-| volatility-of-volatility | Stress estimation |
-| basis z-score | Relative-value modeling |
-| rolling hedge ratios | Market-neutral trading |
-
-Recommended regime features:
-
-- HMM probabilities
-- volatility state labels
-- liquidity regime labels
-- market stress indicators
-
----
-
-# 10. Missing Datasets And Future Extensions
-
-## L2 Order Book Data
-
-Highest-priority extension.
-
-Enables:
-
-- microstructure modeling
-- execution research
-- liquidity imbalance features
-
-## Liquidation Data
-
-Important for crypto markets.
-
-Captures:
-
-- forced flows
-- liquidation cascades
-- leverage flushes
-
-## Trade-Level Data
-
-Enables:
-
-- signed volume
-- order flow imbalance
-- VPIN-style metrics
-
-## Options Surface Data
-
-Provides:
-
-- implied volatility
-- skew
-- term structure
-- volatility expectations
-
-## Cross-Exchange Data
-
-Currently missing but highly valuable:
-
-- Binance vs Deribit spreads
-- fragmented liquidity indicators
-- cross-exchange funding divergence
-
----
-
-# 11. Storage Layout
-
-## Bronze Layout
-
-```text
-dataset_type=spot|perp|oi|funding|perp_trades|option_trades/
-  exchange=<exchange>/
-  instrument_type=<spot|perp>/
-  symbol=<symbol>/
-  timeframe=<interval|tick>/
-  year=<YYYY>/
-  month=<YYYY-MM>/
-  date=<YYYY-MM-DD>/
-  data.parquet
-```
-
-## Silver Layout
-
-```text
-dataset_type=<dataset>/
-  exchange=<exchange>/
-  symbol=<symbol>/
-  timeframe=<interval>/
-  year=<YYYY>/
-  month=<YYYY-MM>/
-  <SYMBOL>-<YYYY-MM>.parquet
-```
-
-## Gold Layout
-
-```text
-lake/gold/
-  dataset_id=<dataset_id>/
-  feature_set_version=<version>/
-  exchange=<exchange>/
-  symbol=<symbol>/
-```
-
----
-
-# 12. Example Commands
-
-## Full Medallion Pipeline (Bronze+Silver+Gold)
+## 5.1 End-to-End Pipeline
 
 ```bash
 uv run python scripts/run_medallion_pipeline.py --config config.yaml
 ```
 
-This script runs all three layers in sequence (`bronze-build` -> `silver-build` -> `gold-build`)
-using `medallion-pipeline` settings from `config.yaml`. It also enforces a non-blocking single-run
-lock via `.run/full-pipeline.lock` and writes a shared append-only pipeline log.
+Runs `bronze-build -> silver-build -> gold-build` using `medallion-pipeline` settings from
+`config.yaml`, enforces single-run locking via `.run/full-pipeline.lock`, and writes a shared
+append-only pipeline log.
 
-## Bronze Build
+## 5.2 Layer Commands
+
+Bronze:
 
 ```bash
 uv run python main.py bronze-build \
   --exchange deribit \
-  --market spot perp oi funding perp_trades option_trades \
+  --dataset spot perp oi funding perp_trades option_trades \
   --symbols BTC ETH SOL
 ```
 
-Trade datasets can use independent symbol defaults and overrides:
-
-- `--symbols` applies to `spot`, `perp`, `oi`, `funding`
-- `--perp-trade-symbols` applies to `perp_trades` (default: `BTC ETH SOL`)
-- `--option-trade-symbols` applies to `option_trades` (default: `BTC ETH SOL`)
-
-### Bronze Resume Checkpoint
-
-`bronze-build` writes a restart checkpoint at:
-
-```text
-.run/checkpoints/bronze-build.json
-```
-
-Behavior:
-
-- Completed tasks are recorded incrementally during the run.
-- If a run fails or is interrupted, the next run with the same effective plan resumes by skipping completed tasks.
-- If all tasks complete successfully, the checkpoint is deleted automatically.
-
-Manual reset:
-
-```bash
-rm -f .run/checkpoints/bronze-build.json
-```
-
-### Perp Trades Dataset Migration Note
-
-Perpetual trade ticks now use `dataset_type=perp_trades` (not `dataset_type=trades`).
-
-- New Bronze writes go to `dataset_type=perp_trades`.
-- Silver `perp_trades` discovery/processing expects `dataset_type=perp_trades`.
-
-If you have historical Bronze data in the legacy path, migrate or backfill it before running Silver:
-
-```bash
-# example legacy -> canonical path rename
-mv lake/bronze/dataset_type=trades lake/bronze/dataset_type=perp_trades
-```
-
-You can check for legacy paths with:
-
-```bash
-uv run python scripts/check_legacy_trades_dataset.py --lake-root lake/bronze
-```
-
-## Silver Build
+Silver:
 
 ```bash
 uv run python main.py silver-build \
   --bronze-root lake/bronze \
   --silver-root lake/silver \
   --exchange deribit \
-  --market spot perp oi funding perp_trades option_trades \
+  --dataset spot perp oi funding perp_trades option_trades \
   --timeframe 1m
 ```
 
-## Gold Build
+Gold:
 
 ```bash
 uv run python main.py gold-build \
@@ -738,28 +394,56 @@ uv run python main.py gold-build \
   --dataset-id gold.market.full.m1
 ```
 
-Source selection policy for gold combinations:
+## 5.3 Operational Notes
 
-- For each required upstream dataset (spot/perp/oi/funding/trades/options), if multiple equivalent symbol variants exist
-  (for example `BTC`, `BTC-USDC`, `BTC-PERPETUAL` that normalize to the same base symbol), gold selects the newest
-  matching variant by parquet file modification time and uses only that variant for the join.
-- For `gold.hybrid.full_l2.m1`, L2 input also uses the newest matching artifact.
+Symbol-group controls for Bronze:
+
+- `--symbols` applies to all selected datasets (`spot`, `perp`, `oi`, `funding`, `perp_trades`, `option_trades`)
+- default symbols are `BTC ETH SOL`
+
+Bronze checkpoint path:
+
+```text
+.run/checkpoints/bronze-build.json
+```
+
+Checkpoint behavior:
+
+- completed tasks are recorded incrementally
+- reruns with the same effective plan skip completed tasks
+- successful runs delete the checkpoint automatically
+
+Manual reset:
+
+```bash
+rm -f .run/checkpoints/bronze-build.json
+```
+
+Perp-trades storage path: `dataset_type=perp_trades`.
+
+Gold source selection:
+
+- for each required upstream dataset, equivalent symbol variants are normalized and the newest
+  parquet artifact is selected
+- `gold.hybrid.full_l2.m1` applies the same newest-artifact policy for L2 input
 
 Gold retention policy:
 
-- Gold keeps only the latest `N` versions per `dataset_id/exchange/symbol` lineage (default `N=3`).
-- Configure via `gold-build.retention_keep_versions` in `config.yaml` or override with
+- keep latest `N` versions per `dataset_id/exchange/symbol` lineage (default `N=3`)
+- configure via `gold-build.retention_keep_versions` in `config.yaml` or override with
   `--retention-keep-versions`.
 
-Weitere Gold-Dataset-IDs:
+Available Gold dataset IDs:
 
-- `gold.market.perp_trades.m1` (perp-trade-flow Features only)
-- `gold.market.option_trades.m1` (nur option-trade-flow Features)
+- `gold.market.perp_trades.m1` (perp-trade-flow only)
+- `gold.market.option_trades.m1` (option-trade-flow only)
 - `gold.market.core.m1`
 - `gold.market.core_funding.m1`
 - `gold.hybrid.full_l2.m1`
 
-## Quality Checks
+## 5.4 Quality Checks
+
+Run this sequence before pushing changes:
 
 ```bash
 uv run ruff check .
@@ -771,92 +455,37 @@ uv run python scripts/validate_config_with_pydantic.py --config config.yaml
 uv run pytest
 ```
 
-`pytest` includes coverage reporting for `application`, `ingestion`, and `api` via
-`pyproject.toml` defaults. The same test+coverage command is enforced in `.pre-commit-config.yaml`.
-Architecture import boundaries are validated with `import-linter` using `.importlinter`.
-Runtime configuration schema is validated with Pydantic via `scripts/validate_config_with_pydantic.py`.
+| Check | Scope | Gate Objective | Failure Signal |
+|---|---|---|---|
+| `uv run ruff check .` | Lint and static quality rules | Keep code quality and prevent obvious correctness pitfalls before runtime. | Style/correctness violations such as unused imports, invalid patterns, or rule breaches. |
+| `uv run mypy .` | Static typing | Enforce typed contracts across DTOs, services, and module boundaries. | Type mismatches, invalid `None` handling, incompatible signatures. |
+| `uv run pyright --level error` | Static typing (strict) | Provide complementary type analysis and stricter narrowing checks. | Type errors not caught by mypy or stricter incompatibility findings. |
+| `uv run ty check` | Additional typing gate | Maintain policy-level typing consistency across the codebase. | Unresolved typing gaps and annotation inconsistencies. |
+| `uv run lint-imports --config .importlinter` | Architecture boundaries | Enforce dependency direction and import-layer contracts. | Boundary violations (for example domain importing infrastructure internals). |
+| `uv run python scripts/validate_config_with_pydantic.py --config config.yaml` | Runtime config schema | Reject invalid runtime configuration before pipeline execution. | Missing/invalid config fields or schema/type constraint failures. |
+| `uv run pytest` | Behavioral + regression tests | Validate functional behavior and enforce coverage thresholds. | Test failures, behavioral regressions, or coverage below configured threshold. |
+
+Operational notes:
+
+- `pytest` coverage defaults are configured in `pyproject.toml`.
+- Pre-commit enforces the same logical quality-gate path used in CI.
 
 ---
 
-# 13. Quant Research Usage
+# 7. Roadmap
 
-## Regime Detection
+Objective: build complete, reproducible historical quote coverage for `BTC`, `ETH`, and `SOL`.
 
-Useful for:
+| Phase | Priority | Focus | Deliverables |
+|---|---|---|---|
+| 1. Bronze Completeness | High | Close historical quote gaps and keep daily continuity. | Backfill missing quote days, enforce daily completeness checks, and alert on new gaps. |
+| 2. Data Quality Controls | High | Improve trust in raw quote integrity. | Automated checks for outliers, stale intervals, duplicate windows, and symbol-normalization drift. |
+| 3. Multi-Exchange Coverage | High | Reduce single-venue bias and improve robustness. | Add at least one additional exchange for `BTC`/`ETH`/`SOL`, plus cross-exchange reconciliation metrics. |
+| 4. Silver/Gold Contract Hardening | Medium | Stabilize research-facing quote features. | Explicit alignment/merge contracts, regression tests for joins/resampling, and versioned feature expectations. |
+| 5. Quote Readiness Reporting | Medium | Make model readiness measurable. | Recurring coverage, freshness, and quality reports with clear pass/fail thresholds. |
 
-- Gaussian HMMs
-- Markov-switching models
-- volatility state estimation
+Near-term execution order:
 
-Most important features:
-
-- perp returns
-- OI changes
-- funding
-- realized volatility
-
-## Market-Neutral Strategies
-
-Important features:
-
-- basis spreads
-- funding carry
-- leverage state
-- hedge ratios
-
-## Forecasting
-
-Potential targets:
-
-- realized volatility
-- regime transitions
-- volatility expansions
-- return direction
-
-## Reinforcement Learning
-
-Gold datasets provide:
-
-- deterministic replay
-- aligned feature grids
-- reproducible state spaces
-
----
-
-# 14. Engineering Standards
-
-The repository follows the engineering rules defined in `AGENTS.md`.
-
-Important principles:
-
-- typed code
-- modular design
-- reproducibility
-- scalable storage
-- deterministic outputs
-- documentation consistency
-
-Recommended tooling:
-
-- pytest
-- ruff
-- mypy
-- ty
-- pyright
-
----
-
-# 15. Roadmap
-
-Recommended future directions:
-
-| Priority | Area |
-|---|---|
-| High | Full L2 ingestion |
-| High | Multi-exchange support |
-| High | Liquidation datasets |
-| High | Cross-exchange basis features |
-| Medium | Options surface ingestion |
-| Medium | TimescaleDB integration |
-| Medium | MLFlow lineage tracking |
-| Medium | Streaming ingestion |
+1. Complete phase 1 for all three symbols.
+2. Implement phase 2 checks in CI and pre-commit-compatible local runs.
+3. Start phase 3 with one exchange and expand after reconciliation is stable.

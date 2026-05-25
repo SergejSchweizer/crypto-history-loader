@@ -248,7 +248,7 @@ def test_run_bronze_build_raises_when_no_valid_symbols(monkeypatch) -> None:  # 
         loader_cmd.run_bronze_build(args=args, logger=logger)
 
 
-def test_run_bronze_build_uses_trade_specific_symbols(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+def test_run_bronze_build_uses_symbols_for_trade_tasks(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     class _NoopLock:
         def __init__(self, lock_path: str) -> None:
             del lock_path
@@ -274,8 +274,6 @@ def test_run_bronze_build_uses_trade_specific_symbols(monkeypatch) -> None:  # t
         exchanges=None,
         market=["perp_trades", "option_trades"],
         symbols=["BTCUSDT", "ETHUSDT"],
-        perp_trade_symbols=["BTC", "ETH"],
-        option_trade_symbols=["SOL"],
         save_parquet_lake=False,
         lake_root="lake/bronze",
         no_json_output=True,
@@ -284,10 +282,10 @@ def test_run_bronze_build_uses_trade_specific_symbols(monkeypatch) -> None:  # t
     logger = logging.getLogger("test_trade_symbols")
     loader_cmd.run_bronze_build(args=args, logger=logger)
 
-    assert ("deribit", "perp", "BTC") in scheduled_trade_tasks
-    assert ("deribit", "perp", "ETH") in scheduled_trade_tasks
-    assert ("deribit", "option", "SOL") in scheduled_trade_tasks
-    assert ("deribit", "option", "BTCUSDT") not in scheduled_trade_tasks
+    assert ("deribit", "perp", "BTCUSDT") in scheduled_trade_tasks
+    assert ("deribit", "perp", "ETHUSDT") in scheduled_trade_tasks
+    assert ("deribit", "option", "BTCUSDT") in scheduled_trade_tasks
+    assert ("deribit", "option", "ETHUSDT") in scheduled_trade_tasks
 
 
 def test_sanitize_symbols_requires_list_input() -> None:
@@ -298,8 +296,6 @@ def test_sanitize_symbols_requires_list_input() -> None:
 def test_resolved_symbol_groups_sanitizes_and_sorts() -> None:
     args = argparse.Namespace(
         symbols=["BTC", " ", None, "ETH"],
-        perp_trade_symbols=["SOL", "", "BTC"],
-        option_trade_symbols=["  ", "ETH", "BTC"],
     )
 
     ohlcv_symbols, perp_trade_symbols, option_trade_symbols = loader_cmd._resolved_symbol_groups(
@@ -308,7 +304,7 @@ def test_resolved_symbol_groups_sanitizes_and_sorts() -> None:
     )
 
     assert ohlcv_symbols == ["BTC", "ETH"]
-    assert perp_trade_symbols == ["BTC", "SOL"]
+    assert perp_trade_symbols == ["BTC", "ETH"]
     assert option_trade_symbols == ["BTC", "ETH"]
 
 
