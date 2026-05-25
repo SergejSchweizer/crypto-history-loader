@@ -1,0 +1,87 @@
+global:
+  deribit_observed_start_dates:
+    spot:
+      BTC: "2023-04-24"
+      ETH: "2023-04-24"
+      SOL: "2024-02-27"
+    volatility_index_data:
+      BTC: "2021-04-01"
+      ETH: "2021-04-01"
+env:
+  DEPTH_SYNC_LOG_DIR: .logs
+export-descriptive-stats:
+  lake_root: lake/bronze
+  output_csv: docs/tables/descriptive_stats.csv
+  start_time: "2026-01-01T00:00:00+00:00"
+  end_time: "2026-01-31T23:59:59+00:00"
+  exchanges: [deribit]
+  symbols: [BTC, ETH, SOL]
+  timeframes: [1m]
+  instrument_types: [spot, perp]
+
+bronze-build:
+  exchange: deribit
+  market: [spot, perp, oi, funding, perp_trades, option_trades, volatility_index_data]
+  start_date: "2018-08-14"
+  symbol_start_dates:
+    - BTC=2018-08-14
+    - ETH=2019-03-14
+    - SOL=2022-03-15
+  symbols: [BTC, ETH, SOL]
+  perp_trade_symbols: [BTC, ETH, SOL]
+  option_trade_symbols: [BTC, ETH, SOL]
+  save_parquet_lake: true
+  no_json_output: true
+
+medallion-pipeline:
+  execution_order: [bronze, silver, gold]
+  bronze:
+    enabled: true
+    command: bronze-build
+    cli_args:
+      - --exchanges
+      - deribit
+      - --market
+      - spot
+      - perp
+      - oi
+      - funding
+      - perp_trades
+      - option_trades
+      - volatility_index_data
+      - --symbols
+      - BTC
+      - ETH
+      - SOL
+      - --perp-trade-symbols
+      - BTC
+      - ETH
+      - SOL
+      - --option-trade-symbols
+      - BTC
+      - ETH
+      - SOL
+      - --save-parquet-lake
+      - --no-json-output
+  silver:
+    enabled: true
+    command: silver-build
+    cli_args:
+      - --market
+      - spot
+      - perp
+      - funding
+      - oi
+      - perp_trades
+      - option_trades
+      - volatility_index_data
+      - --manifest
+      - --plot
+      - --no-json-output
+  gold:
+    enabled: true
+    command: gold-build
+    cli_args:
+      - --manifest
+      - --plot
+      - --no-json-output
