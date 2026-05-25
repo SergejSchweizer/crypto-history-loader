@@ -95,6 +95,7 @@ Start-date analysis note:
 
 - Spot/perp/funding/oi/perp-trades baselines are derived from Deribit instrument availability.
 - Option-trades/volatility-index baselines are derived from earliest endpoint-observed fetchable dates.
+- Deribit spot observed starts (UTC, from `public/get_instruments` `creation_timestamp`): `BTC=2023-04-24`, `ETH=2023-04-24`, `SOL=2024-02-27`.
 
 ## 6. Dataset Wiki (Bronze -> Silver)
 
@@ -113,6 +114,17 @@ Feature meaning:
 - `volume`: participation intensity
 - `quote_volume`: notional turnover proxy
 - `trade_count`: activity proxy (adapter currently maps to `0`)
+
+Market coverage:
+
+- centralized spot order flow and price discovery for base assets versus quote currency (`*_USDC`)
+- unlevered cash-market micro-regime used as anchor market state
+
+Quant modeling use:
+
+- baseline return/volatility factors for forecasting and regime labeling
+- spot/perp basis spread construction and lead-lag analysis
+- liquidity-aware feature normalization using spot turnover
 
 Silver transforms:
 
@@ -154,6 +166,17 @@ Feature meaning:
 - perp volume as speculative activity proxy
 - spot/perp spread foundation for basis features
 
+Market coverage:
+
+- perpetual futures market where leverage and funding mechanics drive positioning
+- dominant derivatives venue price path for directional and basis risk
+
+Quant modeling use:
+
+- carry/basis signals (perp vs spot) and momentum/mean-reversion features
+- leveraged risk appetite proxies from perp turnover and range expansion
+- regime segmentation of derivatives-led dislocations
+
 Silver transforms:
 
 - same validation/dedupe policy as spot
@@ -191,6 +214,17 @@ Feature meaning:
 - `open_interest`: total open leveraged exposure
 - lagged OI dynamics indicate leverage build-up/unwind
 
+Market coverage:
+
+- aggregate outstanding perp derivatives exposure across open positions
+- leverage stock variable complementary to flow variables (trades/funding)
+
+Quant modeling use:
+
+- leverage build-up / unwind signals for squeeze-risk and liquidation-risk models
+- OI-price divergence factors for trend continuation vs exhaustion classifiers
+- state variables in risk overlays and position sizing logic
+
 Silver transforms:
 
 - normalize and validate into `oi_observed`
@@ -227,6 +261,17 @@ Feature meaning:
 
 - `funding_rate`: crowding/carry pressure
 - `index_price` vs `mark_price`: reference and risk-engine context
+
+Market coverage:
+
+- perpetual financing leg that equilibrates perp and spot through periodic payments
+- market crowding and directional imbalance proxy in derivatives
+
+Quant modeling use:
+
+- carry factors for cross-sectional and time-series alpha models
+- crowding stress indicators in drawdown/risk-off prediction models
+- explanatory feature for basis compression/expansion dynamics
 
 Silver transforms:
 
@@ -266,6 +311,17 @@ Feature meaning:
 - execution-level flow and aggressor pressure
 - signed flow decomposition via buy/sell splits
 
+Market coverage:
+
+- tick-level perp transaction tape (aggressor side, size, execution price)
+- high-frequency derivatives flow and microstructure pressure
+
+Quant modeling use:
+
+- order-flow imbalance and toxicity proxies for short-horizon return prediction
+- realized volatility/jump nowcasting from trade intensity and size bursts
+- execution-aware slippage and impact modeling inputs
+
 Silver transforms:
 
 - build `perp_trades_observed` with strict validation/dedupe
@@ -277,7 +333,7 @@ Coverage (baseline = oldest Deribit-offered start per dataset/symbol, as of `202
 
 | Symbol | Start Date | End Date | Missing Days | Missing % |
 |---|---|---|---:|---:|
-| BTC-PERPETUAL | 2018-08-14 | 2026-05-24 | 2702 | 95.11% |
+| BTC-PERPETUAL | 2018-08-14 | 2026-05-24 | 2693 | 94.79% |
 | ETH-PERPETUAL | 2019-03-14 | 2026-05-24 | 2595 | 98.71% |
 
 Column stats (Bronze snapshot):
@@ -298,6 +354,17 @@ Feature meaning:
 
 - option-specific flow by strike/expiry/moneyness context
 - call/put-side pressure and participation
+
+Market coverage:
+
+- listed crypto options transaction tape across strikes, expiries, and call/put types
+- volatility-demand and tail-hedging behavior of derivatives participants
+
+Quant modeling use:
+
+- skew/smile demand proxies via call-put flow asymmetry
+- event-risk and convexity-demand state variables for regime models
+- cross-market signal enrichment for perp/spot models during stress windows
 
 Silver transforms:
 
@@ -332,6 +399,17 @@ Feature meaning:
 - implied/stress benchmark (DVOL-style index)
 - risk-premium and stress-regime signal input
 
+Market coverage:
+
+- exchange-published implied volatility index representing aggregate option-implied risk
+- forward-looking volatility state for BTC/ETH options complex
+
+Quant modeling use:
+
+- volatility regime labels and transition probabilities in state-space/HMM models
+- risk-premium features when combined with realized volatility proxies
+- portfolio risk targeting and volatility-scaling inputs
+
 Silver transforms:
 
 - build `volatility_index_data_observed`
@@ -341,8 +419,8 @@ Coverage (baseline = oldest Deribit-offered start per dataset/symbol, as of `202
 
 | Symbol | Start Date | End Date | Missing Days | Missing % |
 |---|---|---|---:|---:|
-| BTC | 2026-04-24 | 2026-05-24 | 0 | 0.00% |
-| ETH | 2026-04-24 | 2026-05-24 | 0 | 0.00% |
+| BTC | 2021-04-01 | 2026-05-24 | 1849 | 98.35% |
+| ETH | 2021-04-01 | 2026-05-24 | 1849 | 98.35% |
 
 Column stats (Bronze snapshot):
 

@@ -27,13 +27,13 @@ def test_configure_logging_uses_module_name_for_log_file(
             if hasattr(handler, "baseFilename")
         ]
 
-        assert logger.name == "crypto_market_loader.loader"
+        assert logger.name == "crypto_history_loader.loader"
         assert "loader.log" in file_names
     finally:
         for handler in list(logger.handlers):
             logger.removeHandler(handler)
             handler.close()
-        logging.getLogger("crypto_market_loader.loader").handlers.clear()
+        logging.getLogger("crypto_history_loader.loader").handlers.clear()
 
 
 def test_load_env_file_populates_missing_environment_values(
@@ -85,7 +85,7 @@ def test_configure_logging_ignores_global_file_override_for_module_logger(
         for handler in list(logger.handlers):
             logger.removeHandler(handler)
             handler.close()
-        logging.getLogger("crypto_market_loader.silver-build").handlers.clear()
+        logging.getLogger("crypto_history_loader.silver-build").handlers.clear()
 
 
 def test_configure_logging_uses_unified_format_with_module_name(
@@ -107,4 +107,4 @@ def test_configure_logging_uses_unified_format_with_module_name(
         for handler in list(logger.handlers):
             logger.removeHandler(handler)
             handler.close()
-        logging.getLogger("crypto_market_loader.gold-build").handlers.clear()
+        logging.getLogger("crypto_history_loader.gold-build").handlers.clear()

@@ -8,7 +8,7 @@ import os
 from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
 
-LOGGER_NAME = "crypto_market_loader"
+LOGGER_NAME = "crypto_history_loader"
 DEFAULT_LOG_DIR = ".logs"
 DEFAULT_LOG_FILE = "crypto-history-loader.log"
 LOG_FORMAT = "%(asctime)s | %(levelname)s | %(name)s | %(message)s"

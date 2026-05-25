@@ -1,0 +1,21 @@
+[importlinter]
+root_packages =
+    api
+    application
+    ingestion
+
+[importlinter:contract:no_application_to_api]
+name = Forbid application depending on api
+type = forbidden
+source_modules =
+    application
+forbidden_modules =
+    api
+
+[importlinter:contract:no_ingestion_to_api]
+name = Forbid ingestion depending on api
+type = forbidden
+source_modules =
+    ingestion
+forbidden_modules =
+    api
