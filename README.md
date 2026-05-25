@@ -183,6 +183,34 @@ reporting behavior instead of duplicating one-off planner logic.
 
 # 4. Installation
 
+## 4.1 System prerequisites
+
+Because this repository is used heavily with GitHub workflows, install both `git` and the GitHub CLI
+(`gh`) on every development machine (Linux and Windows) before running project setup.
+
+Linux (Debian/Ubuntu):
+
+```bash
+sudo apt update
+sudo apt install -y git gh
+```
+
+Windows (PowerShell + winget):
+
+```powershell
+winget install --id Git.Git -e
+winget install --id GitHub.cli -e
+```
+
+Verify installs:
+
+```bash
+git --version
+gh --version
+```
+
+## 4.2 Python environment setup
+
 ```bash
 uv sync --extra dev
 ```
