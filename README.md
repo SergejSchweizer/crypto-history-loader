@@ -212,9 +212,33 @@ Coverage reference for missing statistics in this section:
 
 ## 4.1 Spot (`dataset_type=spot`)
 
-Market role: physical spot-market state, baseline for directional and volatility context.
-Relationship: joins with `perp` by symbol and minute to compute basis; anchors Gold core joins.
-Raw ingestion granularity: `1m` candles.
+### 1. Bronze layer
+
+Market role: physical spot-market state and baseline for directional/volatility context.
+Relationship: joins with `perp` by symbol/minute for basis and premium analysis.
+Time aggregation: native `1m` OHLCV ingestion (no Bronze resampling).
+
+### 1.1 Deribit endpoint
+
+Endpoint: `GET https://www.deribit.com/api/v2/public/get_tradingview_chart_data`.
+Description: returns TradingView-style OHLCV candle arrays for a symbol and resolution over a time range.
+
+### 2. Silver layer
+
+- Builder: `build_silver_for_symbol`.
+- Filter rows with null OHLC columns: `open_price`, `high_price`, `low_price`, `close_price`.
+- Remove invalid candles where `high_price < max(open_price, close_price)` or `low_price > min(open_price, close_price)`.
+- Deduplicate by `exchange/instrument_type/symbol/timeframe/open_time`, keep latest by `ingested_at`.
+- Output canonical columns: `open_price`, `high_price`, `low_price`, `close_price`, `volume`, `quote_volume`, `trade_count`, plus structural metadata.
+- Time aggregation: `1m -> 1m` (no Silver resample).
+
+### 3. High-value features
+
+- Log return: `r_t = ln(close_price_t / close_price_{t-1})`.
+- Range volatility (Parkinson): `sigma^2_{P,t} = (1 / (4 ln 2)) * (ln(high_price_t / low_price_t))^2`.
+- Dollar participation: `turnover_t = quote_volume_t`; trade intensity: `intensity_t = trade_count_t`.
+- Spot-perp basis anchor (self-financing leg input): `basis_t = perp_close_t - spot_close_t`.
+- Market-neutral residual alpha seed: `epsilon_t = r^{spot}_t - beta_t * r^{mkt}_t`.
 
 | Column | Unit | Market meaning | Relationship to other datasets/columns |
 |---|---|---|---|
@@ -237,10 +261,33 @@ Coverage:
 
 ## 4.2 Perpetual (`dataset_type=perp`)
 
-Market role: leveraged perpetual-futures state with faster leverage-driven price discovery.
-Relationship: interpreted with `funding` and `oi` for crowding/leverage regimes; joined with `spot`
-for basis and premium state.
-Raw ingestion granularity: `1m` candles.
+### 1. Bronze layer
+
+Market role: leveraged perpetual state for faster risk transfer and price discovery.
+Relationship: consumed jointly with `spot`, `funding`, and `oi` for carry/crowding context.
+Time aggregation: native `1m` OHLCV ingestion.
+
+### 1.1 Deribit endpoint
+
+Endpoint: `GET https://www.deribit.com/api/v2/public/get_tradingview_chart_data`.
+Description: returns perpetual OHLCV candle arrays (open/high/low/close/volume) for instrument-level bar construction.
+
+### 2. Silver layer
+
+- Builder: `build_silver_for_symbol` (same contract as spot).
+- Filter rows with null OHLC columns: `open_price`, `high_price`, `low_price`, `close_price`.
+- Enforce candle consistency: `high_price >= max(open_price, close_price)` and `low_price <= min(open_price, close_price)`.
+- Deduplicate by `exchange/instrument_type/symbol/timeframe/open_time`, keep latest by `ingested_at`.
+- Output canonical columns: `open_price`, `high_price`, `low_price`, `close_price`, `volume`, `quote_volume`, `trade_count`, plus structural metadata.
+- Time aggregation: `1m -> 1m`.
+
+### 3. High-value features
+
+- Basis level vs spot: `basis_t = perp_close_t - spot_close_t`.
+- Basis momentum: `delta_basis_t = basis_t - basis_{t-1}`.
+- Intrabar realized range proxy: `rv_t = ln(high_price_t / low_price_t)^2`.
+- Notional pressure: `pressure_t = quote_volume_t / rolling_mean(quote_volume, n)`.
+- Self-financing carry sleeve signal: `s_t = zscore(basis_t) - lambda * funding_rate_t`.
 
 | Column | Unit | Market meaning | Relationship to other datasets/columns |
 |---|---|---|---|
@@ -263,10 +310,35 @@ Coverage:
 
 ## 4.3 Open Interest (`dataset_type=oi`)
 
-Market role: outstanding leveraged exposure stock.
-Relationship: interpreted jointly with `perp` returns and `funding` to classify leverage build-up,
-covering, and liquidation regimes.
-Raw ingestion granularity: `1m` observations.
+### 1. Bronze layer
+
+Market role: outstanding leveraged exposure stock for each perp symbol.
+Relationship: used with `perp` returns and `funding` to label build-up, unwind, and squeeze regimes.
+Time aggregation: native `1m` OI snapshots.
+
+### 1.1 Deribit endpoint
+
+Endpoint: `GET https://www.deribit.com/api/v2/public/get_last_settlements_by_instrument`.
+Description: returns settlement/event records per instrument; this loader extracts open-interest observations and normalizes them to the OI stream.
+
+### 2. Silver layer
+
+- Builder 1: `build_oi_observed_for_symbol`.
+- Normalize/cast columns: `timestamp`, `exchange`, `symbol`, `open_interest`.
+- Validate `open_interest` is finite and non-negative.
+- Deduplicate observed rows by `exchange/symbol/timestamp/open_interest` into `oi_observed`.
+- Builder 2: `build_oi_1m_feature_for_symbol`.
+- Generate full `1m` calendar and backward `asof`-join observed rows.
+- Output columns: `open_interest`, `oi_is_observed`, `oi_is_ffill`, `minutes_since_oi_observation`, `oi_observation_lag_sec`, `oi_source_timestamp`.
+- Time aggregation: observed `1m ->` feature `1m`.
+
+### 3. High-value features
+
+- OI change: `delta_oi_t = open_interest_t - open_interest_{t-1}`.
+- OI return proxy: `g^{oi}_t = ln(open_interest_t / open_interest_{t-1})`.
+- Crowding regime score: `crowd_t = zscore(delta_oi_t) * sign(perp_return_t)`.
+- Freshness penalty: `w_t = exp(-k * minutes_since_oi_observation_t)`.
+- FFill guard flag: `stale_t = 1[oi_is_ffill = 1 and minutes_since_oi_observation_t > tau]`.
 
 | Column | Unit | Market meaning | Relationship to other datasets/columns |
 |---|---|---|---|
@@ -283,10 +355,36 @@ Coverage:
 
 ## 4.4 Funding (`dataset_type=funding`)
 
-Market role: periodic long-short transfer/carry state.
-Relationship: enriches perp/spot state with crowding and carry; interpreted with OI for leverage
-imbalance.
-Raw ingestion granularity: native `8h` funding events.
+### 1. Bronze layer
+
+Market role: periodic long-short transfer (carry) state for perps.
+Relationship: joined with perp and OI state to identify crowding and carry pressure.
+Time aggregation: native `8h` funding observations.
+
+### 1.1 Deribit endpoint
+
+Endpoint: `GET https://www.deribit.com/api/v2/public/get_funding_rate_history`.
+Description: returns historical funding events (`interest_8h` and related mark/index fields) for perpetual instruments.
+
+### 2. Silver layer
+
+- Builder 1: `build_funding_observed_for_symbol`.
+- Validate `funding_rate`: non-null, finite, and `abs(funding_rate) <= 1.0`.
+- Group by `exchange/symbol/funding_time`.
+- Output observed columns: `funding_rate`, `base_asset`, `funding_interval_hours`, ingestion bounds, source row counts.
+- Builder 2: `build_funding_1m_feature_for_symbol`.
+- Backward-join observed funding into a full `1m` calendar with anti-leakage constraints.
+- Output feature columns: `funding_rate_last_known`, `funding_observed_at`, `minutes_since_funding`, `is_funding_observation_minute`, `funding_data_available`.
+- Time aggregation: `8h` events -> `1m` feature grid.
+
+### 3. High-value features
+
+- Annualized carry proxy (8h funding): `carry_ann_t ~= funding_rate_last_known_t * 3 * 365`.
+- Funding shock: `shock_t = funding_rate_t - rolling_mean(funding_rate, n)`.
+- Recency weight: `w_t = exp(-k * minutes_since_funding_t)`.
+- Net carry after basis decay estimate: `net_carry_t = carry_ann_t - expected_basis_reversion_t`.
+- Market-neutral financing filter: trade only if `|funding_rate_last_known_t| < q_alpha` or
+  `sign(basis_t) = -sign(funding_rate_last_known_t)`.
 
 | Column | Unit | Market meaning | Relationship to other datasets/columns |
 |---|---|---|---|
@@ -304,10 +402,36 @@ Coverage:
 
 ## 4.5 Perpetual Trades (`dataset_type=perp_trades`)
 
-Market role: tick-level perpetual execution flow and aggressor pressure.
-Relationship: aggregated into `perp_trades_1m_feature` and joined with `spot/perp/oi/funding` in
-Gold (`gold.market.perp_trades.m1`, `gold.market.full.m1`).
-Raw ingestion granularity: `tick` (per trade execution).
+### 1. Bronze layer
+
+Market role: tick-level perpetual execution flow and aggressor direction.
+Relationship: microstructure input for `perp_trades_1m_feature` and downstream Gold joins.
+Time aggregation: native `tick` (one row per trade).
+
+### 1.1 Deribit endpoint
+
+Endpoint: primary `GET https://history.deribit.com/api/v2/public/get_last_trades_by_instrument_and_time`; fallback `GET https://history.deribit.com/api/v2/public/get_last_trades_by_currency_and_time` (base URL may fall back to `https://www.deribit.com`).
+Description: paginated tick-trade retrieval for perpetuals; returns trade-by-trade executions with timestamp, price, size, and side metadata.
+
+### 2. Silver layer
+
+- Builder 1: `build_perp_trades_observed_for_symbol`.
+- Normalize typed trade columns: `trade_time`, `trade_id`, `price`, `quantity`, `side`.
+- Filter invalid rows: `price <= 0`, `quantity <= 0`, null/non-finite values.
+- Deduplicate observed rows by `exchange/instrument_type/symbol/trade_time/trade_id`.
+- Builder 2: `build_perp_trades_1m_feature_for_symbol`.
+- Aggregate `tick` rows to `1m` OHLC columns: `open_price`, `high_price`, `low_price`, `close_price`.
+- Aggregate flow columns: `volume`, `quote_volume`, `trade_count`, `buy_volume`, `sell_volume`, `buy_trade_count`, `sell_trade_count`, `buy_volume_share`.
+- Time aggregation: `tick -> 1m`.
+
+### 3. High-value features
+
+- Signed volume imbalance: `imb_t = (buy_volume_t - sell_volume_t) / (buy_volume_t + sell_volume_t)`.
+- Trade-count imbalance: `imb_count_t = (buy_trade_count_t - sell_trade_count_t) / trade_count_t`.
+- Kyle-style impact proxy: `impact_t = |return_t| / max(quote_volume_t, eps)`.
+- Flow momentum: `flow_mom_t = rolling_sum(imb_t, n)`.
+- Self-financing intraday spread leg: `pnl_t = w_t * (r_long_t - r_short_t) - costs_t`,
+  with `w_t` increasing in `|imb_t|`.
 
 | Column | Unit | Market meaning | Relationship to other datasets/columns |
 |---|---|---|---|
@@ -326,10 +450,35 @@ Coverage:
 
 ## 4.6 Option Trades (`dataset_type=option_trades`)
 
-Market role: tick-level options execution flow with contract metadata.
-Relationship: aggregated into `option_trades_1m_feature`; joins at underlying level (`BTC`, `ETH`)
-with spot/perp state in Gold (`gold.market.option_trades.m1`, `gold.market.full.m1`).
-Raw ingestion granularity: `tick` (per trade execution).
+### 1. Bronze layer
+
+Market role: tick-level option execution flow, with trade-level contract metadata available at ingest (`instrument_name`, `expiry`, `strike`, `option_type`).
+Relationship: upstream input for option-flow minute features and cross-asset joins.
+Time aggregation: native `tick`.
+
+### 1.1 Deribit endpoint
+
+Endpoint: `GET https://history.deribit.com/api/v2/public/get_last_trades_by_currency_and_time` (base URL may fall back to `https://www.deribit.com`).
+Description: paginated option tick-trade retrieval by currency; includes contract identifier fields used to derive `expiry`, `strike`, and `option_type`.
+
+### 2. Silver layer
+
+- Builders: same trade builders with `bronze_dataset_type=option_trades`.
+- Output datasets: `option_trades_observed` and `option_trades_1m_feature`.
+- Observed schema (post-validation/dedup): `trade_time`, `trade_id`, `price`, `quantity`, `side`, `exchange`, `symbol`, `instrument_type`.
+- Feature aggregation (`tick -> 1m`) OHLC columns: `open_price`, `high_price`, `low_price`, `close_price`.
+- Feature flow columns: `volume`, `quote_volume`, `trade_count`, `buy_volume`, `sell_volume`, `buy_trade_count`, `sell_trade_count`, `buy_volume_share`.
+- Current Silver limitation: contract metadata columns from Bronze (`expiry`, `strike`, `option_type`) are not retained.
+- Time aggregation: `tick -> 1m`.
+
+### 3. High-value features
+
+- Option signed flow: `opt_imb_t = (buy_volume_t - sell_volume_t) / (buy_volume_t + sell_volume_t)`.
+- Call-put pressure (when split is available): `cp_t = (call_buy_notional_t - put_buy_notional_t) / total_notional_t`.
+- Activity shock: `shock_t = (trade_count_t - rolling_mean(trade_count, n)) / rolling_std(trade_count, n)`.
+- Moneyness-weighted pressure (if `strike` joined): `mw_t = sum_i(weight_i * signed_notional_i)` with
+  `weight_i = exp(-|ln(strike_i / spot_t)|)`.
+- Volatility timing trigger: `enter_vol_t = 1[opt_imb_t > q_{0.9} and funding_shock_t > 0]`.
 
 | Column | Unit | Market meaning | Relationship to other datasets/columns |
 |---|---|---|---|
