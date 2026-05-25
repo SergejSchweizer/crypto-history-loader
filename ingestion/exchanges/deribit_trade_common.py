@@ -37,7 +37,12 @@ def is_route_failure(exc: Exception) -> bool:
     """Return whether exception message indicates route/network unreachable."""
 
     message = str(exc).lower()
-    return "no route to host" in message or "network is unreachable" in message
+    return (
+        "no route to host" in message
+        or "network is unreachable" in message
+        or "timed out" in message
+        or "connection timeout" in message
+    )
 
 
 def extract_result_rows(payload: dict[str, Any], *, payload_name: str) -> list[dict[str, object]]:

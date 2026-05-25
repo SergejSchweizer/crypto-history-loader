@@ -1913,3 +1913,85 @@ def test_build_gold_prunes_to_latest_three_versions(tmp_path: Path) -> None:
     )
     kept_versions = sorted(path.name.split("=", 1)[1] for path in version_dirs)
     assert kept_versions == ["v1.0.1", "v1.0.2", "v1.0.3"]
+
+
+def test_build_gold_prunes_to_latest_three_artifacts_with_same_version(tmp_path: Path) -> None:
+    silver = tmp_path / "silver"
+    gold = tmp_path / "gold"
+    symbol = "BTC"
+    exchange = "deribit"
+    t0 = datetime(2026, 5, 1, 0, 0, tzinfo=UTC)
+
+    _write_silver_month(
+        silver,
+        dataset_type="spot",
+        exchange=exchange,
+        symbol="BTC_USDC",
+        timeframe="1m",
+        month="2026-05",
+        rows=[
+            {
+                "open_time": t0,
+                "exchange": exchange,
+                "symbol": symbol,
+                "open_price": 1.0,
+                "high_price": 1.1,
+                "low_price": 0.9,
+                "close_price": 1.0,
+                "volume": 10.0,
+            }
+        ],
+    )
+    _write_silver_month(
+        silver,
+        dataset_type="perp",
+        exchange=exchange,
+        symbol="BTC-PERPETUAL",
+        timeframe="1m",
+        month="2026-05",
+        rows=[
+            {
+                "open_time": t0,
+                "exchange": exchange,
+                "symbol": symbol,
+                "open_price": 10.0,
+                "high_price": 11.0,
+                "low_price": 9.0,
+                "close_price": 10.0,
+                "volume": 100.0,
+            }
+        ],
+    )
+
+    artifact_dir = (
+        gold
+        / "dataset_id=gold.market.core.m1"
+        / "dataset_type=gold_symbol_dataset"
+        / "feature_set_version=v1.0.0"
+        / "exchange=deribit"
+        / "symbol=BTC"
+    )
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    for i in range(5):
+        stem = artifact_dir / f"BTC_GOLD_seed_{i}"
+        for suffix in (".parquet", ".json", ".png"):
+            path = stem.with_suffix(suffix)
+            path.write_text("x", encoding="utf-8")
+
+    build_gold_for_symbol(
+        silver_root=str(silver),
+        gold_root=str(gold),
+        exchange=exchange,
+        symbol=symbol,
+        dataset_id="gold.market.core.m1",
+        dataset_version="v1.0.0",
+        auto_version=False,
+        keep_last_versions=3,
+    )
+
+    parquet_files = sorted(artifact_dir.glob("*.parquet"))
+    json_files = sorted(artifact_dir.glob("*.json"))
+    png_files = sorted(artifact_dir.glob("*.png"))
+    assert len(parquet_files) == 3
+    assert len(json_files) == 3
+    assert len(png_files) == 3

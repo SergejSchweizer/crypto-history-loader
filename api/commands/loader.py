@@ -327,14 +327,14 @@ def _add_ingest_parser(
     parser.add_argument(
         "--perp-trade-symbols",
         nargs="+",
-        default=["BTC", "ETH", "SOL"],
-        help="Symbols for perp_trades ingestion (independent from --symbols).",
+        default=None,
+        help="Symbols for perp_trades ingestion (defaults to --symbols when omitted).",
     )
     parser.add_argument(
         "--option-trade-symbols",
         nargs="+",
-        default=["BTC", "ETH", "SOL"],
-        help="Symbols for option_trades ingestion (independent from --symbols).",
+        default=None,
+        help="Symbols for option_trades ingestion (defaults to --symbols when omitted).",
     )
     parser.set_defaults(tail_delta_only=True)
     parser.add_argument(

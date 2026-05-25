@@ -228,6 +228,51 @@ def _prune_gold_versions(
         shutil.rmtree(old_dir, ignore_errors=False)
 
 
+def _prune_gold_artifacts(
+    *,
+    gold_root: Path,
+    dataset_id: str,
+    exchange: str,
+    symbol: str,
+    keep_last_versions: int,
+) -> None:
+    """Keep only latest N gold artifact stems per dataset/exchange/symbol lineage."""
+
+    if keep_last_versions < 1:
+        raise ValueError(f"keep_last_versions must be >= 1; received {keep_last_versions}")
+
+    dataset_base = gold_root / f"dataset_id={dataset_id}" / "dataset_type=gold_symbol_dataset"
+    symbol_dirs = list(dataset_base.glob(f"feature_set_version=*/exchange={exchange}/symbol={symbol}"))
+    if not symbol_dirs:
+        return
+
+    grouped: dict[Path, list[Path]] = {}
+    for symbol_dir in symbol_dirs:
+        for artifact in symbol_dir.glob("*"):
+            if not artifact.is_file():
+                continue
+            grouped.setdefault(artifact.with_suffix(""), []).append(artifact)
+    if len(grouped) <= keep_last_versions:
+        return
+
+    def _group_sort_key(stem_path: Path, files: list[Path]) -> tuple[int, tuple[int, int, int], float, str]:
+        version_dir = stem_path.parent.parent.parent
+        parsed_version = _extract_feature_set_version(version_dir)
+        mtime = max(path.stat().st_mtime for path in files)
+        if parsed_version is not None:
+            try:
+                semver = _parse_semver(parsed_version)
+                return (1, semver, mtime, str(stem_path))
+            except ValueError:
+                pass
+        return (0, (0, 0, 0), mtime, str(stem_path))
+
+    sorted_groups = sorted(grouped.items(), key=lambda item: _group_sort_key(item[0], item[1]), reverse=True)
+    for _, files in sorted_groups[keep_last_versions:]:
+        for path in files:
+            path.unlink(missing_ok=True)
+
+
 def _contract_bump_level(
     previous: Mapping[str, object],
     current_contract: Mapping[str, object],
@@ -1333,6 +1378,13 @@ def build_gold_for_symbol(
     manifest_path.write_text(json.dumps(manifest_payload, indent=2), encoding="utf-8")
     written_manifest: str | None = str(manifest_path.resolve())
     _prune_gold_versions(
+        gold_root=root,
+        dataset_id=dataset_id,
+        exchange=exchange,
+        symbol=symbol,
+        keep_last_versions=keep_last_versions,
+    )
+    _prune_gold_artifacts(
         gold_root=root,
         dataset_id=dataset_id,
         exchange=exchange,

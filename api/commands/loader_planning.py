@@ -42,8 +42,16 @@ def resolved_symbol_groups(args: argparse.Namespace, logger: logging.Logger) -> 
     """Return deterministically ordered symbol groups for Bronze task planning."""
 
     validated_symbols = sorted(sanitize_symbols(cast(object, args.symbols), logger=logger))
-    validated_perp_trade_symbols = sorted(sanitize_symbols(cast(object, args.perp_trade_symbols), logger=logger))
-    validated_option_trade_symbols = sorted(sanitize_symbols(cast(object, args.option_trade_symbols), logger=logger))
+    if cast(object, args.perp_trade_symbols) is None:
+        validated_perp_trade_symbols = list(validated_symbols)
+    else:
+        validated_perp_trade_symbols = sorted(sanitize_symbols(cast(object, args.perp_trade_symbols), logger=logger))
+    if cast(object, args.option_trade_symbols) is None:
+        validated_option_trade_symbols = list(validated_symbols)
+    else:
+        validated_option_trade_symbols = sorted(
+            sanitize_symbols(cast(object, args.option_trade_symbols), logger=logger)
+        )
     return (
         validated_symbols,
         validated_perp_trade_symbols,
