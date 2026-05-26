@@ -21,6 +21,7 @@ from api.cli import build_parser
         (["bronze-build", "--save-parquet-lake"], {"save_parquet_lake": True}),
         (["bronze-build", "--lake-root", "lake/test-bronze"], {"lake_root": "lake/test-bronze"}),
         (["bronze-build", "--no-json-output"], {"no_json_output": True}),
+        (["bronze-build"], {"tail_delta_only": False}),
         (["bronze-build", "--tail-delta-only"], {"tail_delta_only": True}),
         (["bronze-build", "--full-gap-fill"], {"tail_delta_only": False}),
         (["bronze-build", "--start-date", "2023-04-24"], {"start_date": "2023-04-24"}),

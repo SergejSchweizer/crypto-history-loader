@@ -226,6 +226,7 @@ Description: returns TradingView-style OHLCV candle arrays for a symbol and reso
 ### 2. Silver layer
 
 - Builder: `build_silver_for_symbol`.
+- Missing values: rows with null `open_price`, `high_price`, `low_price`, or `close_price` are dropped; `volume`, `quote_volume`, and `trade_count` are preserved as provided by the source.
 - Filter rows with null OHLC columns: `open_price`, `high_price`, `low_price`, `close_price`.
 - Remove invalid candles where `high_price < max(open_price, close_price)` or `low_price > min(open_price, close_price)`.
 - Deduplicate by `exchange/instrument_type/symbol/timeframe/open_time`, keep latest by `ingested_at`.
@@ -275,6 +276,7 @@ Description: returns perpetual OHLCV candle arrays (open/high/low/close/volume) 
 ### 2. Silver layer
 
 - Builder: `build_silver_for_symbol` (same contract as spot).
+- Missing values: rows with null `open_price`, `high_price`, `low_price`, or `close_price` are dropped; `volume`, `quote_volume`, and `trade_count` are preserved as provided by the source.
 - Filter rows with null OHLC columns: `open_price`, `high_price`, `low_price`, `close_price`.
 - Enforce candle consistency: `high_price >= max(open_price, close_price)` and `low_price <= min(open_price, close_price)`.
 - Deduplicate by `exchange/instrument_type/symbol/timeframe/open_time`, keep latest by `ingested_at`.
@@ -325,6 +327,7 @@ Description: returns settlement/event records per instrument; this loader extrac
 
 - Builder 1: `build_oi_observed_for_symbol`.
 - Normalize/cast columns: `timestamp`, `exchange`, `symbol`, `open_interest`.
+- Missing values: rows with null/non-finite `open_interest` are excluded from `oi_observed`; `oi_1m_feature` uses backward as-of fill and exposes freshness/nullability state via `oi_is_observed`, `oi_is_ffill`, and `minutes_since_oi_observation`.
 - Validate `open_interest` is finite and non-negative.
 - Deduplicate observed rows by `exchange/symbol/timestamp/open_interest` into `oi_observed`.
 - Builder 2: `build_oi_1m_feature_for_symbol`.
@@ -369,6 +372,7 @@ Description: returns historical funding events (`interest_8h` and related mark/i
 ### 2. Silver layer
 
 - Builder 1: `build_funding_observed_for_symbol`.
+- Missing values: rows with null/non-finite `funding_rate` are excluded from `funding_observed`; `funding_1m_feature` carries the last known value and explicit availability flags (`funding_data_available`, `minutes_since_funding`).
 - Validate `funding_rate`: non-null, finite, and `abs(funding_rate) <= 1.0`.
 - Group by `exchange/symbol/funding_time`.
 - Output observed columns: `funding_rate`, `base_asset`, `funding_interval_hours`, ingestion bounds, source row counts.
@@ -416,6 +420,7 @@ Description: paginated tick-trade retrieval for perpetuals; returns trade-by-tra
 ### 2. Silver layer
 
 - Builder 1: `build_perp_trades_observed_for_symbol`.
+- Missing values: rows with null/non-finite `price` or `quantity` are dropped; missing/unknown `side` is normalized to `unknown` where required for deterministic aggregations.
 - Normalize typed trade columns: `trade_time`, `trade_id`, `price`, `quantity`, `side`.
 - Filter invalid rows: `price <= 0`, `quantity <= 0`, null/non-finite values.
 - Deduplicate observed rows by `exchange/instrument_type/symbol/trade_time/trade_id`.
@@ -464,6 +469,7 @@ Description: paginated option tick-trade retrieval by currency; includes contrac
 ### 2. Silver layer
 
 - Builders: same trade builders with `bronze_dataset_type=option_trades`.
+- Missing values: rows with null/non-finite `price` or `quantity` are dropped; missing/unknown `side` is normalized to `unknown`; contract metadata nulls (`expiry`, `strike`, `option_type`) may exist in Bronze but are currently not retained in Silver outputs.
 - Output datasets: `option_trades_observed` and `option_trades_1m_feature`.
 - Observed schema (post-validation/dedup): `trade_time`, `trade_id`, `price`, `quantity`, `side`, `exchange`, `symbol`, `instrument_type`.
 - Feature aggregation (`tick -> 1m`) OHLC columns: `open_price`, `high_price`, `low_price`, `close_price`.
