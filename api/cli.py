@@ -55,7 +55,7 @@ from ingestion.spot import (
 from ingestion.trades import fetch_trades_all_history, fetch_trades_range
 
 __all__ = ["SingleInstanceError", "SingleInstanceLock", "build_parser", "main"]
-_TAIL_DELTA_ONLY = True
+_TAIL_DELTA_ONLY = False
 _BRONZE_START_OPEN_MS: int | None = None
 _BRONZE_SYMBOL_START_OPEN_MS: dict[str, int] = {}
 _BRONZE_EXCHANGE_SYMBOL_START_OPEN_MS: dict[str, int] = {}

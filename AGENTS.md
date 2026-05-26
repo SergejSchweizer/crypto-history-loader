@@ -58,6 +58,8 @@ Always active across all modules and workflows.
 - [MUST] Do not comment obvious code.
 - [SHOULD] Add comments for non-obvious decisions, invariants, and tradeoffs.
 - [MUST] Comments and docstrings explain non-obvious decisions, invariants, edge cases, tradeoffs, external system assumptions, and failure handling.
+- [MUST] Add inline comments for important non-obvious data logic, including forward-fill, interpolation, resampling, timestamp normalization, timezone handling, rolling windows, and numerical stability safeguards.
+- [MUST] For market-data and derivatives workflows, inline comments must document funding normalization, open-interest reconstruction, option-surface reconstruction, feature engineering decisions, leakage prevention, and exchange-specific behavior.
 - [SHOULD] Avoid comments that only restate obvious code.
 - [MUST] Enforce deny-by-default `.gitignore` patterns, with minimal explicit allowlist.
 
@@ -153,9 +155,11 @@ Applies to review readiness, PR preparation, and pre-merge quality-gate validati
 - [SHOULD] Require docstrings for non-trivial modules and functions.
 - [MUST] Run lint, format, typing, tests, and coverage checks before merge when practical.
 - [MUST] Required quality-gate checks include Ruff linting, Ruff formatting check, Pyright strict type checking, Pytest, coverage threshold, docstring checks, import boundary checks, and architecture tests.
+- [MUST] Required documentation checks include `interrogate` docstring coverage and `pydoclint` signature-docstring consistency validation.
 - [MUST] Run quality tools in strict mode where available, and fail the build on any reported error.
 - [MUST] Do not use permissive flags or downgraded severity levels that hide lint, type, formatting, or test failures.
 - [MUST] Agents must not bypass checks with `--no-verify` unless explicitly instructed by the human maintainer.
+- [MUST] `.pre-commit-config.yaml` includes and maintains hooks for `ruff`, `interrogate`, `pydoclint`, `pyright`, and `pytest`.
 
 ## Review Findings Format
 
@@ -189,6 +193,8 @@ Applies to review readiness, PR preparation, and pre-merge quality-gate validati
 
 - `ruff check .`
 - `ruff format --check .`
+- `interrogate .`
+- `pydoclint src`
 - `pyright --level error`
 - `pytest -q`
 
@@ -206,6 +212,7 @@ Applies when adding or changing tests, fixing bugs, refactoring behavior, adding
 - [MUST] Add regression tests for every bug fix.
 - [MUST] Test happy path, edge cases, and failure paths.
 - [MUST] Keep tests deterministic.
+- [MUST] Run `coverage run -m pytest` and `coverage report` for release-ready validation when practical.
 
 ## Coverage Policy
 
@@ -229,6 +236,7 @@ Applies when adding or changing tests, fixing bugs, refactoring behavior, adding
 - Analyze logfile output while process runs.
 - Add or refine logs only where they improve failure isolation.
 - Add or adjust tests before finalizing the fix.
+- Run the documented pre-commit command sequence before finalizing: Ruff, `interrogate`, `pydoclint`, type checks, tests, and coverage.
 
 ## Definition of Done
 
@@ -241,6 +249,8 @@ Applies when adding or changing tests, fixing bugs, refactoring behavior, adding
 - `pytest -q`
 - `pytest --maxfail=1 -q`
 - `pytest --cov --cov-report=term-missing`
+- `coverage run -m pytest`
+- `coverage report`
 
 ## Exceptions and Escalation
 
@@ -269,12 +279,23 @@ Applies to Python quality tooling, typing, formatting, and local validation comm
 - [MUST] Do not relax tool strictness or suppress failures globally to make checks pass.
 - [MUST] Use type hints consistently, including explicit return types for public interfaces.
 - [MUST] Public modules, public classes, public functions, CLIs, and architectural boundaries have concise docstrings.
+- [MUST] Every public function, class, and method uses Google-style docstrings.
+- [MUST] Function docstrings document: what and why, parameters, returns, raised exceptions, assumptions, side effects, and data semantics.
+- [MUST] When applicable, function docstrings also document time-alignment assumptions and exchange-specific quirks.
+- [MUST] Enforce docstring coverage with `interrogate`.
+- [MUST] Enforce docstring/signature consistency with `pydoclint`.
 - [MUST] Keep import boundaries compatible with repository rules when boundary tooling is configured.
 - [SHOULD] Prefer one canonical command sequence for local validation to reduce drift across contributors.
+- [MUST] `pyproject.toml` includes and maintains Ruff pydocstyle configuration with Google convention.
+- [MUST] `pyproject.toml` includes and maintains `interrogate` with `fail-under = 95`.
+- [MUST] `pyproject.toml` includes and maintains `pydoclint` with Google style and return-type checks.
+- [MUST] `pyproject.toml` includes and maintains coverage report threshold with `fail_under = 90`.
+- [MUST] `pyproject.toml` keeps `line-length = 100` and `target-version = "py312"` for Ruff unless intentionally changed and documented.
 
 ## Agent Action Checklist
 
 - Run lint and format checks before finalizing changes.
+- Run docstring quality checks (`interrogate` and `pydoclint`) before finalizing changes.
 - Run type checks for modified modules.
 - Run targeted tests first, then broader tests when practical.
 - Report any tool that could not be run and why.
@@ -288,6 +309,8 @@ Applies to Python quality tooling, typing, formatting, and local validation comm
 
 - `ruff check .`
 - `ruff format --check .`
+- `interrogate .`
+- `pydoclint src`
 - `mypy .` or `pyright`
 - `pytest -q`
 

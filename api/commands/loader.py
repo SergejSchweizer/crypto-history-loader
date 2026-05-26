@@ -98,7 +98,7 @@ from ingestion.spot import (
 )
 from ingestion.trades import OptionTradeTick, TradeMarket, TradeTick, fetch_trades_all_history, fetch_trades_range
 
-_TAIL_DELTA_ONLY = True
+_TAIL_DELTA_ONLY = False
 _BRONZE_START_OPEN_MS: int | None = None
 _BRONZE_SYMBOL_START_OPEN_MS: dict[str, int] = {}
 _BRONZE_EXCHANGE_SYMBOL_START_OPEN_MS: dict[str, int] = {}
@@ -107,7 +107,7 @@ OI_DATASET_TYPE = dataset_spec("oi").dataset_type
 
 
 _RUNTIME_BOUNDS_CONTEXT = BronzeRuntimeBoundsContext(
-    tail_delta_only=True,
+    tail_delta_only=False,
     global_start_open_ms=None,
     symbol_start_open_ms={},
     exchange_symbol_start_open_ms={},
@@ -278,7 +278,7 @@ def _add_ingest_parser(
         default=["BTC", "ETH", "SOL"],
         help="Symbols used for all selected markets/datasets.",
     )
-    parser.set_defaults(tail_delta_only=True)
+    parser.set_defaults(tail_delta_only=False)
     parser.add_argument(
         "--save-parquet-lake",
         action="store_true",
@@ -298,13 +298,13 @@ def _add_ingest_parser(
         "--tail-delta-only",
         dest="tail_delta_only",
         action="store_true",
-        help="Fetch only new tail data after latest stored point (overrides config).",
+        help="Fetch only new tail data after latest stored point (overrides default full-gap-fill mode).",
     )
     parser.add_argument(
         "--full-gap-fill",
         dest="tail_delta_only",
         action="store_false",
-        help="Run full historical internal gap checks instead of default tail-only delta mode.",
+        help="Run full historical internal gap checks (default behavior).",
     )
     parser.add_argument(
         "--start-date",
