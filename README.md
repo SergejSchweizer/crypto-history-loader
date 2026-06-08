@@ -417,6 +417,8 @@ Time aggregation: native `tick` (one row per trade).
 
 Endpoint: primary `GET https://history.deribit.com/api/v2/public/get_last_trades_by_instrument_and_time`; fallback `GET https://history.deribit.com/api/v2/public/get_last_trades_by_currency_and_time` (base URL may fall back to `https://www.deribit.com`).
 Description: paginated tick-trade retrieval for perpetuals; returns trade-by-trade executions with timestamp, price, size, and side metadata.
+Reliability behavior: requests use Deribit's 1000-row page limit by default and retry/fall back across
+configured endpoints for transient route, timeout, and connection-reset failures.
 
 ### 2. Silver layer
 
@@ -467,6 +469,8 @@ Time aggregation: native `tick`.
 
 Endpoint: `GET https://history.deribit.com/api/v2/public/get_last_trades_by_currency_and_time` (base URL may fall back to `https://www.deribit.com`).
 Description: paginated option tick-trade retrieval by currency; includes contract identifier fields used to derive `expiry`, `strike`, and `option_type`.
+Reliability behavior: requests use Deribit's 1000-row page limit by default and retry/fall back across
+configured base URLs for transient route, timeout, and connection-reset failures.
 
 ### 2. Silver layer
 

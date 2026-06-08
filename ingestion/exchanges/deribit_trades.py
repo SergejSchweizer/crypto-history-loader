@@ -20,7 +20,7 @@ from ingestion.exchanges.deribit_trade_common import (
 from ingestion.http_client import HttpClientError, get_json
 
 DERIBIT_TRADES_MAX_PAGE_SIZE = 1000
-DERIBIT_TRADES_DEFAULT_PAGE_SIZE = 200
+DERIBIT_TRADES_DEFAULT_PAGE_SIZE = DERIBIT_TRADES_MAX_PAGE_SIZE
 DERIBIT_TRADES_BASE_URL_DEFAULT = "https://history.deribit.com"
 DERIBIT_TRADES_FALLBACK_BASE_URL = "https://www.deribit.com"
 logger = logging.getLogger(__name__)
