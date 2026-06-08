@@ -33,10 +33,18 @@ def env_int_min(value: str, default: int, minimum: int) -> int:
 
 
 def is_route_failure(exc: Exception) -> bool:
-    """Return whether exception message indicates route/network unreachable."""
+    """Return whether an exception indicates transient route/network failure."""
 
     message = str(exc).lower()
-    return "no route to host" in message or "network is unreachable" in message
+    transient_markers = (
+        "no route to host",
+        "network is unreachable",
+        "timed out",
+        "connection timeout",
+        "connection reset",
+        "remote end closed connection",
+    )
+    return any(marker in message for marker in transient_markers)
 
 
 def extract_result_rows(payload: dict[str, Any], *, payload_name: str) -> list[dict[str, object]]:

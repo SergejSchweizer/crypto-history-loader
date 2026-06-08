@@ -101,6 +101,38 @@ def test_fetch_trades_range_falls_back_on_route_failure(monkeypatch) -> None:  #
     assert any("www.deribit.com" in url for url in calls)
 
 
+def test_fetch_trades_range_falls_back_on_timeout(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    calls: list[str] = []
+
+    def _fake_get_json(url: str, params: dict[str, object]) -> dict[str, object]:
+        calls.append(url)
+        if "history.deribit.com" in url:
+            raise HttpClientError("Connection error for x: timed out")
+        return {
+            "result": {
+                "trades": [
+                    {
+                        "timestamp": int(cast(Any, params["start_timestamp"])),
+                        "trade_id": "id-1",
+                    }
+                ],
+                "has_more": False,
+            }
+        }
+
+    monkeypatch.setenv("DEPTH_DERIBIT_TRADES_ROUTE_RETRY_ATTEMPTS", "1")
+    monkeypatch.setattr(deribit_trades, "get_json", _fake_get_json)
+    rows = deribit_trades.fetch_trades_range(
+        symbol="BTC-PERPETUAL",
+        market="perp",
+        start_open_ms=1_700_000_000_000,
+        end_open_ms=1_700_000_100_000,
+    )
+    assert len(rows) == 1
+    assert any("history.deribit.com" in url for url in calls)
+    assert any("www.deribit.com" in url for url in calls)
+
+
 def test_fetch_trades_range_retries_route_failure_before_success(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     calls = {"n": 0}
 
