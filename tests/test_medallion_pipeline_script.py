@@ -193,15 +193,18 @@ def test_rotate_pipeline_log_rotates_and_prunes(tmp_path: Path) -> None:
     module = _load_pipeline_module()
     log_path = tmp_path / "pipeline.log"
     log_path.write_text("a\n", encoding="utf-8")
-    old_date = datetime(2026, 5, 1, 0, 0, tzinfo=UTC).timestamp()
-    os.utime(log_path, (old_date, old_date))
-    stale = tmp_path / "pipeline.log.2026-04-01"
+    today = datetime.now(UTC).date()
+    rotated_date = today.fromordinal(today.toordinal() - 1)
+    retained_date = today.fromordinal(today.toordinal() - 10)
+    stale_date = today.fromordinal(today.toordinal() - 40)
+    os.utime(log_path, (datetime.combine(rotated_date, datetime.min.time(), UTC).timestamp(),) * 2)
+    stale = tmp_path / f"pipeline.log.{stale_date.isoformat()}"
     stale.write_text("x\n", encoding="utf-8")
-    keep = tmp_path / "pipeline.log.2026-05-15"
+    keep = tmp_path / f"pipeline.log.{retained_date.isoformat()}"
     keep.write_text("x\n", encoding="utf-8")
     module._rotate_pipeline_log(log_path, retention_days=30)
     assert not log_path.exists()
-    assert (tmp_path / "pipeline.log.2026-05-01").exists()
+    assert (tmp_path / f"pipeline.log.{rotated_date.isoformat()}").exists()
     assert not stale.exists()
     assert keep.exists()
 

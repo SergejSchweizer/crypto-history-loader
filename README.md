@@ -207,8 +207,9 @@ All datasets share structural metadata columns:
 
 Coverage reference for missing statistics in this section:
 - Start: first observed day per dataset series
-- End: `2026-05-25` (inclusive)
+- End: dataset-specific end date shown per row (inclusive)
 - Missing %: missing calendar days / expected calendar days
+- Missing Days: count of missing calendar days in the [Start Date, End Date] span
 
 ## 4.1 Spot (`dataset_type=spot`)
 
@@ -256,9 +257,9 @@ Coverage:
 
 | Exchange | Symbol | Timeframe | Start Date | End Date | Missing Days | Missing % |
 |---|---|---|---|---|---:|---:|
-| `deribit` | `BTC_USDC` | `1m` | `2023-04-24` | `2026-05-25` | 0 | 0.00% |
-| `deribit` | `ETH_USDC` | `1m` | `2023-04-24` | `2026-05-25` | 0 | 0.00% |
-| `deribit` | `SOL_USDC` | `1m` | `2024-02-27` | `2026-05-25` | 0 | 0.00% |
+| `deribit` | `BTC_USDC` | `1m` | `2023-04-24` | `2026-05-29` | 0 | 0.00% |
+| `deribit` | `ETH_USDC` | `1m` | `2023-04-24` | `2026-05-29` | 0 | 0.00% |
+| `deribit` | `SOL_USDC` | `1m` | `2024-02-27` | `2026-05-29` | 0 | 0.00% |
 
 ## 4.2 Perpetual (`dataset_type=perp`)
 
@@ -306,9 +307,9 @@ Coverage:
 
 | Exchange | Symbol | Timeframe | Start Date | End Date | Missing Days | Missing % |
 |---|---|---|---|---|---:|---:|
-| `deribit` | `BTC-PERPETUAL` | `1m` | `2018-08-14` | `2026-05-25` | 27 | 0.95% |
-| `deribit` | `ETH-PERPETUAL` | `1m` | `2019-03-14` | `2026-05-25` | 12 | 0.46% |
-| `deribit` | `SOL-PERPETUAL` | `1m` | `2022-04-29` | `2026-05-25` | 11 | 0.74% |
+| `deribit` | `BTC-PERPETUAL` | `1m` | `2018-08-14` | `2026-05-29` | 0 | 0.00% |
+| `deribit` | `ETH-PERPETUAL` | `1m` | `2019-03-14` | `2026-05-29` | 0 | 0.00% |
+| `deribit` | `SOL-PERPETUAL` | `1m` | `2022-04-29` | `2026-05-29` | 0 | 0.00% |
 
 ## 4.3 Open Interest (`dataset_type=oi`)
 
@@ -352,9 +353,9 @@ Coverage:
 
 | Exchange | Symbol | Timeframe | Start Date | End Date | Missing Days | Missing % |
 |---|---|---|---|---|---:|---:|
-| `deribit` | `BTC-PERPETUAL` | `1m` | `2018-08-15` | `2026-05-25` | 0 | 0.00% |
-| `deribit` | `ETH-PERPETUAL` | `1m` | `2019-03-15` | `2026-05-25` | 0 | 0.00% |
-| `deribit` | `SOL-PERPETUAL` | `1m` | `2022-03-16` | `2026-05-25` | 0 | 0.00% |
+| `deribit` | `BTC-PERPETUAL` | `1m` | `2018-08-15` | `2026-05-28` | 0 | 0.00% |
+| `deribit` | `ETH-PERPETUAL` | `1m` | `2019-03-15` | `2026-05-28` | 0 | 0.00% |
+| `deribit` | `SOL-PERPETUAL` | `1m` | `2022-03-16` | `2026-05-28` | 0 | 0.00% |
 
 ## 4.4 Funding (`dataset_type=funding`)
 
@@ -400,9 +401,9 @@ Coverage:
 
 | Exchange | Symbol | Timeframe | Start Date | End Date | Missing Days | Missing % |
 |---|---|---|---|---|---:|---:|
-| `deribit` | `BTC-PERPETUAL` | `8h` | `2023-04-24` | `2026-05-25` | 0 | 0.00% |
-| `deribit` | `ETH-PERPETUAL` | `8h` | `2023-04-24` | `2026-05-25` | 0 | 0.00% |
-| `deribit` | `SOL-PERPETUAL` | `8h` | `2024-02-27` | `2026-05-25` | 0 | 0.00% |
+| `deribit` | `BTC-PERPETUAL` | `8h` | `2019-05-12` | `2026-05-28` | 570 | 22.14% |
+| `deribit` | `ETH-PERPETUAL` | `8h` | `2019-04-30` | `2026-05-28` | 0 | 0.00% |
+| `deribit` | `SOL-PERPETUAL` | `8h` | `2022-03-25` | `2026-05-28` | 0 | 0.00% |
 
 ## 4.5 Perpetual Trades (`dataset_type=perp_trades`)
 
@@ -450,8 +451,9 @@ Coverage:
 
 | Exchange | Symbol | Timeframe | Start Date | End Date | Missing Days | Missing % |
 |---|---|---|---|---|---:|---:|
-| `deribit` | `BTC-PERPETUAL` | `tick` | `2023-01-01` | `2026-05-24` | 1093 | 88.07% |
-| `deribit` | `ETH-PERPETUAL` | `tick` | `2023-04-25` | `2026-05-24` | 1093 | 96.98% |
+| `deribit` | `BTC-PERPETUAL` | `tick` | `2018-08-14` | `2026-05-26` | 2334 | 82.10% |
+| `deribit` | `ETH-PERPETUAL` | `tick` | `2019-03-14` | `2026-05-26` | 2491 | 94.68% |
+| `deribit` | `SOL-PERPETUAL` | `tick` | `N/A` | `N/A` | N/A | N/A |
 
 ## 4.6 Option Trades (`dataset_type=option_trades`)
 
@@ -502,8 +504,9 @@ Coverage:
 
 | Exchange | Symbol | Timeframe | Start Date | End Date | Missing Days | Missing % |
 |---|---|---|---|---|---:|---:|
-| `deribit` | `BTC` | `tick` | `2018-08-14` | `2026-05-24` | 1171 | 41.20% |
-| `deribit` | `ETH` | `tick` | `2023-04-25` | `2026-05-24` | 882 | 78.26% |
+| `deribit` | `BTC` | `tick` | `2018-08-14` | `2026-05-26` | 723 | 25.43% |
+| `deribit` | `ETH` | `tick` | `2019-03-21` | `2026-05-26` | 881 | 33.57% |
+| `deribit` | `SOL` | `tick` | `N/A` | `N/A` | N/A | N/A |
 
 ---
 

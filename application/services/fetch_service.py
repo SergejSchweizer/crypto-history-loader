@@ -1309,19 +1309,8 @@ def fetch_trade_tasks_parallel(
                     elapsed_s,
                 )
             task_errors[key] = f"[{error_class}] {exc}"
-            if error_class == "NET_UNREACHABLE":
-                remaining_tasks = tasks[idx:]
-                if remaining_tasks:
-                    logger.error(
-                        "Aborting remaining trade fetch tasks due to network unreachable error "
-                        "remaining_tasks=%s exchange=%s",
-                        len(remaining_tasks),
-                        task.exchange,
-                    )
-                for pending in remaining_tasks:
-                    pending_key = (pending.exchange, pending.market, pending.symbol)
-                    task_errors[pending_key] = (
-                        "[NET_UNREACHABLE] skipped due to prior network unreachable error in this run"
-                    )
-                break
+            # Keep processing remaining tasks even when one route is unreachable.
+            # This avoids a single transient network issue cascading into a full
+            # trade-run failure classification.
+            continue
     return TradeFetchResultDTO(rows=task_results, errors=task_errors)
