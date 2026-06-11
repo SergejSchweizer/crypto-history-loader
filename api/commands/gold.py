@@ -6,6 +6,8 @@ import argparse
 import json
 import logging
 import re
+from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from typing import cast
 
 from application.services.gold_service import (
@@ -54,6 +56,7 @@ def add_gold_build_parser(subparsers: argparse._SubParsersAction[argparse.Argume
         default=3,
         help="Keep only the latest N gold feature_set_version artifacts per dataset_id/exchange/symbol",
     )
+    parser.add_argument("--maxprocesses", type=int, default=4, help="Maximum parallel gold build workers")
     parser.add_argument("--no-json-output", action="store_true", help="Suppress JSON output")
 
 
@@ -104,6 +107,9 @@ def run_gold_build(args: argparse.Namespace, logger: logging.Logger) -> None:
     keep_last_versions = int(getattr(args, "retention_keep_versions", 3))
     if keep_last_versions < 1:
         raise ValueError(f"Invalid --retention-keep-versions '{keep_last_versions}'. Value must be an integer >= 1")
+    maxprocesses = int(getattr(args, "maxprocesses", 4))
+    if maxprocesses < 1:
+        raise ValueError(f"Invalid --maxprocesses '{maxprocesses}'. Value must be an integer >= 1")
     reports: list[dict[str, object]] = []
 
     dataset_ids = _resolve_dataset_ids(dataset_id)
@@ -117,40 +123,55 @@ def run_gold_build(args: argparse.Namespace, logger: logging.Logger) -> None:
         )
     logger.info("Gold build schedule dataset_symbols=%s", schedule)
     _validate_version_args(auto_version=auto_version, dataset_version=dataset_version, version_base=version_base)
-    for selected_dataset_id in dataset_ids:
-        for symbol in schedule[selected_dataset_id]:
-            try:
-                report = build_gold_for_symbol(
-                    silver_root=silver_root,
-                    gold_root=gold_root,
-                    l2_root=l2_root,
-                    exchange=exchange,
-                    symbol=symbol,
-                    dataset_id=selected_dataset_id,
-                    dataset_version=dataset_version,
-                    auto_version=auto_version,
-                    version_base=version_base,
-                    manifest=True,
-                    plot=True,
-                    l2_validation_mode=l2_validation_mode,
-                    keep_last_versions=keep_last_versions,
-                )
-            except ValueError as exc:
-                logger.warning(
-                    "Gold dataset skipped symbol=%s dataset_id=%s reason=%s",
-                    symbol,
-                    selected_dataset_id,
-                    exc,
-                )
-                continue
-            reports.append(report.to_dict())
-            logger.info(
-                "Gold dataset written symbol=%s dataset_id=%s rows_out=%s path=%s",
+
+    def _run_one(selected_dataset_id: str, symbol: str) -> dict[str, object] | None:
+        try:
+            report = build_gold_for_symbol(
+                silver_root=silver_root,
+                gold_root=gold_root,
+                l2_root=l2_root,
+                exchange=exchange,
+                symbol=symbol,
+                dataset_id=selected_dataset_id,
+                dataset_version=dataset_version,
+                auto_version=auto_version,
+                version_base=version_base,
+                manifest=True,
+                plot=True,
+                l2_validation_mode=l2_validation_mode,
+                keep_last_versions=keep_last_versions,
+            )
+        except ValueError as exc:
+            logger.warning(
+                "Gold dataset skipped symbol=%s dataset_id=%s reason=%s",
                 symbol,
                 selected_dataset_id,
-                report.rows_out,
-                report.parquet_path,
+                exc,
             )
+            return None
+        logger.info(
+            "Gold dataset written symbol=%s dataset_id=%s rows_out=%s path=%s",
+            symbol,
+            selected_dataset_id,
+            report.rows_out,
+            report.parquet_path,
+        )
+        return report.to_dict()
+
+    jobs: list[Callable[[], dict[str, object] | None]] = []
+    for selected_dataset_id in dataset_ids:
+        for symbol in schedule[selected_dataset_id]:
+            jobs.append(
+                lambda selected_dataset_id=selected_dataset_id, symbol=symbol: _run_one(selected_dataset_id, symbol)
+            )
+
+    logger.info("Gold build parallelization maxprocesses=%s jobs=%s", maxprocesses, len(jobs))
+    with ThreadPoolExecutor(max_workers=maxprocesses) as executor:
+        futures = [executor.submit(job) for job in jobs]
+        for future in futures:
+            payload = future.result()
+            if payload is not None:
+                reports.append(payload)
 
     if not bool(args.no_json_output):
         print(json.dumps({"reports": reports}, indent=2))

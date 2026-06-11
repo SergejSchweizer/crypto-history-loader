@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Literal, cast
 
-from ingestion.exchanges import deribit_option_trades, deribit_trades
+from ingestion.exchanges import deribit_option_trades, deribit_perp_trades
 from ingestion.spot import Exchange, normalize_storage_symbol
 
 TradeMarket = Literal["spot", "perp", "option"]
@@ -185,7 +185,7 @@ def fetch_trades_all_history(
             return
         on_history_chunk([_parse_trade_row(exchange, normalized_symbol, market_non_option, row) for row in rows])
 
-    rows = deribit_trades.fetch_trades_all(
+    rows = deribit_perp_trades.fetch_perp_trades_all(
         symbol=normalized_symbol,
         market=market_non_option,
         on_page=_on_page if on_history_chunk is not None else None,
@@ -201,7 +201,7 @@ def fetch_trades_range(
     market: TradeMarket,
     start_open_ms: int,
     end_open_ms: int,
-    page_size: int = deribit_trades.DERIBIT_TRADES_DEFAULT_PAGE_SIZE,
+    page_size: int | None = None,
 ) -> list[TradeTick | OptionTradeTick]:
     """Fetch historical trades by inclusive range."""
 
@@ -217,7 +217,7 @@ def fetch_trades_range(
         )
         return [_parse_option_trade_row(exchange, normalized_symbol, row) for row in rows]
     market_non_option: Literal["spot", "perp"] = market
-    rows = deribit_trades.fetch_trades_range(
+    rows = deribit_perp_trades.fetch_perp_trades_range(
         symbol=normalized_symbol,
         market=market_non_option,
         start_open_ms=start_open_ms,

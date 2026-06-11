@@ -5,6 +5,8 @@ from __future__ import annotations
 import argparse
 import logging
 
+import pytest
+
 from api.commands import silver as silver_cmd
 
 
@@ -157,6 +159,24 @@ def test_run_silver_build_uses_tick_timeframe_for_option_trades_discovery(
 
     assert captured == [("option_trades", "tick", "option")]
     assert built == ["option_trades_observed", "option_trades_1m_feature"]
+
+
+def test_run_silver_build_rejects_invalid_maxprocesses() -> None:
+    args = argparse.Namespace(
+        bronze_root="lake/bronze",
+        silver_root="lake/silver",
+        exchange="deribit",
+        market=["spot"],
+        symbols=["BTC"],
+        timeframe="1m",
+        manifest=False,
+        plot=False,
+        maxprocesses=0,
+        no_json_output=True,
+    )
+
+    with pytest.raises(ValueError, match="maxprocesses"):
+        silver_cmd.run_silver_build(args=args, logger=logging.getLogger("test"))
 
 
 def _report(dataset: str) -> silver_cmd.SilverBuildReport:

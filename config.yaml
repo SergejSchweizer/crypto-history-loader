@@ -65,6 +65,8 @@ medallion-pipeline:
       - option_trades
       - --manifest
       - --plot
+      - --maxprocesses
+      - "4"
       - --no-json-output
   gold:
     enabled: true
@@ -72,4 +74,6 @@ medallion-pipeline:
     cli_args:
       - --manifest
       - --plot
+      - --maxprocesses
+      - "4"
       - --no-json-output

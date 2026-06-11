@@ -8,7 +8,7 @@ setup:
 	$(PYTHON) -m pip install -e .
 
 test:
-	$(PYTHON) -m pytest
+	uv run --extra dev pytest
 
 lint:
 	$(PYTHON) -m ruff check .

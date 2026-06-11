@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 import pyarrow.parquet as pq
@@ -20,14 +20,18 @@ from ingestion.lake import (
     load_open_interest_from_lake,
     load_spot_candles_from_lake,
     merge_and_deduplicate_rows,
+    open_time_bounds_in_lake_by_dataset,
     open_times_in_lake,
+    partition_dates_in_lake_by_dataset,
     partition_path,
     save_funding_parquet_lake,
     save_open_interest_parquet_lake,
     save_spot_candles_parquet_lake,
+    save_trades_parquet_lake,
 )
 from ingestion.open_interest import OpenInterestPoint
 from ingestion.spot import SpotCandle
+from ingestion.trades import TradeTick
 
 
 def _sample_candle() -> SpotCandle:
@@ -174,6 +178,84 @@ def test_open_times_in_lake_returns_sorted_unique(tmp_path: Path) -> None:
     )
 
     assert values == [candle_1.open_time, candle_2.open_time]
+
+
+def test_partition_dates_in_lake_by_dataset_uses_daily_trade_partitions(tmp_path: Path) -> None:
+    tick_1 = TradeTick(
+        exchange="deribit",
+        symbol="BTC-PERPETUAL",
+        instrument_type="perp",
+        trade_id="x1",
+        trade_time=datetime(2026, 5, 1, 0, 0, 1, tzinfo=UTC),
+        price=100.0,
+        quantity=1.0,
+        side="buy",
+        is_maker=True,
+        source_endpoint="public_trades",
+    )
+    tick_2 = TradeTick(
+        exchange="deribit",
+        symbol="BTC-PERPETUAL",
+        instrument_type="perp",
+        trade_id="x2",
+        trade_time=datetime(2026, 5, 3, 0, 0, 1, tzinfo=UTC),
+        price=101.0,
+        quantity=2.0,
+        side="sell",
+        is_maker=False,
+        source_endpoint="public_trades",
+    )
+    save_trades_parquet_lake({"deribit": {"BTC-PERPETUAL": [tick_2, tick_1]}}, market="perp", lake_root=str(tmp_path))
+
+    values = partition_dates_in_lake_by_dataset(
+        lake_root=str(tmp_path),
+        dataset_type="perp_trades",
+        market="perp",
+        exchange="deribit",
+        symbol="BTC-PERPETUAL",
+        timeframe="tick",
+    )
+
+    assert values == [date(2026, 5, 1), date(2026, 5, 3)]
+
+
+def test_open_time_bounds_in_lake_by_dataset_reads_trade_partition_bounds(tmp_path: Path) -> None:
+    early = TradeTick(
+        exchange="deribit",
+        symbol="BTC-PERPETUAL",
+        instrument_type="perp",
+        trade_id="x1",
+        trade_time=datetime(2026, 5, 1, 0, 0, 1, tzinfo=UTC),
+        price=100.0,
+        quantity=1.0,
+        side="buy",
+        is_maker=True,
+        source_endpoint="public_trades",
+    )
+    late = TradeTick(
+        exchange="deribit",
+        symbol="BTC-PERPETUAL",
+        instrument_type="perp",
+        trade_id="x2",
+        trade_time=datetime(2026, 5, 1, 7, 14, 52, tzinfo=UTC),
+        price=101.0,
+        quantity=2.0,
+        side="sell",
+        is_maker=False,
+        source_endpoint="public_trades",
+    )
+    save_trades_parquet_lake({"deribit": {"BTC-PERPETUAL": [late, early]}}, market="perp", lake_root=str(tmp_path))
+
+    values = open_time_bounds_in_lake_by_dataset(
+        lake_root=str(tmp_path),
+        dataset_type="perp_trades",
+        market="perp",
+        exchange="deribit",
+        symbol="BTC-PERPETUAL",
+        timeframe="tick",
+    )
+
+    assert values == {date(2026, 5, 1): (early.trade_time, late.trade_time)}
 
 
 def test_load_spot_candles_from_lake_reads_full_partition_history(tmp_path: Path) -> None:

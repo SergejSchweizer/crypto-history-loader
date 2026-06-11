@@ -7,7 +7,7 @@ import json
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from hashlib import sha256
 from pathlib import Path
 from typing import Any, cast
@@ -285,6 +285,125 @@ def open_times_in_lake_by_dataset(
                 if isinstance(value, datetime):
                     values.append(value)
     return sorted(set(values))
+
+
+def partition_dates_in_lake_by_dataset(
+    lake_root: str,
+    dataset_type: str,
+    market: str,
+    exchange: str,
+    symbol: str,
+    timeframe: str,
+) -> list[date]:
+    """Return stored daily partition dates for one dataset/instrument/timeframe."""
+
+    partition_root = (
+        Path(lake_root)
+        / f"dataset_type={dataset_type}"
+        / f"exchange={exchange}"
+        / f"instrument_type={market}"
+        / f"symbol={symbol}"
+        / f"timeframe={timeframe}"
+    )
+    if not partition_root.exists():
+        return []
+
+    values: set[date] = set()
+    for data_file in _partition_data_files(partition_root):
+        for part in data_file.parts:
+            if not part.startswith("date="):
+                continue
+            try:
+                values.add(date.fromisoformat(part.split("=", 1)[1]))
+            except ValueError:
+                continue
+            break
+    return sorted(values)
+
+
+def open_time_bounds_in_lake_by_dataset(
+    lake_root: str,
+    dataset_type: str,
+    market: str,
+    exchange: str,
+    symbol: str,
+    timeframe: str,
+) -> dict[date, tuple[datetime, datetime]]:
+    """Return per-partition open_time min/max bounds for a dataset selection."""
+
+    try:
+        import pyarrow.parquet as pq
+    except ImportError as exc:
+        raise RuntimeError("pyarrow is required for parquet lake output. Install project dependencies.") from exc
+
+    partition_root = (
+        Path(lake_root)
+        / f"dataset_type={dataset_type}"
+        / f"exchange={exchange}"
+        / f"instrument_type={market}"
+        / f"symbol={symbol}"
+        / f"timeframe={timeframe}"
+    )
+    if not partition_root.exists():
+        return {}
+
+    bounds: dict[date, tuple[datetime, datetime]] = {}
+    for data_file in _partition_data_files(partition_root):
+        partition_date = _date_from_partition_path(data_file)
+        if partition_date is None:
+            continue
+        file_min, file_max = _open_time_bounds_for_parquet_file(pq.ParquetFile(data_file))
+        if file_min is None or file_max is None:
+            continue
+        current = bounds.get(partition_date)
+        if current is None:
+            bounds[partition_date] = (file_min, file_max)
+        else:
+            bounds[partition_date] = (min(current[0], file_min), max(current[1], file_max))
+    return bounds
+
+
+def _date_from_partition_path(path: Path) -> date | None:
+    """Extract the date partition from a parquet file path."""
+
+    for part in path.parts:
+        if not part.startswith("date="):
+            continue
+        try:
+            return date.fromisoformat(part.split("=", 1)[1])
+        except ValueError:
+            return None
+    return None
+
+
+def _open_time_bounds_for_parquet_file(parquet_file: Any) -> tuple[datetime | None, datetime | None]:
+    """Read open_time min/max with metadata stats first, then fall back to the column."""
+
+    min_value: datetime | None = None
+    max_value: datetime | None = None
+    open_time_index = parquet_file.schema_arrow.get_field_index("open_time")
+    if open_time_index >= 0:
+        metadata = parquet_file.metadata
+        for row_group_index in range(metadata.num_row_groups):
+            stats = metadata.row_group(row_group_index).column(open_time_index).statistics
+            if stats is None or stats.min is None or stats.max is None:
+                min_value = None
+                max_value = None
+                break
+            if isinstance(stats.min, datetime) and isinstance(stats.max, datetime):
+                min_value = stats.min if min_value is None else min(min_value, stats.min)
+                max_value = stats.max if max_value is None else max(max_value, stats.max)
+        if min_value is not None and max_value is not None:
+            return min_value, max_value
+
+    for batch in parquet_file.iter_batches(columns=["open_time"], batch_size=10_000):  # type: ignore[no-untyped-call]
+        for row in batch.to_pylist():
+            value = row.get("open_time")
+            if not isinstance(value, datetime):
+                continue
+            min_value = value if min_value is None else min(min_value, value)
+            max_value = value if max_value is None else max(max_value, value)
+    return min_value, max_value
 
 
 def record_natural_key(record: dict[str, object]) -> NaturalKey:

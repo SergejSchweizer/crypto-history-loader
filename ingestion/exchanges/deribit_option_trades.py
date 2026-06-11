@@ -1,4 +1,4 @@
-"""Deribit historical option trades adapter."""
+"""Deribit historical option_trades adapter."""
 
 from __future__ import annotations
 
@@ -18,21 +18,21 @@ from ingestion.exchanges.deribit_trade_common import (
 from ingestion.http_client import HttpClientError, get_json
 
 DERIBIT_OPTION_TRADES_MAX_PAGE_SIZE = 1000
-DERIBIT_OPTION_TRADES_DEFAULT_PAGE_SIZE = DERIBIT_OPTION_TRADES_MAX_PAGE_SIZE
+DERIBIT_OPTION_TRADES_DEFAULT_PAGE_SIZE = 500
 DERIBIT_OPTION_TRADES_BASE_URL_DEFAULT = "https://history.deribit.com"
 DERIBIT_OPTION_TRADES_FALLBACK_BASE_URL = "https://www.deribit.com"
 logger = logging.getLogger(__name__)
 
 
 def _trades_base_url() -> str:
-    """Return Deribit trades API base URL."""
+    """Return Deribit option_trades API base URL."""
 
     value = os.getenv("DEPTH_DERIBIT_OPTION_TRADES_BASE_URL", DERIBIT_OPTION_TRADES_BASE_URL_DEFAULT).strip()
     return value.rstrip("/")
 
 
 def _trades_base_urls() -> list[str]:
-    """Return ordered base URL candidates for option trades API."""
+    """Return ordered base URL candidates for option_trades API."""
 
     primary = _trades_base_url()
     if primary != DERIBIT_OPTION_TRADES_FALLBACK_BASE_URL:
@@ -41,7 +41,7 @@ def _trades_base_urls() -> list[str]:
 
 
 def _extract_result_rows(payload: dict[str, Any]) -> list[dict[str, object]]:
-    return extract_result_rows(payload, payload_name="option trades")
+    return extract_result_rows(payload, payload_name="option_trades")
 
 
 def _has_more(payload: dict[str, Any]) -> bool:
@@ -67,18 +67,26 @@ def _route_retry_backoff_base_seconds() -> float:
     return env_float_non_negative(value=value, default=0.5)
 
 
+def _default_page_size() -> int:
+    value = os.getenv("DEPTH_DERIBIT_OPTION_TRADES_PAGE_SIZE", str(DERIBIT_OPTION_TRADES_DEFAULT_PAGE_SIZE))
+    return min(
+        env_int_min(value=value, default=DERIBIT_OPTION_TRADES_DEFAULT_PAGE_SIZE, minimum=1),
+        DERIBIT_OPTION_TRADES_MAX_PAGE_SIZE,
+    )
+
+
 def fetch_option_trades_range(
     *,
     currency: str,
     start_open_ms: int,
     end_open_ms: int,
-    count: int = DERIBIT_OPTION_TRADES_MAX_PAGE_SIZE,
+    count: int | None = None,
 ) -> list[dict[str, object]]:
-    """Fetch Deribit option trades in inclusive millisecond range."""
+    """Fetch Deribit option_trades in inclusive millisecond range."""
 
     if end_open_ms < start_open_ms:
         return []
-    if count <= 0:
+    if count is not None and count <= 0:
         raise ValueError("count must be positive")
 
     normalized_currency = currency.upper().strip()
@@ -86,18 +94,26 @@ def fetch_option_trades_range(
         raise ValueError("currency cannot be empty")
     cursor = start_open_ms
     collected: list[dict[str, object]] = []
-    page_size = min(count, DERIBIT_OPTION_TRADES_MAX_PAGE_SIZE)
+    page_size = min(count if count is not None else _default_page_size(), DERIBIT_OPTION_TRADES_MAX_PAGE_SIZE)
     max_pages = int(os.getenv("DEPTH_DERIBIT_OPTION_TRADES_MAX_PAGES_PER_RANGE", "5000"))
     inter_request_sleep_s = _inter_request_sleep_seconds()
     route_retry_attempts = _route_retry_attempts()
     route_retry_backoff_base_s = _route_retry_backoff_base_seconds()
     pages = 0
 
+    logger.debug(
+        "Deribit option_trades range start currency=%s start_ms=%s end_ms=%s page_size=%s max_pages=%s",
+        normalized_currency,
+        start_open_ms,
+        end_open_ms,
+        page_size,
+        max_pages,
+    )
     while cursor <= end_open_ms:
         pages += 1
         if max_pages > 0 and pages > max_pages:
             logger.warning(
-                "Deribit option trades range page cap reached currency=%s start_ms=%s end_ms=%s max_pages=%s",
+                "Deribit option_trades range page cap reached currency=%s start_ms=%s end_ms=%s max_pages=%s",
                 normalized_currency,
                 start_open_ms,
                 end_open_ms,
@@ -117,7 +133,7 @@ def fetch_option_trades_range(
         for base_url in _trades_base_urls():
             for attempt in range(1, route_retry_attempts + 1):
                 logger.debug(
-                    "Deribit option trades request base_url=%s currency=%s cursor=%s end_ms=%s attempt=%s/%s",
+                    "Deribit option_trades request base_url=%s currency=%s cursor=%s end_ms=%s attempt=%s/%s",
                     base_url,
                     normalized_currency,
                     cursor,
@@ -139,7 +155,7 @@ def fetch_option_trades_range(
                         sleep_s = route_retry_backoff_base_s * (2 ** (attempt - 1))
                         if sleep_s > 0:
                             logger.debug(
-                                "Deribit option trades retry sleep base_url=%s currency=%s cursor=%s sleep_s=%.3f",
+                                "Deribit option_trades retry sleep base_url=%s currency=%s cursor=%s sleep_s=%.3f",
                                 base_url,
                                 normalized_currency,
                                 cursor,
@@ -148,7 +164,7 @@ def fetch_option_trades_range(
                             time.sleep(sleep_s)
                         continue
                     logger.warning(
-                        "Deribit option trades route failure via base_url=%s currency=%s cursor=%s; trying fallback",
+                        "Deribit option_trades route failure via base_url=%s currency=%s cursor=%s; trying fallback",
                         base_url,
                         normalized_currency,
                         cursor,
@@ -159,7 +175,7 @@ def fetch_option_trades_range(
             assert last_error is not None
             raise last_error
         if not isinstance(payload, dict):
-            raise ValueError("Unexpected Deribit option trades response format")
+            raise ValueError("Unexpected Deribit option_trades response format")
         rows = _extract_result_rows(payload)
         if not rows:
             break
@@ -174,12 +190,25 @@ def fetch_option_trades_range(
             break
         if inter_request_sleep_s > 0:
             logger.debug(
-                "Deribit option trades inter-request sleep currency=%s cursor=%s sleep_s=%.3f",
+                "Deribit option_trades inter-request sleep currency=%s cursor=%s sleep_s=%.3f",
                 normalized_currency,
                 cursor,
                 inter_request_sleep_s,
             )
             time.sleep(inter_request_sleep_s)
+        if pages % 100 == 0:
+            logger.debug(
+                (
+                    "Deribit option_trades range progress currency=%s start_ms=%s end_ms=%s "
+                    "pages=%s cursor_ms=%s rows_collected=%s"
+                ),
+                normalized_currency,
+                start_open_ms,
+                end_open_ms,
+                pages,
+                cursor,
+                len(collected),
+            )
 
     dedup: dict[tuple[int, str, str], dict[str, object]] = {}
     for row in collected:
@@ -188,14 +217,24 @@ def fetch_option_trades_range(
         instrument_name = str(cast(Any, row).get("instrument_name", ""))
         if start_open_ms <= ts <= end_open_ms:
             dedup[(ts, trade_id, instrument_name)] = row
-    return [dedup[key] for key in sorted(dedup)]
+    rows_out = [dedup[key] for key in sorted(dedup)]
+    logger.debug(
+        "Deribit option_trades range done currency=%s start_ms=%s end_ms=%s pages=%s rows=%s deduped_rows=%s",
+        normalized_currency,
+        start_open_ms,
+        end_open_ms,
+        pages,
+        len(collected),
+        len(rows_out),
+    )
+    return rows_out
 
 
 def fetch_option_trades_all(
     *,
     currency: str,
 ) -> list[dict[str, object]]:
-    """Fetch available Deribit option trade history by paging backwards in fixed windows."""
+    """Fetch available Deribit option_trades history by paging backwards in fixed windows."""
 
     window_ms = 24 * 60 * 60 * 1000
     end_ms = _utc_now_ms()

@@ -308,7 +308,6 @@ class IncrementalPersistor:
             return
         self.streamed_trade_tasks.add((task.exchange, task.market, task.symbol))
         self._persist_trade_task(task, rows, logger)
-        self.mark_checkpoint_complete("trade", (task.exchange, task.market, task.symbol))
 
 
 def finalize_bronze_output(

@@ -10,6 +10,67 @@ from ingestion.exchanges import deribit_option_trades
 from ingestion.http_client import HttpClientError
 
 
+def test_fetch_option_trades_range_defaults_to_500_row_pages(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    counts: list[int] = []
+
+    def _fake_get_json(url: str, params: dict[str, object]) -> dict[str, object]:
+        del url
+        counts.append(int(cast(Any, params["count"])))
+        return {
+            "result": {
+                "trades": [
+                    {
+                        "timestamp": int(cast(Any, params["start_timestamp"])),
+                        "trade_id": "id-1",
+                        "instrument_name": "BTC-31DEC26-100000-C",
+                    }
+                ],
+                "has_more": False,
+            }
+        }
+
+    monkeypatch.setattr(deribit_option_trades, "get_json", _fake_get_json)
+    rows = deribit_option_trades.fetch_option_trades_range(
+        currency="BTC",
+        start_open_ms=1_700_000_000_000,
+        end_open_ms=1_700_000_100_000,
+    )
+
+    assert len(rows) == 1
+    assert counts == [500]
+
+
+def test_fetch_option_trades_range_page_size_env_override(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    counts: list[int] = []
+
+    def _fake_get_json(url: str, params: dict[str, object]) -> dict[str, object]:
+        del url
+        counts.append(int(cast(Any, params["count"])))
+        return {
+            "result": {
+                "trades": [
+                    {
+                        "timestamp": int(cast(Any, params["start_timestamp"])),
+                        "trade_id": "id-1",
+                        "instrument_name": "BTC-31DEC26-100000-C",
+                    }
+                ],
+                "has_more": False,
+            }
+        }
+
+    monkeypatch.setenv("DEPTH_DERIBIT_OPTION_TRADES_PAGE_SIZE", "9")
+    monkeypatch.setattr(deribit_option_trades, "get_json", _fake_get_json)
+    rows = deribit_option_trades.fetch_option_trades_range(
+        currency="BTC",
+        start_open_ms=1_700_000_000_000,
+        end_open_ms=1_700_000_100_000,
+    )
+
+    assert len(rows) == 1
+    assert counts == [9]
+
+
 def test_fetch_option_trades_range_stops_when_has_more_false(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     calls: list[int] = []
 
@@ -183,7 +244,7 @@ def test_option_extract_rows_and_has_more_helpers() -> None:
     assert deribit_option_trades._has_more(payload) is True
     assert deribit_option_trades._has_more({"result": {}}) is False
     assert deribit_option_trades._extract_result_rows({"result": {"trades": "bad"}}) == []
-    with pytest.raises(ValueError, match="Unexpected Deribit option trades response payload"):
+    with pytest.raises(ValueError, match="Unexpected Deribit option_trades response payload"):
         deribit_option_trades._extract_result_rows({})
 
 
@@ -204,7 +265,7 @@ def test_fetch_option_trades_range_validations() -> None:
 
 def test_fetch_option_trades_range_rejects_non_dict_payload(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     monkeypatch.setattr(deribit_option_trades, "get_json", lambda *args, **kwargs: [])  # type: ignore[return-value]
-    with pytest.raises(ValueError, match="Unexpected Deribit option trades response format"):
+    with pytest.raises(ValueError, match="Unexpected Deribit option_trades response format"):
         deribit_option_trades.fetch_option_trades_range(currency="BTC", start_open_ms=1, end_open_ms=2, count=1)
 
 

@@ -25,7 +25,7 @@ def test_fetch_trades_range_parses_deribit_rows(monkeypatch) -> None:  # type: i
             }
         ]
 
-    monkeypatch.setattr("ingestion.exchanges.deribit_trades.fetch_trades_range", _fake_fetch)
+    monkeypatch.setattr("ingestion.exchanges.deribit_perp_trades.fetch_perp_trades_range", _fake_fetch)
     rows = fetch_trades_range(
         exchange="deribit",
         symbol="BTC",
