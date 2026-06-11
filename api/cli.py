@@ -60,6 +60,7 @@ _BRONZE_START_OPEN_MS: int | None = None
 _BRONZE_SYMBOL_START_OPEN_MS: dict[str, int] = {}
 _BRONZE_EXCHANGE_SYMBOL_START_OPEN_MS: dict[str, int] = {}
 _BRONZE_CONFIG_ALIASES: tuple[str, ...] = ("bronze-build", "bronze-ingest", "loader")
+_DEBUG_BY_DEFAULT_COMMANDS: frozenset[str] = frozenset({"bronze-build", "silver-build", "gold-build"})
 
 
 # Backward-compatible wrappers used by tests.
@@ -257,6 +258,13 @@ def _apply_env_from_config(config: dict[str, object]) -> None:
         os.environ[raw_key] = str(value)
 
 
+def _is_debug_logging_enabled(args: argparse.Namespace) -> bool:
+    """Return whether command logging should use debug verbosity."""
+
+    command = str(getattr(args, "command", ""))
+    return bool(getattr(args, "debug", False)) or command in _DEBUG_BY_DEFAULT_COMMANDS
+
+
 def main() -> None:
     """CLI entrypoint."""
 
@@ -276,7 +284,7 @@ def main() -> None:
     if command_parser is not None:
         explicit = _collect_explicit_cli_dests(command_parser, sys.argv[1:])
         _apply_yaml_defaults(args=args, command=command, config=config_data, explicit_dests=explicit)
-    logger = configure_logging(module_name=str(args.command), debug=bool(getattr(args, "debug", False)))
+    logger = configure_logging(module_name=str(args.command), debug=_is_debug_logging_enabled(args))
     logger.info("Command start: %s", args.command)
 
     if args.command == "bronze-build":
