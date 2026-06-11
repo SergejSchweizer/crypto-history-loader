@@ -76,3 +76,19 @@ def test_repo_config_builds_pipeline_steps() -> None:
     assert steps, "Expected at least one enabled medallion pipeline step"
     for step in steps:
         assert step.args, f"Pipeline step '{step.name}' must include command args"
+
+
+def test_repo_config_medallion_bronze_inherits_full_history_start_bounds() -> None:
+    module = _load_pipeline_module()
+    config = _load_repo_config()
+    main_path = _repo_root() / "main.py"
+    config_path = _repo_root() / "config.yaml"
+    steps = module._build_steps(main_path=main_path, config_path=config_path, config_data=config)
+    bronze_step = next(step for step in steps if step.name == "bronze")
+
+    start_idx = bronze_step.args.index("--start-date")
+    assert bronze_step.args[start_idx + 1] == config["bronze-build"]["start_date"]
+
+    symbol_idx = bronze_step.args.index("--symbol-start-dates")
+    expected_symbol_dates = config["bronze-build"]["symbol_start_dates"]
+    assert bronze_step.args[symbol_idx + 1 : symbol_idx + 1 + len(expected_symbol_dates)] == expected_symbol_dates

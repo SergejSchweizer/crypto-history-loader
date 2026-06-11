@@ -46,16 +46,17 @@ def test_build_steps_uses_configured_market_args_with_trades(tmp_path: Path) -> 
     assert "perp_trades" in args
 
 
-def test_build_steps_bronze_enforces_one_month_start_date_when_missing(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_build_steps_bronze_inherits_start_bounds_from_bronze_config(tmp_path: Path) -> None:
     module = _load_pipeline_module()
     main_path = tmp_path / "main.py"
     main_path.write_text("print('ok')\n", encoding="utf-8")
     config_path = tmp_path / "config.yaml"
     config_path.write_text("x: 1\n", encoding="utf-8")
-    monkeypatch.setattr(module, "_one_month_ago_utc_date", lambda _now: "2026-04-16")
     cfg = {
+        "bronze-build": {
+            "start_date": "2018-08-14",
+            "symbol_start_dates": ["BTC=2018-08-14", "ETH=2019-03-14", "SOL=2022-03-15"],
+        },
         "medallion-pipeline": {
             "execution_order": ["bronze"],
             "bronze": {
@@ -63,23 +64,33 @@ def test_build_steps_bronze_enforces_one_month_start_date_when_missing(
                 "command": "bronze-build",
                 "cli_args": ["--dataset", "spot", "perp"],
             },
-        }
+        },
     }
     steps = module._build_steps(main_path=main_path, config_path=config_path, config_data=cfg)
     assert len(steps) == 1
     assert "--start-date" in steps[0].args
     idx = steps[0].args.index("--start-date")
-    assert steps[0].args[idx + 1] == "2026-04-16"
+    assert steps[0].args[idx + 1] == "2018-08-14"
+    sym_idx = steps[0].args.index("--symbol-start-dates")
+    assert steps[0].args[sym_idx + 1 : sym_idx + 4] == [
+        "BTC=2018-08-14",
+        "ETH=2019-03-14",
+        "SOL=2022-03-15",
+    ]
 
 
-def test_build_steps_bronze_clamps_older_date_bounds(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_build_steps_bronze_preserves_explicit_medallion_start_bounds(tmp_path: Path) -> None:
     module = _load_pipeline_module()
     main_path = tmp_path / "main.py"
     main_path.write_text("print('ok')\n", encoding="utf-8")
     config_path = tmp_path / "config.yaml"
     config_path.write_text("x: 1\n", encoding="utf-8")
-    monkeypatch.setattr(module, "_one_month_ago_utc_date", lambda _now: "2026-04-16")
     cfg = {
+        "bronze-build": {
+            "start_date": "2018-08-14",
+            "symbol_start_dates": ["BTC=2018-08-14"],
+            "exchange_symbol_start_dates": ["deribit:SOL=2022-03-15"],
+        },
         "medallion-pipeline": {
             "execution_order": ["bronze"],
             "bronze": {
@@ -95,17 +106,17 @@ def test_build_steps_bronze_clamps_older_date_bounds(tmp_path: Path, monkeypatch
                     "deribit:SOL=2020-01-01",
                 ],
             },
-        }
+        },
     }
     steps = module._build_steps(main_path=main_path, config_path=config_path, config_data=cfg)
     args = steps[0].args
     start_idx = args.index("--start-date")
-    assert args[start_idx + 1] == "2026-04-16"
+    assert args[start_idx + 1] == "2020-01-01"
     sym_idx = args.index("--symbol-start-dates")
-    assert args[sym_idx + 1] == "BTC=2026-04-16"
+    assert args[sym_idx + 1] == "BTC=2021-01-01"
     assert args[sym_idx + 2] == "ETH=2026-05-10"
     ex_idx = args.index("--exchange-symbol-start-dates")
-    assert args[ex_idx + 1] == "deribit:SOL=2026-04-16"
+    assert args[ex_idx + 1] == "deribit:SOL=2020-01-01"
 
 
 def test_log_path_from_config_prefers_explicit_log_file(tmp_path: Path) -> None:

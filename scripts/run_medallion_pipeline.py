@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import calendar
 import fcntl
 import os
 import re
@@ -94,79 +93,53 @@ def _build_steps(*, main_path: Path, config_path: Path, config_data: dict[str, A
             raise ValueError(f"medallion-pipeline.{layer_name}.cli_args must be a list")
         cli_args = [str(token) for token in cli_args_raw]
         if layer_name == "bronze" and command == "bronze-build":
-            cli_args = _enforce_one_month_download_window(cli_args)
+            cli_args = _apply_bronze_start_defaults(cli_args=cli_args, config_data=config_data)
 
         cmd = [str(main_path), "--config", str(config_path), command, *cli_args]
         steps.append(PipelineStep(name=layer_name, args=cmd))
     return steps
 
 
-def _one_month_ago_utc_date(today_utc: datetime) -> str:
-    """Return YYYY-MM-DD for one calendar month before ``today_utc``."""
+def _has_option(cli_args: list[str], option_name: str) -> bool:
+    """Return whether a CLI option is already present."""
 
-    year = today_utc.year
-    month = today_utc.month
-    day = today_utc.day
-    prev_year = year - 1 if month == 1 else year
-    prev_month = 12 if month == 1 else month - 1
-    prev_month_last_day = calendar.monthrange(prev_year, prev_month)[1]
-    prev_day = min(day, prev_month_last_day)
-    return datetime(prev_year, prev_month, prev_day, tzinfo=UTC).strftime("%Y-%m-%d")
+    return option_name in cli_args
 
 
-def _clamp_date_lower_bound(value: str, lower_bound: str) -> str:
-    """Clamp YYYY-MM-DD value to be no earlier than ``lower_bound``."""
+def _string_list(value: object) -> list[str]:
+    """Return a clean string list from config values."""
 
-    return lower_bound if value < lower_bound else value
-
-
-def _clamp_symbol_date_entries(entries: list[str], *, lower_bound: str) -> list[str]:
-    """Clamp ``SYMBOL=YYYY-MM-DD`` or ``EXCHANGE:SYMBOL=YYYY-MM-DD`` tokens."""
-
-    clamped: list[str] = []
-    for item in entries:
-        if "=" not in item:
-            clamped.append(item)
-            continue
-        key, date_part = item.split("=", 1)
-        clamped.append(f"{key}={_clamp_date_lower_bound(date_part, lower_bound)}")
-    return clamped
+    if not isinstance(value, list):
+        return []
+    return [str(item).strip() for item in value if str(item).strip()]
 
 
-def _enforce_one_month_download_window(cli_args: list[str]) -> list[str]:
-    """Ensure Bronze CLI date boundaries do not request more than one month of history."""
+def _apply_bronze_start_defaults(*, cli_args: list[str], config_data: dict[str, Any]) -> list[str]:
+    """Append Bronze start-bound defaults from the ``bronze-build`` config section.
 
-    lower_bound = _one_month_ago_utc_date(datetime.now(UTC))
-    rewritten: list[str] = []
-    i = 0
-    has_start_date = False
+    Medallion runs should use the same historical boundaries as direct
+    ``bronze-build`` runs unless the medallion step explicitly overrides them.
+    """
 
-    while i < len(cli_args):
-        token = cli_args[i]
-        if token == "--start-date":
-            has_start_date = True
-            rewritten.append(token)
-            if i + 1 < len(cli_args) and not cli_args[i + 1].startswith("--"):
-                rewritten.append(_clamp_date_lower_bound(cli_args[i + 1], lower_bound))
-                i += 2
-            else:
-                rewritten.append(lower_bound)
-                i += 1
-            continue
-        if token in {"--symbol-start-dates", "--exchange-symbol-start-dates"}:
-            rewritten.append(token)
-            i += 1
-            values: list[str] = []
-            while i < len(cli_args) and not cli_args[i].startswith("--"):
-                values.append(cli_args[i])
-                i += 1
-            rewritten.extend(_clamp_symbol_date_entries(values, lower_bound=lower_bound))
-            continue
-        rewritten.append(token)
-        i += 1
+    bronze_cfg = config_data.get("bronze-build")
+    if not isinstance(bronze_cfg, dict):
+        return cli_args
 
-    if not has_start_date:
-        rewritten.extend(["--start-date", lower_bound])
+    rewritten = list(cli_args)
+    start_date = bronze_cfg.get("start_date")
+    if isinstance(start_date, str) and start_date.strip() and not _has_option(rewritten, "--start-date"):
+        rewritten.extend(["--start-date", start_date.strip()])
+
+    symbol_start_dates = _string_list(bronze_cfg.get("symbol_start_dates"))
+    if symbol_start_dates and not _has_option(rewritten, "--symbol-start-dates"):
+        rewritten.append("--symbol-start-dates")
+        rewritten.extend(symbol_start_dates)
+
+    exchange_symbol_start_dates = _string_list(bronze_cfg.get("exchange_symbol_start_dates"))
+    if exchange_symbol_start_dates and not _has_option(rewritten, "--exchange-symbol-start-dates"):
+        rewritten.append("--exchange-symbol-start-dates")
+        rewritten.extend(exchange_symbol_start_dates)
+
     return rewritten
 
 
