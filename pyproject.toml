@@ -28,6 +28,7 @@ dev = [
   "pyright>=1.1.407",
   "pytest>=9.0",
   "pytest-cov>=7.0",
+  "pytest-xdist>=3.8",
   "ruff>=0.14",
   "ty>=0.0.1a23",
 ]
@@ -44,7 +45,7 @@ exclude = ["tests*", "notebooks*"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
-addopts = "-q --cov=application --cov=ingestion --cov=api --cov-report=term-missing --cov-fail-under=85"
+addopts = "-q -n logical --dist=worksteal --cov=application --cov=ingestion --cov=api --cov-report=term-missing --cov-fail-under=85"
 
 [tool.ruff]
 line-length = 120

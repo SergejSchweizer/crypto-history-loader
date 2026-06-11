@@ -23,14 +23,26 @@ def symbol_start_open_ms_bound(
     symbol_start_open_ms: dict[str, int],
     exchange_symbol_start_open_ms: dict[str, int],
 ) -> int | None:
-    """Resolve exchange-symbol boundary, then symbol boundary, then global boundary."""
+    """Resolve the effective Bronze start boundary.
+
+    Exchange-symbol and symbol bounds may narrow a run to a later known data
+    availability date, but they must not widen an explicit global start date to
+    older history.
+    """
 
     exchange_key = exchange.lower()
     symbol_key = canonical_symbol_key(symbol)
     exchange_symbol_key = f"{exchange_key}:{symbol_key}"
+    specific_bound = None
     if exchange_symbol_key in exchange_symbol_start_open_ms:
-        return exchange_symbol_start_open_ms[exchange_symbol_key]
-    return symbol_start_open_ms.get(symbol_key, global_start_open_ms)
+        specific_bound = exchange_symbol_start_open_ms[exchange_symbol_key]
+    else:
+        specific_bound = symbol_start_open_ms.get(symbol_key)
+    if global_start_open_ms is None:
+        return specific_bound
+    if specific_bound is None:
+        return global_start_open_ms
+    return max(global_start_open_ms, specific_bound)
 
 
 def configure_bronze_start_bounds(

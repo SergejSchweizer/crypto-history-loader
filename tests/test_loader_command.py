@@ -12,8 +12,9 @@ from typing import Any, cast
 import pytest
 
 from api.commands import loader as loader_cmd
-from application.dto import CandleFetchTaskDTO, PersistResultDTO
+from application.dto import CandleFetchTaskDTO, PersistResultDTO, TradeFetchTaskDTO
 from ingestion.spot import SpotCandle
+from ingestion.trades import OptionTradeTick, TradeTick
 
 
 def test_run_bronze_build_emits_manifest_and_plot_file_lists(tmp_path: Path, monkeypatch, capsys) -> None:  # type: ignore[no-untyped-def]
@@ -101,6 +102,97 @@ def test_run_bronze_build_emits_manifest_and_plot_file_lists(tmp_path: Path, mon
     assert payload["_plot_files"] == [str(parquet_path.with_suffix(".png").resolve())]
 
 
+def test_run_bronze_build_persists_trade_chunks_incrementally(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Bronze trade fetches should persist chunks for both perp and option datasets."""
+
+    class _NoopLock:
+        def __init__(self, lock_path: str) -> None:
+            del lock_path
+
+        def __enter__(self) -> None:
+            return None
+
+        def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
+            del exc_type, exc, tb
+
+    perp_tick = TradeTick(
+        exchange="deribit",
+        symbol="BTC-PERPETUAL",
+        instrument_type="perp",
+        trade_id="perp-1",
+        trade_time=datetime(2026, 5, 1, 0, 0, tzinfo=UTC),
+        price=100.0,
+        quantity=1.0,
+        side="buy",
+        is_maker=False,
+        source_endpoint="public_trades",
+    )
+    option_tick = OptionTradeTick(
+        exchange="deribit",
+        symbol="BTC",
+        instrument_type="option",
+        instrument_name="BTC-31DEC26-100000-C",
+        expiry="31DEC26",
+        strike=100000.0,
+        option_type="call",
+        trade_id="option-1",
+        trade_time=datetime(2026, 5, 1, 0, 0, tzinfo=UTC),
+        price=0.01,
+        quantity=2.0,
+        side="sell",
+        is_maker=True,
+        source_endpoint="public_option_trades",
+    )
+    persisted_markets: list[str] = []
+
+    def _fake_fetch_all_task_groups(**kwargs: object):  # type: ignore[no-untyped-def]
+        callback = kwargs.get("on_trade_task_chunk")
+        assert callable(callback)
+        cast(Any, callback)(TradeFetchTaskDTO(exchange="deribit", market="perp", symbol="BTC"), [perp_tick])
+        cast(Any, callback)(TradeFetchTaskDTO(exchange="deribit", market="option", symbol="BTC"), [option_tick])
+        return (
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {("deribit", "perp", "BTC"): [perp_tick], ("deribit", "option", "BTC"): [option_tick]},
+            {},
+        )
+
+    def _fake_persist_loader_outputs_dto(**kwargs: object) -> PersistResultDTO:
+        storage = cast(Any, kwargs["storage"])
+        market = next(iter(storage.trades))
+        persisted_markets.append(str(market))
+        return PersistResultDTO([str(tmp_path / f"{market}.parquet")])
+
+    monkeypatch.setattr(loader_cmd, "SingleInstanceLock", _NoopLock)
+    monkeypatch.setattr(loader_cmd, "_fetch_all_task_groups", _fake_fetch_all_task_groups)
+    monkeypatch.setattr(loader_cmd, "persist_loader_outputs_dto", _fake_persist_loader_outputs_dto)
+    monkeypatch.setattr(loader_cmd, "ensure_bronze_sidecars", lambda **kwargs: [])
+
+    args = argparse.Namespace(
+        exchange="deribit",
+        exchanges=None,
+        market=["perp_trades", "option_trades"],
+        symbols=["BTC"],
+        perp_trade_symbols=["BTC"],
+        option_trade_symbols=["BTC"],
+        save_parquet_lake=True,
+        lake_root=str(tmp_path),
+        no_json_output=True,
+        tail_delta_only=True,
+    )
+
+    loader_cmd.run_bronze_build(args=args, logger=logging.getLogger("test_trade_incremental_persist"))
+
+    assert persisted_markets == ["perp", "option"]
+
+
 def test_exchange_symbol_start_dates_override_symbol_and_global_bounds() -> None:
     original_tail = loader_cmd._TAIL_DELTA_ONLY
     original_global = loader_cmd._BRONZE_START_OPEN_MS
@@ -113,6 +205,24 @@ def test_exchange_symbol_start_dates_override_symbol_and_global_bounds() -> None
         loader_cmd._BRONZE_EXCHANGE_SYMBOL_START_OPEN_MS = {"deribit:BTC": 3000}
         assert loader_cmd._symbol_start_open_ms_bound(exchange="deribit", symbol="BTCUSDT") == 3000
         assert loader_cmd._symbol_start_open_ms_bound(exchange="deribit", symbol="ETHUSDT") == 1000
+    finally:
+        loader_cmd._TAIL_DELTA_ONLY = original_tail
+        loader_cmd._BRONZE_START_OPEN_MS = original_global
+        loader_cmd._BRONZE_SYMBOL_START_OPEN_MS = original_symbol
+        loader_cmd._BRONZE_EXCHANGE_SYMBOL_START_OPEN_MS = original_exchange_symbol
+
+
+def test_global_start_date_is_not_widened_by_older_symbol_bounds() -> None:
+    original_tail = loader_cmd._TAIL_DELTA_ONLY
+    original_global = loader_cmd._BRONZE_START_OPEN_MS
+    original_symbol = dict(loader_cmd._BRONZE_SYMBOL_START_OPEN_MS)
+    original_exchange_symbol = dict(loader_cmd._BRONZE_EXCHANGE_SYMBOL_START_OPEN_MS)
+    try:
+        loader_cmd._TAIL_DELTA_ONLY = False
+        loader_cmd._BRONZE_START_OPEN_MS = 3000
+        loader_cmd._BRONZE_SYMBOL_START_OPEN_MS = {"BTC": 1000}
+        loader_cmd._BRONZE_EXCHANGE_SYMBOL_START_OPEN_MS = {}
+        assert loader_cmd._symbol_start_open_ms_bound(exchange="deribit", symbol="BTCUSDT") == 3000
     finally:
         loader_cmd._TAIL_DELTA_ONLY = original_tail
         loader_cmd._BRONZE_START_OPEN_MS = original_global

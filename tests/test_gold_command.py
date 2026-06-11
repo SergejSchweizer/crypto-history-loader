@@ -162,3 +162,24 @@ def test_run_gold_build_rejects_invalid_retention_keep_versions() -> None:
     )
     with pytest.raises(ValueError, match="retention-keep-versions"):
         gold_cmd.run_gold_build(args=args, logger=logging.getLogger("test"))
+
+
+def test_run_gold_build_rejects_invalid_maxprocesses() -> None:
+    args = argparse.Namespace(
+        silver_root="lake/silver",
+        gold_root="lake/gold",
+        l2_root="remote_l2_m1_features",
+        exchange="deribit",
+        dataset_id="gold.market.full.m1",
+        dataset_version="v1.0.0",
+        auto_version=False,
+        version_base="v1.0.0",
+        symbols=None,
+        l2_validation_mode="strict",
+        retention_keep_versions=3,
+        maxprocesses=0,
+        no_json_output=True,
+    )
+
+    with pytest.raises(ValueError, match="maxprocesses"):
+        gold_cmd.run_gold_build(args=args, logger=logging.getLogger("test"))

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Any, cast
 
 import pytest
@@ -16,6 +16,7 @@ from application.services.fetch_service import (
     _heartbeat_seconds,
     _ranges_in_random_order,
     _run_with_optional_timeout,
+    _split_range_into_trade_windows,
     _split_range_into_utc_days,
     _task_timeout_seconds,
     fetch_candle_tasks_parallel,
@@ -28,6 +29,7 @@ from application.services.fetch_service import (
     fetch_trade_tasks_parallel,
 )
 from ingestion.funding import FundingPoint
+from ingestion.http_client import HttpClientError
 from ingestion.open_interest import OpenInterestPoint
 from ingestion.spot import SpotCandle
 from ingestion.trades import TradeTick
@@ -422,6 +424,25 @@ def test_split_range_into_utc_days_splits_cross_day_windows() -> None:
     assert windows[1][1] == end_ms
 
 
+def test_split_range_into_trade_windows_uses_market_specific_bounds() -> None:
+    start_ms = int(datetime(2026, 4, 27, 0, 0, tzinfo=UTC).timestamp() * 1000)
+    end_ms = int(datetime(2026, 4, 27, 0, 59, 59, 999000, tzinfo=UTC).timestamp() * 1000)
+
+    perp_windows = _split_range_into_trade_windows(start_ms, end_ms, market="perp")
+    option_windows = _split_range_into_trade_windows(start_ms, end_ms, market="option")
+
+    assert len(perp_windows) == 4
+    assert perp_windows[0] == (
+        start_ms,
+        int(datetime(2026, 4, 27, 0, 14, 59, 999000, tzinfo=UTC).timestamp() * 1000),
+    )
+    assert perp_windows[-1] == (
+        int(datetime(2026, 4, 27, 0, 45, tzinfo=UTC).timestamp() * 1000),
+        end_ms,
+    )
+    assert option_windows == [(start_ms, end_ms)]
+
+
 def test_fetch_symbol_candles_tail_delta_only_passes_history_chunk_callback() -> None:
     captured: dict[str, object] = {}
 
@@ -451,7 +472,6 @@ def test_fetch_symbol_candles_tail_delta_only_passes_history_chunk_callback() ->
 
 
 def test_fetch_symbol_trades_full_gap_fill_respects_start_bound_for_existing_symbol() -> None:
-    earliest_existing = datetime(2022, 4, 29, 0, 0, tzinfo=UTC)
     start_bound = datetime(2022, 4, 29, 0, 1, tzinfo=UTC)
     end_open_time = datetime(2022, 4, 29, 0, 1, 30, tzinfo=UTC)
     start_bound_ms = int(start_bound.timestamp() * 1000)
@@ -506,7 +526,7 @@ def test_fetch_symbol_trades_full_gap_fill_respects_start_bound_for_existing_sym
         market="perp",
         symbol="BTC",
         lake_root="lake/bronze",
-        open_times_reader=lambda **kwargs: [earliest_existing],
+        partition_dates_reader=lambda **kwargs: [date(2022, 4, 28)],
         symbol_normalizer=lambda **kwargs: "BTC",
         now_open_resolver=lambda **kwargs: end_open_ms,
         history_fetcher=lambda **kwargs: pytest.fail("history_fetcher should not be called when open_times exist"),
@@ -523,12 +543,11 @@ def test_fetch_symbol_trades_full_gap_fill_respects_start_bound_for_existing_sym
 
 
 def test_fetch_symbol_trades_full_gap_fill_fetches_internal_and_tail_gaps() -> None:
-    first_existing = datetime(2022, 4, 29, 0, 0, tzinfo=UTC)
-    second_existing = datetime(2022, 4, 29, 0, 2, tzinfo=UTC)
-    end_open = datetime(2022, 4, 29, 0, 3, tzinfo=UTC)
+    end_open = datetime(2022, 5, 2, 0, 3, tzinfo=UTC)
     end_open_ms = int(end_open.timestamp() * 1000)
-    gap_one_ms = int(datetime(2022, 4, 29, 0, 1, tzinfo=UTC).timestamp() * 1000)
-    gap_tail_ms = int(datetime(2022, 4, 29, 0, 3, tzinfo=UTC).timestamp() * 1000)
+    gap_one_start_ms = int(datetime(2022, 4, 30, 0, 0, tzinfo=UTC).timestamp() * 1000)
+    gap_one_end_ms = int(datetime(2022, 4, 30, 23, 59, 59, 999000, tzinfo=UTC).timestamp() * 1000)
+    gap_tail_start_ms = int(datetime(2022, 5, 2, 0, 0, tzinfo=UTC).timestamp() * 1000)
     calls: list[tuple[int, int]] = []
 
     def _range_fetcher(**kwargs: object) -> list[TradeTick]:
@@ -542,7 +561,8 @@ def test_fetch_symbol_trades_full_gap_fill_fetches_internal_and_tail_gaps() -> N
         market="perp",
         symbol="BTC",
         lake_root="lake/bronze",
-        open_times_reader=lambda **kwargs: [first_existing, second_existing],
+        partition_dates_reader=lambda **kwargs: [date(2022, 4, 29), date(2022, 5, 1)],
+        partition_open_time_bounds_reader=lambda **kwargs: {},
         symbol_normalizer=lambda **kwargs: "BTC-PERPETUAL",
         now_open_resolver=lambda **kwargs: end_open_ms,
         history_fetcher=lambda **kwargs: pytest.fail("history_fetcher should not be called when open_times exist"),
@@ -551,10 +571,91 @@ def test_fetch_symbol_trades_full_gap_fill_fetches_internal_and_tail_gaps() -> N
     )
 
     assert rows == []
-    assert set(calls) == {(gap_one_ms, gap_one_ms), (gap_tail_ms, gap_tail_ms)}
+    assert calls[0][0] == gap_one_start_ms
+    assert calls[-1] == (gap_tail_start_ms, end_open_ms)
+    assert any(end == gap_one_end_ms for _, end in calls)
 
 
-def test_fetch_symbol_trades_bootstrap_with_start_bound_uses_day_range_fetch() -> None:
+def test_fetch_symbol_trades_does_not_plan_minute_gaps_from_tick_timestamps() -> None:
+    end_open_ms = int(datetime(2022, 4, 29, 0, 3, tzinfo=UTC).timestamp() * 1000)
+    calls: list[tuple[int, int]] = []
+
+    def _range_fetcher(**kwargs: object) -> list[TradeTick]:
+        calls.append((int(cast(Any, kwargs["start_open_ms"])), int(cast(Any, kwargs["end_open_ms"]))))
+        return []
+
+    rows = fetch_symbol_trades(
+        exchange="deribit",
+        market="perp",
+        symbol="BTC",
+        lake_root="lake/bronze",
+        partition_dates_reader=lambda **kwargs: [date(2022, 4, 29)],
+        partition_open_time_bounds_reader=lambda **kwargs: {},
+        symbol_normalizer=lambda **kwargs: "BTC-PERPETUAL",
+        now_open_resolver=lambda **kwargs: end_open_ms,
+        history_fetcher=lambda **kwargs: pytest.fail("history_fetcher should not be called when partitions exist"),
+        range_fetcher=_range_fetcher,
+        tail_delta_only=False,
+    )
+
+    assert rows == []
+    assert calls == []
+
+
+def test_fetch_symbol_trades_resumes_partial_trade_partition_from_max_open_time() -> None:
+    end_open_ms = int(datetime(2022, 4, 29, 11, 30, tzinfo=UTC).timestamp() * 1000)
+    stored_max = datetime(2022, 4, 29, 7, 14, 52, tzinfo=UTC)
+    calls: list[tuple[int, int]] = []
+
+    def _range_fetcher(**kwargs: object) -> list[TradeTick]:
+        calls.append((int(cast(Any, kwargs["start_open_ms"])), int(cast(Any, kwargs["end_open_ms"]))))
+        return []
+
+    rows = fetch_symbol_trades(
+        exchange="deribit",
+        market="perp",
+        symbol="BTC",
+        lake_root="lake/bronze",
+        partition_dates_reader=lambda **kwargs: [date(2022, 4, 29)],
+        partition_open_time_bounds_reader=lambda **kwargs: {
+            date(2022, 4, 29): (datetime(2022, 4, 29, 0, 0, 1, tzinfo=UTC), stored_max)
+        },
+        symbol_normalizer=lambda **kwargs: "BTC-PERPETUAL",
+        now_open_resolver=lambda **kwargs: end_open_ms,
+        history_fetcher=lambda **kwargs: pytest.fail("history_fetcher should not be called when partitions exist"),
+        range_fetcher=_range_fetcher,
+        tail_delta_only=False,
+    )
+
+    assert rows == []
+    assert calls[0][0] == int(stored_max.timestamp() * 1000) + 1
+    assert calls[-1][1] == end_open_ms
+
+
+def test_fetch_symbol_trades_uses_partition_dates_instead_of_open_time_scan() -> None:
+    end_open_ms = int(datetime(2022, 4, 29, 0, 3, tzinfo=UTC).timestamp() * 1000)
+    partition_calls: list[object] = []
+
+    rows = fetch_symbol_trades(
+        exchange="deribit",
+        market="perp",
+        symbol="BTC",
+        lake_root="lake/bronze",
+        open_times_reader=lambda **kwargs: pytest.fail("trade fetch should not scan tick open_time values"),
+        partition_dates_reader=lambda **kwargs: partition_calls.append(kwargs) or [date(2022, 4, 29)],
+        partition_open_time_bounds_reader=lambda **kwargs: {},
+        symbol_normalizer=lambda **kwargs: "BTC-PERPETUAL",
+        now_open_resolver=lambda **kwargs: end_open_ms,
+        history_fetcher=lambda **kwargs: pytest.fail("history_fetcher should not be called when partitions exist"),
+        range_fetcher=lambda **kwargs: pytest.fail("range_fetcher should not be called for covered trade day"),
+        tail_delta_only=False,
+    )
+
+    assert rows == []
+    assert len(partition_calls) == 1
+
+
+def test_fetch_symbol_trades_bootstrap_with_start_bound_uses_trade_range_fetch() -> None:
     start_bound = datetime(2022, 4, 29, 0, 0, tzinfo=UTC)
     end_open_time = datetime(2022, 4, 29, 0, 1, 30, tzinfo=UTC)
     start_bound_ms = int(start_bound.timestamp() * 1000)
@@ -583,7 +684,7 @@ def test_fetch_symbol_trades_bootstrap_with_start_bound_uses_day_range_fetch() -
         market="perp",
         symbol="BTC",
         lake_root="lake/bronze",
-        open_times_reader=lambda **kwargs: [],
+        partition_dates_reader=lambda **kwargs: [],
         symbol_normalizer=lambda **kwargs: "BTC-PERPETUAL",
         now_open_resolver=lambda **kwargs: end_open_ms,
         history_fetcher=lambda **kwargs: pytest.fail("history_fetcher should not be called when start bound is set"),
@@ -594,6 +695,153 @@ def test_fetch_symbol_trades_bootstrap_with_start_bound_uses_day_range_fetch() -
 
     assert calls == [(start_bound_ms, end_open_ms)]
     assert [(row.trade_time, row.trade_id) for row in rows] == [(datetime(2022, 4, 29, 0, 0, 10, tzinfo=UTC), "a")]
+
+
+def test_fetch_symbol_trades_debug_logs_scan_plan_and_window(caplog: pytest.LogCaptureFixture) -> None:
+    start_bound = datetime(2022, 4, 29, 0, 0, tzinfo=UTC)
+    end_open_time = datetime(2022, 4, 29, 0, 1, tzinfo=UTC)
+    start_bound_ms = int(start_bound.timestamp() * 1000)
+    end_open_ms = int(end_open_time.timestamp() * 1000)
+    tick = TradeTick(
+        exchange="deribit",
+        symbol="BTC",
+        instrument_type="perp",
+        trade_id="debug",
+        trade_time=datetime(2022, 4, 29, 0, 0, 10, tzinfo=UTC),
+        price=100.0,
+        quantity=1.0,
+        side="buy",
+        is_maker=False,
+        source_endpoint="public_trades",
+    )
+
+    with caplog.at_level(logging.DEBUG):
+        rows = fetch_symbol_trades(
+            exchange="deribit",
+            market="perp",
+            symbol="BTC",
+            lake_root="lake/bronze",
+            partition_dates_reader=lambda **kwargs: [],
+            symbol_normalizer=lambda **kwargs: "BTC-PERPETUAL",
+            now_open_resolver=lambda **kwargs: end_open_ms,
+            history_fetcher=lambda **kwargs: pytest.fail(
+                "history_fetcher should not be called when start bound is set"
+            ),
+            range_fetcher=lambda **kwargs: [tick],
+            tail_delta_only=False,
+            start_open_ms_bound=start_bound_ms,
+        )
+
+    assert rows == [tick]
+    assert "Trade partition scan start" in caplog.text
+    assert "Trade partition scan done" in caplog.text
+    assert "Trade bootstrap plan" in caplog.text
+    assert "Trade-window fetch start" in caplog.text
+    assert "Trade-window fetch done" in caplog.text
+    assert "Trade bootstrap progress" in caplog.text
+
+
+def test_fetch_symbol_trades_continues_after_recoverable_trade_window_error(caplog: pytest.LogCaptureFixture) -> None:
+    start_bound = datetime(2022, 4, 29, 0, 0, tzinfo=UTC)
+    end_open_time = datetime(2022, 4, 29, 0, 16, tzinfo=UTC)
+    start_bound_ms = int(start_bound.timestamp() * 1000)
+    end_open_ms = int(end_open_time.timestamp() * 1000)
+    first_window_end_ms = int(datetime(2022, 4, 29, 0, 14, 59, 999000, tzinfo=UTC).timestamp() * 1000)
+    calls: list[tuple[int, int]] = []
+    tick = TradeTick(
+        exchange="deribit",
+        symbol="BTC",
+        instrument_type="perp",
+        trade_id="recovered",
+        trade_time=datetime(2022, 4, 30, 0, 0, 1, tzinfo=UTC),
+        price=100.0,
+        quantity=1.0,
+        side="buy",
+        is_maker=False,
+        source_endpoint="public_trades",
+    )
+
+    def _range_fetcher(**kwargs: object) -> list[TradeTick]:
+        start_open_ms = int(cast(Any, kwargs["start_open_ms"]))
+        end_ms = int(cast(Any, kwargs["end_open_ms"]))
+        calls.append((start_open_ms, end_ms))
+        if end_ms == first_window_end_ms:
+            raise HttpClientError("Connection error for x: timed out")
+        return [tick]
+
+    with caplog.at_level(logging.WARNING):
+        rows = fetch_symbol_trades(
+            exchange="deribit",
+            market="perp",
+            symbol="BTC",
+            lake_root="lake/bronze",
+            partition_dates_reader=lambda **kwargs: [],
+            symbol_normalizer=lambda **kwargs: "BTC-PERPETUAL",
+            now_open_resolver=lambda **kwargs: end_open_ms,
+            history_fetcher=lambda **kwargs: pytest.fail(
+                "history_fetcher should not be called when start bound is set"
+            ),
+            range_fetcher=_range_fetcher,
+            tail_delta_only=False,
+            start_open_ms_bound=start_bound_ms,
+        )
+
+    assert len(calls) == 2
+    assert rows == [tick]
+    assert "Trade-window fetch failed" in caplog.text
+    assert "Trade bootstrap completed with failed trade windows" in caplog.text
+
+
+def test_fetch_symbol_trades_fails_when_all_trade_windows_fail() -> None:
+    start_bound_ms = int(datetime(2022, 4, 29, 0, 0, tzinfo=UTC).timestamp() * 1000)
+    end_open_ms = int(datetime(2022, 4, 29, 0, 1, tzinfo=UTC).timestamp() * 1000)
+
+    def _range_fetcher(**kwargs: object) -> list[TradeTick]:
+        del kwargs
+        raise HttpClientError("Connection error for x: timed out")
+
+    with pytest.raises(RuntimeError, match="all trade windows failed"):
+        fetch_symbol_trades(
+            exchange="deribit",
+            market="perp",
+            symbol="BTC",
+            lake_root="lake/bronze",
+            partition_dates_reader=lambda **kwargs: [],
+            symbol_normalizer=lambda **kwargs: "BTC-PERPETUAL",
+            now_open_resolver=lambda **kwargs: end_open_ms,
+            history_fetcher=lambda **kwargs: pytest.fail(
+                "history_fetcher should not be called when start bound is set"
+            ),
+            range_fetcher=_range_fetcher,
+            tail_delta_only=False,
+            start_open_ms_bound=start_bound_ms,
+        )
+
+
+def test_fetch_symbol_trades_does_not_swallow_nonrecoverable_trade_window_error() -> None:
+    start_bound_ms = int(datetime(2022, 4, 29, 0, 0, tzinfo=UTC).timestamp() * 1000)
+    end_open_ms = int(datetime(2022, 4, 29, 0, 1, tzinfo=UTC).timestamp() * 1000)
+
+    def _range_fetcher(**kwargs: object) -> list[TradeTick]:
+        del kwargs
+        raise ValueError("bad trade payload")
+
+    with pytest.raises(ValueError, match="bad trade payload"):
+        fetch_symbol_trades(
+            exchange="deribit",
+            market="perp",
+            symbol="BTC",
+            lake_root="lake/bronze",
+            partition_dates_reader=lambda **kwargs: [],
+            symbol_normalizer=lambda **kwargs: "BTC-PERPETUAL",
+            now_open_resolver=lambda **kwargs: end_open_ms,
+            history_fetcher=lambda **kwargs: pytest.fail(
+                "history_fetcher should not be called when start bound is set"
+            ),
+            range_fetcher=_range_fetcher,
+            tail_delta_only=False,
+            start_open_ms_bound=start_bound_ms,
+        )
 
 
 def test_fetch_symbol_candles_bootstrap_with_start_bound_uses_day_range_fetch() -> None:

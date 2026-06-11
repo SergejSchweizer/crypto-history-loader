@@ -6,6 +6,7 @@ import argparse
 import json
 import logging
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from typing import cast
 
 from application.services.silver_service import (
@@ -47,6 +48,7 @@ def add_silver_build_parser(subparsers: argparse._SubParsersAction[argparse.Argu
     parser.add_argument("--timeframe", default="1m", help="Timeframe to process (default: 1m)")
     parser.add_argument("--manifest", action="store_true", help="Generate monthly silver manifest sidecars")
     parser.add_argument("--plot", action="store_true", help="Generate monthly silver plot PNG sidecars")
+    parser.add_argument("--maxprocesses", type=int, default=4, help="Maximum parallel silver build workers")
     parser.add_argument("--no-json-output", action="store_true", help="Suppress JSON output")
 
 
@@ -57,9 +59,12 @@ def run_silver_build(args: argparse.Namespace, logger: logging.Logger) -> None:
     silver_root = cast(str, args.silver_root)
     exchange = cast(str, args.exchange)
     timeframe = cast(str, args.timeframe)
+    maxprocesses = int(getattr(args, "maxprocesses", 4))
+    if maxprocesses < 1:
+        raise ValueError(f"Invalid --maxprocesses '{maxprocesses}'. Value must be an integer >= 1")
     reports: list[dict[str, object]] = []
 
-    def _append_report(report_market: str, symbol_value: str, report: SilverBuildReport) -> None:
+    def _report_payload(report_market: str, symbol_value: str, report: SilverBuildReport) -> dict[str, object]:
         manifest_path: str | None = None
         manifest_paths: list[str] = []
         plot_path: str | None = None
@@ -83,9 +88,9 @@ def run_silver_build(args: argparse.Namespace, logger: logging.Logger) -> None:
         report_dict["manifest_paths"] = manifest_paths
         report_dict["plot_path"] = plot_path
         report_dict["plot_paths"] = plot_paths
-        reports.append(report_dict)
+        return report_dict
 
-    def _run_funding(symbol: str) -> None:
+    def _run_funding(symbol: str) -> list[dict[str, object]]:
         observed = build_funding_observed_for_symbol(
             bronze_root=bronze_root,
             silver_root=silver_root,
@@ -93,7 +98,7 @@ def run_silver_build(args: argparse.Namespace, logger: logging.Logger) -> None:
             symbol=symbol,
             timeframe=DERIBIT_FUNDING_NATIVE_INTERVAL,
         )
-        _append_report("funding_observed", symbol, observed)
+        observed_payload = _report_payload("funding_observed", symbol, observed)
 
         feature = build_funding_1m_feature_for_symbol(
             silver_root=silver_root,
@@ -101,15 +106,16 @@ def run_silver_build(args: argparse.Namespace, logger: logging.Logger) -> None:
             symbol=symbol,
             observed_timeframe=DERIBIT_FUNDING_NATIVE_INTERVAL,
         )
-        _append_report("funding_1m_feature", symbol, feature)
+        feature_payload = _report_payload("funding_1m_feature", symbol, feature)
         logger.info(
             "Silver funding reports written symbol=%s observed_rows=%s feature_rows=%s",
             symbol,
             observed.rows_out,
             feature.rows_out,
         )
+        return [observed_payload, feature_payload]
 
-    def _run_oi(symbol: str) -> None:
+    def _run_oi(symbol: str) -> list[dict[str, object]]:
         observed = build_oi_observed_for_symbol(
             bronze_root=bronze_root,
             silver_root=silver_root,
@@ -117,7 +123,7 @@ def run_silver_build(args: argparse.Namespace, logger: logging.Logger) -> None:
             symbol=symbol,
             timeframe=timeframe,
         )
-        _append_report("oi_observed", symbol, observed)
+        observed_payload = _report_payload("oi_observed", symbol, observed)
 
         feature = build_oi_1m_feature_for_symbol(
             silver_root=silver_root,
@@ -125,15 +131,16 @@ def run_silver_build(args: argparse.Namespace, logger: logging.Logger) -> None:
             symbol=symbol,
             observed_timeframe=timeframe,
         )
-        _append_report("oi_1m_feature", symbol, feature)
+        feature_payload = _report_payload("oi_1m_feature", symbol, feature)
         logger.info(
             "Silver OI reports written symbol=%s observed_rows=%s feature_rows=%s",
             symbol,
             observed.rows_out,
             feature.rows_out,
         )
+        return [observed_payload, feature_payload]
 
-    def _run_trades(symbol: str) -> None:
+    def _run_trades(symbol: str) -> list[dict[str, object]]:
         observed = build_perp_trades_observed_for_symbol(
             bronze_root=bronze_root,
             silver_root=silver_root,
@@ -142,22 +149,23 @@ def run_silver_build(args: argparse.Namespace, logger: logging.Logger) -> None:
             instrument_type="perp",
             timeframe="tick",
         )
-        _append_report("perp_trades_observed", symbol, observed)
+        observed_payload = _report_payload("perp_trades_observed", symbol, observed)
         feature = build_perp_trades_1m_feature_for_symbol(
             silver_root=silver_root,
             exchange=exchange,
             symbol=symbol,
             observed_timeframe="tick",
         )
-        _append_report("perp_trades_1m_feature", symbol, feature)
+        feature_payload = _report_payload("perp_trades_1m_feature", symbol, feature)
         logger.info(
             "Silver trades reports written symbol=%s observed_rows=%s feature_rows=%s",
             symbol,
             observed.rows_out,
             feature.rows_out,
         )
+        return [observed_payload, feature_payload]
 
-    def _run_option_trades(symbol: str) -> None:
+    def _run_option_trades(symbol: str) -> list[dict[str, object]]:
         observed = build_perp_trades_observed_for_symbol(
             bronze_root=bronze_root,
             silver_root=silver_root,
@@ -168,7 +176,7 @@ def run_silver_build(args: argparse.Namespace, logger: logging.Logger) -> None:
             bronze_dataset_type="option_trades",
             output_dataset_type="option_trades_observed",
         )
-        _append_report("option_trades_observed", symbol, observed)
+        observed_payload = _report_payload("option_trades_observed", symbol, observed)
         feature = build_perp_trades_1m_feature_for_symbol(
             silver_root=silver_root,
             exchange=exchange,
@@ -177,15 +185,16 @@ def run_silver_build(args: argparse.Namespace, logger: logging.Logger) -> None:
             observed_dataset_type="option_trades_observed",
             output_dataset_type="option_trades_1m_feature",
         )
-        _append_report("option_trades_1m_feature", symbol, feature)
+        feature_payload = _report_payload("option_trades_1m_feature", symbol, feature)
         logger.info(
-            "Silver option trades reports written symbol=%s observed_rows=%s feature_rows=%s",
+            "Silver option_trades reports written symbol=%s observed_rows=%s feature_rows=%s",
             symbol,
             observed.rows_out,
             feature.rows_out,
         )
+        return [observed_payload, feature_payload]
 
-    def _run_ohlcv(market: str, symbol: str) -> None:
+    def _run_ohlcv(market: str, symbol: str) -> list[dict[str, object]]:
         report = build_silver_for_symbol(
             bronze_root=bronze_root,
             silver_root=silver_root,
@@ -194,7 +203,7 @@ def run_silver_build(args: argparse.Namespace, logger: logging.Logger) -> None:
             symbol=symbol,
             timeframe=timeframe,
         )
-        _append_report(market, symbol, report)
+        payload = _report_payload(market, symbol, report)
         logger.info(
             "Silver dataset built market=%s symbol=%s rows_in=%s rows_out=%s",
             market,
@@ -202,8 +211,9 @@ def run_silver_build(args: argparse.Namespace, logger: logging.Logger) -> None:
             report.rows_in,
             report.rows_out,
         )
+        return [payload]
 
-    market_handlers: dict[str, Callable[[str], None]] = {
+    market_handlers: dict[str, Callable[[str], list[dict[str, object]]]] = {
         "funding": _run_funding,
         "oi": _run_oi,
         "perp_trades": _run_trades,
@@ -221,6 +231,7 @@ def run_silver_build(args: argparse.Namespace, logger: logging.Logger) -> None:
     selected = getattr(args, "dataset", getattr(args, "market", None))
     if selected is None:
         raise ValueError("Missing dataset selection. Provide --dataset.")
+    jobs: list[tuple[str, str, Callable[[], list[dict[str, object]]]]] = []
     for market in cast(list[str], selected):
         symbols = cast(list[str] | None, args.symbols)
         bronze_dataset, bronze_instrument, discovery_timeframe = _discovery_params_for_market(market, timeframe)
@@ -235,9 +246,15 @@ def run_silver_build(args: argparse.Namespace, logger: logging.Logger) -> None:
         handler = market_handlers.get(market)
         for symbol in effective_symbols:
             if handler is not None:
-                handler(symbol)
+                jobs.append((market, symbol, lambda symbol=symbol, handler=handler: handler(symbol)))
             else:
-                _run_ohlcv(market, symbol)
+                jobs.append((market, symbol, lambda market=market, symbol=symbol: _run_ohlcv(market, symbol)))
+
+    logger.info("Silver build parallelization maxprocesses=%s jobs=%s", maxprocesses, len(jobs))
+    with ThreadPoolExecutor(max_workers=maxprocesses) as executor:
+        futures = [executor.submit(job) for _, _, job in jobs]
+        for future in futures:
+            reports.extend(future.result())
 
     if not bool(args.no_json_output):
         print(json.dumps({"reports": reports}, indent=2))

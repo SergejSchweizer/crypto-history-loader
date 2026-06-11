@@ -25,8 +25,8 @@ Author: Sergej Schweizer
   - [4.2 Perpetual (`dataset_type=perp`)](#42-perpetual-dataset_typeperp)
   - [4.3 Open Interest (`dataset_type=oi`)](#43-open-interest-dataset_typeoi)
   - [4.4 Funding (`dataset_type=funding`)](#44-funding-dataset_typefunding)
-  - [4.5 Perpetual Trades (`dataset_type=perp_trades`)](#45-perpetual-trades-dataset_typeperp_trades)
-  - [4.6 Option Trades (`dataset_type=option_trades`)](#46-option-trades-dataset_typeoption_trades)
+  - [4.5 `perp_trades` (`dataset_type=perp_trades`)](#45-perp_trades-dataset_typeperp_trades)
+  - [4.6 `option_trades` (`dataset_type=option_trades`)](#46-option_trades-dataset_typeoption_trades)
 - [5. Example Commands](#5-example-commands)
   - [5.1 End-to-End Pipeline](#51-end-to-end-pipeline)
   - [5.2 Layer Commands](#52-layer-commands)
@@ -179,7 +179,7 @@ uv sync --extra dev
 ```
 
 The `dev` extra installs the local quality-gate tools used by pre-commit and CI-style checks:
-Ruff, Mypy, Pyright, ty, import-linter, pytest, pytest-cov, and pre-commit.
+Ruff, Mypy, Pyright, ty, import-linter, pytest, pytest-cov, pytest-xdist, and pre-commit.
 
 Runtime configuration uses:
 
@@ -405,7 +405,7 @@ Coverage:
 | `deribit` | `ETH-PERPETUAL` | `8h` | `2019-04-30` | `2026-05-28` | 0 | 0.00% |
 | `deribit` | `SOL-PERPETUAL` | `8h` | `2022-03-25` | `2026-05-28` | 0 | 0.00% |
 
-## 4.5 Perpetual Trades (`dataset_type=perp_trades`)
+## 4.5 `perp_trades` (`dataset_type=perp_trades`)
 
 ### 1. Bronze layer
 
@@ -417,8 +417,11 @@ Time aggregation: native `tick` (one row per trade).
 
 Endpoint: primary `GET https://history.deribit.com/api/v2/public/get_last_trades_by_instrument_and_time`; fallback `GET https://history.deribit.com/api/v2/public/get_last_trades_by_currency_and_time` (base URL may fall back to `https://www.deribit.com`).
 Description: paginated tick-trade retrieval for perpetuals; returns trade-by-trade executions with timestamp, price, size, and side metadata.
-Reliability behavior: requests use Deribit's 1000-row page limit by default and retry/fall back across
+Reliability behavior: requests use 500-row pages by default, stay capped by Deribit's 1000-row page
+limit, split bounded Bronze fetches into 15-minute trade windows, and retry/fall back across
 configured endpoints for transient route, timeout, and connection-reset failures.
+Runtime override: set `DEPTH_DERIBIT_PERP_TRADES_PAGE_SIZE` to tune request page size within the
+`1..1000` bound.
 
 ### 2. Silver layer
 
@@ -455,9 +458,9 @@ Coverage:
 |---|---|---|---|---|---:|---:|
 | `deribit` | `BTC-PERPETUAL` | `tick` | `2018-08-14` | `2026-05-26` | 2334 | 82.10% |
 | `deribit` | `ETH-PERPETUAL` | `tick` | `2019-03-14` | `2026-05-26` | 2491 | 94.68% |
-| `deribit` | `SOL-PERPETUAL` | `tick` | `N/A` | `N/A` | N/A | N/A |
+| `deribit` | `SOL-PERPETUAL` | `tick` | `2022-04-29` | `2022-12-30` | 0 | 0.00% |
 
-## 4.6 Option Trades (`dataset_type=option_trades`)
+## 4.6 `option_trades` (`dataset_type=option_trades`)
 
 ### 1. Bronze layer
 
@@ -469,8 +472,11 @@ Time aggregation: native `tick`.
 
 Endpoint: `GET https://history.deribit.com/api/v2/public/get_last_trades_by_currency_and_time` (base URL may fall back to `https://www.deribit.com`).
 Description: paginated option tick-trade retrieval by currency; includes contract identifier fields used to derive `expiry`, `strike`, and `option_type`.
-Reliability behavior: requests use Deribit's 1000-row page limit by default and retry/fall back across
+Reliability behavior: requests use 500-row pages by default, stay capped by Deribit's 1000-row page
+limit, split bounded Bronze fetches into 60-minute trade windows, and retry/fall back across
 configured base URLs for transient route, timeout, and connection-reset failures.
+Runtime override: set `DEPTH_DERIBIT_OPTION_TRADES_PAGE_SIZE` to tune request page size within the
+`1..1000` bound.
 
 ### 2. Silver layer
 
@@ -510,7 +516,7 @@ Coverage:
 |---|---|---|---|---|---:|---:|
 | `deribit` | `BTC` | `tick` | `2018-08-14` | `2026-05-26` | 723 | 25.43% |
 | `deribit` | `ETH` | `tick` | `2019-03-21` | `2026-05-26` | 881 | 33.57% |
-| `deribit` | `SOL` | `tick` | `N/A` | `N/A` | N/A | N/A |
+| `deribit` | `SOL` | `tick` | `2022-05-04` | `2022-12-30` | 0 | 0.00% |
 
 ---
 
@@ -545,7 +551,8 @@ uv run python main.py silver-build \
   --silver-root lake/silver \
   --exchange deribit \
   --dataset spot perp oi funding perp_trades option_trades \
-  --timeframe 1m
+  --timeframe 1m \
+  --maxprocesses 4
 ```
 
 Gold:
@@ -555,6 +562,7 @@ uv run python main.py gold-build \
   --silver-root lake/silver \
   --gold-root lake/gold \
   --exchange deribit \
+  --maxprocesses 4 \
   --dataset-id gold.market.full.m1
 ```
 
@@ -583,7 +591,7 @@ Manual reset:
 rm -f .run/checkpoints/bronze-build.json
 ```
 
-Perp-trades storage path: `dataset_type=perp_trades`.
+`perp_trades` storage path: `dataset_type=perp_trades`.
 
 Gold source selection:
 
@@ -599,8 +607,8 @@ Gold retention policy:
 
 Available Gold dataset IDs:
 
-- `gold.market.perp_trades.m1` (perp-trade-flow only)
-- `gold.market.option_trades.m1` (option-trade-flow only)
+- `gold.market.perp_trades.m1` (`perp_trades` flow only)
+- `gold.market.option_trades.m1` (`option_trades` flow only)
 - `gold.market.core.m1`
 - `gold.market.core_funding.m1`
 - `gold.hybrid.full_l2.m1`
@@ -616,7 +624,7 @@ uv run pyright --level error
 uv run ty check
 uv run lint-imports --config .importlinter
 uv run python scripts/validate_config_with_pydantic.py --config config.yaml
-uv run pytest
+uv run --extra dev pytest
 ```
 
 | Check | Scope | Gate Objective | Failure Signal |
@@ -627,11 +635,11 @@ uv run pytest
 | `uv run ty check` | Additional typing gate | Maintain policy-level typing consistency across the codebase. | Unresolved typing gaps and annotation inconsistencies. |
 | `uv run lint-imports --config .importlinter` | Architecture boundaries | Enforce dependency direction and import-layer contracts. | Boundary violations (for example domain importing infrastructure internals). |
 | `uv run python scripts/validate_config_with_pydantic.py --config config.yaml` | Runtime config schema | Reject invalid runtime configuration before pipeline execution. | Missing/invalid config fields or schema/type constraint failures. |
-| `uv run pytest` | Behavioral + regression tests | Validate functional behavior and enforce coverage thresholds. | Test failures, behavioral regressions, or coverage below configured threshold. |
+| `uv run --extra dev pytest` | Behavioral + regression tests | Validate functional behavior in parallel and enforce coverage thresholds. | Test failures, behavioral regressions, or coverage below configured threshold. |
 
 Operational notes:
 
-- `pytest` coverage defaults are configured in `pyproject.toml`.
+- `pytest` coverage and parallel execution defaults are configured in `pyproject.toml`; xdist uses logical CPU workers with work-stealing distribution.
 - Pre-commit enforces the same logical quality-gate path used in CI.
 
 ---
