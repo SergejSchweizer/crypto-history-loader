@@ -55,6 +55,16 @@ def test_load_checkpoint_handles_unreadable_stale_and_missing_completed(tmp_path
     }
 
 
+def test_build_bronze_execution_policy_preserves_bounded_concurrency() -> None:
+    policy = runtime.build_bronze_execution_policy(configured_concurrency=3)
+
+    assert policy.effective_concurrency == 3
+    assert policy.candle_concurrency == 3
+    assert policy.oi_concurrency == 3
+    assert policy.funding_concurrency == 3
+    assert policy.trade_concurrency == 3
+
+
 def test_fingerprint_and_write_checkpoint_roundtrip(tmp_path: Path) -> None:
     args = argparse.Namespace(
         exchange="deribit",

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Protocol, cast
@@ -73,6 +74,7 @@ class IncrementalPersistor:
         self.streamed_oi_tasks: set[tuple[Exchange, str, str]] = set()
         self.streamed_funding_tasks: set[tuple[Exchange, str, str]] = set()
         self.streamed_trade_tasks: set[tuple[Exchange, TradeMarket, str]] = set()
+        self._lock = threading.Lock()
 
     def _log_new_daily_partitions(
         self,
@@ -306,8 +308,9 @@ class IncrementalPersistor:
     ) -> None:
         if not rows:
             return
-        self.streamed_trade_tasks.add((task.exchange, task.market, task.symbol))
-        self._persist_trade_task(task, rows, logger)
+        with self._lock:
+            self.streamed_trade_tasks.add((task.exchange, task.market, task.symbol))
+            self._persist_trade_task(task, rows, logger)
 
 
 def finalize_bronze_output(

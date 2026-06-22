@@ -15,7 +15,7 @@ from application.dto import BronzeExecutionPolicyDTO, BronzeFetchPlanDTO
 def build_bronze_execution_policy(configured_concurrency: int) -> BronzeExecutionPolicyDTO:
     """Build standardized Bronze execution policy."""
 
-    effective_concurrency = 1
+    effective_concurrency = max(1, configured_concurrency)
     return BronzeExecutionPolicyDTO(
         configured_concurrency=configured_concurrency,
         effective_concurrency=effective_concurrency,

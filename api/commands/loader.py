@@ -814,10 +814,7 @@ def run_bronze_build(args: argparse.Namespace, logger: logging.Logger) -> None:
             trade_concurrency = policy.trade_concurrency
             incremental_parquet_on_fetch = bool(args.save_parquet_lake)
             logger.info(
-                (
-                    "Fetch mode enabled for spot/perp, oi, funding, and perp_trades with "
-                    "concurrency=%s (configured=%s; parallelization disabled)"
-                ),
+                ("Fetch mode enabled for spot/perp, oi, funding, and perp_trades with concurrency=%s (configured=%s)"),
                 policy.effective_concurrency,
                 policy.configured_concurrency,
             )
