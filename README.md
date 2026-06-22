@@ -211,6 +211,40 @@ Coverage reference for missing statistics in this section:
 - Missing %: missing calendar days / expected calendar days
 - Missing Days: count of missing calendar days in the [Start Date, End Date] span
 
+Current Bronze missing-day snapshot generated from `lake/bronze` on 2026-06-22 21:39 CEST:
+
+| Dataset Type | Series | Start Date | End Date | Expected Days | Observed Days | Missing Days | Missing % |
+|---|---:|---|---|---:|---:|---:|---:|
+| `spot` | 3 | 2023-04-24 | 2026-06-22 | 3,159 | 3,159 | 0 | 0.00% |
+| `perp` | 3 | 2018-08-14 | 2026-06-22 | 7,044 | 7,044 | 0 | 0.00% |
+| `oi` | 3 | 2018-08-15 | 2026-06-22 | 7,086 | 7,086 | 0 | 0.00% |
+| `funding` | 3 | 2019-04-30 | 2026-06-22 | 6,782 | 6,782 | 0 | 0.00% |
+| `perp_trades` | 3 | 2018-08-14 | 2026-06-11 | 5,739 | 1,864 | 3,875 | 67.52% |
+| `option_trades` | 3 | 2018-08-14 | 2026-06-22 | 5,751 | 5,425 | 326 | 5.67% |
+
+Per-series Bronze missing-day detail:
+
+| Dataset Type | Exchange | Instrument | Symbol | Timeframe | Start Date | End Date | Expected Days | Observed Days | Missing Days | Missing % |
+|---|---|---|---|---|---|---|---:|---:|---:|---:|
+| `funding` | deribit | perp | `BTC-PERPETUAL` | 8h | 2019-04-30 | 2026-06-22 | 2,611 | 2,611 | 0 | 0.00% |
+| `funding` | deribit | perp | `ETH-PERPETUAL` | 8h | 2019-04-30 | 2026-06-22 | 2,611 | 2,611 | 0 | 0.00% |
+| `funding` | deribit | perp | `SOL-PERPETUAL` | 8h | 2022-03-16 | 2026-06-22 | 1,560 | 1,560 | 0 | 0.00% |
+| `oi` | deribit | perp | `BTC-PERPETUAL` | 1m | 2018-08-15 | 2026-06-22 | 2,869 | 2,869 | 0 | 0.00% |
+| `oi` | deribit | perp | `ETH-PERPETUAL` | 1m | 2019-03-15 | 2026-06-22 | 2,657 | 2,657 | 0 | 0.00% |
+| `oi` | deribit | perp | `SOL-PERPETUAL` | 1m | 2022-03-16 | 2026-06-22 | 1,560 | 1,560 | 0 | 0.00% |
+| `option_trades` | deribit | option | `BTC` | tick | 2018-08-14 | 2026-06-22 | 2,870 | 2,870 | 0 | 0.00% |
+| `option_trades` | deribit | option | `ETH` | tick | 2019-03-21 | 2026-06-11 | 2,640 | 2,314 | 326 | 12.35% |
+| `option_trades` | deribit | option | `SOL` | tick | 2022-05-04 | 2022-12-30 | 241 | 241 | 0 | 0.00% |
+| `perp` | deribit | perp | `BTC-PERPETUAL` | 1m | 2018-08-14 | 2026-06-22 | 2,870 | 2,870 | 0 | 0.00% |
+| `perp` | deribit | perp | `ETH-PERPETUAL` | 1m | 2019-03-14 | 2026-06-22 | 2,658 | 2,658 | 0 | 0.00% |
+| `perp` | deribit | perp | `SOL-PERPETUAL` | 1m | 2022-04-29 | 2026-06-22 | 1,516 | 1,516 | 0 | 0.00% |
+| `perp_trades` | deribit | perp | `BTC-PERPETUAL` | tick | 2018-08-14 | 2026-06-11 | 2,859 | 1,035 | 1,824 | 63.80% |
+| `perp_trades` | deribit | perp | `ETH-PERPETUAL` | tick | 2019-03-14 | 2026-05-29 | 2,634 | 583 | 2,051 | 77.87% |
+| `perp_trades` | deribit | perp | `SOL-PERPETUAL` | tick | 2022-04-29 | 2022-12-30 | 246 | 246 | 0 | 0.00% |
+| `spot` | deribit | spot | `BTC_USDC` | 1m | 2023-04-24 | 2026-06-22 | 1,156 | 1,156 | 0 | 0.00% |
+| `spot` | deribit | spot | `ETH_USDC` | 1m | 2023-04-24 | 2026-06-22 | 1,156 | 1,156 | 0 | 0.00% |
+| `spot` | deribit | spot | `SOL_USDC` | 1m | 2024-02-27 | 2026-06-22 | 847 | 847 | 0 | 0.00% |
+
 ## 4.1 Spot (`dataset_type=spot`)
 
 ### 1. Bronze layer

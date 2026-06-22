@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from datetime import UTC, date, datetime
 from typing import Any, cast
 
@@ -441,6 +442,14 @@ def test_split_range_into_trade_windows_uses_market_specific_bounds() -> None:
         end_ms,
     )
     assert option_windows == [(start_ms, end_ms)]
+
+
+def test_split_range_into_trade_windows_uses_perp_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DEPTH_PERP_TRADES_WINDOW_MINUTES", "60")
+    start_ms = int(datetime(2026, 4, 27, 0, 0, tzinfo=UTC).timestamp() * 1000)
+    end_ms = int(datetime(2026, 4, 27, 0, 59, 59, 999000, tzinfo=UTC).timestamp() * 1000)
+
+    assert _split_range_into_trade_windows(start_ms, end_ms, market="perp") == [(start_ms, end_ms)]
 
 
 def test_fetch_symbol_candles_tail_delta_only_passes_history_chunk_callback() -> None:
@@ -1739,3 +1748,41 @@ def test_fetch_trade_tasks_parallel_records_on_task_complete_errors() -> None:
     key = (task.exchange, task.market, task.symbol)
     assert key in result.errors
     assert "trade complete boom" in result.errors[key]
+
+
+def test_fetch_trade_tasks_parallel_uses_bounded_concurrency() -> None:
+    tasks = [
+        TradeFetchTaskDTO(exchange="deribit", market="perp", symbol="BTC"),
+        TradeFetchTaskDTO(exchange="deribit", market="perp", symbol="ETH"),
+    ]
+
+    def _fetcher(**kwargs: object) -> list[TradeTick]:
+        symbol = str(kwargs["symbol"])
+        time.sleep(0.2)
+        return [
+            TradeTick(
+                exchange="deribit",
+                symbol=symbol,
+                instrument_type="perp",
+                trade_id=symbol,
+                trade_time=datetime(2026, 4, 27, 10, 0, tzinfo=UTC),
+                price=100.0,
+                quantity=1.0,
+                side="buy",
+                is_maker=False,
+                source_endpoint="public_trades",
+            )
+        ]
+
+    started_at = time.monotonic()
+    result = fetch_trade_tasks_parallel(
+        tasks=tasks,
+        lake_root="lake/bronze",
+        concurrency=2,
+        logger=logging.getLogger("test"),
+        symbol_fetcher=cast(Any, _fetcher),
+    )
+
+    assert time.monotonic() - started_at < 0.35
+    assert len(result.rows) == 2
+    assert not result.errors

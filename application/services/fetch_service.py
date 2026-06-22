@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import logging
 import multiprocessing as mp
+import os
 import threading
 import time
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, date, datetime, timedelta
 from typing import Any, TypeVar, cast
 
@@ -61,6 +63,8 @@ OI_DATASET_TYPE = dataset_contract("oi").dataset_type
 TRADE_BOUNDARY_TOLERANCE_MS = 60_000
 PERP_TRADES_WINDOW_MS = 15 * 60 * 1000
 OPTION_TRADES_WINDOW_MS = 60 * 60 * 1000
+MIN_TRADE_WINDOW_MS = 60 * 1000
+MAX_TRADE_WINDOW_MS = 24 * 60 * 60 * 1000
 TTimeout = TypeVar("TTimeout")
 TRow = TypeVar("TRow")
 logger = logging.getLogger(__name__)
@@ -288,8 +292,27 @@ def _trade_window_ms(market: TradeMarket) -> int:
     """Return operational trade fetch window size by dataset family."""
 
     if market == "option":
-        return OPTION_TRADES_WINDOW_MS
-    return PERP_TRADES_WINDOW_MS
+        return _env_window_ms(
+            env_name="DEPTH_OPTION_TRADES_WINDOW_MINUTES",
+            default_ms=OPTION_TRADES_WINDOW_MS,
+        )
+    return _env_window_ms(
+        env_name="DEPTH_PERP_TRADES_WINDOW_MINUTES",
+        default_ms=PERP_TRADES_WINDOW_MS,
+    )
+
+
+def _env_window_ms(*, env_name: str, default_ms: int) -> int:
+    """Read bounded trade window size from environment."""
+
+    raw = os.getenv(env_name)
+    if raw is None:
+        return default_ms
+    try:
+        minutes = int(raw)
+    except ValueError:
+        return default_ms
+    return min(MAX_TRADE_WINDOW_MS, max(MIN_TRADE_WINDOW_MS, minutes * 60 * 1000))
 
 
 def _split_range_into_trade_windows(
@@ -1691,15 +1714,23 @@ def fetch_trade_tasks_parallel(
     on_task_complete: Callable[[TradeFetchTaskDTO, list[TradeTick | OptionTradeTick]], None] | None = None,
     on_task_chunk: Callable[[TradeFetchTaskDTO, list[TradeTick | OptionTradeTick]], None] | None = None,
 ) -> TradeFetchResultDTO:
-    """Fetch trade tasks sequentially."""
+    """Fetch trade tasks with bounded symbol-level concurrency."""
 
-    del concurrency, shared_semaphore
+    del shared_semaphore
     total_tasks = len(tasks)
     task_results: dict[tuple[Exchange, TradeMarket, str], list[TradeTick | OptionTradeTick]] = {}
     task_errors: dict[tuple[Exchange, TradeMarket, str], str] = {}
     task_timeout_s = _task_timeout_seconds()
     heartbeat_s = _heartbeat_seconds()
-    for idx, task in enumerate(tasks, start=1):
+    bounded_concurrency = max(1, min(concurrency, total_tasks or 1))
+
+    def _fetch_one(
+        idx: int, task: TradeFetchTaskDTO
+    ) -> tuple[
+        TradeFetchTaskDTO,
+        list[TradeTick | OptionTradeTick] | None,
+        str | None,
+    ]:
         logger.info(
             "Fetch start [%s/%s] type=trades exchange=%s market=%s symbol=%s mode=%s",
             idx,
@@ -1709,7 +1740,6 @@ def fetch_trade_tasks_parallel(
             task.symbol,
             "auto-bootstrap-or-tail",
         )
-        key = (task.exchange, task.market, task.symbol)
         started_at = datetime.now(UTC)
 
         hb_exchange = task.exchange
@@ -1730,6 +1760,15 @@ def fetch_trade_tasks_parallel(
                 elapsed_s,
             )
 
+        history_chunk_callback: Callable[[list[TradeTick | OptionTradeTick]], None] | None = None
+        if on_task_chunk is not None:
+            task_chunk_callback = on_task_chunk
+
+            def _forward_trade_chunk(chunk: list[TradeTick | OptionTradeTick], _task: TradeFetchTaskDTO = task) -> None:
+                task_chunk_callback(_task, chunk)
+
+            history_chunk_callback = _forward_trade_chunk
+
         try:
             rows = _run_with_optional_timeout(
                 symbol_fetcher,
@@ -1740,7 +1779,7 @@ def fetch_trade_tasks_parallel(
                 market=task.market,
                 symbol=task.symbol,
                 lake_root=lake_root,
-                on_history_chunk=(lambda chunk, _task=task: on_task_chunk(_task, chunk)) if on_task_chunk else None,
+                on_history_chunk=history_chunk_callback,
             )
             elapsed_s = elapsed_seconds(started_at)
             logger.info(
@@ -1753,9 +1792,6 @@ def fetch_trade_tasks_parallel(
                 len(rows),
                 elapsed_s,
             )
-            task_results[key] = rows
-            if on_task_complete is not None:
-                on_task_complete(task, rows)
         except Exception as exc:  # noqa: BLE001
             elapsed_s = elapsed_seconds(started_at)
             error_class = _classify_trade_fetch_error(exc)
@@ -1777,9 +1813,42 @@ def fetch_trade_tasks_parallel(
                     task.symbol,
                     elapsed_s,
                 )
-            task_errors[key] = f"[{error_class}] {exc}"
             # Keep processing remaining tasks even when one route is unreachable.
             # This avoids a single transient network issue cascading into a full
             # trade-run failure classification.
-            continue
+            return task, None, f"[{error_class}] {exc}"
+        return task, rows, None
+
+    def _store_success(task: TradeFetchTaskDTO, rows: list[TradeTick | OptionTradeTick]) -> None:
+        key = (task.exchange, task.market, task.symbol)
+        if on_task_complete is not None:
+            on_task_complete(task, rows)
+        task_results[key] = rows
+
+    if bounded_concurrency == 1:
+        for idx, task in enumerate(tasks, start=1):
+            task, rows, error = _fetch_one(idx, task)
+            key = (task.exchange, task.market, task.symbol)
+            if error is not None:
+                task_errors[key] = error
+            elif rows is not None:
+                try:
+                    _store_success(task, rows)
+                except Exception as exc:  # noqa: BLE001
+                    task_errors[key] = f"[{_classify_trade_fetch_error(exc)}] {exc}"
+        return TradeFetchResultDTO(rows=task_results, errors=task_errors)
+
+    with ThreadPoolExecutor(max_workers=bounded_concurrency) as executor:
+        futures = {executor.submit(_fetch_one, idx, task): task for idx, task in enumerate(tasks, start=1)}
+        for future in as_completed(futures):
+            task, rows, error = future.result()
+            key = (task.exchange, task.market, task.symbol)
+            if error is not None:
+                task_errors[key] = error
+                continue
+            if rows is not None:
+                try:
+                    _store_success(task, rows)
+                except Exception as exc:  # noqa: BLE001
+                    task_errors[key] = f"[{_classify_trade_fetch_error(exc)}] {exc}"
     return TradeFetchResultDTO(rows=task_results, errors=task_errors)
