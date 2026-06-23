@@ -1218,7 +1218,7 @@ def fetch_symbol_trades(
     if not stored_partition_dates:
         if start_open_ms_bound is not None:
             bootstrap_rows: list[TradeTick | OptionTradeTick] = []
-            failed_windows: list[str] = []
+            bootstrap_failed_windows: list[str] = []
             windows = _trade_windows_in_random_order(
                 start_open_ms_bound,
                 end_open_ms,
@@ -1246,7 +1246,7 @@ def fetch_symbol_trades(
                     end_open_ms=window_end_ms,
                 )
                 if error is not None:
-                    failed_windows.append(f"{window_start_ms}-{window_end_ms}: {error}")
+                    bootstrap_failed_windows.append(f"{window_start_ms}-{window_end_ms}: {error}")
                     _log_trade_window_progress(
                         phase="bootstrap",
                         exchange=exchange,
@@ -1255,12 +1255,12 @@ def fetch_symbol_trades(
                         completed_windows=attempted_windows,
                         total_windows=len(windows),
                         rows=len(bootstrap_rows),
-                        failed_windows=len(failed_windows),
+                        failed_windows=len(bootstrap_failed_windows),
                         started_at=phase_started_at,
                     )
                     continue
                 if window_rows and on_history_chunk is not None:
-                    on_history_chunk(cast(list[TradeTick | OptionTradeTick], window_rows))
+                    on_history_chunk(window_rows)
                 bootstrap_rows.extend(window_rows)
                 _log_trade_window_progress(
                     phase="bootstrap",
@@ -1270,24 +1270,24 @@ def fetch_symbol_trades(
                     completed_windows=attempted_windows,
                     total_windows=len(windows),
                     rows=len(bootstrap_rows),
-                    failed_windows=len(failed_windows),
+                    failed_windows=len(bootstrap_failed_windows),
                     started_at=phase_started_at,
                 )
             _raise_if_all_trade_windows_failed(
-                failed_windows=failed_windows,
+                failed_windows=bootstrap_failed_windows,
                 attempted_windows=attempted_windows,
                 exchange=exchange,
                 market=market,
                 symbol=symbol,
             )
-            if failed_windows:
+            if bootstrap_failed_windows:
                 logger.warning(
                     "Trade bootstrap completed with failed trade windows exchange=%s market=%s symbol=%s "
                     "failed=%s attempted=%s",
                     exchange,
                     market,
                     symbol,
-                    len(failed_windows),
+                    len(bootstrap_failed_windows),
                     attempted_windows,
                 )
             return _dedupe_sort_trade_rows(bootstrap_rows)
@@ -1329,7 +1329,7 @@ def fetch_symbol_trades(
         return []
 
     gap_rows: list[TradeTick | OptionTradeTick] = []
-    failed_windows: list[str] = []
+    gap_failed_windows: list[str] = []
     window_plan: list[tuple[int, int]] = []
     for start_open_ms, gap_end_ms in _ranges_in_random_order(missing_ranges):
         window_plan.extend(
@@ -1360,7 +1360,7 @@ def fetch_symbol_trades(
             end_open_ms=window_end_ms,
         )
         if error is not None:
-            failed_windows.append(f"{window_start_ms}-{window_end_ms}: {error}")
+            gap_failed_windows.append(f"{window_start_ms}-{window_end_ms}: {error}")
             _log_trade_window_progress(
                 phase="gap",
                 exchange=exchange,
@@ -1369,12 +1369,12 @@ def fetch_symbol_trades(
                 completed_windows=attempted_windows,
                 total_windows=len(window_plan),
                 rows=len(gap_rows),
-                failed_windows=len(failed_windows),
+                failed_windows=len(gap_failed_windows),
                 started_at=phase_started_at,
             )
             continue
         if window_rows and on_history_chunk is not None:
-            on_history_chunk(cast(list[TradeTick | OptionTradeTick], window_rows))
+            on_history_chunk(window_rows)
         gap_rows.extend(window_rows)
         _log_trade_window_progress(
             phase="gap",
@@ -1384,23 +1384,23 @@ def fetch_symbol_trades(
             completed_windows=attempted_windows,
             total_windows=len(window_plan),
             rows=len(gap_rows),
-            failed_windows=len(failed_windows),
+            failed_windows=len(gap_failed_windows),
             started_at=phase_started_at,
         )
     _raise_if_all_trade_windows_failed(
-        failed_windows=failed_windows,
+        failed_windows=gap_failed_windows,
         attempted_windows=attempted_windows,
         exchange=exchange,
         market=market,
         symbol=symbol,
     )
-    if failed_windows:
+    if gap_failed_windows:
         logger.warning(
             "Trade gap fill completed with failed trade windows exchange=%s market=%s symbol=%s failed=%s attempted=%s",
             exchange,
             market,
             symbol,
-            len(failed_windows),
+            len(gap_failed_windows),
             attempted_windows,
         )
     filtered = _filter_rows_by_start_bound(gap_rows, start_open_ms_bound)

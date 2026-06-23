@@ -33,7 +33,7 @@ from ingestion.funding import FundingPoint
 from ingestion.http_client import HttpClientError
 from ingestion.open_interest import OpenInterestPoint
 from ingestion.spot import SpotCandle
-from ingestion.trades import TradeTick
+from ingestion.trades import OptionTradeTick, TradeMarket, TradeTick
 
 
 def _sleep_then_empty(**kwargs: object) -> list[SpotCandle]:
@@ -450,6 +450,81 @@ def test_split_range_into_trade_windows_uses_perp_env_override(monkeypatch: pyte
     end_ms = int(datetime(2026, 4, 27, 0, 59, 59, 999000, tzinfo=UTC).timestamp() * 1000)
 
     assert _split_range_into_trade_windows(start_ms, end_ms, market="perp") == [(start_ms, end_ms)]
+
+
+@pytest.mark.parametrize(
+    ("market", "symbol", "expected_windows"),
+    [("perp", "BTC-PERPETUAL", 336), ("option", "BTC", 84)],
+)
+def test_fetch_symbol_trades_bootstrap_covers_complete_84_hour_window(
+    market: TradeMarket,
+    symbol: str,
+    expected_windows: int,
+) -> None:
+    start_ms = int(datetime(2026, 4, 27, 0, 0, tzinfo=UTC).timestamp() * 1000)
+    end_ms = start_ms + (7 * 12 * 60 * 60 * 1000) - 1
+    calls: list[tuple[int, int]] = []
+
+    def _range_fetcher(**kwargs: object) -> list[TradeTick | OptionTradeTick]:
+        window_start_ms = int(cast(Any, kwargs["start_open_ms"]))
+        window_end_ms = int(cast(Any, kwargs["end_open_ms"]))
+        calls.append((window_start_ms, window_end_ms))
+        trade_time = datetime.fromtimestamp(window_start_ms / 1000, tz=UTC)
+        if market == "option":
+            return [
+                OptionTradeTick(
+                    exchange="deribit",
+                    symbol="BTC",
+                    instrument_type="option",
+                    instrument_name="BTC-31DEC26-100000-C",
+                    expiry="31DEC26",
+                    strike=100000.0,
+                    option_type="call",
+                    trade_id=f"trade-{window_start_ms}",
+                    trade_time=trade_time,
+                    price=100.0,
+                    quantity=1.0,
+                    side="buy",
+                    is_maker=False,
+                    source_endpoint="public_option_trades",
+                )
+            ]
+        return [
+            TradeTick(
+                exchange="deribit",
+                symbol="BTC-PERPETUAL",
+                instrument_type="perp",
+                trade_id=f"trade-{window_start_ms}",
+                trade_time=trade_time,
+                price=100.0,
+                quantity=1.0,
+                side="buy",
+                is_maker=False,
+                source_endpoint="public_trades",
+            )
+        ]
+
+    rows = fetch_symbol_trades(
+        exchange="deribit",
+        market=market,
+        symbol=symbol,
+        lake_root="lake/bronze",
+        partition_dates_reader=lambda **kwargs: [],
+        symbol_normalizer=lambda **kwargs: "BTC-PERPETUAL",
+        now_open_resolver=lambda **kwargs: end_ms,
+        history_fetcher=lambda **kwargs: pytest.fail("bounded bootstrap should use range fetches"),
+        range_fetcher=_range_fetcher,
+        tail_delta_only=False,
+        start_open_ms_bound=start_ms,
+    )
+
+    assert len(rows) == expected_windows
+    assert len(calls) == expected_windows
+    assert calls[0][0] == start_ms
+    assert calls[-1][1] == end_ms
+    assert all(
+        previous_end + 1 == next_start for (_, previous_end), (next_start, _) in zip(calls[:-1], calls[1:], strict=True)
+    )
 
 
 def test_fetch_symbol_candles_tail_delta_only_passes_history_chunk_callback() -> None:

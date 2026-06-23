@@ -8,7 +8,7 @@ from pathlib import Path
 import pyarrow.parquet as pq
 
 from ingestion.lake import save_trades_parquet_lake
-from ingestion.trades import OptionTradeTick, TradeTick, fetch_trades_range
+from ingestion.trades import OptionTradeTick, TradeTick, fetch_trades_all_history, fetch_trades_range
 
 
 def test_fetch_trades_range_parses_deribit_rows(monkeypatch) -> None:  # type: ignore[no-untyped-def]
@@ -37,6 +37,69 @@ def test_fetch_trades_range_parses_deribit_rows(monkeypatch) -> None:  # type: i
     assert rows[0].trade_id == "abc"
     assert rows[0].side == "buy"
     assert rows[0].is_maker is True
+
+
+def test_fetch_trades_all_history_streams_perp_pages(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    def _fake_fetch_all(**kwargs: object) -> list[dict[str, object]]:
+        on_page = kwargs.get("on_page")
+        if callable(on_page):
+            on_page(
+                [
+                    {
+                        "timestamp": int(datetime(2026, 5, 1, 0, 0, tzinfo=UTC).timestamp() * 1000),
+                        "trade_id": "perp-page",
+                        "price": 100.5,
+                        "amount": 1.25,
+                        "direction": "buy",
+                        "liquidation": "m",
+                    }
+                ]
+            )
+        return []
+
+    chunks: list[list[TradeTick | OptionTradeTick]] = []
+    monkeypatch.setattr("ingestion.exchanges.deribit_perp_trades.fetch_perp_trades_all", _fake_fetch_all)
+    rows = fetch_trades_all_history(
+        exchange="deribit",
+        symbol="BTC-PERPETUAL",
+        market="perp",
+        on_history_chunk=chunks.append,
+    )
+
+    assert rows == []
+    assert len(chunks) == 1
+    assert chunks[0][0].trade_id == "perp-page"
+    assert chunks[0][0].source_endpoint == "public_trades"
+
+
+def test_fetch_trades_all_history_streams_option_rows(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    def _fake_fetch_all(**kwargs: object) -> list[dict[str, object]]:
+        assert kwargs["currency"] == "BTC"
+        return [
+            {
+                "timestamp": int(datetime(2026, 5, 1, 0, 0, tzinfo=UTC).timestamp() * 1000),
+                "trade_id": "option-page",
+                "instrument_name": "BTC-31DEC26-100000-P",
+                "price": 500.0,
+                "amount": 0.5,
+                "direction": "sell",
+            }
+        ]
+
+    chunks: list[list[TradeTick | OptionTradeTick]] = []
+    monkeypatch.setattr("ingestion.exchanges.deribit_option_trades.fetch_option_trades_all", _fake_fetch_all)
+    rows = fetch_trades_all_history(
+        exchange="deribit",
+        symbol="BTC",
+        market="option",
+        on_history_chunk=chunks.append,
+    )
+
+    assert rows == []
+    assert len(chunks) == 1
+    assert isinstance(chunks[0][0], OptionTradeTick)
+    assert chunks[0][0].trade_id == "option-page"
+    assert chunks[0][0].option_type == "put"
 
 
 def test_save_trades_parquet_lake_writes_dataset(tmp_path: Path) -> None:

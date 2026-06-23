@@ -232,6 +232,22 @@ def run_silver_build(args: argparse.Namespace, logger: logging.Logger) -> None:
     if selected is None:
         raise ValueError("Missing dataset selection. Provide --dataset.")
     jobs: list[tuple[str, str, Callable[[], list[dict[str, object]]]]] = []
+
+    def _make_handler_job(
+        handler: Callable[[str], list[dict[str, object]]],
+        symbol: str,
+    ) -> Callable[[], list[dict[str, object]]]:
+        def _job() -> list[dict[str, object]]:
+            return handler(symbol)
+
+        return _job
+
+    def _make_ohlcv_job(market: str, symbol: str) -> Callable[[], list[dict[str, object]]]:
+        def _job() -> list[dict[str, object]]:
+            return _run_ohlcv(market, symbol)
+
+        return _job
+
     for market in cast(list[str], selected):
         symbols = cast(list[str] | None, args.symbols)
         bronze_dataset, bronze_instrument, discovery_timeframe = _discovery_params_for_market(market, timeframe)
@@ -246,9 +262,9 @@ def run_silver_build(args: argparse.Namespace, logger: logging.Logger) -> None:
         handler = market_handlers.get(market)
         for symbol in effective_symbols:
             if handler is not None:
-                jobs.append((market, symbol, lambda symbol=symbol, handler=handler: handler(symbol)))
+                jobs.append((market, symbol, _make_handler_job(handler, symbol)))
             else:
-                jobs.append((market, symbol, lambda market=market, symbol=symbol: _run_ohlcv(market, symbol)))
+                jobs.append((market, symbol, _make_ohlcv_job(market, symbol)))
 
     logger.info("Silver build parallelization maxprocesses=%s jobs=%s", maxprocesses, len(jobs))
     with ThreadPoolExecutor(max_workers=maxprocesses) as executor:

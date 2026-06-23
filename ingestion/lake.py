@@ -352,7 +352,8 @@ def open_time_bounds_in_lake_by_dataset(
         partition_date = _date_from_partition_path(data_file)
         if partition_date is None:
             continue
-        file_min, file_max = _open_time_bounds_for_parquet_file(pq.ParquetFile(data_file))
+        parquet_file = cast(Any, pq.ParquetFile(data_file))  # type: ignore[no-untyped-call]  # pyarrow exposes an untyped constructor.
+        file_min, file_max = _open_time_bounds_for_parquet_file(parquet_file)
         if file_min is None or file_max is None:
             continue
         current = bounds.get(partition_date)
@@ -396,7 +397,7 @@ def _open_time_bounds_for_parquet_file(parquet_file: Any) -> tuple[datetime | No
         if min_value is not None and max_value is not None:
             return min_value, max_value
 
-    for batch in parquet_file.iter_batches(columns=["open_time"], batch_size=10_000):  # type: ignore[no-untyped-call]
+    for batch in parquet_file.iter_batches(columns=["open_time"], batch_size=10_000):
         for row in batch.to_pylist():
             value = row.get("open_time")
             if not isinstance(value, datetime):

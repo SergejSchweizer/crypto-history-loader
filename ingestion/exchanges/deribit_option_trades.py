@@ -180,10 +180,12 @@ def fetch_option_trades_range(
         if not rows:
             break
         collected.extend(rows)
-        last_ts = int(cast(Any, rows[-1]).get("timestamp", 0))
-        if last_ts < cursor:
+        # Deribit's documented ``sorting`` order is trade-id oriented, so do not
+        # assume the last row also has the greatest timestamp for pagination.
+        max_ts = max(int(cast(Any, row).get("timestamp", 0)) for row in rows)
+        if max_ts < cursor:
             break
-        cursor = last_ts + 1
+        cursor = max_ts + 1
         if len(rows) < page_size:
             break
         if not _has_more(payload):

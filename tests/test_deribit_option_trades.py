@@ -133,6 +133,46 @@ def test_fetch_option_trades_range_respects_max_pages_env(monkeypatch) -> None: 
     assert len(rows) == 3
 
 
+def test_fetch_option_trades_range_paginates_from_max_page_timestamp(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    calls: list[int] = []
+
+    def _fake_get_json(url: str, params: dict[str, object]) -> dict[str, object]:
+        del url
+        cursor = int(cast(Any, params["start_timestamp"]))
+        calls.append(cursor)
+        if len(calls) == 1:
+            return {
+                "result": {
+                    "trades": [
+                        {"timestamp": cursor + 1, "trade_id": "later", "instrument_name": "BTC-31DEC26-100000-C"},
+                        {"timestamp": cursor, "trade_id": "earlier", "instrument_name": "BTC-31DEC26-100000-C"},
+                    ],
+                    "has_more": True,
+                }
+            }
+        return {
+            "result": {
+                "trades": [{"timestamp": cursor, "trade_id": "next", "instrument_name": "BTC-31DEC26-100000-C"}],
+                "has_more": False,
+            }
+        }
+
+    monkeypatch.setattr(deribit_option_trades, "get_json", _fake_get_json)
+    rows = deribit_option_trades.fetch_option_trades_range(
+        currency="BTC",
+        start_open_ms=100,
+        end_open_ms=105,
+        count=2,
+    )
+
+    assert calls == [100, 102]
+    assert rows == [
+        {"timestamp": 100, "trade_id": "earlier", "instrument_name": "BTC-31DEC26-100000-C"},
+        {"timestamp": 101, "trade_id": "later", "instrument_name": "BTC-31DEC26-100000-C"},
+        {"timestamp": 102, "trade_id": "next", "instrument_name": "BTC-31DEC26-100000-C"},
+    ]
+
+
 def test_option_trades_base_url_env_override(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     monkeypatch.setenv("DEPTH_DERIBIT_OPTION_TRADES_BASE_URL", "https://example.org///")
     assert deribit_option_trades._trades_base_url() == "https://example.org"

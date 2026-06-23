@@ -159,11 +159,16 @@ def run_gold_build(args: argparse.Namespace, logger: logging.Logger) -> None:
         return report.to_dict()
 
     jobs: list[Callable[[], dict[str, object] | None]] = []
+
+    def _make_job(selected_dataset_id: str, symbol: str) -> Callable[[], dict[str, object] | None]:
+        def _job() -> dict[str, object] | None:
+            return _run_one(selected_dataset_id, symbol)
+
+        return _job
+
     for selected_dataset_id in dataset_ids:
         for symbol in schedule[selected_dataset_id]:
-            jobs.append(
-                lambda selected_dataset_id=selected_dataset_id, symbol=symbol: _run_one(selected_dataset_id, symbol)
-            )
+            jobs.append(_make_job(selected_dataset_id, symbol))
 
     logger.info("Gold build parallelization maxprocesses=%s jobs=%s", maxprocesses, len(jobs))
     with ThreadPoolExecutor(max_workers=maxprocesses) as executor:
