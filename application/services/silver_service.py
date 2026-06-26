@@ -8,10 +8,10 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from application.services.gold_service import (  # pyright: ignore[reportPrivateUsage]
-    _feature_hash,  # pyright: ignore[reportPrivateUsage]
-    _feature_metadata,  # pyright: ignore[reportPrivateUsage]
-    _write_feature_distribution_plot,  # pyright: ignore[reportPrivateUsage]
+from ingestion.feature_profile import (
+    feature_hash,
+    feature_metadata,
+    write_feature_distribution_plot,
 )
 
 
@@ -419,7 +419,7 @@ def _write_silver_plot(frame: Any, output_path: Path) -> str | None:
         frame = frame.with_columns(pl.lit("deribit").alias("exchange"))
     if "symbol" not in frame.columns:
         frame = frame.with_columns(pl.lit("unknown").alias("symbol"))
-    return _write_feature_distribution_plot(frame, output_path, normalize_y=False)
+    return write_feature_distribution_plot(frame, output_path, normalize_y=False)
 
 
 def _with_timestamp_m1(frame: Any) -> Any:
@@ -1502,7 +1502,7 @@ def write_monthly_sidecars(
                 "exchange": report.exchange,
                 "symbol": report.symbol,
                 "build_date_utc": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
-                "column_hash": _feature_hash(frame.columns),
+                "column_hash": feature_hash(frame.columns),
                 "rows_out": frame.height,
                 "columns": frame.columns,
                 "min_timestamp": _iso_utc(min_ts),
@@ -1516,7 +1516,7 @@ def write_monthly_sidecars(
                         else [report.symbol],
                     }
                 },
-                "feature_metadata": _feature_metadata(pl, frame_for_gold, report.exchange),
+                "feature_metadata": feature_metadata(pl, frame_for_gold, report.exchange),
                 "plot_generated": plotted is not None,
             }
             manifest_path = parquet_path.with_suffix(".json")

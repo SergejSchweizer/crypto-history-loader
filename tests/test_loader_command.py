@@ -13,6 +13,7 @@ import pytest
 
 from api.commands import loader as loader_cmd
 from application.dto import CandleFetchTaskDTO, PersistResultDTO, TradeFetchTaskDTO
+from application.services.bronze_runtime_service import BronzeRuntimeBoundsContext
 from ingestion.spot import SpotCandle
 from ingestion.trades import OptionTradeTick, TradeTick
 
@@ -196,61 +197,49 @@ def test_run_bronze_build_persists_trade_chunks_incrementally(
 
 
 def test_exchange_symbol_start_dates_override_symbol_and_global_bounds() -> None:
-    original_tail = loader_cmd._TAIL_DELTA_ONLY
-    original_global = loader_cmd._BRONZE_START_OPEN_MS
-    original_symbol = dict(loader_cmd._BRONZE_SYMBOL_START_OPEN_MS)
-    original_exchange_symbol = dict(loader_cmd._BRONZE_EXCHANGE_SYMBOL_START_OPEN_MS)
+    original_context = loader_cmd._RUNTIME_BOUNDS_CONTEXT
     try:
-        loader_cmd._TAIL_DELTA_ONLY = False
-        loader_cmd._BRONZE_START_OPEN_MS = 1000
-        loader_cmd._BRONZE_SYMBOL_START_OPEN_MS = {"BTC": 2000}
-        loader_cmd._BRONZE_EXCHANGE_SYMBOL_START_OPEN_MS = {"deribit:BTC": 3000}
+        loader_cmd._RUNTIME_BOUNDS_CONTEXT = BronzeRuntimeBoundsContext(
+            tail_delta_only=False,
+            global_start_open_ms=1000,
+            symbol_start_open_ms={"BTC": 2000},
+            exchange_symbol_start_open_ms={"deribit:BTC": 3000},
+        )
         assert loader_cmd._symbol_start_open_ms_bound(exchange="deribit", symbol="BTCUSDT") == 3000
         assert loader_cmd._symbol_start_open_ms_bound(exchange="deribit", symbol="ETHUSDT") == 1000
     finally:
-        loader_cmd._TAIL_DELTA_ONLY = original_tail
-        loader_cmd._BRONZE_START_OPEN_MS = original_global
-        loader_cmd._BRONZE_SYMBOL_START_OPEN_MS = original_symbol
-        loader_cmd._BRONZE_EXCHANGE_SYMBOL_START_OPEN_MS = original_exchange_symbol
+        loader_cmd._RUNTIME_BOUNDS_CONTEXT = original_context
 
 
 def test_global_start_date_is_not_widened_by_older_symbol_bounds() -> None:
-    original_tail = loader_cmd._TAIL_DELTA_ONLY
-    original_global = loader_cmd._BRONZE_START_OPEN_MS
-    original_symbol = dict(loader_cmd._BRONZE_SYMBOL_START_OPEN_MS)
-    original_exchange_symbol = dict(loader_cmd._BRONZE_EXCHANGE_SYMBOL_START_OPEN_MS)
+    original_context = loader_cmd._RUNTIME_BOUNDS_CONTEXT
     try:
-        loader_cmd._TAIL_DELTA_ONLY = False
-        loader_cmd._BRONZE_START_OPEN_MS = 3000
-        loader_cmd._BRONZE_SYMBOL_START_OPEN_MS = {"BTC": 1000}
-        loader_cmd._BRONZE_EXCHANGE_SYMBOL_START_OPEN_MS = {}
+        loader_cmd._RUNTIME_BOUNDS_CONTEXT = BronzeRuntimeBoundsContext(
+            tail_delta_only=False,
+            global_start_open_ms=3000,
+            symbol_start_open_ms={"BTC": 1000},
+            exchange_symbol_start_open_ms={},
+        )
         assert loader_cmd._symbol_start_open_ms_bound(exchange="deribit", symbol="BTCUSDT") == 3000
     finally:
-        loader_cmd._TAIL_DELTA_ONLY = original_tail
-        loader_cmd._BRONZE_START_OPEN_MS = original_global
-        loader_cmd._BRONZE_SYMBOL_START_OPEN_MS = original_symbol
-        loader_cmd._BRONZE_EXCHANGE_SYMBOL_START_OPEN_MS = original_exchange_symbol
+        loader_cmd._RUNTIME_BOUNDS_CONTEXT = original_context
 
 
 def test_symbol_start_bound_caps_to_last_30_days_in_tail_mode() -> None:
-    original_tail = loader_cmd._TAIL_DELTA_ONLY
-    original_global = loader_cmd._BRONZE_START_OPEN_MS
-    original_symbol = dict(loader_cmd._BRONZE_SYMBOL_START_OPEN_MS)
-    original_exchange_symbol = dict(loader_cmd._BRONZE_EXCHANGE_SYMBOL_START_OPEN_MS)
+    original_context = loader_cmd._RUNTIME_BOUNDS_CONTEXT
     try:
-        loader_cmd._TAIL_DELTA_ONLY = True
-        loader_cmd._BRONZE_START_OPEN_MS = None
-        loader_cmd._BRONZE_SYMBOL_START_OPEN_MS = {}
-        loader_cmd._BRONZE_EXCHANGE_SYMBOL_START_OPEN_MS = {"deribit:BTC": 1000}
+        loader_cmd._RUNTIME_BOUNDS_CONTEXT = BronzeRuntimeBoundsContext(
+            tail_delta_only=True,
+            global_start_open_ms=None,
+            symbol_start_open_ms={},
+            exchange_symbol_start_open_ms={"deribit:BTC": 1000},
+        )
         resolved = loader_cmd._symbol_start_open_ms_bound(exchange="deribit", symbol="BTCUSDT")
         assert isinstance(resolved, int)
         rolling_30_days_ago_ms = int((datetime.now(UTC).timestamp() - (30 * 24 * 60 * 60)) * 1000)
         assert resolved >= rolling_30_days_ago_ms
     finally:
-        loader_cmd._TAIL_DELTA_ONLY = original_tail
-        loader_cmd._BRONZE_START_OPEN_MS = original_global
-        loader_cmd._BRONZE_SYMBOL_START_OPEN_MS = original_symbol
-        loader_cmd._BRONZE_EXCHANGE_SYMBOL_START_OPEN_MS = original_exchange_symbol
+        loader_cmd._RUNTIME_BOUNDS_CONTEXT = original_context
 
 
 def test_parse_exchange_symbol_start_dates_parses_canonical_pairs() -> None:
@@ -259,7 +248,7 @@ def test_parse_exchange_symbol_start_dates_parses_canonical_pairs() -> None:
     assert parsed["deribit:SOL"] == int(datetime(2024, 2, 27, 0, 0, tzinfo=UTC).timestamp() * 1000)
 
 
-def test_configure_bronze_start_bounds_sets_globals() -> None:
+def test_configure_bronze_start_bounds_sets_context() -> None:
     args = argparse.Namespace(
         start_date=None,
         symbol_start_dates=["BTC=2023-04-24"],
@@ -267,22 +256,18 @@ def test_configure_bronze_start_bounds_sets_globals() -> None:
     )
     logger = logging.getLogger("test_bronze_bounds")
 
-    original_global = loader_cmd._BRONZE_START_OPEN_MS
-    original_symbol = dict(loader_cmd._BRONZE_SYMBOL_START_OPEN_MS)
-    original_exchange_symbol = dict(loader_cmd._BRONZE_EXCHANGE_SYMBOL_START_OPEN_MS)
+    original_context = loader_cmd._RUNTIME_BOUNDS_CONTEXT
     try:
         loader_cmd._configure_bronze_start_bounds(args=args, logger=logger)
-        assert loader_cmd._BRONZE_START_OPEN_MS is None
-        assert loader_cmd._BRONZE_SYMBOL_START_OPEN_MS["BTC"] == int(
+        assert loader_cmd._RUNTIME_BOUNDS_CONTEXT.global_start_open_ms is None
+        assert loader_cmd._RUNTIME_BOUNDS_CONTEXT.symbol_start_open_ms["BTC"] == int(
             datetime(2023, 4, 24, 0, 0, tzinfo=UTC).timestamp() * 1000
         )
-        assert loader_cmd._BRONZE_EXCHANGE_SYMBOL_START_OPEN_MS["deribit:SOL"] == int(
+        assert loader_cmd._RUNTIME_BOUNDS_CONTEXT.exchange_symbol_start_open_ms["deribit:SOL"] == int(
             datetime(2024, 2, 27, 0, 0, tzinfo=UTC).timestamp() * 1000
         )
     finally:
-        loader_cmd._BRONZE_START_OPEN_MS = original_global
-        loader_cmd._BRONZE_SYMBOL_START_OPEN_MS = original_symbol
-        loader_cmd._BRONZE_EXCHANGE_SYMBOL_START_OPEN_MS = original_exchange_symbol
+        loader_cmd._RUNTIME_BOUNDS_CONTEXT = original_context
 
 
 def test_run_bronze_build_drops_invalid_symbols_before_scheduling(monkeypatch) -> None:  # type: ignore[no-untyped-def]

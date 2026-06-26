@@ -16,6 +16,7 @@ from api.commands.loader import add_bronze_build_parser
 from api.commands.silver import add_silver_build_parser, run_silver_build
 from api.commands.stats import add_export_descriptive_stats_parser, run_export_descriptive_stats
 from api.commands.timeframes import add_list_spot_timeframes_parser, run_list_spot_timeframes
+from application.services.bronze_runtime_service import BronzeRuntimeBoundsContext
 from application.services.config_validation import validate_runtime_config
 from application.services.fetch_service import fetch_symbol_candles
 from application.services.gapfill_service import _last_closed_open_ms, _missing_ranges_ms
@@ -104,10 +105,12 @@ def _sync_loader_runtime_overrides() -> None:
     loader_any.open_times_in_lake_by_dataset = open_times_in_lake_by_dataset
     loader_any.latest_open_time_in_lake = latest_open_time_in_lake
     loader_any.latest_open_time_in_lake_by_dataset = latest_open_time_in_lake_by_dataset
-    loader_any._TAIL_DELTA_ONLY = _TAIL_DELTA_ONLY
-    loader_any._BRONZE_START_OPEN_MS = _BRONZE_START_OPEN_MS
-    loader_any._BRONZE_SYMBOL_START_OPEN_MS = _BRONZE_SYMBOL_START_OPEN_MS
-    loader_any._BRONZE_EXCHANGE_SYMBOL_START_OPEN_MS = _BRONZE_EXCHANGE_SYMBOL_START_OPEN_MS
+    loader_any._RUNTIME_BOUNDS_CONTEXT = BronzeRuntimeBoundsContext(
+        tail_delta_only=_TAIL_DELTA_ONLY,
+        global_start_open_ms=_BRONZE_START_OPEN_MS,
+        symbol_start_open_ms=_BRONZE_SYMBOL_START_OPEN_MS,
+        exchange_symbol_start_open_ms=_BRONZE_EXCHANGE_SYMBOL_START_OPEN_MS,
+    )
     loader_any.normalize_storage_symbol = normalize_storage_symbol
     loader_any.interval_to_milliseconds = interval_to_milliseconds
     loader_any.open_interest_interval_to_milliseconds = open_interest_interval_to_milliseconds

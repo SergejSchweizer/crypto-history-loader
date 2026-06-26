@@ -1,4 +1,4 @@
-"""Bronze start-bound helpers for loader orchestration."""
+"""Compatibility exports for Bronze start-bound helpers."""
 
 from __future__ import annotations
 
@@ -6,43 +6,10 @@ import argparse
 import logging
 from typing import cast
 
-from api.commands.loader_planning import (
-    canonical_symbol_key,
-    parse_exchange_symbol_start_dates,
-    parse_start_date_to_open_ms,
-    parse_symbol_start_dates,
+from application.services.bronze_runtime_service import (
+    build_bronze_runtime_bounds_context,
+    symbol_start_open_ms_bound,
 )
-from ingestion.spot import Exchange
-
-
-def symbol_start_open_ms_bound(
-    *,
-    exchange: Exchange,
-    symbol: str,
-    global_start_open_ms: int | None,
-    symbol_start_open_ms: dict[str, int],
-    exchange_symbol_start_open_ms: dict[str, int],
-) -> int | None:
-    """Resolve the effective Bronze start boundary.
-
-    Exchange-symbol and symbol bounds may narrow a run to a later known data
-    availability date, but they must not widen an explicit global start date to
-    older history.
-    """
-
-    exchange_key = exchange.lower()
-    symbol_key = canonical_symbol_key(symbol)
-    exchange_symbol_key = f"{exchange_key}:{symbol_key}"
-    specific_bound = None
-    if exchange_symbol_key in exchange_symbol_start_open_ms:
-        specific_bound = exchange_symbol_start_open_ms[exchange_symbol_key]
-    else:
-        specific_bound = symbol_start_open_ms.get(symbol_key)
-    if global_start_open_ms is None:
-        return specific_bound
-    if specific_bound is None:
-        return global_start_open_ms
-    return max(global_start_open_ms, specific_bound)
 
 
 def configure_bronze_start_bounds(
@@ -52,22 +19,14 @@ def configure_bronze_start_bounds(
 ) -> tuple[int | None, dict[str, int], dict[str, int]]:
     """Compute Bronze start-bound maps from CLI/config args and emit boundary logs."""
 
-    global_start_open_ms = parse_start_date_to_open_ms(cast(str | None, getattr(args, "start_date", None)))
-    symbol_start_open_ms = parse_symbol_start_dates(cast(list[str] | None, getattr(args, "symbol_start_dates", None)))
-    exchange_symbol_start_open_ms = parse_exchange_symbol_start_dates(
-        cast(list[str] | None, getattr(args, "exchange_symbol_start_dates", None))
+    context = build_bronze_runtime_bounds_context(
+        tail_delta_only=bool(getattr(args, "tail_delta_only", False)),
+        start_date=cast(str | None, getattr(args, "start_date", None)),
+        symbol_start_dates=cast(list[str] | None, getattr(args, "symbol_start_dates", None)),
+        exchange_symbol_start_dates=cast(list[str] | None, getattr(args, "exchange_symbol_start_dates", None)),
+        logger=logger,
     )
-    if global_start_open_ms is not None:
-        logger.info(
-            "Bronze start-date boundary enabled start_date=%s start_open_ms=%s",
-            cast(str, args.start_date),
-            global_start_open_ms,
-        )
-    if symbol_start_open_ms:
-        logger.info("Bronze symbol start-date boundaries enabled symbol_bounds=%s", symbol_start_open_ms)
-    if exchange_symbol_start_open_ms:
-        logger.info(
-            "Bronze exchange-symbol start-date boundaries enabled exchange_symbol_bounds=%s",
-            exchange_symbol_start_open_ms,
-        )
-    return global_start_open_ms, symbol_start_open_ms, exchange_symbol_start_open_ms
+    return context.global_start_open_ms, context.symbol_start_open_ms, context.exchange_symbol_start_open_ms
+
+
+__all__ = ["configure_bronze_start_bounds", "symbol_start_open_ms_bound"]

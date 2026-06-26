@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 import multiprocessing as mp
-import os
 import threading
 import time
 from collections.abc import Callable
@@ -27,11 +26,8 @@ from application.dto import (
 from application.schema import dataset_contract
 from application.services.fetch_bootstrap import fetch_bootstrap_history_rows, fetch_bounded_daily_rows
 from application.services.fetch_executors import elapsed_seconds, run_with_optional_history_chunk
-from application.services.fetch_runtime_policy import heartbeat_seconds, task_timeout_seconds
-from application.services.gapfill_service import (  # pyright: ignore[reportPrivateUsage]
-    _last_closed_open_ms,  # pyright: ignore[reportPrivateUsage]
-    _missing_ranges_ms,  # pyright: ignore[reportPrivateUsage]
-)
+from application.services.fetch_runtime_policy import heartbeat_seconds, task_timeout_seconds, trade_window_ms
+from application.services.gapfill_service import _last_closed_open_ms, _missing_ranges_ms
 from ingestion.funding import (
     FundingPoint,
     fetch_funding_all_history,
@@ -71,10 +67,6 @@ from ingestion.volatility import (
 
 OI_DATASET_TYPE = dataset_contract("oi").dataset_type
 TRADE_BOUNDARY_TOLERANCE_MS = 60_000
-PERP_TRADES_WINDOW_MS = 15 * 60 * 1000
-OPTION_TRADES_WINDOW_MS = 60 * 60 * 1000
-MIN_TRADE_WINDOW_MS = 60 * 1000
-MAX_TRADE_WINDOW_MS = 24 * 60 * 60 * 1000
 TTimeout = TypeVar("TTimeout")
 TRow = TypeVar("TRow")
 logger = logging.getLogger(__name__)
@@ -301,28 +293,7 @@ def _day_windows_in_random_order(start_open_ms: int, end_open_ms: int) -> list[t
 def _trade_window_ms(market: TradeMarket) -> int:
     """Return operational trade fetch window size by dataset family."""
 
-    if market == "option":
-        return _env_window_ms(
-            env_name="DEPTH_OPTION_TRADES_WINDOW_MINUTES",
-            default_ms=OPTION_TRADES_WINDOW_MS,
-        )
-    return _env_window_ms(
-        env_name="DEPTH_PERP_TRADES_WINDOW_MINUTES",
-        default_ms=PERP_TRADES_WINDOW_MS,
-    )
-
-
-def _env_window_ms(*, env_name: str, default_ms: int) -> int:
-    """Read bounded trade window size from environment."""
-
-    raw = os.getenv(env_name)
-    if raw is None:
-        return default_ms
-    try:
-        minutes = int(raw)
-    except ValueError:
-        return default_ms
-    return min(MAX_TRADE_WINDOW_MS, max(MIN_TRADE_WINDOW_MS, minutes * 60 * 1000))
+    return trade_window_ms(market)
 
 
 def _split_range_into_trade_windows(

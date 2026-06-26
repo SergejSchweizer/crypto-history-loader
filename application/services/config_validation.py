@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 
 class _LoaderConfigModel(BaseModel):
@@ -30,12 +30,28 @@ class _ExportDescriptiveStatsModel(BaseModel):
     instrument_types: list[str]
 
 
+class _EnvConfigModel(BaseModel):
+    """Schema for durable runtime environment settings."""
+
+    model_config = ConfigDict(extra="allow")
+    DEPTH_SYNC_LOG_DIR: str | None = None
+    DEPTH_FETCH_CONCURRENCY: int | None = Field(default=None, ge=1)
+    DEPTH_FETCH_TASK_TIMEOUT_S: float | None = Field(default=None, ge=0)
+    DEPTH_FETCH_HEARTBEAT_S: float | None = Field(default=None, gt=0)
+    DEPTH_PERP_TRADES_WINDOW_MINUTES: int | None = Field(default=None, ge=1, le=1440)
+    DEPTH_OPTION_TRADES_WINDOW_MINUTES: int | None = Field(default=None, ge=1, le=1440)
+    DEPTH_DERIBIT_PERP_TRADES_PAGE_SIZE: int | None = Field(default=None, ge=1, le=1000)
+    DEPTH_DERIBIT_OPTION_TRADES_PAGE_SIZE: int | None = Field(default=None, ge=1, le=1000)
+    DEPTH_DERIBIT_PERP_TRADES_INTER_REQUEST_SLEEP_S: float | None = Field(default=None, ge=0)
+    DEPTH_DERIBIT_OPTION_TRADES_INTER_REQUEST_SLEEP_S: float | None = Field(default=None, ge=0)
+
+
 class _RuntimeConfigModel(BaseModel):
     """Top-level runtime config schema."""
 
     model_config = ConfigDict(extra="allow")
     global_: dict[str, Any] = {}
-    env: dict[str, Any]
+    env: _EnvConfigModel
     export_descriptive_stats: _ExportDescriptiveStatsModel
     bronze_build: _LoaderConfigModel | None = None
 

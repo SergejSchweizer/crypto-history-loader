@@ -4,12 +4,23 @@ from __future__ import annotations
 
 import argparse
 import logging
-from datetime import UTC, datetime
 from typing import cast
 
 from api.commands.loader_dataset_handlers import build_trade_tasks_from_specs
 from application.datasets import CliDataType, DatasetSpec, DatasetTask, dataset_specs
 from application.dto import BronzeFetchPlanDTO
+from application.services.bronze_runtime_service import (
+    canonical_symbol_key as _canonical_symbol_key,
+)
+from application.services.bronze_runtime_service import (
+    parse_exchange_symbol_start_dates as _parse_exchange_symbol_start_dates,
+)
+from application.services.bronze_runtime_service import (
+    parse_start_date_to_open_ms as _parse_start_date_to_open_ms,
+)
+from application.services.bronze_runtime_service import (
+    parse_symbol_start_dates as _parse_symbol_start_dates,
+)
 from ingestion.spot import Exchange, Market, normalize_timeframe
 
 BRONZE_FIXED_TIMEFRAME = "1m"
@@ -155,79 +166,22 @@ def _trade_spec_for_market(*, specs: list[DatasetSpec], market: str) -> DatasetS
 def parse_start_date_to_open_ms(start_date: str | None) -> int | None:
     """Parse inclusive UTC start date ``YYYY-MM-DD`` to epoch milliseconds."""
 
-    if start_date is None:
-        return None
-    value = start_date.strip()
-    if not value:
-        return None
-    start_dt = datetime.strptime(value, "%Y-%m-%d").replace(tzinfo=UTC)
-    return int(start_dt.timestamp() * 1000)
+    return _parse_start_date_to_open_ms(start_date)
 
 
 def canonical_symbol_key(symbol: str) -> str:
     """Return canonical base symbol key for per-symbol start-date matching."""
 
-    upper = symbol.upper().strip()
-    if not upper:
-        return upper
-    if upper.endswith("-PERPETUAL"):
-        return upper.split("-", 1)[0]
-    if "_" in upper:
-        return upper.split("_", 1)[0]
-    if upper.endswith("USDC"):
-        return upper[:-4]
-    if upper.endswith("USDT"):
-        return upper[:-4]
-    if upper.endswith("USD"):
-        return upper[:-3]
-    return upper
+    return _canonical_symbol_key(symbol)
 
 
 def parse_symbol_start_dates(entries: list[str] | None) -> dict[str, int]:
-    """Parse ``SYMBOL=YYYY-MM-DD`` entries into canonical symbol->epoch-ms map."""
+    """Parse ``SYMBOL=YYYY-MM-DD`` entries into canonical symbol-to-epoch-ms map."""
 
-    if not entries:
-        return {}
-    parsed: dict[str, int] = {}
-    for raw in entries:
-        item = raw.strip()
-        if not item:
-            continue
-        if "=" not in item:
-            raise ValueError(f"Invalid symbol start date '{item}'. Expected SYMBOL=YYYY-MM-DD")
-        symbol_part, date_part = item.split("=", 1)
-        symbol_key = canonical_symbol_key(symbol_part)
-        if not symbol_key:
-            raise ValueError(f"Invalid symbol in symbol start date '{item}'")
-        start_ms = parse_start_date_to_open_ms(date_part)
-        if start_ms is None:
-            raise ValueError(f"Invalid start date in symbol start date '{item}'")
-        parsed[symbol_key] = start_ms
-    return parsed
+    return _parse_symbol_start_dates(entries)
 
 
 def parse_exchange_symbol_start_dates(entries: list[str] | None) -> dict[str, int]:
-    """Parse ``EXCHANGE:SYMBOL=YYYY-MM-DD`` entries into canonical exchange:symbol->epoch-ms map."""
+    """Parse ``EXCHANGE:SYMBOL=YYYY-MM-DD`` entries into canonical exchange:symbol map."""
 
-    if not entries:
-        return {}
-    parsed: dict[str, int] = {}
-    for raw in entries:
-        item = raw.strip()
-        if not item:
-            continue
-        if "=" not in item:
-            raise ValueError(f"Invalid exchange-symbol start date '{item}'. Expected EXCHANGE:SYMBOL=YYYY-MM-DD")
-        pair_part, date_part = item.split("=", 1)
-        if ":" not in pair_part:
-            raise ValueError(f"Invalid exchange-symbol pair '{pair_part}'. Expected EXCHANGE:SYMBOL")
-        exchange_part, symbol_part = pair_part.split(":", 1)
-        exchange_key = exchange_part.strip().lower()
-        symbol_key = canonical_symbol_key(symbol_part)
-        if not exchange_key or not symbol_key:
-            raise ValueError(f"Invalid exchange-symbol in '{item}'")
-        start_ms = parse_start_date_to_open_ms(date_part)
-        if start_ms is None:
-            raise ValueError(f"Invalid start date in exchange-symbol start date '{item}'")
-        parsed[f"{exchange_key}:{symbol_key}"] = start_ms
-    return parsed
+    return _parse_exchange_symbol_start_dates(entries)
