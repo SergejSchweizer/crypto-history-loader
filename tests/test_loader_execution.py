@@ -5,6 +5,8 @@ from __future__ import annotations
 import logging
 from typing import Any, cast
 
+import pytest
+
 from api.commands.loader_execution import fetch_all_task_groups
 
 
@@ -107,3 +109,24 @@ def test_fetch_all_task_groups_skips_empty_groups() -> None:
 
     assert calls == []
     assert result == ({}, {}, {}, {}, {}, {}, {}, {})
+
+
+def test_fetch_all_task_groups_requires_volatility_fetcher_for_volatility_tasks() -> None:
+    with pytest.raises(ValueError, match="fetch_volatility_fn is required"):
+        fetch_all_task_groups(
+            candle_tasks=[],
+            oi_tasks=[],
+            funding_tasks=[],
+            volatility_tasks=[("deribit", "BTC", "1m")],
+            trade_tasks=None,
+            lake_root="lake/bronze",
+            candle_concurrency=1,
+            oi_concurrency=1,
+            funding_concurrency=1,
+            trade_concurrency=1,
+            logger=logging.getLogger("test_loader_execution_volatility_missing"),
+            fetch_candles_fn=lambda **kwargs: ({}, {}),
+            fetch_oi_fn=lambda **kwargs: ({}, {}),
+            fetch_funding_fn=lambda **kwargs: ({}, {}),
+            fetch_trades_fn=lambda **kwargs: ({}, {}),
+        )

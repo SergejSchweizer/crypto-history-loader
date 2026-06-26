@@ -94,6 +94,7 @@ def _build_steps(*, main_path: Path, config_path: Path, config_data: dict[str, A
         cli_args = [str(token) for token in cli_args_raw]
         if layer_name == "bronze" and command == "bronze-build":
             cli_args = _apply_bronze_start_defaults(cli_args=cli_args, config_data=config_data)
+            cli_args = _ensure_volatility_dataset_arg(cli_args)
 
         cmd = [str(main_path), "--config", str(config_path), command, *cli_args]
         steps.append(PipelineStep(name=layer_name, args=cmd))
@@ -104,6 +105,20 @@ def _has_option(cli_args: list[str], option_name: str) -> bool:
     """Return whether a CLI option is already present."""
 
     return option_name in cli_args
+
+
+def _ensure_volatility_dataset_arg(cli_args: list[str]) -> list[str]:
+    """Include volatility index data in Bronze medallion dataset schedules."""
+
+    if "--dataset" not in cli_args or "volatility_index_data" in cli_args:
+        return cli_args
+    rewritten = list(cli_args)
+    dataset_idx = rewritten.index("--dataset")
+    insert_idx = dataset_idx + 1
+    while insert_idx < len(rewritten) and not rewritten[insert_idx].startswith("--"):
+        insert_idx += 1
+    rewritten.insert(insert_idx, "volatility_index_data")
+    return rewritten
 
 
 def _string_list(value: object) -> list[str]:
@@ -150,7 +165,7 @@ def _log_path_from_config(*, config_data: dict[str, Any], repo_root: Path) -> Pa
     if isinstance(env_cfg, dict):
         configured_file = env_cfg.get("DEPTH_SYNC_LOG_FILE")
         if isinstance(configured_file, str) and configured_file.strip():
-            return Path(configured_file.strip()).resolve()
+            return (Path(configured_file.strip()).parent / "run-medallion-pipeline.log").resolve()
         configured_dir = env_cfg.get("DEPTH_SYNC_LOG_DIR")
         if isinstance(configured_dir, str) and configured_dir.strip():
             return (Path(configured_dir.strip()) / "crypto-history-loader.log").resolve()

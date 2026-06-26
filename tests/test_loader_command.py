@@ -70,6 +70,8 @@ def test_run_bronze_build_emits_manifest_and_plot_file_lists(tmp_path: Path, mon
             {},
             {},
             {},
+            {},
+            {},
         )
 
     monkeypatch.setattr(loader_cmd, "SingleInstanceLock", _NoopLock)
@@ -302,7 +304,7 @@ def test_run_bronze_build_drops_invalid_symbols_before_scheduling(monkeypatch) -
         scheduled_candle_tasks.extend(cast(Any, kwargs["candle_tasks"]))
         scheduled_oi_tasks.extend(cast(Any, kwargs["oi_tasks"]))
         scheduled_funding_tasks.extend(cast(Any, kwargs["funding_tasks"]))
-        return ({}, {}, {}, {}, {}, {}, {}, {})
+        return ({}, {}, {}, {}, {}, {}, {}, {}, {}, {})
 
     monkeypatch.setattr(loader_cmd, "SingleInstanceLock", _NoopLock)
     monkeypatch.setattr(loader_cmd, "_fetch_all_task_groups", _fake_fetch_all_task_groups)
@@ -373,7 +375,7 @@ def test_run_bronze_build_uses_symbols_for_trade_tasks(monkeypatch) -> None:  # 
 
     def _fake_fetch_all_task_groups(**kwargs: object):  # type: ignore[no-untyped-def]
         scheduled_trade_tasks.extend(cast(Any, kwargs["trade_tasks"]))
-        return ({}, {}, {}, {}, {}, {}, {}, {})
+        return ({}, {}, {}, {}, {}, {}, {}, {}, {}, {})
 
     monkeypatch.setattr(loader_cmd, "SingleInstanceLock", _NoopLock)
     monkeypatch.setattr(loader_cmd, "_fetch_all_task_groups", _fake_fetch_all_task_groups)
@@ -493,7 +495,7 @@ def test_run_bronze_build_resumes_from_checkpoint_and_clears_on_success(
         candle_tasks = cast(list[tuple[str, str, str, str]], kwargs["candle_tasks"])
         scheduled.extend(candle_tasks)
         rows = {task: [] for task in candle_tasks}
-        return (rows, {}, {}, {}, {}, {}, {}, {})
+        return (rows, {}, {}, {}, {}, {}, {}, {}, {}, {})
 
     monkeypatch.setattr(loader_cmd, "_fetch_all_task_groups", _fake_fetch_all_task_groups)
 
@@ -515,7 +517,13 @@ def test_run_bronze_build_resumes_from_checkpoint_and_clears_on_success(
     loader_cmd._write_bronze_checkpoint(
         checkpoint_path,
         fingerprint=fingerprint,
-        completed={"candle": {"deribit|spot|BTC|1m"}, "oi": set(), "funding": set(), "trade": set()},
+        completed={
+            "candle": {"deribit|spot|BTC|1m"},
+            "oi": set(),
+            "funding": set(),
+            "volatility_index_data": set(),
+            "trade": set(),
+        },
     )
 
     loader_cmd.run_bronze_build(args=args, logger=logging.getLogger("test"))

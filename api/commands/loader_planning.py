@@ -22,7 +22,7 @@ def sanitize_symbols(raw_symbols: object, logger: logging.Logger) -> list[str]:
         raise ValueError("Symbols must be provided as a list")
     cleaned: list[str] = []
     dropped = 0
-    for raw in raw_symbols:
+    for raw in cast(list[object], raw_symbols):
         if not isinstance(raw, str):
             dropped += 1
             continue
@@ -70,6 +70,7 @@ def build_bronze_fetch_plan(args: argparse.Namespace, logger: logging.Logger) ->
     candle_tasks: list[tuple[Exchange, Market, str, str]] = []
     oi_tasks: list[tuple[Exchange, str, str]] = []
     funding_tasks: list[tuple[Exchange, str, str]] = []
+    volatility_index_data_tasks: list[tuple[Exchange, str, str]] = []
     for exchange in sorted(exchanges):
         normalized_timeframe = normalize_timeframe(exchange=exchange, value=BRONZE_FIXED_TIMEFRAME)
         for symbol in symbols:
@@ -118,6 +119,7 @@ def build_bronze_fetch_plan(args: argparse.Namespace, logger: logging.Logger) ->
         candle_tasks=candle_tasks,
         oi_tasks=oi_tasks,
         funding_tasks=funding_tasks,
+        volatility_index_data_tasks=volatility_index_data_tasks,
         trade_tasks=trade_tasks,
         dataset_tasks=dataset_tasks,
     )

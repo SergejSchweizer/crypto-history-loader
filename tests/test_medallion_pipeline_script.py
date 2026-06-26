@@ -44,6 +44,7 @@ def test_build_steps_uses_configured_market_args_with_trades(tmp_path: Path) -> 
     args = steps[0].args
     assert "--dataset" in args
     assert "perp_trades" in args
+    assert "volatility_index_data" in args
 
 
 def test_build_steps_bronze_inherits_start_bounds_from_bronze_config(tmp_path: Path) -> None:
@@ -123,7 +124,7 @@ def test_log_path_from_config_prefers_explicit_log_file(tmp_path: Path) -> None:
     module = _load_pipeline_module()
     cfg = {"env": {"DEPTH_SYNC_LOG_FILE": str(tmp_path / "logs" / "pipeline.log")}}
     out = module._log_path_from_config(config_data=cfg, repo_root=tmp_path)
-    assert out == (tmp_path / "logs" / "pipeline.log").resolve()
+    assert out == (tmp_path / "logs" / "run-medallion-pipeline.log").resolve()
 
 
 def test_build_steps_validation_errors(tmp_path: Path) -> None:

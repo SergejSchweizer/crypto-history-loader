@@ -1,4 +1,5 @@
 """Gold transformation service for per-symbol model-ready datasets."""
+# pyright: reportUnknownMemberType=false, reportUnknownVariableType=false, reportUnknownArgumentType=false
 
 from __future__ import annotations
 
@@ -21,6 +22,7 @@ _FULL_MARKET_REQUIREMENTS: list[tuple[str, str]] = [
     ("funding_1m_feature", "1m"),
     ("perp_trades_1m_feature", "1m"),
     ("option_trades_1m_feature", "1m"),
+    ("volatility_index_data_observed", "1m"),
 ]
 GOLD_DATASET_SPECS: dict[str, dict[str, object]] = {
     "gold.market.perp_trades.m1": {
@@ -223,6 +225,51 @@ def _prune_gold_versions(
     version_dirs_sorted = sorted(version_dirs, key=_sort_key, reverse=True)
     for old_dir in version_dirs_sorted[keep_last_versions:]:
         shutil.rmtree(old_dir, ignore_errors=False)
+
+
+def _prune_gold_artifacts(
+    *,
+    gold_root: Path,
+    dataset_id: str,
+    exchange: str,
+    symbol: str,
+    keep_last_versions: int,
+) -> None:
+    """Keep only latest N gold artifact stems per dataset/exchange/symbol lineage."""
+
+    if keep_last_versions < 1:
+        raise ValueError(f"keep_last_versions must be >= 1; received {keep_last_versions}")
+
+    dataset_base = gold_root / f"dataset_id={dataset_id}" / "dataset_type=gold_symbol_dataset"
+    symbol_dirs = list(dataset_base.glob(f"feature_set_version=*/exchange={exchange}/symbol={symbol}"))
+    if not symbol_dirs:
+        return
+
+    grouped: dict[Path, list[Path]] = {}
+    for symbol_dir in symbol_dirs:
+        for artifact in symbol_dir.glob("*"):
+            if not artifact.is_file():
+                continue
+            grouped.setdefault(artifact.with_suffix(""), []).append(artifact)
+    if len(grouped) <= keep_last_versions:
+        return
+
+    def _group_sort_key(stem_path: Path, files: list[Path]) -> tuple[int, tuple[int, int, int], float, str]:
+        version_dir = stem_path.parent.parent.parent
+        parsed_version = _extract_feature_set_version(version_dir)
+        mtime = max(path.stat().st_mtime for path in files)
+        if parsed_version is not None:
+            try:
+                semver = _parse_semver(parsed_version)
+                return (1, semver, mtime, str(stem_path))
+            except ValueError:
+                pass
+        return (0, (0, 0, 0), mtime, str(stem_path))
+
+    sorted_groups = sorted(grouped.items(), key=lambda item: _group_sort_key(item[0], item[1]), reverse=True)
+    for _, files in sorted_groups[keep_last_versions:]:
+        for path in files:
+            path.unlink(missing_ok=True)
 
 
 def _contract_bump_level(
@@ -479,7 +526,7 @@ def _read_dataset_frame(
 ) -> Any:
     pl = _require_polars()
     dataset_root = Path(silver_root) / f"dataset_type={dataset_type}" / f"exchange={exchange}"
-    candidate_dirs: list[tuple[float, Path]] = []
+    candidate_files: list[Path] = []
     symbol_dirs = sorted(dataset_root.glob(f"symbol=*/timeframe={timeframe}"))
     for sym_dir in symbol_dirs:
         sym_segment = sym_dir.parent.name
@@ -488,18 +535,11 @@ def _read_dataset_frame(
         raw_symbol = sym_segment.split("=", 1)[1]
         if normalize_symbol(raw_symbol) != symbol:
             continue
-        dir_files = sorted(sym_dir.glob("**/*.parquet"))
-        if not dir_files:
-            continue
-        latest_mtime = max(path.stat().st_mtime for path in dir_files)
-        candidate_dirs.append((latest_mtime, sym_dir))
-    if not candidate_dirs:
+        candidate_files.extend(path for path in sorted(sym_dir.glob("**/*.parquet")) if path.is_file())
+    if not candidate_files:
         raise ValueError(f"Missing silver dataset for symbol={symbol}: {dataset_type}")
-    _, selected_dir = max(candidate_dirs, key=lambda item: (item[0], str(item[1])))
-    files = sorted(selected_dir.glob("**/*.parquet"))
-    if not files:
-        raise ValueError(f"Missing silver dataset for symbol={symbol}: {dataset_type}")
-    frame = pl.read_parquet([str(path) for path in files])
+    selected_file = max(candidate_files, key=lambda path: (path.stat().st_mtime, str(path)))
+    frame = pl.read_parquet(str(selected_file))
     return frame
 
 
@@ -636,6 +676,26 @@ def _prepare_option_trades(pl: Any, frame: Any, symbol: str) -> Any:
     )
 
 
+def _prepare_volatility_index_data(pl: Any, frame: Any, symbol: str) -> Any:
+    return (
+        frame.with_columns(
+            [
+                pl.col("timestamp").cast(pl.Datetime(time_unit="us", time_zone="UTC")).alias("timestamp_m1"),
+                pl.lit(symbol).alias("symbol"),
+            ]
+        )
+        .select(
+            [
+                "timestamp_m1",
+                "exchange",
+                "symbol",
+                pl.col("volatility_value").cast(pl.Float64).alias("volatility_index_value"),
+            ]
+        )
+        .sort("timestamp_m1")
+    )
+
+
 def _prepare_dataset_frame(pl: Any, dataset_type: str, frame: Any, symbol: str) -> Any:
     dataset_preparers: dict[str, Any] = {
         "spot": lambda: _prepare_spot_or_perp(pl, frame, "spot", symbol),
@@ -644,6 +704,7 @@ def _prepare_dataset_frame(pl: Any, dataset_type: str, frame: Any, symbol: str) 
         "funding_1m_feature": lambda: _prepare_funding(pl, frame, symbol),
         "perp_trades_1m_feature": lambda: _prepare_trades(pl, frame, symbol),
         "option_trades_1m_feature": lambda: _prepare_option_trades(pl, frame, symbol),
+        "volatility_index_data_observed": lambda: _prepare_volatility_index_data(pl, frame, symbol),
         "gold_l2_m1": lambda: _prepare_l2(pl, frame, symbol),
     }
     preparer = dataset_preparers.get(dataset_type)
@@ -702,7 +763,7 @@ def _sample_frame_for_plot(frame: Any) -> Any:
 def _ordered_numeric_columns(frame: Any) -> list[str]:
     numeric_cols = [col for col, dtype in zip(frame.columns, frame.dtypes, strict=False) if dtype.is_numeric()]
     market_cols = [col for col in numeric_cols if col.startswith(("spot_", "perp_"))]
-    derived_cols = [col for col in numeric_cols if col.startswith(("oi_", "funding_"))]
+    derived_cols = [col for col in numeric_cols if col.startswith(("oi_", "funding_", "volatility_index_"))]
     l2_cols = [col for col in numeric_cols if col.startswith("l2_")]
     other_cols = [col for col in numeric_cols if col not in set(market_cols + derived_cols + l2_cols)]
     return [*market_cols, *derived_cols, *l2_cols, *other_cols]
@@ -871,7 +932,7 @@ def _write_feature_distribution_plot(
         series_df = frame.select(["timestamp_m1", col]).sort("timestamp_m1")
         values_all = series_df.get_column(col).to_list()
         ts = series_df.get_column("timestamp_m1").to_list()
-        arr_non_null, arr_plot_normalized, missing_values = _normalized_series(values_all)
+        arr_non_null, arr_plot_normalized, _missing_values = _normalized_series(values_all)
         left_ax = fig.add_subplot(grid[idx + 1, 0])
         right_ax = fig.add_subplot(grid[idx + 1, 1])
 
@@ -1026,6 +1087,8 @@ def _feature_source_dataset(column_name: str) -> str:
         return "funding_1m_feature"
     if column_name.startswith("trades_"):
         return "perp_trades_1m_feature"
+    if column_name.startswith("volatility_index_"):
+        return "volatility_index_data_observed"
     return "gold_merged"
 
 
@@ -1286,14 +1349,21 @@ def build_gold_for_symbol(
         symbol=symbol,
         keep_last_versions=keep_last_versions,
     )
+    _prune_gold_artifacts(
+        gold_root=root,
+        dataset_id=dataset_id,
+        exchange=exchange,
+        symbol=symbol,
+        keep_last_versions=keep_last_versions,
+    )
 
     return GoldBuildReport(
         exchange=exchange,
         symbol=symbol,
         rows_out=merged.height,
         columns=cols,
-        min_timestamp=manifest_payload["min_timestamp"],
-        max_timestamp=manifest_payload["max_timestamp"],
+        min_timestamp=str(manifest_payload["min_timestamp"]) if manifest_payload["min_timestamp"] is not None else None,
+        max_timestamp=str(manifest_payload["max_timestamp"]) if manifest_payload["max_timestamp"] is not None else None,
         parquet_path=str(parquet_path.resolve()),
         manifest_path=written_manifest,
         plot_path=written_plot,

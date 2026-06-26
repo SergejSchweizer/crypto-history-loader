@@ -130,6 +130,8 @@ def test_dataset_specs_symbol_normalization_and_hash_helpers() -> None:
     assert _feature_source_dataset("funding_rate_last_known") == "funding_1m_feature"
     assert _feature_source_dataset("trades_open_price") == "perp_trades_1m_feature"
     assert _feature_source_dataset("option_trades_open_price") == "option_trades_1m_feature"
+    assert _feature_source_dataset("volatility_index_data_value") == "volatility_index_data_observed"
+    assert _feature_source_dataset("volatility_index_value") == "volatility_index_data_observed"
     assert _feature_source_dataset("l2_coverage_ratio") == "gold_merged"
     assert _feature_source_dataset("custom_col") == "gold_merged"
 
@@ -254,6 +256,41 @@ def _write_option_trades_1m_feature_month(
     _write_silver_month(
         root,
         dataset_type="option_trades_1m_feature",
+        exchange=exchange,
+        symbol=symbol,
+        timeframe="1m",
+        month=month,
+        rows=rows,
+    )
+
+
+def _write_volatility_observed_month(
+    root: Path,
+    *,
+    dataset_type: str,
+    exchange: str,
+    symbol: str,
+    month: str,
+    timestamps: list[datetime],
+) -> None:
+    rows: list[dict[str, object]] = []
+    for idx, ts in enumerate(timestamps):
+        rows.append(
+            {
+                "timestamp": ts,
+                "exchange": exchange,
+                "symbol": symbol,
+                "instrument_type": "perp",
+                "dataset_type": dataset_type.replace("_observed", ""),
+                "volatility_value": 50.0 + idx,
+                "volatility_source_timestamp": ts,
+                "ingested_at": ts,
+                "source_endpoint": "public_volatility",
+            }
+        )
+    _write_silver_month(
+        root,
+        dataset_type=dataset_type,
         exchange=exchange,
         symbol=symbol,
         timeframe="1m",
@@ -402,6 +439,22 @@ def test_build_gold_for_symbol_writes_hashed_parquet_and_manifest(tmp_path: Path
         month="2026-05",
         timestamps=[t0, t1],
     )
+    _write_volatility_observed_month(
+        silver,
+        dataset_type="volatility_index_data_observed",
+        exchange=exchange,
+        symbol="BTC-PERPETUAL",
+        month="2026-05",
+        timestamps=[t0, t1],
+    )
+    _write_volatility_observed_month(
+        silver,
+        dataset_type="volatility_index_data_observed",
+        exchange=exchange,
+        symbol="BTC-PERPETUAL",
+        month="2026-05",
+        timestamps=[t0, t1],
+    )
 
     assert discover_gold_symbols(str(silver), exchange) == [symbol]
 
@@ -441,6 +494,7 @@ def test_build_gold_for_symbol_writes_hashed_parquet_and_manifest(tmp_path: Path
     assert "funding_1m_feature" in payload["source_silver_datasets"]
     assert "perp_trades_1m_feature" in payload["source_silver_datasets"]
     assert "option_trades_1m_feature" in payload["source_silver_datasets"]
+    assert "volatility_index_data_observed" in payload["source_silver_datasets"]
     assert payload["source_silver_datasets"]["spot_1m"]["source_symbols"] == ["BTC"]
     assert payload["source_silver_datasets"]["perp_1m"]["source_symbols"] == ["BTC"]
     assert "feature_metadata" in payload
@@ -454,6 +508,94 @@ def test_build_gold_for_symbol_writes_hashed_parquet_and_manifest(tmp_path: Path
     assert "source_data_hash" in payload
     assert "git_commit_hash" in payload
     assert "build_id" in payload
+
+
+def test_build_gold_uses_latest_silver_artifacts_only(tmp_path: Path) -> None:
+    silver = tmp_path / "silver"
+    gold = tmp_path / "gold"
+    symbol = "BTC"
+    exchange = "deribit"
+    t0 = datetime(2026, 5, 1, 0, 0, tzinfo=UTC)
+    t1 = datetime(2026, 5, 1, 0, 1, tzinfo=UTC)
+
+    spot_timeframe_dir = silver / "dataset_type=spot" / f"exchange={exchange}" / "symbol=BTC_USDC" / "timeframe=1m"
+    spot_timeframe_dir.mkdir(parents=True, exist_ok=True)
+    old_spot_path = spot_timeframe_dir / "BTC_2026_05_old.parquet"
+    new_spot_path = spot_timeframe_dir / "BTC_2026_05_new.parquet"
+    pl.DataFrame(
+        [
+            {
+                "open_time": t0,
+                "exchange": exchange,
+                "symbol": symbol,
+                "open_price": 1.0,
+                "high_price": 1.0,
+                "low_price": 1.0,
+                "close_price": 1.0,
+                "volume": 10.0,
+            },
+            {
+                "open_time": t1,
+                "exchange": exchange,
+                "symbol": symbol,
+                "open_price": 9.0,
+                "high_price": 9.0,
+                "low_price": 9.0,
+                "close_price": 9.0,
+                "volume": 11.0,
+            },
+        ]
+    ).write_parquet(old_spot_path)
+    pl.DataFrame(
+        [
+            {
+                "open_time": t0,
+                "exchange": exchange,
+                "symbol": symbol,
+                "open_price": 2.0,
+                "high_price": 2.0,
+                "low_price": 2.0,
+                "close_price": 2.0,
+                "volume": 20.0,
+            }
+        ]
+    ).write_parquet(new_spot_path)
+    now = datetime.now().timestamp()
+    os.utime(old_spot_path, (now - 120.0, now - 120.0))
+    os.utime(new_spot_path, (now, now))
+
+    _write_silver_month(
+        silver,
+        dataset_type="perp",
+        exchange=exchange,
+        symbol="BTC-PERPETUAL",
+        timeframe="1m",
+        month="2026-05",
+        rows=[
+            {
+                "open_time": t0,
+                "exchange": exchange,
+                "symbol": symbol,
+                "open_price": 10.0,
+                "high_price": 10.0,
+                "low_price": 10.0,
+                "close_price": 10.0,
+                "volume": 100.0,
+            }
+        ],
+    )
+
+    report = build_gold_for_symbol(
+        silver_root=str(silver),
+        gold_root=str(gold),
+        exchange=exchange,
+        symbol=symbol,
+        dataset_id="gold.market.core.m1",
+    )
+    assert report.rows_out == 1
+
+    payload = json.loads(_require_manifest_path(report).read_text(encoding="utf-8"))
+    assert payload["source_silver_datasets"]["spot_1m"]["rows"] == 1
 
 
 def test_build_gold_for_symbol_normalizes_input_symbol(tmp_path: Path) -> None:
@@ -568,6 +710,38 @@ def test_build_gold_for_symbol_normalizes_input_symbol(tmp_path: Path) -> None:
                 }
             ],
         ),
+        (
+            "volatility_index_data_observed",
+            [
+                {
+                    "timestamp": t0,
+                    "exchange": exchange,
+                    "symbol": "BTC",
+                    "instrument_type": "perp",
+                    "dataset_type": "volatility_index_data",
+                    "volatility_value": 50.0,
+                    "volatility_source_timestamp": t0,
+                    "ingested_at": t0,
+                    "source_endpoint": "public_volatility",
+                }
+            ],
+        ),
+        (
+            "volatility_index_data_observed",
+            [
+                {
+                    "timestamp": t0,
+                    "exchange": exchange,
+                    "symbol": "BTC",
+                    "instrument_type": "perp",
+                    "dataset_type": "volatility_index_data",
+                    "volatility_value": 70.0,
+                    "volatility_source_timestamp": t0,
+                    "ingested_at": t0,
+                    "source_endpoint": "public_volatility",
+                }
+            ],
+        ),
     ]:
         _write_silver_month(
             silver,
@@ -607,6 +781,22 @@ def test_build_gold_for_symbol_trades_only_dataset(tmp_path: Path) -> None:
         silver,
         exchange=exchange,
         symbol=symbol,
+        month="2026-05",
+        timestamps=[t0, t1],
+    )
+    _write_volatility_observed_month(
+        silver,
+        dataset_type="volatility_index_data_observed",
+        exchange=exchange,
+        symbol="BTC-PERPETUAL",
+        month="2026-05",
+        timestamps=[t0, t1],
+    )
+    _write_volatility_observed_month(
+        silver,
+        dataset_type="volatility_index_data_observed",
+        exchange=exchange,
+        symbol="BTC-PERPETUAL",
         month="2026-05",
         timestamps=[t0, t1],
     )
@@ -887,6 +1077,22 @@ def test_build_gold_hybrid_full_l2_contains_l2_features(tmp_path: Path) -> None:
         month="2026-05",
         timestamps=[t0, t1],
     )
+    _write_volatility_observed_month(
+        silver,
+        dataset_type="volatility_index_data_observed",
+        exchange=exchange,
+        symbol="BTC-PERPETUAL",
+        month="2026-05",
+        timestamps=[t0, t1],
+    )
+    _write_volatility_observed_month(
+        silver,
+        dataset_type="volatility_index_data_observed",
+        exchange=exchange,
+        symbol="BTC-PERPETUAL",
+        month="2026-05",
+        timestamps=[t0, t1],
+    )
     _write_l2_gold_parquet(
         gold,
         symbol=symbol,
@@ -1051,6 +1257,22 @@ def test_build_gold_hybrid_full_l2_uses_requested_exchange_l2(tmp_path: Path) ->
         silver,
         exchange=exchange,
         symbol=symbol,
+        month="2026-05",
+        timestamps=[t0, t1],
+    )
+    _write_volatility_observed_month(
+        silver,
+        dataset_type="volatility_index_data_observed",
+        exchange=exchange,
+        symbol="BTC-PERPETUAL",
+        month="2026-05",
+        timestamps=[t0, t1],
+    )
+    _write_volatility_observed_month(
+        silver,
+        dataset_type="volatility_index_data_observed",
+        exchange=exchange,
+        symbol="BTC-PERPETUAL",
         month="2026-05",
         timestamps=[t0, t1],
     )
@@ -1231,6 +1453,22 @@ def test_build_gold_hybrid_full_l2_rejects_invalid_l2_coverage_ratio(tmp_path: P
         month="2026-05",
         timestamps=[t0, t1],
     )
+    _write_volatility_observed_month(
+        silver,
+        dataset_type="volatility_index_data_observed",
+        exchange=exchange,
+        symbol="BTC-PERPETUAL",
+        month="2026-05",
+        timestamps=[t0, t1],
+    )
+    _write_volatility_observed_month(
+        silver,
+        dataset_type="volatility_index_data_observed",
+        exchange=exchange,
+        symbol="BTC-PERPETUAL",
+        month="2026-05",
+        timestamps=[t0, t1],
+    )
     _write_l2_gold_parquet(
         gold,
         symbol=symbol,
@@ -1388,6 +1626,22 @@ def test_build_gold_hybrid_full_l2_lenient_drops_invalid_rows(tmp_path: Path) ->
         silver,
         exchange=exchange,
         symbol=symbol,
+        month="2026-05",
+        timestamps=[t0, t1],
+    )
+    _write_volatility_observed_month(
+        silver,
+        dataset_type="volatility_index_data_observed",
+        exchange=exchange,
+        symbol="BTC-PERPETUAL",
+        month="2026-05",
+        timestamps=[t0, t1],
+    )
+    _write_volatility_observed_month(
+        silver,
+        dataset_type="volatility_index_data_observed",
+        exchange=exchange,
+        symbol="BTC-PERPETUAL",
         month="2026-05",
         timestamps=[t0, t1],
     )
@@ -1555,6 +1809,22 @@ def test_build_gold_full_keeps_minute_grid_and_reports_missing_values(tmp_path: 
         silver,
         exchange=exchange,
         symbol=symbol,
+        month="2026-05",
+        timestamps=[t0, t2],
+    )
+    _write_volatility_observed_month(
+        silver,
+        dataset_type="volatility_index_data_observed",
+        exchange=exchange,
+        symbol="BTC-PERPETUAL",
+        month="2026-05",
+        timestamps=[t0, t2],
+    )
+    _write_volatility_observed_month(
+        silver,
+        dataset_type="volatility_index_data_observed",
+        exchange=exchange,
+        symbol="BTC-PERPETUAL",
         month="2026-05",
         timestamps=[t0, t2],
     )
@@ -1730,3 +2000,85 @@ def test_build_gold_prunes_to_latest_three_versions(tmp_path: Path) -> None:
     )
     kept_versions = sorted(path.name.split("=", 1)[1] for path in version_dirs)
     assert kept_versions == ["v1.0.1", "v1.0.2", "v1.0.3"]
+
+
+def test_build_gold_prunes_to_latest_three_artifacts_with_same_version(tmp_path: Path) -> None:
+    silver = tmp_path / "silver"
+    gold = tmp_path / "gold"
+    symbol = "BTC"
+    exchange = "deribit"
+    t0 = datetime(2026, 5, 1, 0, 0, tzinfo=UTC)
+
+    _write_silver_month(
+        silver,
+        dataset_type="spot",
+        exchange=exchange,
+        symbol="BTC_USDC",
+        timeframe="1m",
+        month="2026-05",
+        rows=[
+            {
+                "open_time": t0,
+                "exchange": exchange,
+                "symbol": symbol,
+                "open_price": 1.0,
+                "high_price": 1.1,
+                "low_price": 0.9,
+                "close_price": 1.0,
+                "volume": 10.0,
+            }
+        ],
+    )
+    _write_silver_month(
+        silver,
+        dataset_type="perp",
+        exchange=exchange,
+        symbol="BTC-PERPETUAL",
+        timeframe="1m",
+        month="2026-05",
+        rows=[
+            {
+                "open_time": t0,
+                "exchange": exchange,
+                "symbol": symbol,
+                "open_price": 10.0,
+                "high_price": 11.0,
+                "low_price": 9.0,
+                "close_price": 10.0,
+                "volume": 100.0,
+            }
+        ],
+    )
+
+    artifact_dir = (
+        gold
+        / "dataset_id=gold.market.core.m1"
+        / "dataset_type=gold_symbol_dataset"
+        / "feature_set_version=v1.0.0"
+        / "exchange=deribit"
+        / "symbol=BTC"
+    )
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    for i in range(5):
+        stem = artifact_dir / f"BTC_GOLD_seed_{i}"
+        for suffix in (".parquet", ".json", ".png"):
+            path = stem.with_suffix(suffix)
+            path.write_text("x", encoding="utf-8")
+
+    build_gold_for_symbol(
+        silver_root=str(silver),
+        gold_root=str(gold),
+        exchange=exchange,
+        symbol=symbol,
+        dataset_id="gold.market.core.m1",
+        dataset_version="v1.0.0",
+        auto_version=False,
+        keep_last_versions=3,
+    )
+
+    parquet_files = sorted(artifact_dir.glob("*.parquet"))
+    json_files = sorted(artifact_dir.glob("*.json"))
+    png_files = sorted(artifact_dir.glob("*.png"))
+    assert len(parquet_files) == 3
+    assert len(json_files) == 3
+    assert len(png_files) == 3

@@ -14,12 +14,14 @@ from application.dto import (
     OpenInterestFetchTaskDTO,
     PersistOptionsDTO,
     TradeFetchTaskDTO,
+    VolatilityFetchTaskDTO,
 )
 from application.services.storage_service import persist_loader_outputs_dto
 from ingestion.funding import FundingPoint
 from ingestion.open_interest import OpenInterestPoint
 from ingestion.spot import Exchange, Market, SpotCandle
 from ingestion.trades import OptionTradeTick, TradeMarket, TradeTick
+from ingestion.volatility import VolatilityPoint
 
 
 class _LakeArgs(Protocol):
@@ -73,6 +75,7 @@ class IncrementalPersistor:
         self.streamed_candle_tasks: set[tuple[Exchange, Market, str, str]] = set()
         self.streamed_oi_tasks: set[tuple[Exchange, str, str]] = set()
         self.streamed_funding_tasks: set[tuple[Exchange, str, str]] = set()
+        self.streamed_volatility_index_data_tasks: set[tuple[Exchange, str, str]] = set()
         self.streamed_trade_tasks: set[tuple[Exchange, TradeMarket, str]] = set()
         self._lock = threading.Lock()
 
@@ -202,6 +205,39 @@ class IncrementalPersistor:
             parquet_files=storage_result.parquet_files,
         )
 
+    def _persist_volatility_task(
+        self,
+        task: VolatilityFetchTaskDTO,
+        rows: list[VolatilityPoint],
+        logger: logging.Logger,
+    ) -> None:
+        if not rows:
+            return
+        storage_result = cast(
+            _PersistResult,
+            self.persist_fn(
+                storage=LoaderStorageDTO(volatility_index_data={"perp": {task.exchange: {task.symbol.upper(): rows}}}),
+                options=PersistOptionsDTO(
+                    save_parquet_lake=True,
+                    lake_root=self.lake_root,
+                    oi_requested=False,
+                    funding_requested=False,
+                    volatility_index_data_requested=True,
+                    trades_requested=False,
+                ),
+            ),
+        )
+        self.incremental_parquet_files.extend(storage_result.parquet_files)
+        self._log_new_daily_partitions(
+            logger=logger,
+            data_type="volatility_index_data",
+            exchange=task.exchange,
+            market="perp",
+            symbol=task.symbol,
+            timeframe=task.timeframe,
+            parquet_files=storage_result.parquet_files,
+        )
+
     def _persist_trade_task(
         self,
         task: TradeFetchTaskDTO,
@@ -312,6 +348,18 @@ class IncrementalPersistor:
             self.streamed_trade_tasks.add((task.exchange, task.market, task.symbol))
             self._persist_trade_task(task, rows, logger)
 
+    def on_volatility_index_data_task_chunk(
+        self,
+        task: VolatilityFetchTaskDTO,
+        rows: list[VolatilityPoint],
+        logger: logging.Logger,
+    ) -> None:
+        if not rows:
+            return
+        self.streamed_volatility_index_data_tasks.add((task.exchange, task.symbol, task.timeframe))
+        self._persist_volatility_task(task, rows, logger)
+        self.mark_checkpoint_complete("volatility_index_data", (task.exchange, task.symbol, task.timeframe))
+
 
 def finalize_bronze_output(
     *,
@@ -320,6 +368,7 @@ def finalize_bronze_output(
     tasks: list[tuple[Exchange, Market, str, str]],
     oi_tasks: list[tuple[Exchange, str, str]],
     funding_tasks: list[tuple[Exchange, str, str]],
+    volatility_index_data_tasks: list[tuple[Exchange, str, str]],
     trade_tasks: list[tuple[Exchange, TradeMarket, str]],
     task_results: dict[tuple[Exchange, Market, str, str], list[SpotCandle]],
     task_errors: dict[tuple[Exchange, Market, str, str], str],
@@ -327,16 +376,20 @@ def finalize_bronze_output(
     oi_errors: dict[tuple[Exchange, str, str], str],
     funding_results: dict[tuple[Exchange, str, str], list[FundingPoint]],
     funding_errors: dict[tuple[Exchange, str, str], str],
+    volatility_index_data_results: dict[tuple[Exchange, str, str], list[VolatilityPoint]],
+    volatility_index_data_errors: dict[tuple[Exchange, str, str], str],
     trade_results: dict[tuple[Exchange, TradeMarket, str], list[TradeTick | OptionTradeTick]],
     trade_errors: dict[tuple[Exchange, TradeMarket, str], str],
     multi_market: bool,
     oi_requested: bool,
     funding_requested: bool,
+    volatility_index_data_requested: bool,
     perp_trades_requested: bool,
     option_trades_requested: bool,
     candles_for_storage: dict[Market, dict[str, dict[str, list[SpotCandle]]]],
     open_interest_for_storage: dict[Market, dict[str, dict[str, list[OpenInterestPoint]]]],
     funding_for_storage: dict[Market, dict[str, dict[str, list[FundingPoint]]]],
+    volatility_index_data_for_storage: dict[Market, dict[str, dict[str, list[VolatilityPoint]]]],
     trades_for_storage: dict[TradeMarket, dict[str, dict[str, list[TradeTick | OptionTradeTick]]]],
     ohlcv_markets: list[Market],
     args: _LakeArgs,
@@ -348,6 +401,7 @@ def finalize_bronze_output(
     populate_ohlcv_output_fn: Callable[..., None],
     populate_oi_output_fn: Callable[..., None],
     populate_funding_output_fn: Callable[..., None],
+    populate_volatility_output_fn: Callable[..., None],
     populate_trades_output_fn: Callable[..., None],
     symbol_progress_rows_fn: Callable[..., list[dict[str, object]]],
     fairness_rows: list[dict[str, object]] | None,
@@ -357,13 +411,16 @@ def finalize_bronze_output(
 ) -> None:
     logger.info(
         "Fetch summary spot/perp: success=%s failed=%s | oi: success=%s failed=%s | "
-        "funding: success=%s failed=%s | trades: success=%s failed=%s",
+        "funding: success=%s failed=%s | volatility_index_data: success=%s failed=%s | "
+        "trades: success=%s failed=%s",
         len(task_results),
         len(task_errors),
         len(oi_results),
         len(oi_errors),
         len(funding_results),
         len(funding_errors),
+        len(volatility_index_data_results),
+        len(volatility_index_data_errors),
         len(trade_results),
         len(trade_errors),
     )
@@ -457,6 +514,8 @@ def finalize_bronze_output(
             selected_dataset_types.add(oi_dataset_type)
         if funding_requested:
             selected_dataset_types.add("funding")
+        if volatility_index_data_requested:
+            selected_dataset_types.add("volatility_index_data")
         if perp_trades_requested:
             selected_dataset_types.add("perp_trades")
         if option_trades_requested:

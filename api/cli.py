@@ -17,6 +17,7 @@ from api.commands.silver import add_silver_build_parser, run_silver_build
 from api.commands.stats import add_export_descriptive_stats_parser, run_export_descriptive_stats
 from api.commands.timeframes import add_list_spot_timeframes_parser, run_list_spot_timeframes
 from application.services.config_validation import validate_runtime_config
+from application.services.fetch_service import fetch_symbol_candles
 from application.services.gapfill_service import _last_closed_open_ms, _missing_ranges_ms
 from application.services.runtime_service import (
     SingleInstanceError,
@@ -64,20 +65,29 @@ _DEBUG_BY_DEFAULT_COMMANDS: frozenset[str] = frozenset({"bronze-build", "silver-
 
 
 # Backward-compatible wrappers used by tests.
-def _fetch_symbol_candles(
+def _fetch_symbol_candles(  # pyright: ignore[reportUnusedFunction]
     exchange: Exchange,
     market: Market,
     symbol: str,
     timeframe: str,
     lake_root: str,
 ) -> list[SpotCandle]:
-    _sync_loader_runtime_overrides()
-    return loader_cmd._fetch_symbol_candles(
+    return fetch_symbol_candles(
         exchange=exchange,
         market=market,
         symbol=symbol,
         timeframe=timeframe,
         lake_root=lake_root,
+        open_times_reader=open_times_in_lake,
+        symbol_normalizer=normalize_storage_symbol,
+        interval_ms_resolver=interval_to_milliseconds,
+        now_open_resolver=_last_closed_open_ms,
+        ranges_builder=_missing_ranges_ms,
+        history_fetcher=fetch_candles_all_history,
+        range_fetcher=fetch_candles_range,
+        latest_open_time_reader=latest_open_time_in_lake,
+        tail_delta_only=_TAIL_DELTA_ONLY,
+        start_open_ms_bound=_BRONZE_START_OPEN_MS,
     )
 
 
@@ -181,10 +191,12 @@ def _subparser_for_command(parser: argparse.ArgumentParser, command: str) -> arg
     """Return subparser object for selected command."""
 
     for action in parser._actions:
-        if isinstance(action, argparse._SubParsersAction):
-            candidate = action.choices.get(command)
-            if isinstance(candidate, argparse.ArgumentParser):
-                return candidate
+        choices = cast(dict[str, argparse.ArgumentParser] | None, getattr(action, "choices", None))
+        if not isinstance(choices, dict):
+            continue
+        candidate = choices.get(command)
+        if isinstance(candidate, argparse.ArgumentParser):
+            return candidate
     return None
 
 
@@ -218,11 +230,12 @@ def _apply_yaml_defaults(
     def _apply_mapping_defaults(section: object) -> None:
         if not isinstance(section, dict):
             return
-        for raw_key, value in section.items():
-            if not isinstance(raw_key, str):
-                continue
+        for raw_key, value in cast(dict[str, object], section).items():
             if raw_key == "debug":
                 # Keep debug as an explicit CLI-only switch.
+                continue
+            if raw_key == "save_parquet_lake":
+                # Keep Bronze parquet writes as an explicit CLI-only switch.
                 continue
             if raw_key in explicit_dests or not hasattr(args, raw_key):
                 continue
@@ -236,11 +249,12 @@ def _resolve_command_config(command: str, config: dict[str, object]) -> object:
     """Resolve command config section, including compatibility aliases."""
 
     if command != "bronze-build":
-        return config.get(command)
+        section = config.get(command)
+        return cast(dict[str, object], section) if isinstance(section, dict) else None
     for candidate in _BRONZE_CONFIG_ALIASES:
         section = config.get(candidate)
         if isinstance(section, dict):
-            return section
+            return cast(dict[str, object], section)
     return None
 
 
@@ -250,9 +264,7 @@ def _apply_env_from_config(config: dict[str, object]) -> None:
     env_config = config.get("env")
     if not isinstance(env_config, dict):
         return
-    for raw_key, value in env_config.items():
-        if not isinstance(raw_key, str):
-            continue
+    for raw_key, value in cast(dict[str, object], env_config).items():
         if value is None:
             continue
         os.environ[raw_key] = str(value)
@@ -288,6 +300,7 @@ def main() -> None:
     logger.info("Command start: %s", args.command)
 
     if args.command == "bronze-build":
+        args._invoked_via_cli = True
         _sync_loader_runtime_overrides()
         loader_cmd.run_bronze_build(args=args, logger=logger)
     elif args.command == "silver-build":

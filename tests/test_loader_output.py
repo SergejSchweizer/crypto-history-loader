@@ -7,8 +7,9 @@ from datetime import UTC, datetime
 from typing import Any
 
 from api.commands.loader_output import IncrementalPersistor
-from application.dto import TradeFetchTaskDTO
+from application.dto import TradeFetchTaskDTO, VolatilityFetchTaskDTO
 from ingestion.trades import TradeTick
+from ingestion.volatility import VolatilityPoint
 
 
 class _PersistResult:
@@ -55,4 +56,71 @@ def test_trade_chunk_persists_without_marking_full_task_complete() -> None:
     persistor.on_trade_task_complete(task, [row], logging.getLogger("test"))
 
     assert len(persist_calls) == 1
+    assert checkpoint_marks == []
+
+
+def test_volatility_chunk_persists_and_marks_task_complete() -> None:
+    """Volatility chunks are complete daily intervals and can checkpoint immediately."""
+
+    checkpoint_marks: list[tuple[str, tuple[object, ...]]] = []
+    persist_calls: list[dict[str, Any]] = []
+    task = VolatilityFetchTaskDTO(
+        exchange="deribit",
+        symbol="BTC",
+        timeframe="1m",
+        dataset_type="volatility_index_data",
+    )
+    row = VolatilityPoint(
+        exchange="deribit",
+        symbol="BTC",
+        interval="1m",
+        open_time=datetime(2026, 4, 27, 10, 0, tzinfo=UTC),
+        close_time=datetime(2026, 4, 27, 10, 0, tzinfo=UTC),
+        value=51.5,
+        source_endpoint="public_get_volatility_index_data",
+        dataset_type="volatility_index",
+    )
+
+    def _persist_fn(**kwargs: Any) -> _PersistResult:
+        persist_calls.append(kwargs)
+        return _PersistResult()
+
+    persistor = IncrementalPersistor(
+        lake_root="lake/bronze",
+        mark_checkpoint_complete=lambda dataset, key: checkpoint_marks.append((dataset, key)),
+        persist_fn=_persist_fn,
+    )
+
+    persistor.on_volatility_index_data_task_chunk(task, [row], logging.getLogger("test"))
+
+    assert len(persist_calls) == 1
+    assert checkpoint_marks == [("volatility_index_data", ("deribit", "BTC", "1m"))]
+
+
+def test_empty_volatility_chunk_skips_persistence() -> None:
+    """Empty volatility chunks should not persist or checkpoint."""
+
+    checkpoint_marks: list[tuple[str, tuple[object, ...]]] = []
+    persist_calls: list[dict[str, Any]] = []
+    task = VolatilityFetchTaskDTO(
+        exchange="deribit",
+        symbol="BTC",
+        timeframe="1m",
+        dataset_type="volatility_index_data",
+    )
+
+    def _persist_fn(**kwargs: Any) -> _PersistResult:
+        persist_calls.append(kwargs)
+        return _PersistResult()
+
+    persistor = IncrementalPersistor(
+        lake_root="lake/bronze",
+        mark_checkpoint_complete=lambda dataset, key: checkpoint_marks.append((dataset, key)),
+        persist_fn=_persist_fn,
+    )
+
+    persistor.on_volatility_index_data_task_chunk(task, [], logging.getLogger("test"))
+    persistor._persist_volatility_task(task, [], logging.getLogger("test"))  # pyright: ignore[reportPrivateUsage] - covers the empty internal persist guard.
+
+    assert persist_calls == []
     assert checkpoint_marks == []

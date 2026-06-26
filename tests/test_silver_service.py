@@ -19,6 +19,7 @@ from application.services.silver_service import (
     build_perp_trades_1m_feature_for_symbol,
     build_perp_trades_observed_for_symbol,
     build_silver_for_symbol,
+    build_volatility_observed_for_symbol,
     discover_months,
     discover_symbols,
     write_monthly_sidecars,
@@ -886,3 +887,102 @@ def test_build_option_trades_1m_feature_for_symbol(tmp_path: Path) -> None:
         / f"{symbol}-2026-05.parquet"
     )
     assert out_file.exists()
+
+
+def test_build_volatility_observed_for_symbol(tmp_path: Path) -> None:
+    bronze = tmp_path / "bronze"
+    silver = tmp_path / "silver"
+    symbol = "BTC"
+    rows = [
+        {
+            "schema_version": "v1",
+            "dataset_type": "volatility_index_data",
+            "exchange": "Deribit",
+            "symbol": symbol,
+            "instrument_type": "perp",
+            "event_time": datetime(2026, 5, 1, 0, 0, tzinfo=UTC),
+            "ingested_at": datetime(2026, 5, 1, 0, 0, 30, tzinfo=UTC),
+            "run_id": "r1",
+            "source_endpoint": "public_get_volatility_index_data",
+            "open_time": datetime(2026, 5, 1, 0, 0, tzinfo=UTC),
+            "close_time": datetime(2026, 5, 1, 0, 0, tzinfo=UTC),
+            "timeframe": "1m",
+            "value": 55.0,
+            "origin_payload": "{}",
+        },
+        {
+            "schema_version": "v1",
+            "dataset_type": "volatility_index_data",
+            "exchange": "Deribit",
+            "symbol": symbol,
+            "instrument_type": "perp",
+            "event_time": datetime(2026, 5, 1, 0, 0, tzinfo=UTC),
+            "ingested_at": datetime(2026, 5, 1, 0, 0, 40, tzinfo=UTC),
+            "run_id": "r2",
+            "source_endpoint": "public_get_volatility_index_data",
+            "open_time": datetime(2026, 5, 1, 0, 0, tzinfo=UTC),
+            "close_time": datetime(2026, 5, 1, 0, 0, tzinfo=UTC),
+            "timeframe": "1m",
+            "value": 56.0,
+            "origin_payload": "{}",
+        },
+        {
+            "schema_version": "v1",
+            "dataset_type": "volatility_index_data",
+            "exchange": "Deribit",
+            "symbol": symbol,
+            "instrument_type": "perp",
+            "event_time": datetime(2026, 5, 1, 0, 1, tzinfo=UTC),
+            "ingested_at": datetime(2026, 5, 1, 0, 1, 30, tzinfo=UTC),
+            "run_id": "r3",
+            "source_endpoint": "public_get_volatility_index_data",
+            "open_time": datetime(2026, 5, 1, 0, 1, tzinfo=UTC),
+            "close_time": datetime(2026, 5, 1, 0, 1, tzinfo=UTC),
+            "timeframe": "1m",
+            "value": -1.0,
+            "origin_payload": "{}",
+        },
+    ]
+    _write_bronze_day_file(
+        bronze,
+        market="volatility_index_data",
+        exchange="deribit",
+        symbol=symbol,
+        timeframe="1m",
+        month="2026-05",
+        day="2026-05-01",
+        rows=rows,
+        dataset_type="volatility_index_data",
+        instrument_type="perp",
+    )
+
+    report = build_volatility_observed_for_symbol(
+        bronze_root=str(bronze),
+        silver_root=str(silver),
+        exchange="deribit",
+        symbol=symbol,
+        timeframe="1m",
+        bronze_dataset_type="volatility_index_data",
+        output_dataset_type="volatility_index_data_observed",
+    )
+    assert report.dataset == "volatility_index_data_observed"
+    assert report.rows_in == 3
+    assert report.rows_out == 1
+    assert report.duplicates_removed == 1
+    assert report.invalid_ohlc_rows == 1
+    assert "volatility_value" in report.columns
+
+    out_file = (
+        silver
+        / "dataset_type=volatility_index_data_observed"
+        / "exchange=deribit"
+        / "symbol=BTC"
+        / "timeframe=1m"
+        / "year=2026"
+        / "month=2026-05"
+        / "BTC-2026-05.parquet"
+    )
+    assert out_file.exists()
+    observed = pl.read_parquet(out_file)
+    assert observed.height == 1
+    assert observed["volatility_value"].to_list() == [56.0]

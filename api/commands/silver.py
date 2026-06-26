@@ -7,7 +7,7 @@ import json
 import logging
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
-from typing import cast
+from typing import Any, cast
 
 from application.services.silver_service import (
     SilverBuildReport,
@@ -18,6 +18,7 @@ from application.services.silver_service import (
     build_perp_trades_1m_feature_for_symbol,
     build_perp_trades_observed_for_symbol,
     build_silver_for_symbol,
+    build_volatility_observed_for_symbol,
     discover_symbols,
     write_monthly_sidecars,
 )
@@ -28,10 +29,11 @@ _MARKET_DISCOVERY_CONFIG: dict[str, tuple[str, str, str]] = {
     "oi": ("oi", "perp", "1m"),
     "perp_trades": ("perp_trades", "perp", "tick"),
     "option_trades": ("option_trades", "option", "tick"),
+    "volatility_index_data": ("volatility_index_data", "perp", "1m"),
 }
 
 
-def add_silver_build_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+def add_silver_build_parser(subparsers: Any) -> None:
     """Register ``silver-build`` parser."""
 
     parser = subparsers.add_parser("silver-build", help="Build silver monthly parquet outputs from bronze data")
@@ -41,8 +43,24 @@ def add_silver_build_parser(subparsers: argparse._SubParsersAction[argparse.Argu
     parser.add_argument(
         "--dataset",
         nargs="+",
-        choices=["spot", "perp", "oi", "funding", "perp_trades", "option_trades"],
-        default=["spot", "perp", "oi", "funding", "perp_trades", "option_trades"],
+        choices=[
+            "spot",
+            "perp",
+            "oi",
+            "funding",
+            "perp_trades",
+            "option_trades",
+            "volatility_index_data",
+        ],
+        default=[
+            "spot",
+            "perp",
+            "oi",
+            "funding",
+            "perp_trades",
+            "option_trades",
+            "volatility_index_data",
+        ],
     )
     parser.add_argument("--symbols", nargs="+", help="Optional symbol list; auto-discovered when omitted")
     parser.add_argument("--timeframe", default="1m", help="Timeframe to process (default: 1m)")
@@ -194,6 +212,24 @@ def run_silver_build(args: argparse.Namespace, logger: logging.Logger) -> None:
         )
         return [observed_payload, feature_payload]
 
+    def _run_volatility_index_data(symbol: str) -> list[dict[str, object]]:
+        observed = build_volatility_observed_for_symbol(
+            bronze_root=bronze_root,
+            silver_root=silver_root,
+            exchange=exchange,
+            symbol=symbol,
+            timeframe=timeframe,
+            bronze_dataset_type="volatility_index_data",
+            output_dataset_type="volatility_index_data_observed",
+        )
+        observed_payload = _report_payload("volatility_index_data_observed", symbol, observed)
+        logger.info(
+            "Silver volatility_index_data report written symbol=%s observed_rows=%s",
+            symbol,
+            observed.rows_out,
+        )
+        return [observed_payload]
+
     def _run_ohlcv(market: str, symbol: str) -> list[dict[str, object]]:
         report = build_silver_for_symbol(
             bronze_root=bronze_root,
@@ -218,6 +254,7 @@ def run_silver_build(args: argparse.Namespace, logger: logging.Logger) -> None:
         "oi": _run_oi,
         "perp_trades": _run_trades,
         "option_trades": _run_option_trades,
+        "volatility_index_data": _run_volatility_index_data,
     }
 
     def _discovery_params_for_market(market: str, default_timeframe: str) -> tuple[str, str, str]:

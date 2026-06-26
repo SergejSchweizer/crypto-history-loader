@@ -5,7 +5,30 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import cast
+from typing import TypeAlias, cast
+
+FetchAllResult8: TypeAlias = tuple[
+    dict[tuple[str, str, str, str], list[object]],
+    dict[tuple[str, str, str, str], str],
+    dict[tuple[str, str, str], list[object]],
+    dict[tuple[str, str, str], str],
+    dict[tuple[str, str, str], list[object]],
+    dict[tuple[str, str, str], str],
+    dict[tuple[str, str, str], list[object]],
+    dict[tuple[str, str, str], str],
+]
+FetchAllResult10: TypeAlias = tuple[
+    dict[tuple[str, str, str, str], list[object]],
+    dict[tuple[str, str, str, str], str],
+    dict[tuple[str, str, str], list[object]],
+    dict[tuple[str, str, str], str],
+    dict[tuple[str, str, str], list[object]],
+    dict[tuple[str, str, str], str],
+    dict[tuple[str, str, str], list[object]],
+    dict[tuple[str, str, str], str],
+    dict[tuple[str, str, str], list[object]],
+    dict[tuple[str, str, str], str],
+]
 
 
 @dataclass(frozen=True)
@@ -51,35 +74,31 @@ def fetch_all_task_groups(
     candle_tasks: list[tuple[str, str, str, str]],
     oi_tasks: list[tuple[str, str, str]],
     funding_tasks: list[tuple[str, str, str]],
+    volatility_tasks: list[tuple[str, str, str]] | None = None,
     trade_tasks: list[tuple[str, str, str]] | None,
     lake_root: str,
     candle_concurrency: int,
     oi_concurrency: int,
     funding_concurrency: int,
+    volatility_concurrency: int = 1,
     trade_concurrency: int,
     logger: logging.Logger,
     fetch_candles_fn: Callable[..., object],
     fetch_oi_fn: Callable[..., object],
     fetch_funding_fn: Callable[..., object],
+    fetch_volatility_fn: Callable[..., object] | None = None,
     fetch_trades_fn: Callable[..., object],
     on_candle_task_complete: Callable[[object, list[object]], None] | None = None,
     on_oi_task_complete: Callable[[object, list[object]], None] | None = None,
     on_funding_task_complete: Callable[[object, list[object]], None] | None = None,
+    on_volatility_task_complete: Callable[[object, list[object]], None] | None = None,
     on_trade_task_complete: Callable[[object, list[object]], None] | None = None,
     on_candle_task_chunk: Callable[[object, list[object]], None] | None = None,
     on_oi_task_chunk: Callable[[object, list[object]], None] | None = None,
     on_funding_task_chunk: Callable[[object, list[object]], None] | None = None,
+    on_volatility_task_chunk: Callable[[object, list[object]], None] | None = None,
     on_trade_task_chunk: Callable[[object, list[object]], None] | None = None,
-) -> tuple[
-    dict[tuple[str, str, str, str], list[object]],
-    dict[tuple[str, str, str, str], str],
-    dict[tuple[str, str, str], list[object]],
-    dict[tuple[str, str, str], str],
-    dict[tuple[str, str, str], list[object]],
-    dict[tuple[str, str, str], str],
-    dict[tuple[str, str, str], list[object]],
-    dict[tuple[str, str, str], str],
-]:
+) -> FetchAllResult8 | FetchAllResult10:
     """Fetch all configured task groups sequentially."""
 
     task_results: dict[tuple[str, str, str, str], list[object]] = {}
@@ -88,10 +107,13 @@ def fetch_all_task_groups(
     oi_errors: dict[tuple[str, str, str], str] = {}
     funding_results: dict[tuple[str, str, str], list[object]] = {}
     funding_errors: dict[tuple[str, str, str], str] = {}
+    volatility_results: dict[tuple[str, str, str], list[object]] = {}
+    volatility_errors: dict[tuple[str, str, str], str] = {}
     trade_results: dict[tuple[str, str, str], list[object]] = {}
     trade_errors: dict[tuple[str, str, str], str] = {}
 
-    group_configs = (
+    include_volatility = fetch_volatility_fn is not None or bool(volatility_tasks)
+    group_configs = [
         _TaskGroupConfig(
             name="candle",
             tasks=candle_tasks,
@@ -128,7 +150,22 @@ def fetch_all_task_groups(
             on_task_complete=on_trade_task_complete,
             on_task_chunk=on_trade_task_chunk,
         ),
-    )
+    ]
+    if include_volatility:
+        if fetch_volatility_fn is None:
+            raise ValueError("fetch_volatility_fn is required when volatility tasks are provided")
+        group_configs.insert(
+            3,
+            _TaskGroupConfig(
+                name="volatility",
+                tasks=volatility_tasks,
+                fetch_fn=fetch_volatility_fn,
+                task_param_name="volatility_tasks",
+                concurrency=volatility_concurrency,
+                on_task_complete=on_volatility_task_complete,
+                on_task_chunk=on_volatility_task_chunk,
+            ),
+        )
     for config in group_configs:
         rows: dict[tuple[str, ...], list[object]]
         errors: dict[tuple[str, ...], str]
@@ -142,10 +179,26 @@ def fetch_all_task_groups(
         elif config.name == "funding":
             funding_results.update(cast(dict[tuple[str, str, str], list[object]], rows))
             funding_errors.update(cast(dict[tuple[str, str, str], str], errors))
+        elif config.name == "volatility":
+            volatility_results.update(cast(dict[tuple[str, str, str], list[object]], rows))
+            volatility_errors.update(cast(dict[tuple[str, str, str], str], errors))
         else:
             trade_results.update(cast(dict[tuple[str, str, str], list[object]], rows))
             trade_errors.update(cast(dict[tuple[str, str, str], str], errors))
 
+    if include_volatility:
+        return (
+            task_results,
+            task_errors,
+            oi_results,
+            oi_errors,
+            funding_results,
+            funding_errors,
+            volatility_results,
+            volatility_errors,
+            trade_results,
+            trade_errors,
+        )
     return (
         task_results,
         task_errors,

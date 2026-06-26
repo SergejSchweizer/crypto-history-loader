@@ -1,12 +1,28 @@
 # CRYPTO-HISTORY-LOADER
 
-Production-grade cryptocurrency market data ingestion, normalization, feature engineering, and dataset generation framework for quantitative research and systematic trading.
+Quant research data platform for historical crypto market features.
 
 Author: Sergej Schweizer
 
 ---
 
-# Table Of Contents
+1. [Executive Summary](#1-executive-summary)
+2. [Research Scope](#2-research-scope)
+3. [Quant Data Architecture](#3-quant-data-architecture)
+4. [Repository Map](#4-repository-map)
+5. [Naming and Contracts](#5-naming-and-contracts)
+6. [Dataset Wiki (Bronze -> Silver)](#6-dataset-wiki-bronze---silver)
+ - [6.1 Spot OHLCV](#61-spot-ohlcv-dataset_typespot)
+ - [6.2 Perpetual OHLCV](#62-perpetual-ohlcv-dataset_typeperp)
+ - [6.3 Open Interest](#63-open-interest-dataset_typeoi)
+ - [6.4 Funding](#64-funding-dataset_typefunding)
+ - [6.5 Perp Tick Trades](#65-perp-tick-trades-dataset_typeperp_trades)
+ - [6.6 Option Tick Trades](#66-option-tick-trades-dataset_typeoption_trades)
+ - [6.7 Volatility Index Data](#67-volatility-index-data-dataset_typevolatility_index_data)
+7. [Storage Contracts](#7-storage-contracts)
+8. [Operations Runbook](#8-operations-runbook)
+9. [Gold Retention Policy](#9-gold-retention-policy)
+10. [Research Quality Gates](#10-research-quality-gates)
 
 - [CRYPTO-HISTORY-LOADER](#crypto-history-loader)
 - [Table Of Contents](#table-of-contents)
@@ -34,7 +50,7 @@ Author: Sergej Schweizer
   - [5.4 Quality Checks](#54-quality-checks)
 - [7. Roadmap](#7-roadmap)
 
----
+`crypto-history-loader` is the historical data backbone for quant research workflows:
 
 # 1. System Overview
 
@@ -142,7 +158,7 @@ task kind, and default timeframe. Bronze planning derives fetch tuples from thes
 new datasets can share symbol validation, deterministic scheduling, checkpoint fingerprints, and
 reporting behavior instead of duplicating one-off planner logic.
 
----
+Canonical terms:
 
 # 3. Installation
 
@@ -190,10 +206,16 @@ config.yaml
 Recommended permissions:
 
 ```bash
-chmod 600 config.yaml
+uv run python main.py --debug bronze-build \
+ --exchange deribit \
+ --market spot perp oi funding perp_trades option_trades volatility_index_data \
+ --symbols BTC ETH SOL \
+ --full-gap-fill \
+ --save-parquet-lake \
+ --no-json-output
 ```
 
----
+Trade symbol inheritance:
 
 # 4. Raw Datasets
 
@@ -653,6 +675,7 @@ Run this sequence before pushing changes:
 
 ```bash
 uv run ruff check .
+uv run ruff format --check .
 uv run mypy .
 uv run pyright --level error
 uv run ty check

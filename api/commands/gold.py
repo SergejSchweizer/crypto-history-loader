@@ -8,7 +8,7 @@ import logging
 import re
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
-from typing import cast
+from typing import Any, cast
 
 from application.services.gold_service import (
     SUPPORTED_GOLD_DATASET_IDS,
@@ -21,7 +21,7 @@ from application.services.gold_service import (
 _SEMVER_RE = re.compile(r"^v\d+\.\d+\.\d+$")
 
 
-def add_gold_build_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+def add_gold_build_parser(subparsers: Any) -> None:
     """Register ``gold-build`` parser."""
 
     parser = subparsers.add_parser("gold-build", help="Build gold per-symbol parquet datasets from silver data")

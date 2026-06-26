@@ -25,9 +25,16 @@ logger = logging.getLogger(__name__)
 
 
 def _trades_base_url() -> str:
-    """Return Deribit option_trades API base URL."""
+    """Return Deribit option_trades API base URL.
 
-    value = os.getenv("DEPTH_DERIBIT_OPTION_TRADES_BASE_URL", DERIBIT_OPTION_TRADES_BASE_URL_DEFAULT).strip()
+    Uses the same primary env override as perp trades for identical behavior,
+    while keeping option-specific override as backward-compatible fallback.
+    """
+
+    value = os.getenv("DEPTH_DERIBIT_TRADES_BASE_URL")
+    if value is None:
+        value = os.getenv("DEPTH_DERIBIT_OPTION_TRADES_BASE_URL", DERIBIT_OPTION_TRADES_BASE_URL_DEFAULT)
+    value = value.strip()
     return value.rstrip("/")
 
 
@@ -53,17 +60,23 @@ def _utc_now_ms() -> int:
 
 
 def _inter_request_sleep_seconds() -> float:
-    value = os.getenv("DEPTH_DERIBIT_OPTION_TRADES_INTER_REQUEST_SLEEP_S", "0.15")
+    value = os.getenv("DEPTH_DERIBIT_TRADES_INTER_REQUEST_SLEEP_S")
+    if value is None:
+        value = os.getenv("DEPTH_DERIBIT_OPTION_TRADES_INTER_REQUEST_SLEEP_S", "0.15")
     return env_float_non_negative(value=value, default=0.15)
 
 
 def _route_retry_attempts() -> int:
-    value = os.getenv("DEPTH_DERIBIT_OPTION_TRADES_ROUTE_RETRY_ATTEMPTS", "3")
+    value = os.getenv("DEPTH_DERIBIT_TRADES_ROUTE_RETRY_ATTEMPTS")
+    if value is None:
+        value = os.getenv("DEPTH_DERIBIT_OPTION_TRADES_ROUTE_RETRY_ATTEMPTS", "3")
     return env_int_min(value=value, default=3, minimum=1)
 
 
 def _route_retry_backoff_base_seconds() -> float:
-    value = os.getenv("DEPTH_DERIBIT_OPTION_TRADES_ROUTE_RETRY_BACKOFF_BASE_S", "0.5")
+    value = os.getenv("DEPTH_DERIBIT_TRADES_ROUTE_RETRY_BACKOFF_BASE_S")
+    if value is None:
+        value = os.getenv("DEPTH_DERIBIT_OPTION_TRADES_ROUTE_RETRY_BACKOFF_BASE_S", "0.5")
     return env_float_non_negative(value=value, default=0.5)
 
 

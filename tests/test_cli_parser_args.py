@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from api import cli
 from api.cli import build_parser
 
 
@@ -117,3 +118,33 @@ def test_medallion_pipeline_cli_args_in_config_are_parser_compatible() -> None:
         argv = [command, *[str(token) for token in cli_args]]
         parsed = parser.parse_args(argv)
         assert parsed.command == command
+
+
+def test_apply_yaml_defaults_keeps_save_parquet_cli_only() -> None:
+    args = cli.build_parser().parse_args(["bronze-build"])
+    config = {
+        "global": {
+            "save_parquet_lake": True,
+            "debug": True,
+            "lake_root": "lake/from-config",
+        }
+    }
+
+    cli._apply_yaml_defaults(args=args, command="bronze-build", config=config, explicit_dests=set())  # type: ignore[attr-defined]
+
+    assert args.save_parquet_lake is False
+    assert args.lake_root == "lake/from-config"
+
+
+def test_resolve_command_config_supports_bronze_aliases() -> None:
+    config = {"loader": {"save_parquet_lake": True}, "silver-build": {"market": ["spot"]}}
+    assert cli._resolve_command_config("bronze-build", config) == {"save_parquet_lake": True}  # type: ignore[attr-defined]
+    assert cli._resolve_command_config("silver-build", config) == {"market": ["spot"]}  # type: ignore[attr-defined]
+
+
+def test_apply_env_from_config_sets_non_null_entries(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("UNIT_TEST_ENV_A", raising=False)
+    monkeypatch.delenv("UNIT_TEST_ENV_B", raising=False)
+    cli._apply_env_from_config({"env": {"UNIT_TEST_ENV_A": "1", "UNIT_TEST_ENV_B": None}})  # type: ignore[attr-defined]
+    assert cli.os.environ["UNIT_TEST_ENV_A"] == "1"
+    assert "UNIT_TEST_ENV_B" not in cli.os.environ

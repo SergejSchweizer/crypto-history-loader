@@ -1,4 +1,5 @@
 """Parquet lake writing utilities for fetched market data."""
+# pyright: reportUnknownMemberType=false, reportUnknownVariableType=false, reportUnknownArgumentType=false
 
 from __future__ import annotations
 
@@ -13,11 +14,15 @@ from pathlib import Path
 from typing import Any, cast
 
 from application.schema import dataset_contract
-from application.services.gold_service import _feature_metadata, _write_feature_distribution_plot
+from application.services.gold_service import (  # pyright: ignore[reportPrivateUsage]
+    _feature_metadata,  # pyright: ignore[reportPrivateUsage]
+    _write_feature_distribution_plot,  # pyright: ignore[reportPrivateUsage]
+)
 from ingestion.funding import FundingPoint
 from ingestion.open_interest import OpenInterestPoint
 from ingestion.spot import SpotCandle
 from ingestion.trades import OptionTradeTick, TradeMarket, TradeTick
+from ingestion.volatility import VolatilityPoint
 
 DatasetType = str
 PartitionKey = tuple[str, str, str, str, str]
@@ -248,6 +253,43 @@ def trade_record(
         record["strike"] = item.strike
         record["option_type"] = item.option_type
     return record
+
+
+def volatility_partition_key(item: VolatilityPoint, market: str) -> PartitionKey:
+    """Build partition key for volatility records."""
+
+    return (
+        item.exchange,
+        market,
+        item.symbol,
+        item.interval,
+        item.open_time.strftime("%Y-%m-%d"),
+    )
+
+
+def volatility_record(
+    item: VolatilityPoint,
+    market: str,
+    run_id: str,
+    ingested_at: datetime,
+) -> dict[str, object]:
+    """Convert volatility point to parquet-lake row format."""
+
+    return {
+        "schema_version": "v1",
+        "dataset_type": item.dataset_type,
+        "exchange": item.exchange,
+        "symbol": item.symbol,
+        "instrument_type": market,
+        "event_time": item.open_time,
+        "ingested_at": ingested_at,
+        "run_id": run_id,
+        "source_endpoint": item.source_endpoint,
+        "open_time": item.open_time,
+        "close_time": item.close_time,
+        "timeframe": item.interval,
+        "value": item.value,
+    }
 
 
 def open_times_in_lake_by_dataset(
@@ -1040,6 +1082,37 @@ def save_funding_parquet_lake(
             for item in items:
                 key = funding_partition_key(item=item, market=market)
                 grouped[key].append(funding_record(item=item, market=market, run_id=run_id, ingested_at=ingested_at))
+
+    return _write_grouped_rows(
+        pa=pa,
+        pq=pq,
+        lake_root=lake_root,
+        dataset_type=dataset_type,
+        run_id=run_id,
+        grouped=grouped,
+    )
+
+
+def save_volatility_parquet_lake(
+    volatility_by_exchange: dict[str, dict[str, list[VolatilityPoint]]],
+    market: str,
+    dataset_type: str,
+    lake_root: str,
+) -> list[str]:
+    """Save fetched volatility rows to parquet lake partitions."""
+
+    pa, pq = _require_pyarrow()
+
+    run_id = utc_run_id()
+    ingested_at = datetime.now(UTC)
+    grouped: defaultdict[PartitionKey, list[dict[str, object]]] = defaultdict(list)
+    for symbol_map in volatility_by_exchange.values():
+        for items in symbol_map.values():
+            for item in items:
+                key = volatility_partition_key(item=item, market=market)
+                record = volatility_record(item=item, market=market, run_id=run_id, ingested_at=ingested_at)
+                record["dataset_type"] = dataset_type
+                grouped[key].append(record)
 
     return _write_grouped_rows(
         pa=pa,

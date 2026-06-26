@@ -1,4 +1,5 @@
 """Plot generation utilities for fetched candle data."""
+# pyright: reportUnknownMemberType=false, reportUnknownVariableType=false, reportUnknownArgumentType=false
 
 from __future__ import annotations
 

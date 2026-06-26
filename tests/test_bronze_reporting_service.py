@@ -25,10 +25,12 @@ def test_symbol_progress_rows_calculates_ratios() -> None:
         candle_tasks=[("deribit", "spot", "BTC", "1m"), ("deribit", "spot", "ETH", "1m")],
         oi_tasks=[],
         funding_tasks=[],
+        volatility_index_data_tasks=[],
         trade_tasks=[("deribit", "perp", "BTC")],
         candle_results={("deribit", "spot", "BTC", "1m"): object()},
         oi_results={},
         funding_results={},
+        volatility_index_data_results={},
         trade_results={("deribit", "perp", "BTC"): object()},
     )
     assert rows == [
@@ -42,10 +44,12 @@ def test_symbol_progress_rows_counts_oi_and_funding_success() -> None:
         candle_tasks=[],
         oi_tasks=[("deribit", "BTC", "1m")],
         funding_tasks=[("deribit", "BTC", "8h")],
+        volatility_index_data_tasks=[],
         trade_tasks=[],
         candle_results={},
         oi_results={("deribit", "BTC", "1m"): object()},
         funding_results={("deribit", "BTC", "8h"): object()},
+        volatility_index_data_results={},
         trade_results={},
     )
     assert rows == [{"symbol": "BTC", "success": 2, "total": 2, "ratio": 1.0}]
