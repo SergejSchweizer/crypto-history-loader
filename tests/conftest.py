@@ -1,0 +1,25 @@
+"""Shared pytest fixtures for deterministic test isolation."""
+
+from __future__ import annotations
+
+import pytest
+
+RUNTIME_ENV_OVERRIDES = (
+    "DEPTH_DERIBIT_OPTION_TRADES_INTER_REQUEST_SLEEP_S",
+    "DEPTH_DERIBIT_OPTION_TRADES_PAGE_SIZE",
+    "DEPTH_DERIBIT_PERP_TRADES_INTER_REQUEST_SLEEP_S",
+    "DEPTH_DERIBIT_PERP_TRADES_PAGE_SIZE",
+    "DEPTH_DERIBIT_TRADES_PAGE_SIZE",
+    "DEPTH_FETCH_HEARTBEAT_S",
+    "DEPTH_FETCH_TASK_TIMEOUT_S",
+    "DEPTH_OPTION_TRADES_WINDOW_MINUTES",
+    "DEPTH_PERP_TRADES_WINDOW_MINUTES",
+)
+
+
+@pytest.fixture(autouse=True)
+def _isolate_runtime_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep tests independent from operator runtime environment overrides."""
+
+    for name in RUNTIME_ENV_OVERRIDES:
+        monkeypatch.delenv(name, raising=False)

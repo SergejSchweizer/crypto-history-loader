@@ -1876,21 +1876,24 @@ def fetch_volatility_tasks_parallel(
             del elapsed_s
 
         try:
-            rows = run_with_optional_history_chunk(
-                runner=_run_with_optional_timeout,
-                fn=symbol_fetcher,
-                timeout_s=task_timeout_s,
-                heartbeat_s=heartbeat_s,
-                heartbeat=_heartbeat_volatility,
-                use_process_timeout=False,
-                kwargs={
-                    "exchange": task.exchange,
-                    "market": "perp",
-                    "symbol": task.symbol,
-                    "timeframe": task.timeframe,
-                    "lake_root": lake_root,
-                    "on_history_chunk": history_chunk_cb,
-                },
+            rows = cast(
+                list[VolatilityPoint],
+                run_with_optional_history_chunk(
+                    runner=_run_with_optional_timeout,
+                    fn=symbol_fetcher,
+                    timeout_s=task_timeout_s,
+                    heartbeat_s=heartbeat_s,
+                    heartbeat=_heartbeat_volatility,
+                    use_process_timeout=False,
+                    kwargs={
+                        "exchange": task.exchange,
+                        "market": "perp",
+                        "symbol": task.symbol,
+                        "timeframe": task.timeframe,
+                        "lake_root": lake_root,
+                        "on_history_chunk": history_chunk_cb,
+                    },
+                ),
             )
             elapsed_s = elapsed_seconds(task_started_at)
             logger.info(

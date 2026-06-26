@@ -52,6 +52,12 @@ _EMPTY_CHECKPOINT: dict[str, set[str]] = {
 }
 
 
+def empty_checkpoint_state() -> dict[str, set[str]]:
+    """Return fresh empty Bronze checkpoint buckets."""
+
+    return {name: set(values) for name, values in _EMPTY_CHECKPOINT.items()}
+
+
 def build_bronze_execution_policy(configured_concurrency: int) -> BronzeExecutionPolicyDTO:
     """Build standardized Bronze execution policy."""
 
@@ -370,21 +376,21 @@ def load_bronze_checkpoint(path: Path, fingerprint: str, logger: logging.Logger)
     """Load matching Bronze checkpoint completed-task sets."""
 
     if not path.exists():
-        return _EMPTY_CHECKPOINT.copy()
+        return empty_checkpoint_state()
     try:
         raw_payload = json.loads(path.read_text(encoding="utf-8"))
     except Exception as exc:  # noqa: BLE001
         logger.warning("Ignoring unreadable Bronze checkpoint '%s': %s", path, exc)
-        return _EMPTY_CHECKPOINT.copy()
+        return empty_checkpoint_state()
     if not isinstance(raw_payload, dict):
-        return _EMPTY_CHECKPOINT.copy()
+        return empty_checkpoint_state()
     payload = cast(dict[str, object], raw_payload)
     if payload.get("fingerprint") != fingerprint:
         logger.info("Ignoring stale Bronze checkpoint '%s' (fingerprint mismatch)", path)
-        return _EMPTY_CHECKPOINT.copy()
+        return empty_checkpoint_state()
     raw_completed = payload.get("completed")
     if not isinstance(raw_completed, dict):
-        return _EMPTY_CHECKPOINT.copy()
+        return empty_checkpoint_state()
     completed = cast(dict[str, object], raw_completed)
     return {
         "candle": set(str(value) for value in cast(list[object], completed.get("candle", []))),

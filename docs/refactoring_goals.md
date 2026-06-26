@@ -21,6 +21,9 @@ Existing safety net:
 - Import-linter currently enforces four dependency contracts: `application -> api`, `ingestion -> api`,
   `ingestion -> application`, and `ingestion.exchanges -> application` are forbidden.
 - Repository tooling currently targets Python 3.11 and Pyright standard mode.
+- CI, pre-commit, `make check`, and `tests/test_quality_gate_contract.py` now assert the same core quality-gate
+  sequence: Ruff lint/format, Mypy, Pyright, Ty, import-linter, config validation, and pytest.
+- Coverage enforcement is configured in `pyproject.toml` under `[tool.coverage.report]`.
 - Fetch task timeout, heartbeat, and trade window sizing are now resolved through
   `application/services/fetch_runtime_policy.py`; durable `config.yaml` values for the main fetch/trade knobs are
   bounded by Pydantic validation.
@@ -250,5 +253,6 @@ Exit criteria:
 
 Exit criteria:
 
+- CI, pre-commit, `make check`, and repository tests enforce the same required gate list.
 - Completion checklist is fully checked.
 - Full validation passes or any skipped gate has an explicit documented reason and follow-up.
