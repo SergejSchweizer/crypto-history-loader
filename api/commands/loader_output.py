@@ -5,10 +5,12 @@ from __future__ import annotations
 import logging
 import threading
 from collections.abc import Callable
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol, cast
 
 from application.dto import (
+    BronzeFetchPlanDTO,
     FundingFetchTaskDTO,
     LoaderStorageDTO,
     OpenInterestFetchTaskDTO,
@@ -45,6 +47,34 @@ class _CandleTaskLike(Protocol):
 
     @property
     def timeframe(self) -> str: ...
+
+
+@dataclass
+class BronzeRunState:
+    """Mutable per-run containers for Bronze orchestration output and storage."""
+
+    output: dict[str, object] = field(default_factory=dict)
+    candles_for_storage: dict[Market, dict[str, dict[str, list[SpotCandle]]]] = field(default_factory=dict)
+    open_interest_for_storage: dict[Market, dict[str, dict[str, list[OpenInterestPoint]]]] = field(default_factory=dict)
+    funding_for_storage: dict[Market, dict[str, dict[str, list[FundingPoint]]]] = field(default_factory=dict)
+    trades_for_storage: dict[TradeMarket, dict[str, dict[str, list[TradeTick | OptionTradeTick]]]] = field(
+        default_factory=dict
+    )
+    candle_tasks: list[tuple[Exchange, Market, str, str]] = field(default_factory=list)
+    oi_tasks: list[tuple[Exchange, str, str]] = field(default_factory=list)
+    funding_tasks: list[tuple[Exchange, str, str]] = field(default_factory=list)
+    trade_tasks: list[tuple[Exchange, TradeMarket, str]] = field(default_factory=list)
+
+    @classmethod
+    def from_plan(cls, plan: BronzeFetchPlanDTO) -> BronzeRunState:
+        """Build initial state from a deterministic Bronze fetch plan."""
+
+        state = cls(output={exchange: {} for exchange in plan.exchanges})
+        state.candle_tasks.extend(plan.candle_tasks)
+        state.oi_tasks.extend(plan.oi_tasks)
+        state.funding_tasks.extend(plan.funding_tasks)
+        state.trade_tasks.extend(plan.trade_tasks)
+        return state
 
 
 def _extract_date_partition(file_path: str) -> str | None:

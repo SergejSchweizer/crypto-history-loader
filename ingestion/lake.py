@@ -12,8 +12,7 @@ from hashlib import sha256
 from pathlib import Path
 from typing import Any, cast
 
-from application.schema import dataset_contract
-from application.services.gold_service import _feature_metadata, _write_feature_distribution_plot
+from ingestion.feature_profile import feature_metadata, write_feature_distribution_plot
 from ingestion.funding import FundingPoint
 from ingestion.open_interest import OpenInterestPoint
 from ingestion.spot import SpotCandle
@@ -22,7 +21,7 @@ from ingestion.trades import OptionTradeTick, TradeMarket, TradeTick
 DatasetType = str
 PartitionKey = tuple[str, str, str, str, str]
 NaturalKey = tuple[str, str, str, str, datetime, str, str]
-OI_DATASET_TYPE = dataset_contract("oi").dataset_type
+OI_DATASET_TYPE = "oi"
 
 
 def ohlcv_dataset_type_for_market(market: str) -> str:
@@ -510,7 +509,7 @@ def _write_bronze_sidecars(
                 ensure_ascii=True,
             ).encode("utf-8")
         ).hexdigest()[:12],
-        "feature_metadata": _feature_metadata(pl, frame, exchange),
+        "feature_metadata": feature_metadata(pl, frame, exchange),
     }
     manifest_path = file_path.with_suffix(".json")
     manifest_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
@@ -521,7 +520,7 @@ def _write_bronze_sidecars(
     )
     if ts_col is not None and ts_col != "timestamp_m1":
         frame = frame.with_columns(pl.col(ts_col).alias("timestamp_m1"))
-    plotted = _write_feature_distribution_plot(frame, file_path.with_suffix(".png"), normalize_y=False)
+    plotted = write_feature_distribution_plot(frame, file_path.with_suffix(".png"), normalize_y=False)
     if plotted is None:
         raise RuntimeError(
             "Bronze sidecar policy requires plot generation for every parquet file, but plot generation failed "

@@ -19,3 +19,19 @@ source_modules =
     ingestion
 forbidden_modules =
     api
+
+[importlinter:contract:no_ingestion_to_application]
+name = Forbid ingestion depending on application
+type = forbidden
+source_modules =
+    ingestion
+forbidden_modules =
+    application
+
+[importlinter:contract:no_exchange_adapters_to_application]
+name = Forbid exchange adapters depending on application services
+type = forbidden
+source_modules =
+    ingestion.exchanges
+forbidden_modules =
+    application

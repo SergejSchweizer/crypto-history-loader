@@ -6,8 +6,8 @@ import logging
 from datetime import UTC, datetime
 from typing import Any
 
-from api.commands.loader_output import IncrementalPersistor
-from application.dto import TradeFetchTaskDTO
+from api.commands.loader_output import BronzeRunState, IncrementalPersistor
+from application.dto import BronzeFetchPlanDTO, TradeFetchTaskDTO
 from ingestion.trades import TradeTick
 
 
@@ -20,6 +20,29 @@ class _PersistResult:
         """Return a serializable result payload."""
 
         return {"parquet_files": self.parquet_files}
+
+
+def test_bronze_run_state_initializes_output_and_tasks_from_plan() -> None:
+    plan = BronzeFetchPlanDTO(
+        exchanges=["deribit"],
+        data_types=["spot", "oi", "funding", "perp_trades"],
+        ohlcv_markets=["spot"],
+        symbols=["BTC"],
+        perp_trade_symbols=["BTC"],
+        option_trade_symbols=[],
+        candle_tasks=[("deribit", "spot", "BTC", "1m")],
+        oi_tasks=[("deribit", "BTC", "1m")],
+        funding_tasks=[("deribit", "BTC", "1m")],
+        trade_tasks=[("deribit", "perp", "BTC")],
+    )
+
+    state = BronzeRunState.from_plan(plan)
+
+    assert state.output == {"deribit": {}}
+    assert state.candle_tasks == [("deribit", "spot", "BTC", "1m")]
+    assert state.oi_tasks == [("deribit", "BTC", "1m")]
+    assert state.funding_tasks == [("deribit", "BTC", "1m")]
+    assert state.trade_tasks == [("deribit", "perp", "BTC")]
 
 
 def test_trade_chunk_persists_without_marking_full_task_complete() -> None:
