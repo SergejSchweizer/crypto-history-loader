@@ -10,7 +10,7 @@ The codebase is already split into `api`, `application`, and `ingestion`, but se
 |---|---:|---|
 | `application/services/fetch_service.py` | 1,854 lines | Fetch planning, windowing, task execution, retries, and reporting are coupled. |
 | `application/services/silver_service.py` | 1,392 lines | Dataset-specific transformations share one large service surface. |
-| `ingestion/lake.py` | 1,248 lines | Bronze persistence, lake reads, schema handling, plotting hooks, and sidecar repair are coupled; partition layout helpers are now isolated in `ingestion/lake_layout.py`. |
+| `ingestion/lake.py` | 1,248 lines | Bronze persistence, lake reads, and schema handling remain coupled; partition layout helpers are isolated in `ingestion/lake_layout.py`, and Bronze sidecar generation/repair is isolated in `ingestion/lake_sidecars.py`. |
 | `api/commands/loader.py` | 998 lines | CLI orchestration, runtime state, checkpoint glue, and command behavior are coupled. |
 | `application/services/gold_service.py` | 929 lines | Frame loading, validation, joins, and output writing remain coupled after feature profiling extraction. |
 | `ingestion/feature_profile.py` | 416 lines | Shared feature metadata and plotting are isolated, but still adapter-heavy and need interface extraction. |
@@ -230,6 +230,8 @@ Exit criteria:
 
 - Partition layout path construction and parquet path parsing live in `ingestion/lake_layout.py` and are tested
   against both current `year/month/date` and previous `month/date` layouts.
+- Bronze sidecar manifest/plot generation and backfill repair live in `ingestion/lake_sidecars.py`; `ingestion.lake`
+  keeps compatibility imports for existing callers and write-path integration.
 - Persistence side effects are isolated.
 - Idempotency tests cover repeated writes and partial reruns.
 
