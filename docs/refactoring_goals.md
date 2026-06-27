@@ -9,7 +9,7 @@ The codebase is already split into `api`, `application`, and `ingestion`, but se
 | Area | Current signal | Refactoring risk |
 |---|---:|---|
 | `application/services/fetch_service.py` | 1,854 lines | Fetch planning, windowing, task execution, retries, and reporting are coupled. |
-| `application/services/silver_service.py` | 1,392 lines | Dataset-specific transformations share one large service surface. |
+| `application/services/silver_service.py` | 1,322 lines | Dataset-specific transformations share one large service surface; Silver sidecar writing is isolated in `application/services/silver_sidecars.py`. |
 | `ingestion/lake.py` | 1,248 lines | Bronze persistence, lake reads, and schema handling remain coupled; partition layout helpers are isolated in `ingestion/lake_layout.py`, and Bronze sidecar generation/repair is isolated in `ingestion/lake_sidecars.py`. |
 | `api/commands/loader.py` | 998 lines | CLI orchestration, runtime state, checkpoint glue, and command behavior are coupled. |
 | `application/services/gold_service.py` | 929 lines | Frame loading, validation, joins, and output writing remain coupled after feature profiling extraction. |
@@ -259,6 +259,8 @@ Progress:
   `application/dataset_contracts.py`.
 - Gold dataset requirements and L2 inclusion flags now live in typed contracts, with
   `application/services/gold_service.py` keeping the previous public constants as compatibility views.
+- Silver monthly manifest and plot sidecar writing now lives in `application/services/silver_sidecars.py`, keeping
+  side effects separate from Silver transformation functions.
 
 Exit criteria:
 

@@ -22,8 +22,8 @@ from application.services.silver_service import (
     build_volatility_observed_for_symbol,
     discover_months,
     discover_symbols,
-    write_monthly_sidecars,
 )
+from application.services.silver_sidecars import write_monthly_sidecars
 
 pl = pytest.importorskip("polars")
 

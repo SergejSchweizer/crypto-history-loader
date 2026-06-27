@@ -20,8 +20,8 @@ from application.services.silver_service import (
     build_silver_for_symbol,
     build_volatility_observed_for_symbol,
     discover_symbols,
-    write_monthly_sidecars,
 )
+from application.services.silver_sidecars import write_monthly_sidecars
 from ingestion.funding import DERIBIT_FUNDING_NATIVE_INTERVAL
 
 _MARKET_DISCOVERY_CONFIG: dict[str, tuple[str, str, str]] = {
