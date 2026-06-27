@@ -7,11 +7,11 @@ import hashlib
 import json
 import logging
 import os
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import cast
+from typing import Literal, cast
 
 from application.dto import BronzeExecutionPolicyDTO, BronzeFetchPlanDTO
 from ingestion.spot import Exchange, Market
@@ -20,6 +20,7 @@ from ingestion.trades import TradeMarket
 CandleTaskKey = tuple[Exchange, Market, str, str]
 IntervalTaskKey = tuple[Exchange, str, str]
 TradeTaskKey = tuple[Exchange, TradeMarket, str]
+CheckpointDataset = Literal["candle", "oi", "funding", "volatility_index_data", "trade"]
 
 
 @dataclass(frozen=True)
@@ -31,6 +32,17 @@ class PendingTaskGroups:
     funding_tasks: list[IntervalTaskKey]
     volatility_index_data_tasks: list[IntervalTaskKey]
     trade_tasks: list[TradeTaskKey]
+
+
+@dataclass(frozen=True)
+class BronzeCheckpointKeyMaps:
+    """Checkpoint key maps for every Bronze task family."""
+
+    candle: dict[CandleTaskKey, str]
+    oi: dict[IntervalTaskKey, str]
+    funding: dict[IntervalTaskKey, str]
+    volatility_index_data: dict[IntervalTaskKey, str]
+    trade: dict[TradeTaskKey, str]
 
 
 @dataclass(frozen=True)
@@ -266,6 +278,131 @@ def dataset_task_key_maps(
         elif task.dataset_type in {"perp_trades", "option_trades"}:
             trade_map[task.trade_tuple()] = key
     return candle_map, oi_map, funding_map, trade_map
+
+
+def volatility_task_key_map(plan: BronzeFetchPlanDTO) -> dict[IntervalTaskKey, str]:
+    """Return tuple-to-checkpoint-key mapping for volatility dataset tasks."""
+
+    return {
+        task.interval_tuple(): task.checkpoint_key()
+        for task in plan.dataset_tasks
+        if task.dataset_type == "volatility_index_data"
+    }
+
+
+def bronze_checkpoint_key_maps(plan: BronzeFetchPlanDTO) -> BronzeCheckpointKeyMaps:
+    """Return checkpoint key maps for every Bronze task family.
+
+    Args:
+        plan: Deterministic Bronze fetch plan.
+
+    Returns:
+        Dataset-family key maps that preserve registry checkpoint aliases while
+        falling back to legacy tuple serialization for compatibility.
+    """
+
+    candle_map, oi_map, funding_map, trade_map = dataset_task_key_maps(plan)
+    return BronzeCheckpointKeyMaps(
+        candle=candle_map,
+        oi=oi_map,
+        funding=funding_map,
+        volatility_index_data=volatility_task_key_map(plan),
+        trade=trade_map,
+    )
+
+
+def checkpoint_key_for_task(
+    dataset: CheckpointDataset,
+    key: tuple[object, ...],
+    key_maps: BronzeCheckpointKeyMaps,
+) -> str:
+    """Return the stable checkpoint key for one Bronze task.
+
+    Args:
+        dataset: Checkpoint bucket name.
+        key: Tuple task key emitted by fetch results or pending task lists.
+        key_maps: Registry-aware checkpoint key maps.
+
+    Returns:
+        Registry checkpoint key when known; otherwise the legacy tuple string.
+    """
+
+    fallback = task_key_tuple_to_string(key)
+    if dataset == "candle":
+        return key_maps.candle.get(cast(CandleTaskKey, key), fallback)
+    if dataset == "oi":
+        return key_maps.oi.get(cast(IntervalTaskKey, key), fallback)
+    if dataset == "funding":
+        return key_maps.funding.get(cast(IntervalTaskKey, key), fallback)
+    if dataset == "volatility_index_data":
+        return key_maps.volatility_index_data.get(cast(IntervalTaskKey, key), fallback)
+    return key_maps.trade.get(cast(TradeTaskKey, key), fallback)
+
+
+def apply_checkpoint_filter_with_key_maps(
+    *,
+    candle_tasks: list[CandleTaskKey],
+    oi_tasks: list[IntervalTaskKey],
+    funding_tasks: list[IntervalTaskKey],
+    volatility_index_data_tasks: list[IntervalTaskKey],
+    trade_tasks: list[TradeTaskKey],
+    completed: dict[str, set[str]],
+    key_maps: BronzeCheckpointKeyMaps,
+) -> PendingTaskGroups:
+    """Filter task groups against completed checkpoint sets using registry-aware keys."""
+
+    return apply_checkpoint_filter(
+        candle_tasks=candle_tasks,
+        oi_tasks=oi_tasks,
+        funding_tasks=funding_tasks,
+        volatility_index_data_tasks=volatility_index_data_tasks,
+        trade_tasks=trade_tasks,
+        completed=completed,
+        candle_key_serializer=lambda task: checkpoint_key_for_task("candle", task, key_maps),
+        oi_key_serializer=lambda task: checkpoint_key_for_task("oi", task, key_maps),
+        funding_key_serializer=lambda task: checkpoint_key_for_task("funding", task, key_maps),
+        volatility_key_serializer=lambda task: checkpoint_key_for_task("volatility_index_data", task, key_maps),
+        trade_key_serializer=lambda task: checkpoint_key_for_task("trade", task, key_maps),
+    )
+
+
+def add_completed_checkpoint_key(
+    *,
+    completed: dict[str, set[str]],
+    dataset: CheckpointDataset,
+    key: tuple[object, ...],
+    key_maps: BronzeCheckpointKeyMaps,
+) -> str:
+    """Add one completed task to checkpoint state and return its serialized key."""
+
+    serialized_key = checkpoint_key_for_task(dataset, key, key_maps)
+    completed[dataset].add(serialized_key)
+    return serialized_key
+
+
+def checkpoint_task_keys(
+    *,
+    candle_tasks: Iterable[CandleTaskKey],
+    oi_tasks: Iterable[IntervalTaskKey],
+    funding_tasks: Iterable[IntervalTaskKey],
+    volatility_index_data_tasks: Iterable[IntervalTaskKey],
+    trade_tasks: Iterable[TradeTaskKey],
+    key_maps: BronzeCheckpointKeyMaps,
+) -> set[str]:
+    """Return checkpoint keys for mixed Bronze task groups."""
+
+    keys: set[str] = set()
+    for candle_task in candle_tasks:
+        keys.add(checkpoint_key_for_task("candle", candle_task, key_maps))
+    for oi_task in oi_tasks:
+        keys.add(checkpoint_key_for_task("oi", oi_task, key_maps))
+    for funding_task in funding_tasks:
+        keys.add(checkpoint_key_for_task("funding", funding_task, key_maps))
+    for volatility_task in volatility_index_data_tasks:
+        keys.add(checkpoint_key_for_task("volatility_index_data", volatility_task, key_maps))
+    for trade_task in trade_tasks:
+        keys.add(checkpoint_key_for_task("trade", trade_task, key_maps))
+    return keys
 
 
 def hydrate_checkpoint_aliases(

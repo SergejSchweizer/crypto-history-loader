@@ -11,7 +11,6 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
 
-from api.commands.loader_checkpoint import apply_checkpoint_filter, has_checkpoint_state
 from api.commands.loader_dataset_handlers import (
     populate_funding_output,
     populate_ohlcv_output,
@@ -47,15 +46,22 @@ from application.services.bronze_reporting_service import (
 )
 from application.services.bronze_runtime_service import (
     BronzeRuntimeBoundsContext,
+    CheckpointDataset,
+    add_completed_checkpoint_key,
+    apply_checkpoint_filter_with_key_maps,
     bronze_checkpoint_fingerprint,
+    bronze_checkpoint_key_maps,
     bronze_checkpoint_path,
     build_bronze_execution_policy,
     build_bronze_runtime_bounds_context,
+    checkpoint_task_keys,
     dataset_task_key_maps,
+    has_checkpoint_state,
     hydrate_checkpoint_aliases,
     load_bronze_checkpoint,
     resolve_symbol_start_open_ms_bound,
     task_key_tuple_to_string,
+    volatility_task_key_map,
     write_bronze_checkpoint,
 )
 from application.services.fetch_service import (
@@ -172,11 +178,7 @@ def _task_key_tuple_to_string(parts: tuple[object, ...]) -> str:
 def _volatility_task_key_map(plan: BronzeFetchPlanDTO) -> dict[tuple[Exchange, str, str], str]:
     """Return tuple->checkpoint-key mapping for volatility dataset tasks."""
 
-    return {
-        task.interval_tuple(): task.checkpoint_key()
-        for task in plan.dataset_tasks
-        if task.dataset_type == "volatility_index_data"
-    }
+    return volatility_task_key_map(plan)
 
 
 def _dataset_task_key_maps(
@@ -799,8 +801,12 @@ def run_bronze_build(args: argparse.Namespace, logger: logging.Logger) -> None:
                 plan.perp_trade_symbols,
                 plan.option_trade_symbols,
             )
-            candle_key_map, oi_key_map, funding_key_map, trade_key_map = _dataset_task_key_maps(plan)
-            volatility_key_map = _volatility_task_key_map(plan)
+            key_maps = bronze_checkpoint_key_maps(plan)
+            candle_key_map = key_maps.candle
+            oi_key_map = key_maps.oi
+            funding_key_map = key_maps.funding
+            volatility_key_map = key_maps.volatility_index_data
+            trade_key_map = key_maps.trade
             checkpoint_path = _bronze_checkpoint_path()
             checkpoint_enabled = bool(args.save_parquet_lake) or checkpoint_path.exists()
             checkpoint_fingerprint = _bronze_checkpoint_fingerprint(args=args, plan=plan)
@@ -827,33 +833,14 @@ def run_bronze_build(args: argparse.Namespace, logger: logging.Logger) -> None:
                 trade_key_map=trade_key_map,
             )
 
-            pending_tasks = apply_checkpoint_filter(
+            pending_tasks = apply_checkpoint_filter_with_key_maps(
                 candle_tasks=state.candle_tasks,
                 oi_tasks=state.oi_tasks,
                 funding_tasks=state.funding_tasks,
                 volatility_index_data_tasks=state.volatility_index_data_tasks,
                 trade_tasks=state.trade_tasks,
                 completed=checkpoint_completed,
-                candle_key_serializer=lambda task: candle_key_map.get(
-                    task,
-                    _task_key_tuple_to_string((task[0], task[1], task[2], task[3])),
-                ),
-                oi_key_serializer=lambda task: oi_key_map.get(
-                    task,
-                    _task_key_tuple_to_string((task[0], task[1], task[2])),
-                ),
-                funding_key_serializer=lambda task: funding_key_map.get(
-                    task,
-                    _task_key_tuple_to_string((task[0], task[1], task[2])),
-                ),
-                volatility_key_serializer=lambda task: volatility_key_map.get(
-                    task,
-                    _task_key_tuple_to_string((task[0], task[1], task[2])),
-                ),
-                trade_key_serializer=lambda task: trade_key_map.get(
-                    task,
-                    _task_key_tuple_to_string((task[0], task[1], task[2])),
-                ),
+                key_maps=key_maps,
             )
             state.candle_tasks = pending_tasks.candle_tasks
             state.oi_tasks = pending_tasks.oi_tasks
@@ -893,34 +880,12 @@ def run_bronze_build(args: argparse.Namespace, logger: logging.Logger) -> None:
                 logger.info("Incremental parquet flush enabled during fetch execution")
 
             def _mark_checkpoint_complete(dataset: str, key: tuple[object, ...]) -> None:
-                if dataset == "candle":
-                    serialized_key = candle_key_map.get(
-                        cast(tuple[Exchange, Market, str, str], key),
-                        _task_key_tuple_to_string(key),
-                    )
-                elif dataset == "oi":
-                    serialized_key = oi_key_map.get(
-                        cast(tuple[Exchange, str, str], key),
-                        _task_key_tuple_to_string(key),
-                    )
-                elif dataset == "funding":
-                    serialized_key = funding_key_map.get(
-                        cast(tuple[Exchange, str, str], key),
-                        _task_key_tuple_to_string(key),
-                    )
-                elif dataset == "volatility_index_data":
-                    serialized_key = volatility_key_map.get(
-                        cast(tuple[Exchange, str, str], key),
-                        _task_key_tuple_to_string(key),
-                    )
-                elif dataset == "trade":
-                    serialized_key = trade_key_map.get(
-                        cast(tuple[Exchange, TradeMarket, str], key),
-                        _task_key_tuple_to_string(key),
-                    )
-                else:
-                    serialized_key = _task_key_tuple_to_string(key)
-                checkpoint_completed[dataset].add(serialized_key)
+                add_completed_checkpoint_key(
+                    completed=checkpoint_completed,
+                    dataset=cast(CheckpointDataset, dataset),
+                    key=key,
+                    key_maps=key_maps,
+                )
                 if checkpoint_enabled:
                     _write_bronze_checkpoint(
                         checkpoint_path,
@@ -1030,30 +995,22 @@ def run_bronze_build(args: argparse.Namespace, logger: logging.Logger) -> None:
                 _mark_checkpoint_complete("volatility_index_data", volatility_key)
             for trade_key in trade_results:
                 _mark_checkpoint_complete("trade", trade_key)
-            pending_task_keys: set[str] = set()
-            for candle_task in state.candle_tasks:
-                pending_task_keys.add(candle_key_map.get(candle_task, _task_key_tuple_to_string(candle_task)))
-            for oi_task in state.oi_tasks:
-                pending_task_keys.add(oi_key_map.get(oi_task, _task_key_tuple_to_string(oi_task)))
-            for funding_task in state.funding_tasks:
-                pending_task_keys.add(funding_key_map.get(funding_task, _task_key_tuple_to_string(funding_task)))
-            for volatility_task in state.volatility_index_data_tasks:
-                pending_task_keys.add(
-                    volatility_key_map.get(volatility_task, _task_key_tuple_to_string(volatility_task))
-                )
-            for trade_task in state.trade_tasks:
-                pending_task_keys.add(trade_key_map.get(trade_task, _task_key_tuple_to_string(trade_task)))
-            success_task_keys: set[str] = set()
-            for candle_key in task_results:
-                success_task_keys.add(candle_key_map.get(candle_key, _task_key_tuple_to_string(candle_key)))
-            for oi_key in oi_results:
-                success_task_keys.add(oi_key_map.get(oi_key, _task_key_tuple_to_string(oi_key)))
-            for funding_key in funding_results:
-                success_task_keys.add(funding_key_map.get(funding_key, _task_key_tuple_to_string(funding_key)))
-            for volatility_key in volatility_index_data_results:
-                success_task_keys.add(volatility_key_map.get(volatility_key, _task_key_tuple_to_string(volatility_key)))
-            for trade_key in trade_results:
-                success_task_keys.add(trade_key_map.get(trade_key, _task_key_tuple_to_string(trade_key)))
+            pending_task_keys = checkpoint_task_keys(
+                candle_tasks=state.candle_tasks,
+                oi_tasks=state.oi_tasks,
+                funding_tasks=state.funding_tasks,
+                volatility_index_data_tasks=state.volatility_index_data_tasks,
+                trade_tasks=state.trade_tasks,
+                key_maps=key_maps,
+            )
+            success_task_keys = checkpoint_task_keys(
+                candle_tasks=task_results,
+                oi_tasks=oi_results,
+                funding_tasks=funding_results,
+                volatility_index_data_tasks=volatility_index_data_results,
+                trade_tasks=trade_results,
+                key_maps=key_maps,
+            )
             fairness_rows = symbol_progress_rows_from_dataset_tasks(
                 dataset_tasks=[task for task in plan.dataset_tasks if task.checkpoint_key() in pending_task_keys],
                 success_keys=success_task_keys,

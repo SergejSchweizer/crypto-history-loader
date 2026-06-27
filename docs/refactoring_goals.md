@@ -11,7 +11,7 @@ The codebase is already split into `api`, `application`, and `ingestion`, but se
 | `application/services/fetch_service.py` | 1,854 lines | Fetch planning, windowing, task execution, retries, and reporting are coupled. |
 | `application/services/silver_service.py` | 1,322 lines | Dataset-specific transformations share one large service surface; Silver sidecar writing is isolated in `application/services/silver_sidecars.py`. |
 | `ingestion/lake.py` | 1,248 lines | Bronze persistence, lake reads, and schema handling remain coupled; partition layout helpers are isolated in `ingestion/lake_layout.py`, and Bronze sidecar generation/repair is isolated in `ingestion/lake_sidecars.py`. |
-| `api/commands/loader.py` | 998 lines | CLI orchestration, runtime state, checkpoint glue, and command behavior are coupled. |
+| `api/commands/loader.py` | 1,081 lines | CLI orchestration and command behavior remain coupled after checkpoint key bookkeeping extraction. |
 | `application/services/gold_service.py` | 929 lines | Frame loading, validation, joins, and output writing remain coupled after feature profiling extraction. |
 | `ingestion/feature_profile.py` | 416 lines | Shared feature metadata and plotting are isolated, but still adapter-heavy and need interface extraction. |
 
@@ -226,6 +226,8 @@ Exit criteria:
 - Checkpoint key mapping, alias hydration, and pending-task filtering live in
   `application/services/bronze_runtime_service.py`, with `api/commands/loader_checkpoint.py` kept as a compatibility
   facade.
+- Registry-aware checkpoint key maps, completed-key marking, pending/success key-set construction, and checkpoint
+  filtering now live behind typed helpers in `application/services/bronze_runtime_service.py`.
 - Bronze start-bound parsing and tail-mode bound resolution live in
   `application/services/bronze_runtime_service.py`; `api/commands/loader.py` now carries one
   `BronzeRuntimeBoundsContext` instead of separate mutable start-bound globals.
