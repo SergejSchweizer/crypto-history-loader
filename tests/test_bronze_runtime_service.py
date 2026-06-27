@@ -59,13 +59,16 @@ def test_load_checkpoint_handles_unreadable_stale_and_missing_completed(tmp_path
     logger = logging.getLogger("test")
 
     path.write_text("{", encoding="utf-8")
-    assert runtime.load_bronze_checkpoint(path, "fp", logger) == {
+    unreadable = runtime.load_bronze_checkpoint(path, "fp", logger)
+    assert unreadable == {
         "candle": set(),
         "oi": set(),
         "funding": set(),
         "volatility_index_data": set(),
         "trade": set(),
     }
+    unreadable["candle"].add("mutated")
+    assert runtime.load_bronze_checkpoint(tmp_path / "missing.json", "fp", logger)["candle"] == set()
 
     path.write_text(json.dumps({"fingerprint": "other", "completed": {}}), encoding="utf-8")
     assert runtime.load_bronze_checkpoint(path, "fp", logger) == {

@@ -1,6 +1,6 @@
 PYTHON ?= .venv/bin/python
 
-.PHONY: setup test lint typecheck check
+.PHONY: setup test lint format typecheck pyright ty imports config-check check
 
 setup:
 	python3 -m venv .venv
@@ -11,9 +11,24 @@ test:
 	uv run --extra dev pytest
 
 lint:
-	$(PYTHON) -m ruff check .
+	uv run ruff check .
+
+format:
+	uv run ruff format --check .
 
 typecheck:
-	$(PYTHON) -m mypy .
+	uv run mypy .
 
-check: lint typecheck test
+pyright:
+	uv run pyright --level error
+
+ty:
+	uv run ty check
+
+imports:
+	uv run lint-imports --config .importlinter
+
+config-check:
+	uv run python scripts/validate_config_with_pydantic.py --config config.yaml
+
+check: lint format typecheck pyright ty imports config-check test

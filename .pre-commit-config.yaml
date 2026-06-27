@@ -16,6 +16,11 @@ repos:
         entry: uv run mypy .
         language: system
         pass_filenames: false
+      - id: pyright
+        name: pyright
+        entry: uv run pyright --level error
+        language: system
+        pass_filenames: false
       - id: ty
         name: ty
         entry: uv run ty check

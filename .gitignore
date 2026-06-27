@@ -14,6 +14,8 @@
 !pyproject.toml
 !uv.lock
 !.pre-commit-config.yaml
+!.github/
+!.github/**
 
 # Source and test trees.
 !api/

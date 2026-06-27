@@ -696,7 +696,7 @@ uv run --extra dev pytest
 
 Operational notes:
 
-- `pytest` coverage and parallel execution defaults are configured in `pyproject.toml`; xdist uses logical CPU workers with work-stealing distribution.
+- `pytest` coverage and parallel execution defaults are configured in `pyproject.toml`; xdist uses logical CPU workers capped at 4 with load-scope distribution.
 - Pre-commit enforces the same logical quality-gate path used in CI.
 
 ---
