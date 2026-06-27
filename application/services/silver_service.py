@@ -8,6 +8,16 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from application.dataset_contracts import (
+    SILVER_FUNDING_FEATURE_COLUMNS,
+    SILVER_FUNDING_OBSERVED_COLUMNS,
+    SILVER_OHLCV_COLUMNS,
+    SILVER_OI_M1_FEATURE_COLUMNS,
+    SILVER_OI_OBSERVED_COLUMNS,
+    SILVER_TRADES_M1_FEATURE_COLUMNS,
+    SILVER_TRADES_OBSERVED_COLUMNS,
+    SILVER_VOLATILITY_OBSERVED_COLUMNS,
+)
 from ingestion.feature_profile import (
     feature_hash,
     feature_metadata,
@@ -63,113 +73,6 @@ class SilverBuildReport:
             "symbols": self.symbols,
             "columns": self.columns,
         }
-
-
-SILVER_OHLCV_COLUMNS = [
-    "schema_version",
-    "dataset_type",
-    "exchange",
-    "symbol",
-    "instrument_type",
-    "event_time",
-    "ingested_at",
-    "run_id",
-    "source_endpoint",
-    "open_time",
-    "close_time",
-    "timeframe",
-    "open_price",
-    "high_price",
-    "low_price",
-    "close_price",
-    "volume",
-    "quote_volume",
-    "trade_count",
-    "origin_payload",
-]
-SILVER_FUNDING_OBSERVED_COLUMNS = [
-    "funding_time",
-    "exchange",
-    "symbol",
-    "base_asset",
-    "instrument_type",
-    "funding_rate",
-    "funding_interval_hours",
-    "ingested_at_min",
-    "ingested_at_max",
-    "source_row_count",
-    "silver_built_at",
-    "data_quality_status",
-]
-SILVER_FUNDING_FEATURE_COLUMNS = [
-    "timestamp",
-    "exchange",
-    "symbol",
-    "funding_rate_last_known",
-    "funding_observed_at",
-    "minutes_since_funding",
-    "is_funding_observation_minute",
-    "funding_data_available",
-]
-SILVER_OI_OBSERVED_COLUMNS = [
-    "timestamp",
-    "exchange",
-    "symbol",
-    "open_interest",
-    "oi_source_timestamp",
-    "ingested_at",
-    "source_endpoint",
-]
-SILVER_OI_M1_FEATURE_COLUMNS = [
-    "timestamp_m1",
-    "exchange",
-    "symbol",
-    "open_interest",
-    "oi_is_observed",
-    "oi_is_ffill",
-    "minutes_since_oi_observation",
-    "oi_observation_lag_sec",
-    "oi_source_timestamp",
-]
-SILVER_TRADES_M1_FEATURE_COLUMNS = [
-    "timestamp_m1",
-    "exchange",
-    "symbol",
-    "instrument_type",
-    "open_price",
-    "high_price",
-    "low_price",
-    "close_price",
-    "volume",
-    "quote_volume",
-    "trade_count",
-    "buy_volume",
-    "sell_volume",
-    "buy_trade_count",
-    "sell_trade_count",
-    "buy_volume_share",
-]
-SILVER_TRADES_OBSERVED_COLUMNS = [
-    "trade_time",
-    "exchange",
-    "symbol",
-    "instrument_type",
-    "trade_id",
-    "price",
-    "quantity",
-    "side",
-]
-SILVER_VOLATILITY_OBSERVED_COLUMNS = [
-    "timestamp",
-    "exchange",
-    "symbol",
-    "instrument_type",
-    "dataset_type",
-    "volatility_value",
-    "volatility_source_timestamp",
-    "ingested_at",
-    "source_endpoint",
-]
 
 
 def _build_trade_feature_frame(pl: Any, frame: Any, *, symbol: str) -> Any:

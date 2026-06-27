@@ -237,6 +237,13 @@ Exit criteria:
 - Reduce large service modules by dataset family and shared frame utilities.
 - Strengthen missing-data and timestamp semantics tests.
 
+Progress:
+
+- Silver output column, timestamp semantics, and missing-data policy contracts now live in
+  `application/dataset_contracts.py`.
+- Gold dataset requirements and L2 inclusion flags now live in typed contracts, with
+  `application/services/gold_service.py` keeping the previous public constants as compatibility views.
+
 Exit criteria:
 
 - Dataset transformations are discoverable by contract.

@@ -14,6 +14,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from application.dataset_contracts import (
+    FULL_MARKET_GOLD_REQUIREMENTS,
+    GOLD_DATASET_CONTRACTS,
+    gold_dataset_contract,
+)
 from ingestion import feature_profile
 
 _feature_hash = feature_profile.feature_hash
@@ -21,39 +26,10 @@ _feature_metadata = feature_profile.feature_metadata
 _write_feature_distribution_plot = feature_profile.write_feature_distribution_plot
 
 _FULL_MARKET_REQUIREMENTS: list[tuple[str, str]] = [
-    ("spot", "1m"),
-    ("perp", "1m"),
-    ("oi_1m_feature", "1m"),
-    ("funding_1m_feature", "1m"),
-    ("perp_trades_1m_feature", "1m"),
-    ("option_trades_1m_feature", "1m"),
-    ("volatility_index_data_observed", "1m"),
+    requirement.as_tuple() for requirement in FULL_MARKET_GOLD_REQUIREMENTS
 ]
 GOLD_DATASET_SPECS: dict[str, dict[str, object]] = {
-    "gold.market.perp_trades.m1": {
-        "requirements": [("perp_trades_1m_feature", "1m")],
-        "include_l2": False,
-    },
-    "gold.market.option_trades.m1": {
-        "requirements": [("option_trades_1m_feature", "1m")],
-        "include_l2": False,
-    },
-    "gold.market.core.m1": {
-        "requirements": [("spot", "1m"), ("perp", "1m")],
-        "include_l2": False,
-    },
-    "gold.market.core_funding.m1": {
-        "requirements": [("spot", "1m"), ("perp", "1m"), ("funding_1m_feature", "1m")],
-        "include_l2": False,
-    },
-    "gold.market.full.m1": {
-        "requirements": _FULL_MARKET_REQUIREMENTS,
-        "include_l2": False,
-    },
-    "gold.hybrid.full_l2.m1": {
-        "requirements": _FULL_MARKET_REQUIREMENTS,
-        "include_l2": True,
-    },
+    dataset_id: contract.legacy_spec() for dataset_id, contract in GOLD_DATASET_CONTRACTS.items()
 }
 SUPPORTED_GOLD_DATASET_IDS = set(GOLD_DATASET_SPECS.keys())
 
@@ -407,25 +383,11 @@ def _discover_symbols_for_dataset(
 
 
 def _dataset_requirements(dataset_id: str) -> list[tuple[str, str]]:
-    spec = GOLD_DATASET_SPECS.get(dataset_id)
-    if spec is None:
-        raise ValueError(f"Unsupported dataset_id: {dataset_id}")
-    requirements = spec.get("requirements")
-    if not isinstance(requirements, list):
-        raise ValueError(f"Invalid dataset requirements for dataset_id: {dataset_id}")
-    parsed: list[tuple[str, str]] = []
-    for item in requirements:
-        if not isinstance(item, (list, tuple)) or len(item) != 2:
-            raise ValueError(f"Invalid dataset requirements for dataset_id: {dataset_id}")
-        parsed.append((str(item[0]), str(item[1])))
-    return parsed
+    return [requirement.as_tuple() for requirement in gold_dataset_contract(dataset_id).requirements]
 
 
 def _dataset_includes_l2(dataset_id: str) -> bool:
-    spec = GOLD_DATASET_SPECS.get(dataset_id)
-    if spec is None:
-        raise ValueError(f"Unsupported dataset_id: {dataset_id}")
-    return bool(spec.get("include_l2", False))
+    return gold_dataset_contract(dataset_id).include_l2
 
 
 def _read_latest_l2_gold_frame(*, l2_root: str, exchange: str, symbol: str) -> tuple[Any, Path]:
