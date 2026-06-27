@@ -35,3 +35,12 @@ source_modules =
     ingestion.exchanges
 forbidden_modules =
     application
+
+[importlinter:contract:acyclic_root_packages]
+name = Keep root packages acyclic
+type = acyclic_siblings
+ancestors =
+    api
+    application
+    ingestion
+depth = 1

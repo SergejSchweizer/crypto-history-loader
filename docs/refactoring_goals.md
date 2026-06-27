@@ -186,6 +186,11 @@ pydoclint src
 - Add or update architecture tests for configured boundaries.
 - Align documented validation commands with actual tooling.
 
+Progress:
+
+- Architecture contracts now include an acyclic-sibling check for the root packages, in addition to the existing
+  forbidden dependency directions.
+
 Exit criteria:
 
 - Architecture and validation expectations are explicit.
