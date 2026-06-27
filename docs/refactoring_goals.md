@@ -248,6 +248,11 @@ Exit criteria:
 - Run full validation.
 - Update README and release notes.
 
+Progress:
+
+- Pytest now isolates `DEPTH_*` process environment variables per test, so CLI config loading and runtime-policy
+  tests cannot leak mutable process state into later tests.
+
 Exit criteria:
 
 - Completion checklist is fully checked.
