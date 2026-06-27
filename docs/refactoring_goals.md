@@ -248,6 +248,11 @@ Exit criteria:
 - Run full validation.
 - Update README and release notes.
 
+Progress:
+
+- Script logging now reuses the runtime logging adapter, keeping module-specific files and the unified log message
+  structure consistent across CLI commands and maintenance scripts.
+
 Exit criteria:
 
 - Completion checklist is fully checked.
