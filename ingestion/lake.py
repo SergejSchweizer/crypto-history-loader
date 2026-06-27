@@ -7,20 +7,19 @@ import concurrent.futures
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict
-from datetime import UTC, date, datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
 
+from ingestion import lake_queries as _lake_queries
 from ingestion.funding import FundingPoint
+from ingestion.lake_datasets import OI_DATASET_TYPE, ohlcv_dataset_type_for_market
 from ingestion.lake_layout import (
     PartitionKey,
     partition_path,
 )
 from ingestion.lake_layout import (
     dataset_data_files as _dataset_data_files,
-)
-from ingestion.lake_layout import (
-    date_from_partition_path as _date_from_partition_path,
 )
 from ingestion.lake_layout import (
     partition_data_files as _partition_data_files,
@@ -37,18 +36,14 @@ from ingestion.trades import OptionTradeTick, TradeMarket, TradeTick
 from ingestion.volatility import VolatilityPoint
 
 NaturalKey = tuple[str, str, str, str, datetime, str, str]
-OI_DATASET_TYPE = "oi"
 __all__ = ["ensure_bronze_sidecars", "partition_path"]
 
-
-def ohlcv_dataset_type_for_market(market: str) -> str:
-    """Return dataset_type label used for OHLCV parquet storage by market."""
-
-    if market == "spot":
-        return "spot"
-    if market == "perp":
-        return "perp"
-    raise ValueError(f"Unsupported OHLCV market '{market}'")
+latest_open_time_in_lake = _lake_queries.latest_open_time_in_lake
+latest_open_time_in_lake_by_dataset = _lake_queries.latest_open_time_in_lake_by_dataset
+open_time_bounds_in_lake_by_dataset = _lake_queries.open_time_bounds_in_lake_by_dataset
+open_times_in_lake = _lake_queries.open_times_in_lake
+open_times_in_lake_by_dataset = _lake_queries.open_times_in_lake_by_dataset
+partition_dates_in_lake_by_dataset = _lake_queries.partition_dates_in_lake_by_dataset
 
 
 def utc_run_id() -> str:
@@ -258,150 +253,6 @@ def volatility_record(
     }
 
 
-def open_times_in_lake_by_dataset(
-    lake_root: str,
-    dataset_type: str,
-    market: str,
-    exchange: str,
-    symbol: str,
-    timeframe: str,
-) -> list[datetime]:
-    """Return stored open_time values for selected dataset/instrument/timeframe."""
-
-    try:
-        import pyarrow.parquet as pq
-    except ImportError as exc:
-        raise RuntimeError("pyarrow is required for parquet lake output. Install project dependencies.") from exc
-
-    partition_root = (
-        Path(lake_root)
-        / f"dataset_type={dataset_type}"
-        / f"exchange={exchange}"
-        / f"instrument_type={market}"
-        / f"symbol={symbol}"
-        / f"timeframe={timeframe}"
-    )
-    if not partition_root.exists():
-        return []
-
-    values: list[datetime] = []
-    for data_file in _partition_data_files(partition_root):
-        parquet_file = pq.ParquetFile(data_file)  # type: ignore[no-untyped-call]
-        for batch in parquet_file.iter_batches(columns=["open_time"], batch_size=10_000):  # type: ignore[no-untyped-call]
-            for row in batch.to_pylist():
-                value = row.get("open_time")
-                if isinstance(value, datetime):
-                    values.append(value)
-    return sorted(set(values))
-
-
-def partition_dates_in_lake_by_dataset(
-    lake_root: str,
-    dataset_type: str,
-    market: str,
-    exchange: str,
-    symbol: str,
-    timeframe: str,
-) -> list[date]:
-    """Return stored daily partition dates for one dataset/instrument/timeframe."""
-
-    partition_root = (
-        Path(lake_root)
-        / f"dataset_type={dataset_type}"
-        / f"exchange={exchange}"
-        / f"instrument_type={market}"
-        / f"symbol={symbol}"
-        / f"timeframe={timeframe}"
-    )
-    if not partition_root.exists():
-        return []
-
-    values: set[date] = set()
-    for data_file in _partition_data_files(partition_root):
-        for part in data_file.parts:
-            if not part.startswith("date="):
-                continue
-            try:
-                values.add(date.fromisoformat(part.split("=", 1)[1]))
-            except ValueError:
-                continue
-            break
-    return sorted(values)
-
-
-def open_time_bounds_in_lake_by_dataset(
-    lake_root: str,
-    dataset_type: str,
-    market: str,
-    exchange: str,
-    symbol: str,
-    timeframe: str,
-) -> dict[date, tuple[datetime, datetime]]:
-    """Return per-partition open_time min/max bounds for a dataset selection."""
-
-    try:
-        import pyarrow.parquet as pq
-    except ImportError as exc:
-        raise RuntimeError("pyarrow is required for parquet lake output. Install project dependencies.") from exc
-
-    partition_root = (
-        Path(lake_root)
-        / f"dataset_type={dataset_type}"
-        / f"exchange={exchange}"
-        / f"instrument_type={market}"
-        / f"symbol={symbol}"
-        / f"timeframe={timeframe}"
-    )
-    if not partition_root.exists():
-        return {}
-
-    bounds: dict[date, tuple[datetime, datetime]] = {}
-    for data_file in _partition_data_files(partition_root):
-        partition_date = _date_from_partition_path(data_file)
-        if partition_date is None:
-            continue
-        parquet_file = cast(Any, pq.ParquetFile(data_file))  # type: ignore[no-untyped-call]  # pyarrow exposes an untyped constructor.
-        file_min, file_max = _open_time_bounds_for_parquet_file(parquet_file)
-        if file_min is None or file_max is None:
-            continue
-        current = bounds.get(partition_date)
-        if current is None:
-            bounds[partition_date] = (file_min, file_max)
-        else:
-            bounds[partition_date] = (min(current[0], file_min), max(current[1], file_max))
-    return bounds
-
-
-def _open_time_bounds_for_parquet_file(parquet_file: Any) -> tuple[datetime | None, datetime | None]:
-    """Read open_time min/max with metadata stats first, then fall back to the column."""
-
-    min_value: datetime | None = None
-    max_value: datetime | None = None
-    open_time_index = parquet_file.schema_arrow.get_field_index("open_time")
-    if open_time_index >= 0:
-        metadata = parquet_file.metadata
-        for row_group_index in range(metadata.num_row_groups):
-            stats = metadata.row_group(row_group_index).column(open_time_index).statistics
-            if stats is None or stats.min is None or stats.max is None:
-                min_value = None
-                max_value = None
-                break
-            if isinstance(stats.min, datetime) and isinstance(stats.max, datetime):
-                min_value = stats.min if min_value is None else min(min_value, stats.min)
-                max_value = stats.max if max_value is None else max(max_value, stats.max)
-        if min_value is not None and max_value is not None:
-            return min_value, max_value
-
-    for batch in parquet_file.iter_batches(columns=["open_time"], batch_size=10_000):
-        for row in batch.to_pylist():
-            value = row.get("open_time")
-            if not isinstance(value, datetime):
-                continue
-            min_value = value if min_value is None else min(min_value, value)
-            max_value = value if max_value is None else max(max_value, value)
-    return min_value, max_value
-
-
 def record_natural_key(record: dict[str, object]) -> NaturalKey:
     """Build natural key for per-partition deduplication."""
 
@@ -527,91 +378,6 @@ def _write_grouped_rows(
                 rows=table.to_pylist(),
             )
     return sorted(written_files)
-
-
-def open_times_in_lake(
-    lake_root: str,
-    market: str,
-    exchange: str,
-    symbol: str,
-    timeframe: str,
-) -> list[datetime]:
-    """Return all stored open_time values for one instrument/timeframe parquet file.
-
-    Reads parquet files in batches to keep memory usage stable for large partitions.
-    """
-
-    return open_times_in_lake_by_dataset(
-        lake_root=lake_root,
-        dataset_type=ohlcv_dataset_type_for_market(market),
-        market=market,
-        exchange=exchange,
-        symbol=symbol,
-        timeframe=timeframe,
-    )
-
-
-def latest_open_time_in_lake_by_dataset(
-    lake_root: str,
-    dataset_type: str,
-    market: str,
-    exchange: str,
-    symbol: str,
-    timeframe: str,
-) -> datetime | None:
-    """Return latest stored open_time for one dataset/instrument/timeframe.
-
-    This intentionally reads only the most recent month partition to avoid
-    full-history scans during tail-only delta ingestion.
-    """
-
-    try:
-        import pyarrow.parquet as pq
-    except ImportError as exc:
-        raise RuntimeError("pyarrow is required for parquet lake output. Install project dependencies.") from exc
-
-    partition_root = (
-        Path(lake_root)
-        / f"dataset_type={dataset_type}"
-        / f"exchange={exchange}"
-        / f"instrument_type={market}"
-        / f"symbol={symbol}"
-        / f"timeframe={timeframe}"
-    )
-    if not partition_root.exists():
-        return None
-
-    data_files = _partition_data_files(partition_root)
-    if not data_files:
-        return None
-    latest_file = data_files[-1]
-    latest_open_time: datetime | None = None
-    parquet_file = pq.ParquetFile(latest_file)  # type: ignore[no-untyped-call]
-    for batch in parquet_file.iter_batches(columns=["open_time"], batch_size=10_000):  # type: ignore[no-untyped-call]
-        for row in batch.to_pylist():
-            value = row.get("open_time")
-            if isinstance(value, datetime) and (latest_open_time is None or value > latest_open_time):
-                latest_open_time = value
-    return latest_open_time
-
-
-def latest_open_time_in_lake(
-    lake_root: str,
-    market: str,
-    exchange: str,
-    symbol: str,
-    timeframe: str,
-) -> datetime | None:
-    """Return latest stored OHLCV open_time for one series."""
-
-    return latest_open_time_in_lake_by_dataset(
-        lake_root=lake_root,
-        dataset_type=ohlcv_dataset_type_for_market(market),
-        market=market,
-        exchange=exchange,
-        symbol=symbol,
-        timeframe=timeframe,
-    )
 
 
 def load_spot_candles_from_lake(
