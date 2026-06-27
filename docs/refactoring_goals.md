@@ -190,6 +190,10 @@ Progress:
 
 - Architecture contracts now include an acyclic-sibling check for the root packages, in addition to the existing
   forbidden dependency directions.
+- Descriptive-statistics lake reads now route through `application/services/lake_query_service.py`, reducing direct
+  API ownership of lake adapter imports.
+- Bronze loader lake readers and sidecar repair now route through application-facing lake query/maintenance services,
+  removing direct `api` imports of `ingestion.lake`.
 
 Exit criteria:
 

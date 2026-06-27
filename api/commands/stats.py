@@ -11,7 +11,7 @@ from typing import Any, cast
 
 import polars as pl
 
-from ingestion.lake import load_combined_dataframe_from_lake
+from application.services.lake_query_service import load_combined_ohlcv_dataframe
 
 
 def add_export_descriptive_stats_parser(subparsers: Any) -> None:
@@ -49,7 +49,7 @@ def run_export_descriptive_stats(args: argparse.Namespace, logger: logging.Logge
 
     frame = cast(
         pl.DataFrame,
-        load_combined_dataframe_from_lake(
+        load_combined_ohlcv_dataframe(
             lake_root=cast(str, args.lake_root),
             exchanges=cast(list[str] | None, args.exchanges),
             symbols=cast(list[str] | None, args.symbols),
@@ -57,7 +57,6 @@ def run_export_descriptive_stats(args: argparse.Namespace, logger: logging.Logge
             instrument_types=cast(list[str] | None, args.instrument_types),
             start_time=start_time,
             end_time=end_time,
-            include_open_interest=False,
         ),
     )
 

@@ -76,6 +76,13 @@ from application.services.gapfill_service import (
 from application.services.gapfill_service import (
     _missing_ranges_ms as missing_ranges_ms,  # pyright: ignore[reportPrivateUsage]
 )
+from application.services.lake_maintenance_service import ensure_bronze_sidecars
+from application.services.lake_query_service import (
+    latest_open_time_in_lake,
+    latest_open_time_in_lake_by_dataset,
+    open_times_in_lake,
+    open_times_in_lake_by_dataset,
+)
 from application.services.runtime_service import SingleInstanceError, SingleInstanceLock, fetch_concurrency
 from application.services.storage_service import persist_loader_outputs_dto
 from ingestion.funding import (
@@ -84,13 +91,6 @@ from ingestion.funding import (
     fetch_funding_range,
     funding_interval_to_milliseconds,
     normalize_funding_timeframe,
-)
-from ingestion.lake import (
-    ensure_bronze_sidecars,
-    latest_open_time_in_lake,
-    latest_open_time_in_lake_by_dataset,
-    open_times_in_lake,
-    open_times_in_lake_by_dataset,
 )
 from ingestion.open_interest import (
     OpenInterestPoint,
