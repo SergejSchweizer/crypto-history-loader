@@ -50,7 +50,7 @@ def test_run_export_descriptive_stats_emits_none_for_missing_columns(
 ) -> None:
     monkeypatch.setattr(
         stats_cmd,
-        "load_combined_dataframe_from_lake",
+        "load_combined_ohlcv_dataframe",
         lambda **kwargs: pl.DataFrame([{"open": 1.0, "close": 1.1}]),
     )
     output_csv = tmp_path / "stats.csv"
@@ -79,7 +79,7 @@ def test_run_export_descriptive_stats_emits_json_when_enabled(
 ) -> None:
     monkeypatch.setattr(
         stats_cmd,
-        "load_combined_dataframe_from_lake",
+        "load_combined_ohlcv_dataframe",
         lambda **kwargs: pl.DataFrame([{"open": 1.0, "high": 2.0, "low": 0.5, "close": 1.5, "volume": 10.0}]),
     )
     args = argparse.Namespace(

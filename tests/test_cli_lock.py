@@ -365,7 +365,7 @@ def test_export_descriptive_stats_writes_csv(monkeypatch: pytest.MonkeyPatch, tm
         {"open": 1.0, "high": 2.0, "low": 0.5, "close": 1.5, "volume": 10.0},
         {"open": 2.0, "high": 3.0, "low": 1.5, "close": 2.5, "volume": 20.0},
     ]
-    monkeypatch.setattr(cli, "load_combined_dataframe_from_lake", lambda **kwargs: pl.DataFrame(rows))
+    monkeypatch.setattr(cli, "load_combined_ohlcv_dataframe", lambda **kwargs: pl.DataFrame(rows))
     output_csv = tmp_path / "docs" / "tables" / "descriptive_stats_baseline.csv"
     monkeypatch.setattr(
         sys,

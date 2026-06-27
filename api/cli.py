@@ -20,6 +20,13 @@ from application.services.bronze_runtime_service import BronzeRuntimeBoundsConte
 from application.services.config_validation import validate_runtime_config
 from application.services.fetch_service import fetch_symbol_candles
 from application.services.gapfill_service import _last_closed_open_ms, _missing_ranges_ms
+from application.services.lake_query_service import (
+    latest_open_time_in_lake,
+    latest_open_time_in_lake_by_dataset,
+    load_combined_ohlcv_dataframe,  # noqa: F401 - backward-compatible test monkeypatch surface
+    open_times_in_lake,
+    open_times_in_lake_by_dataset,
+)
 from application.services.runtime_service import (
     SingleInstanceError,
     SingleInstanceLock,
@@ -31,13 +38,6 @@ from ingestion.funding import (
     fetch_funding_range,
     funding_interval_to_milliseconds,
     normalize_funding_timeframe,
-)
-from ingestion.lake import (
-    latest_open_time_in_lake,
-    latest_open_time_in_lake_by_dataset,
-    load_combined_dataframe_from_lake,  # noqa: F401 - backward-compatible test monkeypatch surface
-    open_times_in_lake,
-    open_times_in_lake_by_dataset,
 )
 from ingestion.open_interest import (
     fetch_open_interest_all_history,
@@ -313,7 +313,7 @@ def main() -> None:
     elif args.command == "list-spot-timeframes":
         run_list_spot_timeframes(args=args, logger=logger)
     elif args.command == "export-descriptive-stats":
-        cast(Any, stats_cmd).load_combined_dataframe_from_lake = load_combined_dataframe_from_lake
+        cast(Any, stats_cmd).load_combined_ohlcv_dataframe = load_combined_ohlcv_dataframe
         run_export_descriptive_stats(args=args, logger=logger)
 
 
