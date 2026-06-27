@@ -24,9 +24,10 @@ from application.dto import (
     VolatilityFetchTaskDTO,
 )
 from application.schema import dataset_contract
+from application.services import fetch_trade_windows as _trade_windows
 from application.services.fetch_bootstrap import fetch_bootstrap_history_rows, fetch_bounded_daily_rows
 from application.services.fetch_executors import elapsed_seconds, run_with_optional_history_chunk
-from application.services.fetch_runtime_policy import heartbeat_seconds, task_timeout_seconds, trade_window_ms
+from application.services.fetch_runtime_policy import heartbeat_seconds, task_timeout_seconds
 from application.services.gapfill_service import _last_closed_open_ms, _missing_ranges_ms
 from ingestion.funding import (
     FundingPoint,
@@ -35,7 +36,6 @@ from ingestion.funding import (
     funding_interval_to_milliseconds,
     normalize_funding_timeframe,
 )
-from ingestion.http_client import HttpClientError
 from ingestion.lake import (
     open_time_bounds_in_lake_by_dataset,
     open_times_in_lake,
@@ -71,125 +71,18 @@ TTimeout = TypeVar("TTimeout")
 TRow = TypeVar("TRow")
 logger = logging.getLogger(__name__)
 
+_classify_trade_fetch_error = _trade_windows.classify_trade_fetch_error
+_dedupe_sort_trade_rows = _trade_windows.dedupe_sort_trade_rows
+_fetch_trade_window = _trade_windows.fetch_trade_window
+_log_trade_window_progress = _trade_windows.log_trade_window_progress
+_raise_if_all_trade_windows_failed = _trade_windows.raise_if_all_trade_windows_failed
+_split_range_into_trade_windows = _trade_windows.split_range_into_trade_windows
+_trade_window_ms = _trade_windows.trade_window_size_ms
+_trade_windows_in_random_order = _trade_windows.trade_windows_in_random_order
+
 
 class _ResultQueueProtocol:
     def put(self, item: object) -> object: ...
-
-
-def _classify_trade_fetch_error(exc: Exception) -> str:
-    """Classify trade fetch errors for operational summaries."""
-
-    message = str(exc).lower()
-    network_markers = (
-        "no route to host",
-        "name or service not known",
-        "temporary failure in name resolution",
-        "network is unreachable",
-        "connection refused",
-    )
-    if any(marker in message for marker in network_markers):
-        return "NET_UNREACHABLE"
-    if "timeout" in message or "timed out" in message:
-        return "NET_TIMEOUT"
-    return "OTHER"
-
-
-def _is_recoverable_trade_window_error(exc: Exception) -> bool:
-    """Return whether a trade-window error should not abort later windows."""
-
-    if isinstance(exc, TimeoutError):
-        return True
-    if isinstance(exc, HttpClientError):
-        return _classify_trade_fetch_error(exc) in {"NET_TIMEOUT", "NET_UNREACHABLE"}
-    return False
-
-
-def _trade_unique_key(item: TradeTick | OptionTradeTick) -> tuple[datetime, str, str]:
-    """Return stable dedup key for perp/option trade ticks."""
-
-    return (item.trade_time, item.trade_id, getattr(item, "instrument_name", ""))
-
-
-def _dedupe_sort_trade_rows(rows: list[TradeTick | OptionTradeTick]) -> list[TradeTick | OptionTradeTick]:
-    """Deduplicate trade rows and return deterministic time/id ordering."""
-
-    unique = {_trade_unique_key(item): item for item in rows}
-    return [unique[key] for key in sorted(unique)]
-
-
-def _fetch_trade_window(
-    *,
-    range_fetcher: Callable[..., list[TradeTick] | list[OptionTradeTick] | list[TradeTick | OptionTradeTick]],
-    exchange: Exchange,
-    market: TradeMarket,
-    symbol: str,
-    start_open_ms: int,
-    end_open_ms: int,
-) -> tuple[list[TradeTick | OptionTradeTick], str | None]:
-    """Fetch one trade window and isolate transient archive/network failures."""
-
-    started_at = datetime.now(UTC)
-    logger.debug(
-        "Trade-window fetch start exchange=%s market=%s symbol=%s start_ms=%s end_ms=%s",
-        exchange,
-        market,
-        symbol,
-        start_open_ms,
-        end_open_ms,
-    )
-    try:
-        rows = range_fetcher(
-            exchange=exchange,
-            symbol=symbol,
-            market=market,
-            start_open_ms=start_open_ms,
-            end_open_ms=end_open_ms,
-        )
-    except Exception as exc:
-        if not _is_recoverable_trade_window_error(exc):
-            raise
-        error_class = _classify_trade_fetch_error(exc)
-        message = f"[{error_class}] {exc}"
-        logger.warning(
-            "Trade-window fetch failed class=%s exchange=%s market=%s symbol=%s start_ms=%s end_ms=%s error=%s",
-            error_class,
-            exchange,
-            market,
-            symbol,
-            start_open_ms,
-            end_open_ms,
-            exc,
-        )
-        return [], message
-    elapsed_s = elapsed_seconds(started_at)
-    logger.debug(
-        "Trade-window fetch done exchange=%s market=%s symbol=%s start_ms=%s end_ms=%s rows=%s elapsed_s=%s",
-        exchange,
-        market,
-        symbol,
-        start_open_ms,
-        end_open_ms,
-        len(rows),
-        elapsed_s,
-    )
-    return cast(list[TradeTick | OptionTradeTick], rows), None
-
-
-def _raise_if_all_trade_windows_failed(
-    *,
-    failed_windows: list[str],
-    attempted_windows: int,
-    exchange: Exchange,
-    market: TradeMarket,
-    symbol: str,
-) -> None:
-    """Fail a trade task only when every attempted trade window failed."""
-
-    if attempted_windows > 0 and len(failed_windows) == attempted_windows:
-        raise RuntimeError(
-            "all trade windows failed "
-            f"exchange={exchange} market={market} symbol={symbol} failures={failed_windows[:5]}"
-        )
 
 
 def _row_open_time_ms(row: object) -> int:
@@ -290,43 +183,6 @@ def _day_windows_in_random_order(start_open_ms: int, end_open_ms: int) -> list[t
     return sorted(windows)
 
 
-def _trade_window_ms(market: TradeMarket) -> int:
-    """Return operational trade fetch window size by dataset family."""
-
-    return trade_window_ms(market)
-
-
-def _split_range_into_trade_windows(
-    start_open_ms: int,
-    end_open_ms: int,
-    *,
-    market: TradeMarket,
-) -> list[tuple[int, int]]:
-    """Split an inclusive trade range into market-specific bounded windows."""
-
-    if end_open_ms < start_open_ms:
-        return []
-    step_ms = _trade_window_ms(market)
-    cursor = start_open_ms
-    windows: list[tuple[int, int]] = []
-    while cursor <= end_open_ms:
-        window_end = min(cursor + step_ms - 1, end_open_ms)
-        windows.append((cursor, window_end))
-        cursor = window_end + 1
-    return windows
-
-
-def _trade_windows_in_random_order(
-    start_open_ms: int,
-    end_open_ms: int,
-    *,
-    market: TradeMarket,
-) -> list[tuple[int, int]]:
-    """Return deterministic trade fetch windows for the requested market."""
-
-    return sorted(_split_range_into_trade_windows(start_open_ms, end_open_ms, market=market))
-
-
 def _day_start_ms(value: date) -> int:
     """Return UTC day start timestamp in milliseconds."""
 
@@ -389,35 +245,6 @@ def _missing_trade_day_ranges(
                 ranges.append((max(max_open_ms + 1, range_start_ms), range_end_ms))
         cursor += timedelta(days=1)
     return ranges
-
-
-def _log_trade_window_progress(
-    *,
-    phase: str,
-    exchange: Exchange,
-    market: TradeMarket,
-    symbol: str,
-    completed_windows: int,
-    total_windows: int,
-    rows: int,
-    failed_windows: int,
-    started_at: datetime,
-) -> None:
-    """Log long-running trade fetch progress without changing fetch behavior."""
-
-    if completed_windows == total_windows or completed_windows == 1 or completed_windows % 25 == 0:
-        logger.debug(
-            ("Trade %s progress exchange=%s market=%s symbol=%s windows=%s/%s rows=%s failed_windows=%s elapsed_s=%s"),
-            phase,
-            exchange,
-            market,
-            symbol,
-            completed_windows,
-            total_windows,
-            rows,
-            failed_windows,
-            elapsed_seconds(started_at),
-        )
 
 
 def _fetch_bounded_daily_rows(
