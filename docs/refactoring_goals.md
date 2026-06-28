@@ -10,7 +10,7 @@ The codebase is already split into `api`, `application`, and `ingestion`, but se
 |---|---:|---|
 | `application/services/fetch_service.py` | 1,901 lines | Fetch planning, task execution, retries, and reporting remain coupled after trade-window helper extraction. |
 | `application/services/silver_service.py` | 1,322 lines | Dataset-specific transformations share one large service surface; Silver sidecar writing is isolated in `application/services/silver_sidecars.py`. |
-| `ingestion/lake.py` | 1,248 lines | Bronze persistence, lake reads, and schema handling remain coupled; partition layout helpers are isolated in `ingestion/lake_layout.py`, and Bronze sidecar generation/repair is isolated in `ingestion/lake_sidecars.py`. |
+| `ingestion/lake.py` | 862 lines | Bronze persistence and dataframe loading remain coupled after partition layout, sidecar, and metadata query extraction. |
 | `api/commands/loader.py` | 1,081 lines | CLI orchestration and command behavior remain coupled after checkpoint key bookkeeping extraction. |
 | `application/services/gold_service.py` | 929 lines | Frame loading, validation, joins, and output writing remain coupled after feature profiling extraction. |
 | `ingestion/feature_profile.py` | 416 lines | Shared feature metadata and plotting are isolated, but still adapter-heavy and need interface extraction. |
@@ -249,6 +249,8 @@ Exit criteria:
   against both current `year/month/date` and previous `month/date` layouts.
 - Bronze sidecar manifest/plot generation and backfill repair live in `ingestion/lake_sidecars.py`; `ingestion.lake`
   keeps compatibility imports for existing callers and write-path integration.
+- Bronze metadata queries for open times, latest open time, partition dates, and open-time bounds live in
+  `ingestion/lake_queries.py`; dataset labels shared by lake adapters live in `ingestion/lake_datasets.py`.
 - Persistence side effects are isolated.
 - Idempotency tests cover repeated writes and partial reruns.
 
