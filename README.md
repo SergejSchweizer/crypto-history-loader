@@ -12,8 +12,6 @@ Author: Sergej Schweizer
   - [1.1 Core Design Principles](#11-core-design-principles)
   - [1.2 Medallion Architecture](#12-medallion-architecture)
   - [1.3 Supported Data Domains](#13-supported-data-domains)
-    - [Domain Groups](#domain-groups)
-    - [CLI Contract](#cli-contract)
 - [2. Repository Structure](#2-repository-structure)
 - [3. Installation](#3-installation)
   - [3.1 System prerequisites](#31-system-prerequisites)
@@ -30,7 +28,7 @@ Author: Sergej Schweizer
   - [5.2 Layer Commands](#52-layer-commands)
   - [5.3 Operational Notes](#53-operational-notes)
   - [5.4 Quality Checks](#54-quality-checks)
-- [7. Roadmap](#7-roadmap)
+- [6. Roadmap](#6-roadmap)
 
 `crypto-history-loader` is the historical data backbone for quant research workflows:
 
@@ -683,7 +681,7 @@ Operational notes:
 
 ---
 
-# 7. Roadmap
+# 6. Roadmap
 
 Objective: build complete, reproducible historical quote coverage for `BTC`, `ETH`, and `SOL`.
 
