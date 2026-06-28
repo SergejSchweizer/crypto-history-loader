@@ -11,15 +11,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
 
+from ingestion import lake_dataframe as _lake_dataframe
 from ingestion import lake_queries as _lake_queries
 from ingestion.funding import FundingPoint
 from ingestion.lake_datasets import OI_DATASET_TYPE, ohlcv_dataset_type_for_market
 from ingestion.lake_layout import (
     PartitionKey,
     partition_path,
-)
-from ingestion.lake_layout import (
-    dataset_data_files as _dataset_data_files,
 )
 from ingestion.lake_layout import (
     partition_data_files as _partition_data_files,
@@ -44,6 +42,7 @@ open_time_bounds_in_lake_by_dataset = _lake_queries.open_time_bounds_in_lake_by_
 open_times_in_lake = _lake_queries.open_times_in_lake
 open_times_in_lake_by_dataset = _lake_queries.open_times_in_lake_by_dataset
 partition_dates_in_lake_by_dataset = _lake_queries.partition_dates_in_lake_by_dataset
+load_combined_dataframe_from_lake = _lake_dataframe.load_combined_dataframe_from_lake
 
 
 def utc_run_id() -> str:
@@ -692,171 +691,3 @@ def save_trades_parquet_lake(
         run_id=run_id,
         grouped=grouped,
     )
-
-
-def load_combined_dataframe_from_lake(
-    lake_root: str,
-    exchanges: list[str] | None = None,
-    symbols: list[str] | None = None,
-    timeframes: list[str] | None = None,
-    instrument_types: list[str] | None = None,
-    start_time: datetime | None = None,
-    end_time: datetime | None = None,
-    limit: int | None = None,
-    include_open_interest: bool = False,
-) -> Any:
-    """Load combined spot/perp OHLCV rows from parquet lake as a Polars DataFrame."""
-
-    if limit is not None and limit <= 0:
-        raise ValueError("limit must be positive when provided")
-
-    try:
-        import polars as pl
-    except ImportError as exc:
-        raise RuntimeError("polars is required for dataframe export. Install project dependencies.") from exc
-
-    exchange_filter = {item.lower() for item in exchanges} if exchanges else None
-    symbol_filter = {item.upper() for item in symbols} if symbols else None
-    timeframe_filter = {item.lower() for item in timeframes} if timeframes else None
-    instrument_filter = {item.lower() for item in instrument_types} if instrument_types else None
-
-    data_files = sorted([*_dataset_data_files(lake_root, "spot"), *_dataset_data_files(lake_root, "perp")])
-
-    frames: list[Any] = []
-    for data_file in data_files:
-        parts = data_file.parts
-        partition_values: dict[str, str] = {}
-        for segment in parts:
-            if "=" not in segment:
-                continue
-            key, value = segment.split("=", 1)
-            partition_values[key] = value
-
-        exchange_value = partition_values.get("exchange", "")
-        instrument_value = partition_values.get("instrument_type", "")
-        symbol_value = partition_values.get("symbol", "")
-        timeframe_value = partition_values.get("timeframe", "")
-
-        if exchange_filter is not None and exchange_value.lower() not in exchange_filter:
-            continue
-        if instrument_filter is not None and instrument_value.lower() not in instrument_filter:
-            continue
-        if symbol_filter is not None and symbol_value.upper() not in symbol_filter:
-            continue
-        if timeframe_filter is not None and timeframe_value.lower() not in timeframe_filter:
-            continue
-
-        frame = pl.read_parquet(str(data_file))
-        rename_map = {
-            "open_price": "open",
-            "high_price": "high",
-            "low_price": "low",
-            "close_price": "close",
-        }
-        for source_col, target_col in rename_map.items():
-            if target_col not in frame.columns and source_col in frame.columns:
-                frame = frame.with_columns(pl.col(source_col).alias(target_col))
-        if start_time is not None:
-            frame = frame.filter(pl.col("open_time") >= start_time)
-        if end_time is not None:
-            frame = frame.filter(pl.col("open_time") <= end_time)
-        if frame.height == 0:
-            continue
-        frames.append(frame)
-
-    columns = [
-        "exchange",
-        "instrument_type",
-        "symbol",
-        "timeframe",
-        "open_time",
-        "close_time",
-        "open",
-        "high",
-        "low",
-        "close",
-        "volume",
-        "quote_volume",
-        "trade_count",
-        "dataset_type",
-        "run_id",
-        "source_endpoint",
-    ]
-    if not frames:
-        dataframe = pl.DataFrame(schema={name: pl.Null for name in columns})
-    else:
-        dataframe = pl.concat(frames, how="diagonal_relaxed")
-        dataframe = dataframe.sort(by=["open_time", "exchange", "instrument_type", "symbol", "timeframe"])
-        for col_name in columns:
-            if col_name not in dataframe.columns:
-                dataframe = dataframe.with_columns(pl.lit(None).alias(col_name))
-        dataframe = dataframe.select(columns)
-        if limit is not None:
-            dataframe = dataframe.head(limit)
-
-    if include_open_interest:
-        oi_files = _dataset_data_files(lake_root, OI_DATASET_TYPE)
-        oi_frames: list[Any] = []
-        for data_file in oi_files:
-            oi_parts = data_file.parts
-            oi_partition_values: dict[str, str] = {}
-            for segment in oi_parts:
-                if "=" not in segment:
-                    continue
-                key, value = segment.split("=", 1)
-                oi_partition_values[key] = value
-
-            exchange_value = oi_partition_values.get("exchange", "")
-            instrument_value = oi_partition_values.get("instrument_type", "")
-            symbol_value = oi_partition_values.get("symbol", "")
-            timeframe_value = oi_partition_values.get("timeframe", "")
-
-            if exchange_filter is not None and exchange_value.lower() not in exchange_filter:
-                continue
-            if instrument_filter is not None and instrument_value.lower() not in instrument_filter:
-                continue
-            if symbol_filter is not None and symbol_value.upper() not in symbol_filter:
-                continue
-            if timeframe_filter is not None and timeframe_value.lower() not in timeframe_filter:
-                continue
-
-            frame = pl.read_parquet(str(data_file))
-            if start_time is not None:
-                frame = frame.filter(pl.col("open_time") >= start_time)
-            if end_time is not None:
-                frame = frame.filter(pl.col("open_time") <= end_time)
-            if frame.height == 0:
-                continue
-            oi_frames.append(frame)
-
-        if oi_frames:
-            oi_frame = (
-                pl.concat(oi_frames, how="diagonal_relaxed")
-                .sort(by=["open_time"])
-                .unique(
-                    subset=["exchange", "instrument_type", "symbol", "timeframe", "open_time"],
-                    keep="last",
-                )
-            )
-            oi_frame = oi_frame.select(
-                [
-                    "exchange",
-                    "instrument_type",
-                    "symbol",
-                    "timeframe",
-                    "open_time",
-                    "open_interest",
-                    "open_interest_value",
-                ]
-            )
-            dataframe = dataframe.join(
-                oi_frame,
-                on=["exchange", "instrument_type", "symbol", "timeframe", "open_time"],
-                how="left",
-            )
-        else:
-            dataframe = dataframe.with_columns(
-                [pl.lit(None).alias("open_interest"), pl.lit(None).alias("open_interest_value")]
-            )
-
-    return dataframe
