@@ -6,26 +6,8 @@ Author: Sergej Schweizer
 
 ---
 
-1. [Executive Summary](#1-executive-summary)
-2. [Research Scope](#2-research-scope)
-3. [Quant Data Architecture](#3-quant-data-architecture)
-4. [Repository Map](#4-repository-map)
-5. [Naming and Contracts](#5-naming-and-contracts)
-6. [Dataset Wiki (Bronze -> Silver)](#6-dataset-wiki-bronze---silver)
- - [6.1 Spot OHLCV](#61-spot-ohlcv-dataset_typespot)
- - [6.2 Perpetual OHLCV](#62-perpetual-ohlcv-dataset_typeperp)
- - [6.3 Open Interest](#63-open-interest-dataset_typeoi)
- - [6.4 Funding](#64-funding-dataset_typefunding)
- - [6.5 Perp Tick Trades](#65-perp-tick-trades-dataset_typeperp_trades)
- - [6.6 Option Tick Trades](#66-option-tick-trades-dataset_typeoption_trades)
- - [6.7 Volatility Index Data](#67-volatility-index-data-dataset_typevolatility_index_data)
-7. [Storage Contracts](#7-storage-contracts)
-8. [Operations Runbook](#8-operations-runbook)
-9. [Gold Retention Policy](#9-gold-retention-policy)
-10. [Research Quality Gates](#10-research-quality-gates)
+## Table Of Contents
 
-- [CRYPTO-HISTORY-LOADER](#crypto-history-loader)
-- [Table Of Contents](#table-of-contents)
 - [1. System Overview](#1-system-overview)
   - [1.1 Core Design Principles](#11-core-design-principles)
   - [1.2 Medallion Architecture](#12-medallion-architecture)
