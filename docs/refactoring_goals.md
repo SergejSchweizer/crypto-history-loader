@@ -8,7 +8,7 @@ The codebase is already split into `api`, `application`, and `ingestion`, but se
 
 | Area | Current signal | Refactoring risk |
 |---|---:|---|
-| `application/services/fetch_service.py` | 1,854 lines | Fetch planning, windowing, task execution, retries, and reporting are coupled. |
+| `application/services/fetch_service.py` | 1,901 lines | Fetch planning, task execution, retries, and reporting remain coupled after trade-window helper extraction. |
 | `application/services/silver_service.py` | 1,322 lines | Dataset-specific transformations share one large service surface; Silver sidecar writing is isolated in `application/services/silver_sidecars.py`. |
 | `ingestion/lake.py` | 1,248 lines | Bronze persistence, lake reads, and schema handling remain coupled; partition layout helpers are isolated in `ingestion/lake_layout.py`, and Bronze sidecar generation/repair is isolated in `ingestion/lake_sidecars.py`. |
 | `api/commands/loader.py` | 998 lines | CLI orchestration, runtime state, checkpoint glue, and command behavior are coupled. |
@@ -231,6 +231,9 @@ Exit criteria:
   `BronzeRuntimeBoundsContext` instead of separate mutable start-bound globals.
 - Bronze output, storage buffers, and pending task lists are grouped in `BronzeRunState`, reducing scattered mutable
   containers inside `run_bronze_build`.
+- Trade-window planning, recoverable fetch-error classification, deterministic trade dedupe, bounded window fetches,
+  and trade progress logging live in `application/services/fetch_trade_windows.py`; `fetch_service.py` keeps
+  compatibility aliases for existing callers while retaining orchestration.
 - Existing CLI behavior remains backward compatible.
 
 ### Phase 4: Lake Adapter Split
