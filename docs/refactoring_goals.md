@@ -8,11 +8,11 @@ The codebase is already split into `api`, `application`, and `ingestion`, but se
 
 | Area | Current signal | Refactoring risk |
 |---|---:|---|
-| `application/services/fetch_service.py` | 1,810 lines | Fetch execution, retries, and reporting remain coupled after trade-window and range-planning helper extraction. |
-| `application/services/silver_service.py` | 1,322 lines | Dataset-specific transformations share one large service surface; Silver sidecar writing is isolated in `application/services/silver_sidecars.py`. |
-| `ingestion/lake.py` | 693 lines | Bronze persistence remains after partition layout, sidecar, metadata query, and dataframe reader extraction. |
-| `api/commands/loader.py` | 1,063 lines | CLI orchestration still remains coupled to command behavior after checkpoint key and symbol-fetch adapter extraction. |
-| `application/services/gold_service.py` | 929 lines | Frame loading, validation, joins, and output writing remain coupled after feature profiling extraction. |
+| `application/services/fetch_service.py` | 1,632 lines | Fetch planning, task execution, retries, and reporting remain coupled after trade-window, range-planning, timeout-runner, history-row helper, and task-callback extraction. |
+| `application/services/silver_service.py` | 1,244 lines | Dataset-specific build orchestration remains shared after sidecar and trade-frame extraction. |
+| `ingestion/lake.py` | 566 lines | Bronze save APIs remain after partition layout, sidecar, metadata query, dataframe reader, and write-helper extraction. |
+| `api/commands/loader.py` | 1,057 lines | CLI orchestration still remains coupled to command behavior after checkpoint key, symbol-fetch adapter, and output-helper extraction. |
+| `application/services/gold_service.py` | 766 lines | Frame loading, validation, joins, and output writing remain coupled after feature profiling and versioning extraction. |
 | `ingestion/feature_profile.py` | 416 lines | Shared feature metadata and plotting are isolated, but still adapter-heavy and need interface extraction. |
 
 Existing safety net:
@@ -235,12 +235,20 @@ Exit criteria:
   containers inside `run_bronze_build`.
 - Dataset-specific Bronze symbol fetch adapters live in `api/commands/loader_fetchers.py`, leaving `loader.py` to build
   dependency adapters and wire task execution.
+- Loader output sidecar path derivation and candle JSON serialization live in
+  `api/commands/loader_output_utils.py`; `api/commands/loader.py` keeps compatibility aliases.
 - Trade-window planning, recoverable fetch-error classification, deterministic trade dedupe, bounded window fetches,
   and trade progress logging live in `application/services/fetch_trade_windows.py`; `fetch_service.py` keeps
   compatibility aliases for existing callers while retaining orchestration.
 - UTC day-window planning, deterministic missing-range ordering, and daily trade coverage-gap planning live in
   `application/services/fetch_range_planning.py`; `fetch_service.py` keeps compatibility aliases for existing tests and
   callers while retaining orchestration.
+- Fetch timeout execution, process fallback handling, and heartbeat wrapping live in
+  `application/services/fetch_executors.py`; `fetch_service.py` keeps compatibility aliases for existing tests/callers.
+- Bound-filtered history row callbacks, open-time key extraction, bounded daily fetch dedupe, and bootstrap row
+  filtering live in `application/services/fetch_history_rows.py`; `fetch_service.py` keeps compatibility aliases.
+- Fetch task chunk callback binding lives in `application/services/fetch_task_callbacks.py`; `fetch_service.py`
+  reuses the same adapter for OHLCV, OI, funding, volatility, and trade task execution.
 - Existing CLI behavior remains backward compatible.
 
 ### Phase 4: Lake Adapter Split
@@ -258,6 +266,8 @@ Exit criteria:
   `ingestion/lake_queries.py`; dataset labels shared by lake adapters live in `ingestion/lake_datasets.py`.
 - Combined OHLCV dataframe export and optional open-interest joining now live in `ingestion/lake_dataframe.py`;
   `ingestion.lake` keeps the previous import path as a compatibility alias.
+- Bronze natural-key deduplication and partition parquet writes live in `ingestion/lake_writes.py`;
+  `ingestion.lake` keeps compatibility aliases and the existing public save APIs.
 - Persistence side effects are isolated.
 - Idempotency tests cover repeated writes and partial reruns.
 
@@ -273,8 +283,12 @@ Progress:
   `application/dataset_contracts.py`.
 - Gold dataset requirements and L2 inclusion flags now live in typed contracts, with
   `application/services/gold_service.py` keeping the previous public constants as compatibility views.
+- Gold semantic-version parsing, contract bump classification, latest-manifest lookup, and artifact pruning now live in
+  `application/services/gold_versioning.py`, with `application/services/gold_service.py` retaining compatibility aliases.
 - Silver monthly manifest and plot sidecar writing now lives in `application/services/silver_sidecars.py`, keeping
   side effects separate from Silver transformation functions.
+- Silver trade observed-frame cleaning and 1m trade-flow aggregation now live in
+  `application/services/silver_trades.py`, with `application/services/silver_service.py` retaining compatibility aliases.
 
 Exit criteria:
 

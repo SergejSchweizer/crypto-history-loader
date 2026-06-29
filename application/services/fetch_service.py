@@ -3,13 +3,11 @@
 from __future__ import annotations
 
 import logging
-import multiprocessing as mp
-import threading
-import time
+import multiprocessing as _mp
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, date, datetime
-from typing import Any, TypeVar, cast
+from typing import TypeVar, cast
 
 from application.dto import (
     CandleFetchResultDTO,
@@ -24,11 +22,13 @@ from application.dto import (
     VolatilityFetchTaskDTO,
 )
 from application.schema import dataset_contract
+from application.services import fetch_executors as _fetch_executors
+from application.services import fetch_history_rows as _history_rows
 from application.services import fetch_range_planning as _range_planning
 from application.services import fetch_trade_windows as _trade_windows
-from application.services.fetch_bootstrap import fetch_bootstrap_history_rows, fetch_bounded_daily_rows
 from application.services.fetch_executors import elapsed_seconds, run_with_optional_history_chunk
 from application.services.fetch_runtime_policy import heartbeat_seconds, task_timeout_seconds
+from application.services.fetch_task_callbacks import bind_task_chunk_callback
 from application.services.gapfill_service import _last_closed_open_ms, _missing_ranges_ms
 from ingestion.funding import (
     FundingPoint,
@@ -67,10 +67,10 @@ from ingestion.volatility import (
 )
 
 OI_DATASET_TYPE = dataset_contract("oi").dataset_type
-TTimeout = TypeVar("TTimeout")
 TRow = TypeVar("TRow")
 logger = logging.getLogger(__name__)
 
+mp = _mp
 TRADE_BOUNDARY_TOLERANCE_MS = _range_planning.TRADE_BOUNDARY_TOLERANCE_MS
 _day_end_ms = _range_planning.day_end_ms
 _day_start_ms = _range_planning.day_start_ms
@@ -78,6 +78,8 @@ _day_windows_in_random_order = _range_planning.day_windows_in_random_order
 _missing_trade_day_ranges = _range_planning.missing_trade_day_ranges
 _ranges_in_random_order = _range_planning.ranges_in_random_order
 _split_range_into_utc_days = _range_planning.split_range_into_utc_days
+_run_with_optional_timeout = _fetch_executors.run_with_optional_timeout
+_timeout_worker = _fetch_executors.timeout_worker
 _classify_trade_fetch_error = _trade_windows.classify_trade_fetch_error
 _dedupe_sort_trade_rows = _trade_windows.dedupe_sort_trade_rows
 _fetch_trade_window = _trade_windows.fetch_trade_window
@@ -86,62 +88,10 @@ _raise_if_all_trade_windows_failed = _trade_windows.raise_if_all_trade_windows_f
 _split_range_into_trade_windows = _trade_windows.split_range_into_trade_windows
 _trade_window_ms = _trade_windows.trade_window_size_ms
 _trade_windows_in_random_order = _trade_windows.trade_windows_in_random_order
-
-
-class _ResultQueueProtocol:
-    def put(self, item: object) -> object: ...
-
-
-def _row_open_time_ms(row: object) -> int:
-    """Return row open timestamp in epoch milliseconds."""
-
-    row_any = cast(Any, row)
-    timestamp = getattr(row_any, "open_time", None)
-    if timestamp is None:
-        timestamp = getattr(row_any, "trade_time", None)
-    if not isinstance(timestamp, datetime):
-        raise ValueError("row is missing open_time/trade_time datetime attribute")
-    return int(timestamp.timestamp() * 1000)
-
-
-def _filter_rows_by_start_bound(rows: list[TRow], start_open_ms_bound: int | None) -> list[TRow]:
-    """Filter rows by inclusive start bound when provided."""
-
-    if start_open_ms_bound is None:
-        return rows
-    return [item for item in rows if _row_open_time_ms(item) >= start_open_ms_bound]
-
-
-def _filter_chunk_callback(
-    on_history_chunk: Callable[[list[TRow]], None] | None,
-    start_open_ms_bound: int | None,
-) -> Callable[[list[TRow]], None] | None:
-    """Wrap chunk callback with optional start-bound filtering."""
-
-    if on_history_chunk is None:
-        return None
-    if start_open_ms_bound is None:
-        return on_history_chunk
-
-    def _filtered_chunk(rows: list[TRow]) -> None:
-        filtered = _filter_rows_by_start_bound(rows, start_open_ms_bound)
-        if filtered:
-            on_history_chunk(filtered)
-
-    return _filtered_chunk
-
-
-def _timeout_worker(
-    result_queue: _ResultQueueProtocol,
-    fn: Callable[..., object],
-    kwargs: dict[str, object],
-) -> None:
-    """Execute one fetch call in a child process and return result state via queue."""
-
-    try:
-        result_queue.put(("ok", fn(**kwargs)))
-    except Exception as exc:  # noqa: BLE001
-        result_queue.put(("err", (exc.__class__.__name__, str(exc))))
+_row_open_time_ms = _history_rows.row_open_time_ms
+_filter_rows_by_start_bound = _history_rows.filter_rows_by_start_bound
+_filter_chunk_callback = _history_rows.filter_chunk_callback
+_bind_task_chunk_callback = bind_task_chunk_callback
 
 
 def _task_timeout_seconds() -> float | None:
@@ -166,11 +116,10 @@ def _fetch_bounded_daily_rows(
 ) -> list[TRow]:
     """Fetch inclusive bounded history in UTC-day windows with deterministic deduplication."""
 
-    return fetch_bounded_daily_rows(
+    return _history_rows.fetch_bounded_daily_rows_with_start_bound(
         day_windows=_day_windows_in_random_order(start_open_ms_bound, end_open_ms),
         range_fetcher=range_fetcher,
         fetch_kwargs=fetch_kwargs,
-        dedupe_key=_row_open_time_ms,
         on_history_chunk=on_history_chunk,
     )
 
@@ -184,15 +133,12 @@ def _fetch_bootstrap_history_rows(
 ) -> list[TRow]:
     """Run history bootstrap fetch, then apply deterministic bound-filtered deduplication."""
 
-    filtered_rows = fetch_bootstrap_history_rows(
+    return _history_rows.fetch_bootstrap_history_rows_with_start_bound(
         history_fetcher=history_fetcher,
         fetch_kwargs=fetch_kwargs,
         on_history_chunk=on_history_chunk,
-        wrap_chunk_callback=lambda callback: _filter_chunk_callback(callback, start_open_ms_bound),
-        filter_rows=lambda rows: _filter_rows_by_start_bound(rows, start_open_ms_bound),
+        start_open_ms_bound=start_open_ms_bound,
     )
-    unique_by_open_time = {_row_open_time_ms(item): item for item in filtered_rows}
-    return [unique_by_open_time[key] for key in sorted(unique_by_open_time)]
 
 
 def _build_missing_ranges_with_optional_head_gap(
@@ -221,91 +167,6 @@ def _build_missing_ranges_with_optional_head_gap(
         if start_open_ms_bound <= head_end_ms:
             missing_ranges.append((start_open_ms_bound, head_end_ms))
     return missing_ranges
-
-
-def _run_with_optional_timeout(
-    fn: Callable[..., TTimeout],
-    *,
-    timeout_s: float | None,
-    heartbeat_s: float,
-    heartbeat: Callable[[int], None],
-    use_process_timeout: bool = False,
-    **kwargs: object,
-) -> TTimeout:
-    """Run callable in a worker process with optional hard timeout and heartbeat."""
-
-    def _run_inline_with_heartbeat() -> TTimeout:
-        started = datetime.now(UTC)
-        stop_event = threading.Event()
-
-        def _heartbeat_loop() -> None:
-            interval = max(0.1, heartbeat_s)
-            while not stop_event.wait(interval):
-                elapsed_s = int((datetime.now(UTC) - started).total_seconds())
-                heartbeat(elapsed_s)
-
-        watcher = threading.Thread(target=_heartbeat_loop, daemon=True)
-        watcher.start()
-        try:
-            return fn(**kwargs)
-        finally:
-            stop_event.set()
-            watcher.join(timeout=1.0)
-
-    if timeout_s is None or not use_process_timeout:
-        return _run_inline_with_heartbeat()
-
-    started = datetime.now(UTC)
-    ctx = mp.get_context("fork")
-    result_queue = ctx.Queue(maxsize=1)
-    process = ctx.Process(target=_timeout_worker, args=(result_queue, fn, kwargs))
-    try:
-        process.start()
-    except OSError as exc:
-        if exc.errno != 5:
-            raise
-        logging.getLogger(__name__).warning(
-            "Worker process startup failed with EIO; falling back to inline execution without hard timeout"
-        )
-        result_queue.close()
-        result_queue.join_thread()
-        return _run_inline_with_heartbeat()
-    deadline = time.monotonic() + timeout_s
-    try:
-        while True:
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                process.terminate()
-                process.join(timeout=2)
-                raise TimeoutError(f"Fetch task timed out after {timeout_s:.1f}s")
-            wait_s = min(max(0.1, heartbeat_s), remaining)
-
-            process.join(timeout=wait_s)
-            if process.is_alive():
-                elapsed_s = int((datetime.now(UTC) - started).total_seconds())
-                heartbeat(elapsed_s)
-                continue
-
-            if result_queue.empty():
-                raise RuntimeError(f"Fetch worker exited without result (exitcode={process.exitcode})")
-
-            status, payload = result_queue.get_nowait()
-            if status == "ok":
-                return cast(TTimeout, payload)
-            exc_name, exc_message = payload
-            if exc_name == "TypeError":
-                raise TypeError(exc_message)
-            if exc_name == "ValueError":
-                raise ValueError(exc_message)
-            if exc_name == "TimeoutError":
-                raise TimeoutError(exc_message)
-            raise RuntimeError(f"{exc_name}: {exc_message}")
-    finally:
-        if process.is_alive():
-            process.terminate()
-            process.join(timeout=2)
-        result_queue.close()
-        result_queue.join_thread()
 
 
 def fetch_symbol_candles(
@@ -1329,9 +1190,7 @@ def fetch_candle_tasks_parallel(
                         "symbol": task.symbol,
                         "timeframe": task.timeframe,
                         "lake_root": lake_root,
-                        "on_history_chunk": (lambda rows, _task=task: on_task_chunk(_task, rows))
-                        if on_task_chunk is not None
-                        else None,
+                        "on_history_chunk": _bind_task_chunk_callback(task, on_task_chunk),
                     },
                 ),
             )
@@ -1398,17 +1257,7 @@ def fetch_open_interest_tasks_parallel(
         hb_exchange = task.exchange
         hb_symbol = task.symbol
         hb_timeframe = task.timeframe
-        history_chunk_cb: Callable[[list[OpenInterestPoint]], None] | None = None
-        if on_task_chunk is not None:
-            task_for_chunk = task
-
-            def _history_chunk_oi(
-                values: list[OpenInterestPoint],
-                _task: OpenInterestFetchTaskDTO = task_for_chunk,
-            ) -> None:
-                on_task_chunk(_task, values)
-
-            history_chunk_cb = _history_chunk_oi
+        history_chunk_cb = _bind_task_chunk_callback(task, on_task_chunk)
 
         def _heartbeat_oi(
             elapsed_s: int,
@@ -1498,17 +1347,7 @@ def fetch_funding_tasks_parallel(
         hb_exchange = task.exchange
         hb_symbol = task.symbol
         hb_timeframe = task.timeframe
-        history_chunk_cb: Callable[[list[FundingPoint]], None] | None = None
-        if on_task_chunk is not None:
-            task_for_chunk = task
-
-            def _history_chunk_funding(
-                values: list[FundingPoint],
-                _task: FundingFetchTaskDTO = task_for_chunk,
-            ) -> None:
-                on_task_chunk(_task, values)
-
-            history_chunk_cb = _history_chunk_funding
+        history_chunk_cb = _bind_task_chunk_callback(task, on_task_chunk)
 
         def _heartbeat_funding(
             elapsed_s: int,
@@ -1596,17 +1435,7 @@ def fetch_volatility_tasks_parallel(
         )
         key = (task.exchange, task.symbol, task.timeframe)
         task_started_at = datetime.now(UTC)
-        history_chunk_cb: Callable[[list[VolatilityPoint]], None] | None = None
-        if on_task_chunk is not None:
-            task_for_chunk = task
-
-            def _history_chunk_volatility(
-                values: list[VolatilityPoint],
-                _task: VolatilityFetchTaskDTO = task_for_chunk,
-            ) -> None:
-                on_task_chunk(_task, values)
-
-            history_chunk_cb = _history_chunk_volatility
+        history_chunk_cb = _bind_task_chunk_callback(task, on_task_chunk)
 
         def _heartbeat_volatility(elapsed_s: int) -> None:
             del elapsed_s
@@ -1716,14 +1545,7 @@ def fetch_trade_tasks_parallel(
                 elapsed_s,
             )
 
-        history_chunk_callback: Callable[[list[TradeTick | OptionTradeTick]], None] | None = None
-        if on_task_chunk is not None:
-            task_chunk_callback = on_task_chunk
-
-            def _forward_trade_chunk(chunk: list[TradeTick | OptionTradeTick], _task: TradeFetchTaskDTO = task) -> None:
-                task_chunk_callback(_task, chunk)
-
-            history_chunk_callback = _forward_trade_chunk
+        history_chunk_callback = _bind_task_chunk_callback(task, on_task_chunk)
 
         try:
             rows = _run_with_optional_timeout(
