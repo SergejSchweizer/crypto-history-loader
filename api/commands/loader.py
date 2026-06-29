@@ -6,11 +6,11 @@ import argparse
 import json
 import logging
 from collections.abc import Callable
-from dataclasses import asdict
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
 
+from api.commands import loader_fetchers as _loader_fetchers
 from api.commands.loader_dataset_handlers import (
     populate_funding_output,
     populate_ohlcv_output,
@@ -19,6 +19,7 @@ from api.commands.loader_dataset_handlers import (
     populate_volatility_output,
 )
 from api.commands.loader_execution import fetch_all_task_groups as fetch_all_task_groups_execution
+from api.commands.loader_fetchers import BronzeSymbolFetchDependencies
 from api.commands.loader_output import BronzeRunState, IncrementalPersistor, finalize_bronze_output
 from api.commands.loader_planning import (
     build_bronze_fetch_plan,
@@ -68,11 +69,6 @@ from application.services.fetch_service import (
     fetch_candle_tasks_parallel,
     fetch_funding_tasks_parallel,
     fetch_open_interest_tasks_parallel,
-    fetch_symbol_candles,
-    fetch_symbol_funding,
-    fetch_symbol_open_interest,
-    fetch_symbol_trades,
-    fetch_symbol_volatility,
     fetch_trade_tasks_parallel,
     fetch_volatility_tasks_parallel,
 )
@@ -348,13 +344,38 @@ def add_bronze_build_parser(subparsers: Any) -> None:
     )
 
 
-def _serialize_candle(candle: SpotCandle) -> dict[str, object]:
-    data = asdict(candle)
-    for key in ("open_time", "close_time"):
-        value = data[key]
-        if isinstance(value, datetime):
-            data[key] = value.isoformat()
-    return data
+def _symbol_fetch_dependencies() -> BronzeSymbolFetchDependencies:
+    """Build symbol-fetch dependency adapters from current loader module globals."""
+
+    return BronzeSymbolFetchDependencies(
+        open_times_in_lake=open_times_in_lake,
+        open_times_in_lake_by_dataset=open_times_in_lake_by_dataset,
+        latest_open_time_in_lake=latest_open_time_in_lake,
+        latest_open_time_in_lake_by_dataset=latest_open_time_in_lake_by_dataset,
+        normalize_storage_symbol=normalize_storage_symbol,
+        interval_to_milliseconds=interval_to_milliseconds,
+        open_interest_interval_to_milliseconds=open_interest_interval_to_milliseconds,
+        funding_interval_to_milliseconds=funding_interval_to_milliseconds,
+        volatility_interval_to_milliseconds=volatility_interval_to_milliseconds,
+        normalize_open_interest_timeframe=normalize_open_interest_timeframe,
+        normalize_funding_timeframe=normalize_funding_timeframe,
+        normalize_volatility_timeframe=normalize_volatility_timeframe,
+        last_closed_open_ms=_last_closed_open_ms,
+        missing_ranges_ms=_missing_ranges_ms,
+        fetch_candles_all_history=fetch_candles_all_history,
+        fetch_candles_range=fetch_candles_range,
+        fetch_open_interest_all_history=fetch_open_interest_all_history,
+        fetch_open_interest_range=fetch_open_interest_range,
+        fetch_funding_all_history=fetch_funding_all_history,
+        fetch_funding_range=fetch_funding_range,
+        fetch_volatility_index_all_history=fetch_volatility_index_all_history,
+        fetch_volatility_index_range=fetch_volatility_index_range,
+        fetch_trades_all_history=fetch_trades_all_history,
+        fetch_trades_range=fetch_trades_range,
+    )
+
+
+_serialize_candle = _loader_fetchers.serialize_candle
 
 
 def _fetch_symbol_candles(
@@ -365,23 +386,15 @@ def _fetch_symbol_candles(
     lake_root: str,
     on_history_chunk: Callable[[list[SpotCandle]], None] | None = None,
 ) -> list[SpotCandle]:
-    return fetch_symbol_candles(
+    return _loader_fetchers.fetch_symbol_candles(
+        dependencies=_symbol_fetch_dependencies(),
+        runtime_context=_current_runtime_bounds_context(),
         exchange=exchange,
         market=market,
         symbol=symbol,
         timeframe=timeframe,
         lake_root=lake_root,
-        open_times_reader=open_times_in_lake,
-        symbol_normalizer=normalize_storage_symbol,
-        interval_ms_resolver=interval_to_milliseconds,
-        now_open_resolver=_last_closed_open_ms,
-        ranges_builder=_missing_ranges_ms,
-        history_fetcher=fetch_candles_all_history,
-        range_fetcher=fetch_candles_range,
-        latest_open_time_reader=latest_open_time_in_lake,
-        tail_delta_only=_current_runtime_bounds_context().tail_delta_only,
         on_history_chunk=on_history_chunk,
-        start_open_ms_bound=_symbol_start_open_ms_bound(exchange=exchange, symbol=symbol),
     )
 
 
@@ -393,24 +406,15 @@ def _fetch_symbol_open_interest(
     lake_root: str,
     on_history_chunk: Callable[[list[OpenInterestPoint]], None] | None = None,
 ) -> list[OpenInterestPoint]:
-    return fetch_symbol_open_interest(
+    return _loader_fetchers.fetch_symbol_open_interest(
+        dependencies=_symbol_fetch_dependencies(),
+        runtime_context=_current_runtime_bounds_context(),
         exchange=exchange,
         market=market,
         symbol=symbol,
         timeframe=timeframe,
         lake_root=lake_root,
-        open_times_reader=open_times_in_lake_by_dataset,
-        timeframe_normalizer=normalize_open_interest_timeframe,
-        symbol_normalizer=normalize_storage_symbol,
-        interval_ms_resolver=open_interest_interval_to_milliseconds,
-        now_open_resolver=_last_closed_open_ms,
-        ranges_builder=_missing_ranges_ms,
-        history_fetcher=fetch_open_interest_all_history,
-        range_fetcher=fetch_open_interest_range,
-        latest_open_time_reader=latest_open_time_in_lake_by_dataset,
-        tail_delta_only=_current_runtime_bounds_context().tail_delta_only,
         on_history_chunk=on_history_chunk,
-        start_open_ms_bound=_symbol_start_open_ms_bound(exchange=exchange, symbol=symbol),
     )
 
 
@@ -422,24 +426,15 @@ def _fetch_symbol_funding(
     lake_root: str,
     on_history_chunk: Callable[[list[FundingPoint]], None] | None = None,
 ) -> list[FundingPoint]:
-    return fetch_symbol_funding(
+    return _loader_fetchers.fetch_symbol_funding(
+        dependencies=_symbol_fetch_dependencies(),
+        runtime_context=_current_runtime_bounds_context(),
         exchange=exchange,
         market=market,
         symbol=symbol,
         timeframe=timeframe,
         lake_root=lake_root,
-        open_times_reader=open_times_in_lake_by_dataset,
-        timeframe_normalizer=normalize_funding_timeframe,
-        symbol_normalizer=normalize_storage_symbol,
-        interval_ms_resolver=funding_interval_to_milliseconds,
-        now_open_resolver=_last_closed_open_ms,
-        ranges_builder=_missing_ranges_ms,
-        history_fetcher=fetch_funding_all_history,
-        range_fetcher=fetch_funding_range,
-        latest_open_time_reader=latest_open_time_in_lake_by_dataset,
-        tail_delta_only=_current_runtime_bounds_context().tail_delta_only,
         on_history_chunk=on_history_chunk,
-        start_open_ms_bound=_symbol_start_open_ms_bound(exchange=exchange, symbol=symbol),
     )
 
 
@@ -451,24 +446,15 @@ def _fetch_symbol_volatility_index_data(
     lake_root: str,
     on_history_chunk: Callable[[list[VolatilityPoint]], None] | None = None,
 ) -> list[VolatilityPoint]:
-    return fetch_symbol_volatility(
+    return _loader_fetchers.fetch_symbol_volatility_index_data(
+        dependencies=_symbol_fetch_dependencies(),
+        runtime_context=_current_runtime_bounds_context(),
         exchange=exchange,
         market=market,
         symbol=symbol,
         timeframe=timeframe,
         lake_root=lake_root,
-        dataset_type="volatility_index_data",
-        open_times_reader=open_times_in_lake_by_dataset,
-        timeframe_normalizer=normalize_volatility_timeframe,
-        interval_ms_resolver=volatility_interval_to_milliseconds,
-        now_open_resolver=_last_closed_open_ms,
-        ranges_builder=_missing_ranges_ms,
-        history_fetcher=fetch_volatility_index_all_history,
-        range_fetcher=fetch_volatility_index_range,
-        latest_open_time_reader=latest_open_time_in_lake_by_dataset,
-        tail_delta_only=_current_runtime_bounds_context().tail_delta_only,
         on_history_chunk=on_history_chunk,
-        start_open_ms_bound=_symbol_start_open_ms_bound(exchange=exchange, symbol=symbol),
     )
 
 
@@ -479,18 +465,14 @@ def _fetch_symbol_trades(
     lake_root: str,
     on_history_chunk: Callable[[list[TradeTick | OptionTradeTick]], None] | None = None,
 ) -> list[TradeTick | OptionTradeTick]:
-    return fetch_symbol_trades(
+    return _loader_fetchers.fetch_symbol_trades(
+        dependencies=_symbol_fetch_dependencies(),
+        runtime_context=_current_runtime_bounds_context(),
         exchange=exchange,
         market=market,
         symbol=symbol,
         lake_root=lake_root,
-        symbol_normalizer=normalize_storage_symbol,
-        history_fetcher=fetch_trades_all_history,
-        range_fetcher=fetch_trades_range,
-        latest_open_time_reader=latest_open_time_in_lake_by_dataset,
-        tail_delta_only=_current_runtime_bounds_context().tail_delta_only,
         on_history_chunk=on_history_chunk,
-        start_open_ms_bound=_symbol_start_open_ms_bound(exchange=exchange, symbol=symbol),
     )
 
 
