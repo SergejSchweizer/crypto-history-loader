@@ -10,7 +10,7 @@ The codebase is already split into `api`, `application`, and `ingestion`, but se
 |---|---:|---|
 | `application/services/fetch_service.py` | 1,632 lines | Fetch planning, task execution, retries, and reporting remain coupled after trade-window, range-planning, timeout-runner, history-row helper, and task-callback extraction. |
 | `application/services/silver_service.py` | 1,244 lines | Dataset-specific build orchestration remains shared after sidecar and trade-frame extraction. |
-| `ingestion/lake.py` | 566 lines | Bronze save APIs remain after partition layout, sidecar, metadata query, dataframe reader, and write-helper extraction. |
+| `ingestion/lake.py` | 418 lines | Bronze save APIs remain after partition layout, read-helper, sidecar, metadata query, dataframe reader, and write-helper extraction. |
 | `api/commands/loader.py` | 1,057 lines | CLI orchestration still remains coupled to command behavior after checkpoint key, symbol-fetch adapter, and output-helper extraction. |
 | `application/services/gold_service.py` | 766 lines | Frame loading, validation, joins, and output writing remain coupled after feature profiling and versioning extraction. |
 | `ingestion/feature_profile.py` | 416 lines | Shared feature metadata and plotting are isolated, but still adapter-heavy and need interface extraction. |
@@ -27,6 +27,8 @@ Existing safety net:
 - Fetch task timeout, heartbeat, and trade window sizing are now resolved through
   `application/services/fetch_runtime_policy.py`; durable `config.yaml` values for the main fetch/trade knobs are
   bounded by Pydantic validation.
+- Bronze lake read helpers now live in `ingestion/lake_reads.py`; `ingestion/lake.py` keeps compatibility aliases
+  for existing callers while lake writing remains unchanged.
 
 ## Final Refactoring Objectives
 
