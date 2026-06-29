@@ -10,7 +10,7 @@ The codebase is already split into `api`, `application`, and `ingestion`, but se
 |---|---:|---|
 | `application/services/fetch_service.py` | 1,901 lines | Fetch planning, task execution, retries, and reporting remain coupled after trade-window helper extraction. |
 | `application/services/silver_service.py` | 1,322 lines | Dataset-specific transformations share one large service surface; Silver sidecar writing is isolated in `application/services/silver_sidecars.py`. |
-| `ingestion/lake.py` | 693 lines | Bronze persistence remains after partition layout, sidecar, metadata query, and dataframe reader extraction. |
+| `ingestion/lake.py` | 566 lines | Bronze save APIs remain after partition layout, sidecar, metadata query, dataframe reader, and write-helper extraction. |
 | `api/commands/loader.py` | 1,081 lines | CLI orchestration and command behavior remain coupled after checkpoint key bookkeeping extraction. |
 | `application/services/gold_service.py` | 929 lines | Frame loading, validation, joins, and output writing remain coupled after feature profiling extraction. |
 | `ingestion/feature_profile.py` | 416 lines | Shared feature metadata and plotting are isolated, but still adapter-heavy and need interface extraction. |
@@ -253,6 +253,8 @@ Exit criteria:
   `ingestion/lake_queries.py`; dataset labels shared by lake adapters live in `ingestion/lake_datasets.py`.
 - Combined OHLCV dataframe export and optional open-interest joining now live in `ingestion/lake_dataframe.py`;
   `ingestion.lake` keeps the previous import path as a compatibility alias.
+- Bronze natural-key deduplication and partition parquet writes live in `ingestion/lake_writes.py`;
+  `ingestion.lake` keeps compatibility aliases and the existing public save APIs.
 - Persistence side effects are isolated.
 - Idempotency tests cover repeated writes and partial reruns.
 

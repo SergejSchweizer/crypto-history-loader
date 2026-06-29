@@ -3,16 +3,14 @@
 
 from __future__ import annotations
 
-import concurrent.futures
 from collections import defaultdict
-from collections.abc import Mapping, Sequence
 from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, cast
 
 from ingestion import lake_dataframe as _lake_dataframe
 from ingestion import lake_queries as _lake_queries
+from ingestion import lake_writes as _lake_writes
 from ingestion.funding import FundingPoint
 from ingestion.lake_datasets import OI_DATASET_TYPE, ohlcv_dataset_type_for_market
 from ingestion.lake_layout import (
@@ -25,17 +23,14 @@ from ingestion.lake_layout import (
 from ingestion.lake_sidecars import (
     ensure_bronze_sidecars,
 )
-from ingestion.lake_sidecars import (
-    write_bronze_sidecars as _write_bronze_sidecars,
-)
 from ingestion.open_interest import OpenInterestPoint
 from ingestion.spot import SpotCandle
 from ingestion.trades import OptionTradeTick, TradeMarket, TradeTick
 from ingestion.volatility import VolatilityPoint
 
-NaturalKey = tuple[str, str, str, str, datetime, str, str]
 __all__ = ["ensure_bronze_sidecars", "partition_path"]
 
+NaturalKey = _lake_writes.NaturalKey
 latest_open_time_in_lake = _lake_queries.latest_open_time_in_lake
 latest_open_time_in_lake_by_dataset = _lake_queries.latest_open_time_in_lake_by_dataset
 open_time_bounds_in_lake_by_dataset = _lake_queries.open_time_bounds_in_lake_by_dataset
@@ -43,6 +38,11 @@ open_times_in_lake = _lake_queries.open_times_in_lake
 open_times_in_lake_by_dataset = _lake_queries.open_times_in_lake_by_dataset
 partition_dates_in_lake_by_dataset = _lake_queries.partition_dates_in_lake_by_dataset
 load_combined_dataframe_from_lake = _lake_dataframe.load_combined_dataframe_from_lake
+record_natural_key = _lake_writes.record_natural_key
+merge_and_deduplicate_rows = _lake_writes.merge_and_deduplicate_rows
+_require_pyarrow = _lake_writes.require_pyarrow
+_write_partition_file = _lake_writes.write_partition_file
+_write_grouped_rows = _lake_writes.write_grouped_rows
 
 
 def utc_run_id() -> str:
@@ -250,133 +250,6 @@ def volatility_record(
         "timeframe": item.interval,
         "value": item.value,
     }
-
-
-def record_natural_key(record: dict[str, object]) -> NaturalKey:
-    """Build natural key for per-partition deduplication."""
-
-    open_time = record["open_time"]
-    if not isinstance(open_time, datetime):
-        raise ValueError("open_time must be datetime")
-    return (
-        str(record["exchange"]),
-        str(record["instrument_type"]),
-        str(record["symbol"]),
-        str(record["timeframe"]),
-        open_time,
-        str(record.get("trade_id", "")),
-        str(record.get("instrument_name", "")),
-    )
-
-
-def merge_and_deduplicate_rows(
-    existing: Sequence[Mapping[str, object]], new: Sequence[Mapping[str, object]]
-) -> list[dict[str, object]]:
-    """Merge old/new rows and keep latest version for duplicate keys."""
-
-    merged: dict[NaturalKey, dict[str, object]] = {}
-    for record in existing:
-        normalized = dict(record)
-        merged[record_natural_key(normalized)] = normalized
-    for record in new:
-        normalized = dict(record)
-        merged[record_natural_key(normalized)] = normalized
-
-    rows = list(merged.values())
-    rows.sort(key=lambda item: cast(datetime, item["open_time"]))
-    return rows
-
-
-def _require_pyarrow() -> tuple[Any, Any]:
-    """Load pyarrow modules required for parquet read/write operations."""
-
-    try:
-        import pyarrow as pa
-        import pyarrow.parquet as pq
-    except ImportError as exc:
-        raise RuntimeError("pyarrow is required for parquet lake output. Install project dependencies.") from exc
-    return pa, pq
-
-
-def _write_partition_file(
-    *,
-    pa: Any,
-    pq: Any,
-    lake_root: str,
-    dataset_type: str,
-    run_id: str,
-    key: PartitionKey,
-    rows: list[dict[str, object]],
-) -> str:
-    """Write one partition file via staging replace after merge/dedup."""
-
-    part_dir = partition_path(lake_root=lake_root, dataset_type=dataset_type, key=key)
-    part_dir.mkdir(parents=True, exist_ok=True)
-    file_path = part_dir / "data.parquet"
-    staging_path = part_dir / f".staging-{run_id}.parquet"
-
-    existing_rows: list[dict[str, object]] = []
-    if file_path.exists():
-        existing_table = pq.ParquetFile(file_path).read()
-        existing_rows = existing_table.to_pylist()
-
-    merged_rows = merge_and_deduplicate_rows(existing=existing_rows, new=rows)
-    table = pa.Table.from_pylist(merged_rows)
-    pq.write_table(table, staging_path)
-    staging_path.replace(file_path)
-    return str(file_path.resolve())
-
-
-def _write_grouped_rows(
-    *,
-    pa: Any,
-    pq: Any,
-    lake_root: str,
-    dataset_type: str,
-    run_id: str,
-    grouped: dict[PartitionKey, list[dict[str, object]]],
-) -> list[str]:
-    """Write grouped partition rows concurrently and return written file paths."""
-
-    written_files: list[str] = []
-    if grouped:
-        max_workers = min(4, len(grouped))
-        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = [
-                executor.submit(
-                    _write_partition_file,
-                    pa=pa,
-                    pq=pq,
-                    lake_root=lake_root,
-                    dataset_type=dataset_type,
-                    run_id=run_id,
-                    key=key,
-                    rows=rows,
-                )
-                for key, rows in grouped.items()
-            ]
-            for future in concurrent.futures.as_completed(futures):
-                written_files.append(future.result())
-        # Render sidecars on the main thread: matplotlib backends are not reliably thread-safe.
-        key_by_path: dict[str, PartitionKey] = {
-            str(
-                (partition_path(lake_root=lake_root, dataset_type=dataset_type, key=key) / "data.parquet").resolve()
-            ): key
-            for key in grouped
-        }
-        for file_str in sorted(written_files):
-            file_path = Path(file_str)
-            key = key_by_path.get(file_str)
-            if key is None:
-                continue
-            table = pq.ParquetFile(file_path).read()
-            _write_bronze_sidecars(
-                file_path=file_path,
-                dataset_type=dataset_type,
-                key=key,
-                rows=table.to_pylist(),
-            )
-    return sorted(written_files)
 
 
 def load_spot_candles_from_lake(
