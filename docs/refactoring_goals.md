@@ -11,7 +11,7 @@ The codebase is already split into `api`, `application`, and `ingestion`, but se
 | `application/services/fetch_service.py` | 1,810 lines | Fetch execution, retries, and reporting remain coupled after trade-window and range-planning helper extraction. |
 | `application/services/silver_service.py` | 1,322 lines | Dataset-specific transformations share one large service surface; Silver sidecar writing is isolated in `application/services/silver_sidecars.py`. |
 | `ingestion/lake.py` | 693 lines | Bronze persistence remains after partition layout, sidecar, metadata query, and dataframe reader extraction. |
-| `api/commands/loader.py` | 1,081 lines | CLI orchestration and command behavior remain coupled after checkpoint key bookkeeping extraction. |
+| `api/commands/loader.py` | 1,063 lines | CLI orchestration still remains coupled to command behavior after checkpoint key and symbol-fetch adapter extraction. |
 | `application/services/gold_service.py` | 929 lines | Frame loading, validation, joins, and output writing remain coupled after feature profiling extraction. |
 | `ingestion/feature_profile.py` | 416 lines | Shared feature metadata and plotting are isolated, but still adapter-heavy and need interface extraction. |
 
@@ -233,6 +233,8 @@ Exit criteria:
   `BronzeRuntimeBoundsContext` instead of separate mutable start-bound globals.
 - Bronze output, storage buffers, and pending task lists are grouped in `BronzeRunState`, reducing scattered mutable
   containers inside `run_bronze_build`.
+- Dataset-specific Bronze symbol fetch adapters live in `api/commands/loader_fetchers.py`, leaving `loader.py` to build
+  dependency adapters and wire task execution.
 - Trade-window planning, recoverable fetch-error classification, deterministic trade dedupe, bounded window fetches,
   and trade progress logging live in `application/services/fetch_trade_windows.py`; `fetch_service.py` keeps
   compatibility aliases for existing callers while retaining orchestration.
