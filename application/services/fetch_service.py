@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import logging
-import multiprocessing as mp
-import threading
-import time
+import multiprocessing as _mp
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, date, datetime, timedelta
@@ -24,6 +22,7 @@ from application.dto import (
     VolatilityFetchTaskDTO,
 )
 from application.schema import dataset_contract
+from application.services import fetch_executors as _fetch_executors
 from application.services import fetch_trade_windows as _trade_windows
 from application.services.fetch_bootstrap import fetch_bootstrap_history_rows, fetch_bounded_daily_rows
 from application.services.fetch_executors import elapsed_seconds, run_with_optional_history_chunk
@@ -67,10 +66,12 @@ from ingestion.volatility import (
 
 OI_DATASET_TYPE = dataset_contract("oi").dataset_type
 TRADE_BOUNDARY_TOLERANCE_MS = 60_000
-TTimeout = TypeVar("TTimeout")
 TRow = TypeVar("TRow")
 logger = logging.getLogger(__name__)
 
+mp = _mp
+_run_with_optional_timeout = _fetch_executors.run_with_optional_timeout
+_timeout_worker = _fetch_executors.timeout_worker
 _classify_trade_fetch_error = _trade_windows.classify_trade_fetch_error
 _dedupe_sort_trade_rows = _trade_windows.dedupe_sort_trade_rows
 _fetch_trade_window = _trade_windows.fetch_trade_window
@@ -79,10 +80,6 @@ _raise_if_all_trade_windows_failed = _trade_windows.raise_if_all_trade_windows_f
 _split_range_into_trade_windows = _trade_windows.split_range_into_trade_windows
 _trade_window_ms = _trade_windows.trade_window_size_ms
 _trade_windows_in_random_order = _trade_windows.trade_windows_in_random_order
-
-
-class _ResultQueueProtocol:
-    def put(self, item: object) -> object: ...
 
 
 def _row_open_time_ms(row: object) -> int:
@@ -122,19 +119,6 @@ def _filter_chunk_callback(
             on_history_chunk(filtered)
 
     return _filtered_chunk
-
-
-def _timeout_worker(
-    result_queue: _ResultQueueProtocol,
-    fn: Callable[..., object],
-    kwargs: dict[str, object],
-) -> None:
-    """Execute one fetch call in a child process and return result state via queue."""
-
-    try:
-        result_queue.put(("ok", fn(**kwargs)))
-    except Exception as exc:  # noqa: BLE001
-        result_queue.put(("err", (exc.__class__.__name__, str(exc))))
 
 
 def _ranges_in_random_order(ranges: list[tuple[int, int]]) -> list[tuple[int, int]]:
@@ -312,91 +296,6 @@ def _build_missing_ranges_with_optional_head_gap(
         if start_open_ms_bound <= head_end_ms:
             missing_ranges.append((start_open_ms_bound, head_end_ms))
     return missing_ranges
-
-
-def _run_with_optional_timeout(
-    fn: Callable[..., TTimeout],
-    *,
-    timeout_s: float | None,
-    heartbeat_s: float,
-    heartbeat: Callable[[int], None],
-    use_process_timeout: bool = False,
-    **kwargs: object,
-) -> TTimeout:
-    """Run callable in a worker process with optional hard timeout and heartbeat."""
-
-    def _run_inline_with_heartbeat() -> TTimeout:
-        started = datetime.now(UTC)
-        stop_event = threading.Event()
-
-        def _heartbeat_loop() -> None:
-            interval = max(0.1, heartbeat_s)
-            while not stop_event.wait(interval):
-                elapsed_s = int((datetime.now(UTC) - started).total_seconds())
-                heartbeat(elapsed_s)
-
-        watcher = threading.Thread(target=_heartbeat_loop, daemon=True)
-        watcher.start()
-        try:
-            return fn(**kwargs)
-        finally:
-            stop_event.set()
-            watcher.join(timeout=1.0)
-
-    if timeout_s is None or not use_process_timeout:
-        return _run_inline_with_heartbeat()
-
-    started = datetime.now(UTC)
-    ctx = mp.get_context("fork")
-    result_queue = ctx.Queue(maxsize=1)
-    process = ctx.Process(target=_timeout_worker, args=(result_queue, fn, kwargs))
-    try:
-        process.start()
-    except OSError as exc:
-        if exc.errno != 5:
-            raise
-        logging.getLogger(__name__).warning(
-            "Worker process startup failed with EIO; falling back to inline execution without hard timeout"
-        )
-        result_queue.close()
-        result_queue.join_thread()
-        return _run_inline_with_heartbeat()
-    deadline = time.monotonic() + timeout_s
-    try:
-        while True:
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                process.terminate()
-                process.join(timeout=2)
-                raise TimeoutError(f"Fetch task timed out after {timeout_s:.1f}s")
-            wait_s = min(max(0.1, heartbeat_s), remaining)
-
-            process.join(timeout=wait_s)
-            if process.is_alive():
-                elapsed_s = int((datetime.now(UTC) - started).total_seconds())
-                heartbeat(elapsed_s)
-                continue
-
-            if result_queue.empty():
-                raise RuntimeError(f"Fetch worker exited without result (exitcode={process.exitcode})")
-
-            status, payload = result_queue.get_nowait()
-            if status == "ok":
-                return cast(TTimeout, payload)
-            exc_name, exc_message = payload
-            if exc_name == "TypeError":
-                raise TypeError(exc_message)
-            if exc_name == "ValueError":
-                raise ValueError(exc_message)
-            if exc_name == "TimeoutError":
-                raise TimeoutError(exc_message)
-            raise RuntimeError(f"{exc_name}: {exc_message}")
-    finally:
-        if process.is_alive():
-            process.terminate()
-            process.join(timeout=2)
-        result_queue.close()
-        result_queue.join_thread()
 
 
 def fetch_symbol_candles(
