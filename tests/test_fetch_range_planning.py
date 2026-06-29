@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import UTC, date, datetime
 
 from application.services.fetch_range_planning import (
+    build_missing_ranges_with_optional_head_gap,
     day_end_ms,
     day_start_ms,
     missing_trade_day_ranges,
@@ -64,3 +65,39 @@ def test_missing_trade_day_ranges_resumes_clear_partial_days() -> None:
         start_open_ms=start_ms,
         end_open_ms=end_ms,
     ) == [(int(datetime(2026, 4, 27, 23, 58, 0, tzinfo=UTC).timestamp() * 1000) + 1, end_ms)]
+
+
+def test_build_missing_ranges_with_optional_head_gap_extends_from_start_bound() -> None:
+    """Include leading explicit start-bound coverage before first persisted point."""
+
+    existing = [datetime(2026, 4, 27, 10, 2, tzinfo=UTC)]
+    start_bound_ms = int(datetime(2026, 4, 27, 10, 0, tzinfo=UTC).timestamp() * 1000)
+    end_ms = int(datetime(2026, 4, 27, 10, 5, tzinfo=UTC).timestamp() * 1000)
+
+    ranges = build_missing_ranges_with_optional_head_gap(
+        existing_open_times=existing,
+        interval_ms=60_000,
+        end_open_ms=end_ms,
+        start_open_ms_bound=start_bound_ms,
+        ranges_builder=lambda **_: [(end_ms - 60_000, end_ms)],
+    )
+
+    assert ranges == [(end_ms - 60_000, end_ms), (start_bound_ms, start_bound_ms + 60_000)]
+
+
+def test_build_missing_ranges_with_optional_head_gap_skips_when_bound_is_covered() -> None:
+    """Do not add a leading range when persisted coverage already reaches the bound."""
+
+    existing = [datetime(2026, 4, 27, 10, 0, tzinfo=UTC)]
+    start_bound_ms = int(existing[0].timestamp() * 1000)
+    end_ms = int(datetime(2026, 4, 27, 10, 5, tzinfo=UTC).timestamp() * 1000)
+
+    ranges = build_missing_ranges_with_optional_head_gap(
+        existing_open_times=existing,
+        interval_ms=60_000,
+        end_open_ms=end_ms,
+        start_open_ms_bound=start_bound_ms,
+        ranges_builder=lambda **_: [(end_ms - 60_000, end_ms)],
+    )
+
+    assert ranges == [(end_ms - 60_000, end_ms)]
