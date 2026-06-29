@@ -6,11 +6,11 @@ import argparse
 import json
 import logging
 from collections.abc import Callable
-from dataclasses import asdict
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
 
+from api.commands import loader_output_utils as _loader_output_utils
 from api.commands.loader_dataset_handlers import (
     populate_funding_output,
     populate_ohlcv_output,
@@ -135,6 +135,8 @@ _RUNTIME_BOUNDS_CONTEXT = BronzeRuntimeBoundsContext(
 )
 _last_closed_open_ms = last_closed_open_ms
 _missing_ranges_ms = missing_ranges_ms
+_serialize_candle = _loader_output_utils.serialize_candle
+_sidecar_path_list = _loader_output_utils.sidecar_path_list
 
 
 def _current_runtime_bounds_context() -> BronzeRuntimeBoundsContext:
@@ -254,12 +256,6 @@ def _write_bronze_checkpoint(
     write_bronze_checkpoint(path, fingerprint=fingerprint, completed=completed)
 
 
-def _sidecar_path_list(parquet_files: list[str], suffix: str) -> list[str]:
-    """Build sorted unique sidecar paths for provided parquet files."""
-
-    return sorted({str(Path(path).with_suffix(suffix).resolve()) for path in parquet_files})
-
-
 def _add_ingest_parser(
     subparsers: Any,
     *,
@@ -346,15 +342,6 @@ def add_bronze_build_parser(subparsers: Any) -> None:
         command_name="bronze-build",
         help_text="Bronze medallion ingest from supported exchanges",
     )
-
-
-def _serialize_candle(candle: SpotCandle) -> dict[str, object]:
-    data = asdict(candle)
-    for key in ("open_time", "close_time"):
-        value = data[key]
-        if isinstance(value, datetime):
-            data[key] = value.isoformat()
-    return data
 
 
 def _fetch_symbol_candles(
