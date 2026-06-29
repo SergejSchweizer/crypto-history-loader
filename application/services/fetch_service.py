@@ -8,7 +8,7 @@ import threading
 import time
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime
 from typing import Any, TypeVar, cast
 
 from application.dto import (
@@ -24,6 +24,7 @@ from application.dto import (
     VolatilityFetchTaskDTO,
 )
 from application.schema import dataset_contract
+from application.services import fetch_range_planning as _range_planning
 from application.services import fetch_trade_windows as _trade_windows
 from application.services.fetch_bootstrap import fetch_bootstrap_history_rows, fetch_bounded_daily_rows
 from application.services.fetch_executors import elapsed_seconds, run_with_optional_history_chunk
@@ -66,11 +67,17 @@ from ingestion.volatility import (
 )
 
 OI_DATASET_TYPE = dataset_contract("oi").dataset_type
-TRADE_BOUNDARY_TOLERANCE_MS = 60_000
 TTimeout = TypeVar("TTimeout")
 TRow = TypeVar("TRow")
 logger = logging.getLogger(__name__)
 
+TRADE_BOUNDARY_TOLERANCE_MS = _range_planning.TRADE_BOUNDARY_TOLERANCE_MS
+_day_end_ms = _range_planning.day_end_ms
+_day_start_ms = _range_planning.day_start_ms
+_day_windows_in_random_order = _range_planning.day_windows_in_random_order
+_missing_trade_day_ranges = _range_planning.missing_trade_day_ranges
+_ranges_in_random_order = _range_planning.ranges_in_random_order
+_split_range_into_utc_days = _range_planning.split_range_into_utc_days
 _classify_trade_fetch_error = _trade_windows.classify_trade_fetch_error
 _dedupe_sort_trade_rows = _trade_windows.dedupe_sort_trade_rows
 _fetch_trade_window = _trade_windows.fetch_trade_window
@@ -137,12 +144,6 @@ def _timeout_worker(
         result_queue.put(("err", (exc.__class__.__name__, str(exc))))
 
 
-def _ranges_in_random_order(ranges: list[tuple[int, int]]) -> list[tuple[int, int]]:
-    """Return missing time ranges in deterministic ascending order."""
-
-    return sorted(ranges)
-
-
 def _task_timeout_seconds() -> float | None:
     """Return optional per-task timeout in seconds from environment."""
 
@@ -153,98 +154,6 @@ def _heartbeat_seconds() -> float:
     """Return heartbeat interval in seconds for long-running fetch tasks."""
 
     return heartbeat_seconds()
-
-
-def _split_range_into_utc_days(start_open_ms: int, end_open_ms: int) -> list[tuple[int, int]]:
-    """Split an inclusive millisecond range into UTC day-bounded slices."""
-
-    if end_open_ms < start_open_ms:
-        return []
-    start_dt = datetime.fromtimestamp(start_open_ms / 1000, tz=UTC)
-    end_dt = datetime.fromtimestamp(end_open_ms / 1000, tz=UTC)
-    cursor = start_dt
-    windows: list[tuple[int, int]] = []
-    while cursor.date() < end_dt.date():
-        day_end = (
-            datetime.combine(cursor.date(), datetime.min.time(), tzinfo=UTC)
-            + timedelta(days=1)
-            - timedelta(milliseconds=1)
-        )
-        windows.append((int(cursor.timestamp() * 1000), int(day_end.timestamp() * 1000)))
-        cursor = day_end + timedelta(milliseconds=1)
-    windows.append((int(cursor.timestamp() * 1000), end_open_ms))
-    return windows
-
-
-def _day_windows_in_random_order(start_open_ms: int, end_open_ms: int) -> list[tuple[int, int]]:
-    """Split range into UTC day windows and return deterministic chronological order."""
-
-    windows = _split_range_into_utc_days(start_open_ms, end_open_ms)
-    return sorted(windows)
-
-
-def _day_start_ms(value: date) -> int:
-    """Return UTC day start timestamp in milliseconds."""
-
-    return int(datetime.combine(value, datetime.min.time(), tzinfo=UTC).timestamp() * 1000)
-
-
-def _day_end_ms(value: date) -> int:
-    """Return UTC day end timestamp in milliseconds."""
-
-    return int(
-        (
-            datetime.combine(value, datetime.min.time(), tzinfo=UTC) + timedelta(days=1) - timedelta(milliseconds=1)
-        ).timestamp()
-        * 1000
-    )
-
-
-def _missing_trade_day_ranges(
-    *,
-    existing_dates: list[date],
-    coverage_bounds: dict[date, tuple[datetime, datetime]] | None = None,
-    start_open_ms: int,
-    end_open_ms: int,
-) -> list[tuple[int, int]]:
-    """Build missing trade ranges from daily tick partitions.
-
-    Tick datasets use exact trade timestamps, so candle-grid gap detection would
-    misclassify normal intra-minute trade times as missing. Daily partitions are
-    the restart-safe coverage unit until a finer manifest exists.
-    """
-
-    if end_open_ms < start_open_ms:
-        return []
-    existing = set(existing_dates)
-    start_day = datetime.fromtimestamp(start_open_ms / 1000, tz=UTC).date()
-    end_day = datetime.fromtimestamp(end_open_ms / 1000, tz=UTC).date()
-    cursor = start_day
-    ranges: list[tuple[int, int]] = []
-    while cursor <= end_day:
-        range_start_ms = max(start_open_ms, _day_start_ms(cursor))
-        range_end_ms = min(end_open_ms, _day_end_ms(cursor))
-        if cursor not in existing:
-            ranges.append((range_start_ms, range_end_ms))
-            cursor += timedelta(days=1)
-            continue
-        if coverage_bounds:
-            bounds = coverage_bounds.get(cursor)
-            if bounds is None:
-                ranges.append((range_start_ms, range_end_ms))
-                cursor += timedelta(days=1)
-                continue
-            min_open_ms = int(bounds[0].timestamp() * 1000)
-            max_open_ms = int(bounds[1].timestamp() * 1000)
-            # Tick partitions rarely contain trades exactly at UTC day boundaries.
-            # Treat near-boundary gaps as covered, but resume clear partial days after
-            # interrupted chunk persistence from the last stored trade timestamp.
-            if min_open_ms - range_start_ms > TRADE_BOUNDARY_TOLERANCE_MS:
-                ranges.append((range_start_ms, min(min_open_ms - 1, range_end_ms)))
-            if range_end_ms - max_open_ms > TRADE_BOUNDARY_TOLERANCE_MS:
-                ranges.append((max(max_open_ms + 1, range_start_ms), range_end_ms))
-        cursor += timedelta(days=1)
-    return ranges
 
 
 def _fetch_bounded_daily_rows(
