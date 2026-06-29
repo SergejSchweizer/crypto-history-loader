@@ -234,10 +234,10 @@ def test_symbol_start_bound_caps_to_last_30_days_in_tail_mode() -> None:
             symbol_start_open_ms={},
             exchange_symbol_start_open_ms={"deribit:BTC": 1000},
         )
+        rolling_30_days_ago_before_call_ms = int((datetime.now(UTC).timestamp() - (30 * 24 * 60 * 60)) * 1000)
         resolved = loader_cmd._symbol_start_open_ms_bound(exchange="deribit", symbol="BTCUSDT")
         assert isinstance(resolved, int)
-        rolling_30_days_ago_ms = int((datetime.now(UTC).timestamp() - (30 * 24 * 60 * 60)) * 1000)
-        assert resolved >= rolling_30_days_ago_ms
+        assert resolved >= rolling_30_days_ago_before_call_ms
     finally:
         loader_cmd._RUNTIME_BOUNDS_CONTEXT = original_context
 
