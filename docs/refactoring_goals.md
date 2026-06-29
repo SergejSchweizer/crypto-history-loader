@@ -11,7 +11,7 @@ The codebase is already split into `api`, `application`, and `ingestion`, but se
 | `application/services/fetch_service.py` | 1,669 lines | Fetch planning, task execution, retries, and reporting remain coupled after trade-window, range-planning, timeout-runner, and history-row helper extraction. |
 | `application/services/silver_service.py` | 1,244 lines | Dataset-specific build orchestration remains shared after sidecar and trade-frame extraction. |
 | `ingestion/lake.py` | 566 lines | Bronze save APIs remain after partition layout, sidecar, metadata query, dataframe reader, and write-helper extraction. |
-| `api/commands/loader.py` | 1,063 lines | CLI orchestration still remains coupled to command behavior after checkpoint key and symbol-fetch adapter extraction. |
+| `api/commands/loader.py` | 1,057 lines | CLI orchestration still remains coupled to command behavior after checkpoint key, symbol-fetch adapter, and output-helper extraction. |
 | `application/services/gold_service.py` | 766 lines | Frame loading, validation, joins, and output writing remain coupled after feature profiling and versioning extraction. |
 | `ingestion/feature_profile.py` | 416 lines | Shared feature metadata and plotting are isolated, but still adapter-heavy and need interface extraction. |
 
@@ -235,6 +235,8 @@ Exit criteria:
   containers inside `run_bronze_build`.
 - Dataset-specific Bronze symbol fetch adapters live in `api/commands/loader_fetchers.py`, leaving `loader.py` to build
   dependency adapters and wire task execution.
+- Loader output sidecar path derivation and candle JSON serialization live in
+  `api/commands/loader_output_utils.py`; `api/commands/loader.py` keeps compatibility aliases.
 - Trade-window planning, recoverable fetch-error classification, deterministic trade dedupe, bounded window fetches,
   and trade progress logging live in `application/services/fetch_trade_windows.py`; `fetch_service.py` keeps
   compatibility aliases for existing callers while retaining orchestration.

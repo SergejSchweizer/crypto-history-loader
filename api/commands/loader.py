@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from api.commands import loader_fetchers as _loader_fetchers
+from api.commands import loader_output_utils as _loader_output_utils
 from api.commands.loader_dataset_handlers import (
     populate_funding_output,
     populate_ohlcv_output,
@@ -131,6 +132,8 @@ _RUNTIME_BOUNDS_CONTEXT = BronzeRuntimeBoundsContext(
 )
 _last_closed_open_ms = last_closed_open_ms
 _missing_ranges_ms = missing_ranges_ms
+_serialize_candle = _loader_output_utils.serialize_candle
+_sidecar_path_list = _loader_output_utils.sidecar_path_list
 
 
 def _current_runtime_bounds_context() -> BronzeRuntimeBoundsContext:
@@ -250,12 +253,6 @@ def _write_bronze_checkpoint(
     write_bronze_checkpoint(path, fingerprint=fingerprint, completed=completed)
 
 
-def _sidecar_path_list(parquet_files: list[str], suffix: str) -> list[str]:
-    """Build sorted unique sidecar paths for provided parquet files."""
-
-    return sorted({str(Path(path).with_suffix(suffix).resolve()) for path in parquet_files})
-
-
 def _add_ingest_parser(
     subparsers: Any,
     *,
@@ -373,9 +370,6 @@ def _symbol_fetch_dependencies() -> BronzeSymbolFetchDependencies:
         fetch_trades_all_history=fetch_trades_all_history,
         fetch_trades_range=fetch_trades_range,
     )
-
-
-_serialize_candle = _loader_fetchers.serialize_candle
 
 
 def _fetch_symbol_candles(
