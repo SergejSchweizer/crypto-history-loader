@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import UTC, date, datetime, timedelta
 
 TRADE_BOUNDARY_TOLERANCE_MS = 60_000
@@ -151,3 +152,44 @@ def missing_trade_day_ranges(
                 ranges.append((max(max_open_ms + 1, range_start_ms), range_end_ms))
         cursor += timedelta(days=1)
     return ranges
+
+
+def build_missing_ranges_with_optional_head_gap(
+    *,
+    existing_open_times: list[datetime],
+    interval_ms: int,
+    end_open_ms: int,
+    start_open_ms_bound: int | None,
+    ranges_builder: Callable[..., list[tuple[int, int]]],
+) -> list[tuple[int, int]]:
+    """Build missing ranges with optional head-gap extension.
+
+    Args:
+        existing_open_times: Persisted timestamps for the requested dataset key.
+        interval_ms: Expected interval between adjacent open timestamps.
+        end_open_ms: Inclusive fetch end bound in epoch milliseconds.
+        start_open_ms_bound: Optional explicit inclusive history start bound.
+        ranges_builder: Dataset-specific internal/tail gap planner.
+
+    Returns:
+        Missing ranges from the range builder plus a head-gap range when the
+        explicit start bound predates persisted coverage.
+
+    Notes:
+        The injected range builder owns internal and tail gap detection. This
+        helper only adds the missing leading range caused by a later first
+        persisted timestamp, keeping start-bound behavior consistent across
+        OHLCV, OI, funding, and volatility fetchers.
+    """
+
+    missing_ranges = ranges_builder(
+        existing_open_times=existing_open_times,
+        interval_ms=interval_ms,
+        end_open_ms=end_open_ms,
+    )
+    earliest_existing_ms = int(min(existing_open_times).timestamp() * 1000)
+    if start_open_ms_bound is not None and start_open_ms_bound < earliest_existing_ms:
+        head_end_ms = min(earliest_existing_ms - interval_ms, end_open_ms)
+        if start_open_ms_bound <= head_end_ms:
+            missing_ranges.append((start_open_ms_bound, head_end_ms))
+    return missing_ranges
