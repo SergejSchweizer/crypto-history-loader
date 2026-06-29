@@ -28,6 +28,7 @@ from application.services import fetch_range_planning as _range_planning
 from application.services import fetch_trade_windows as _trade_windows
 from application.services.fetch_executors import elapsed_seconds, run_with_optional_history_chunk
 from application.services.fetch_runtime_policy import heartbeat_seconds, task_timeout_seconds
+from application.services.fetch_task_callbacks import bind_task_chunk_callback
 from application.services.gapfill_service import _last_closed_open_ms, _missing_ranges_ms
 from ingestion.funding import (
     FundingPoint,
@@ -90,6 +91,7 @@ _trade_windows_in_random_order = _trade_windows.trade_windows_in_random_order
 _row_open_time_ms = _history_rows.row_open_time_ms
 _filter_rows_by_start_bound = _history_rows.filter_rows_by_start_bound
 _filter_chunk_callback = _history_rows.filter_chunk_callback
+_bind_task_chunk_callback = bind_task_chunk_callback
 
 
 def _task_timeout_seconds() -> float | None:
@@ -1188,9 +1190,7 @@ def fetch_candle_tasks_parallel(
                         "symbol": task.symbol,
                         "timeframe": task.timeframe,
                         "lake_root": lake_root,
-                        "on_history_chunk": (lambda rows, _task=task: on_task_chunk(_task, rows))
-                        if on_task_chunk is not None
-                        else None,
+                        "on_history_chunk": _bind_task_chunk_callback(task, on_task_chunk),
                     },
                 ),
             )
@@ -1257,17 +1257,7 @@ def fetch_open_interest_tasks_parallel(
         hb_exchange = task.exchange
         hb_symbol = task.symbol
         hb_timeframe = task.timeframe
-        history_chunk_cb: Callable[[list[OpenInterestPoint]], None] | None = None
-        if on_task_chunk is not None:
-            task_for_chunk = task
-
-            def _history_chunk_oi(
-                values: list[OpenInterestPoint],
-                _task: OpenInterestFetchTaskDTO = task_for_chunk,
-            ) -> None:
-                on_task_chunk(_task, values)
-
-            history_chunk_cb = _history_chunk_oi
+        history_chunk_cb = _bind_task_chunk_callback(task, on_task_chunk)
 
         def _heartbeat_oi(
             elapsed_s: int,
@@ -1357,17 +1347,7 @@ def fetch_funding_tasks_parallel(
         hb_exchange = task.exchange
         hb_symbol = task.symbol
         hb_timeframe = task.timeframe
-        history_chunk_cb: Callable[[list[FundingPoint]], None] | None = None
-        if on_task_chunk is not None:
-            task_for_chunk = task
-
-            def _history_chunk_funding(
-                values: list[FundingPoint],
-                _task: FundingFetchTaskDTO = task_for_chunk,
-            ) -> None:
-                on_task_chunk(_task, values)
-
-            history_chunk_cb = _history_chunk_funding
+        history_chunk_cb = _bind_task_chunk_callback(task, on_task_chunk)
 
         def _heartbeat_funding(
             elapsed_s: int,
@@ -1455,17 +1435,7 @@ def fetch_volatility_tasks_parallel(
         )
         key = (task.exchange, task.symbol, task.timeframe)
         task_started_at = datetime.now(UTC)
-        history_chunk_cb: Callable[[list[VolatilityPoint]], None] | None = None
-        if on_task_chunk is not None:
-            task_for_chunk = task
-
-            def _history_chunk_volatility(
-                values: list[VolatilityPoint],
-                _task: VolatilityFetchTaskDTO = task_for_chunk,
-            ) -> None:
-                on_task_chunk(_task, values)
-
-            history_chunk_cb = _history_chunk_volatility
+        history_chunk_cb = _bind_task_chunk_callback(task, on_task_chunk)
 
         def _heartbeat_volatility(elapsed_s: int) -> None:
             del elapsed_s
@@ -1575,14 +1545,7 @@ def fetch_trade_tasks_parallel(
                 elapsed_s,
             )
 
-        history_chunk_callback: Callable[[list[TradeTick | OptionTradeTick]], None] | None = None
-        if on_task_chunk is not None:
-            task_chunk_callback = on_task_chunk
-
-            def _forward_trade_chunk(chunk: list[TradeTick | OptionTradeTick], _task: TradeFetchTaskDTO = task) -> None:
-                task_chunk_callback(_task, chunk)
-
-            history_chunk_callback = _forward_trade_chunk
+        history_chunk_callback = _bind_task_chunk_callback(task, on_task_chunk)
 
         try:
             rows = _run_with_optional_timeout(
