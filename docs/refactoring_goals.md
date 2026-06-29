@@ -8,10 +8,10 @@ The codebase is already split into `api`, `application`, and `ingestion`, but se
 
 | Area | Current signal | Refactoring risk |
 |---|---:|---|
-| `application/services/fetch_service.py` | 1,632 lines | Fetch planning, task execution, retries, and reporting remain coupled after trade-window, range-planning, timeout-runner, history-row helper, and task-callback extraction. |
+| `application/services/fetch_service.py` | 1,605 lines | Fetch planning, task execution, retries, and reporting remain coupled after trade-window, range-planning, timeout-runner, history-row helper, and task-callback extraction. |
 | `application/services/silver_service.py` | 1,158 lines | Dataset-specific build orchestration remains shared after sidecar, trade-frame, and volatility observed extraction. |
-| `ingestion/lake.py` | 566 lines | Bronze save APIs remain after partition layout, sidecar, metadata query, dataframe reader, and write-helper extraction. |
-| `api/commands/loader.py` | 1,057 lines | CLI orchestration still remains coupled to command behavior after checkpoint key, symbol-fetch adapter, and output-helper extraction. |
+| `ingestion/lake.py` | 418 lines | Bronze save APIs remain after partition layout, read-helper, sidecar, metadata query, dataframe reader, and write-helper extraction. |
+| `api/commands/loader.py` | 975 lines | CLI orchestration still remains coupled to command behavior after checkpoint key, parser, symbol-fetch adapter, and output-helper extraction. |
 | `application/services/gold_service.py` | 766 lines | Frame loading, validation, joins, and output writing remain coupled after feature profiling and versioning extraction. |
 | `ingestion/feature_profile.py` | 416 lines | Shared feature metadata and plotting are isolated, but still adapter-heavy and need interface extraction. |
 
@@ -27,6 +27,10 @@ Existing safety net:
 - Fetch task timeout, heartbeat, and trade window sizing are now resolved through
   `application/services/fetch_runtime_policy.py`; durable `config.yaml` values for the main fetch/trade knobs are
   bounded by Pydantic validation.
+- Bronze lake read helpers now live in `ingestion/lake_reads.py`; `ingestion/lake.py` keeps compatibility aliases
+  for existing callers while lake writing remains unchanged.
+- Bronze CLI parser registration now lives in `api/commands/loader_parser.py`; `api/commands/loader.py` keeps the
+  compatibility entry point while command execution remains unchanged.
 - Silver volatility observed transformations now live in `application/services/silver_volatility.py`; the existing
   `silver_service.py` function remains as the compatibility entry point for command orchestration.
 
@@ -242,9 +246,9 @@ Exit criteria:
 - Trade-window planning, recoverable fetch-error classification, deterministic trade dedupe, bounded window fetches,
   and trade progress logging live in `application/services/fetch_trade_windows.py`; `fetch_service.py` keeps
   compatibility aliases for existing callers while retaining orchestration.
-- UTC day-window planning, deterministic missing-range ordering, and daily trade coverage-gap planning live in
-  `application/services/fetch_range_planning.py`; `fetch_service.py` keeps compatibility aliases for existing tests and
-  callers while retaining orchestration.
+- UTC day-window planning, deterministic missing-range ordering, explicit head-gap planning, and daily trade
+  coverage-gap planning live in `application/services/fetch_range_planning.py`; `fetch_service.py` keeps compatibility
+  aliases for existing tests and callers while retaining orchestration.
 - Fetch timeout execution, process fallback handling, and heartbeat wrapping live in
   `application/services/fetch_executors.py`; `fetch_service.py` keeps compatibility aliases for existing tests/callers.
 - Bound-filtered history row callbacks, open-time key extraction, bounded daily fetch dedupe, and bootstrap row
