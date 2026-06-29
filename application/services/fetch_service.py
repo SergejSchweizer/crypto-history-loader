@@ -7,7 +7,7 @@ import multiprocessing as _mp
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, date, datetime
-from typing import Any, TypeVar, cast
+from typing import TypeVar, cast
 
 from application.dto import (
     CandleFetchResultDTO,
@@ -23,9 +23,9 @@ from application.dto import (
 )
 from application.schema import dataset_contract
 from application.services import fetch_executors as _fetch_executors
+from application.services import fetch_history_rows as _history_rows
 from application.services import fetch_range_planning as _range_planning
 from application.services import fetch_trade_windows as _trade_windows
-from application.services.fetch_bootstrap import fetch_bootstrap_history_rows, fetch_bounded_daily_rows
 from application.services.fetch_executors import elapsed_seconds, run_with_optional_history_chunk
 from application.services.fetch_runtime_policy import heartbeat_seconds, task_timeout_seconds
 from application.services.gapfill_service import _last_closed_open_ms, _missing_ranges_ms
@@ -87,45 +87,9 @@ _raise_if_all_trade_windows_failed = _trade_windows.raise_if_all_trade_windows_f
 _split_range_into_trade_windows = _trade_windows.split_range_into_trade_windows
 _trade_window_ms = _trade_windows.trade_window_size_ms
 _trade_windows_in_random_order = _trade_windows.trade_windows_in_random_order
-
-
-def _row_open_time_ms(row: object) -> int:
-    """Return row open timestamp in epoch milliseconds."""
-
-    row_any = cast(Any, row)
-    timestamp = getattr(row_any, "open_time", None)
-    if timestamp is None:
-        timestamp = getattr(row_any, "trade_time", None)
-    if not isinstance(timestamp, datetime):
-        raise ValueError("row is missing open_time/trade_time datetime attribute")
-    return int(timestamp.timestamp() * 1000)
-
-
-def _filter_rows_by_start_bound(rows: list[TRow], start_open_ms_bound: int | None) -> list[TRow]:
-    """Filter rows by inclusive start bound when provided."""
-
-    if start_open_ms_bound is None:
-        return rows
-    return [item for item in rows if _row_open_time_ms(item) >= start_open_ms_bound]
-
-
-def _filter_chunk_callback(
-    on_history_chunk: Callable[[list[TRow]], None] | None,
-    start_open_ms_bound: int | None,
-) -> Callable[[list[TRow]], None] | None:
-    """Wrap chunk callback with optional start-bound filtering."""
-
-    if on_history_chunk is None:
-        return None
-    if start_open_ms_bound is None:
-        return on_history_chunk
-
-    def _filtered_chunk(rows: list[TRow]) -> None:
-        filtered = _filter_rows_by_start_bound(rows, start_open_ms_bound)
-        if filtered:
-            on_history_chunk(filtered)
-
-    return _filtered_chunk
+_row_open_time_ms = _history_rows.row_open_time_ms
+_filter_rows_by_start_bound = _history_rows.filter_rows_by_start_bound
+_filter_chunk_callback = _history_rows.filter_chunk_callback
 
 
 def _task_timeout_seconds() -> float | None:
@@ -150,11 +114,10 @@ def _fetch_bounded_daily_rows(
 ) -> list[TRow]:
     """Fetch inclusive bounded history in UTC-day windows with deterministic deduplication."""
 
-    return fetch_bounded_daily_rows(
+    return _history_rows.fetch_bounded_daily_rows_with_start_bound(
         day_windows=_day_windows_in_random_order(start_open_ms_bound, end_open_ms),
         range_fetcher=range_fetcher,
         fetch_kwargs=fetch_kwargs,
-        dedupe_key=_row_open_time_ms,
         on_history_chunk=on_history_chunk,
     )
 
@@ -168,15 +131,12 @@ def _fetch_bootstrap_history_rows(
 ) -> list[TRow]:
     """Run history bootstrap fetch, then apply deterministic bound-filtered deduplication."""
 
-    filtered_rows = fetch_bootstrap_history_rows(
+    return _history_rows.fetch_bootstrap_history_rows_with_start_bound(
         history_fetcher=history_fetcher,
         fetch_kwargs=fetch_kwargs,
         on_history_chunk=on_history_chunk,
-        wrap_chunk_callback=lambda callback: _filter_chunk_callback(callback, start_open_ms_bound),
-        filter_rows=lambda rows: _filter_rows_by_start_bound(rows, start_open_ms_bound),
+        start_open_ms_bound=start_open_ms_bound,
     )
-    unique_by_open_time = {_row_open_time_ms(item): item for item in filtered_rows}
-    return [unique_by_open_time[key] for key in sorted(unique_by_open_time)]
 
 
 def _build_missing_ranges_with_optional_head_gap(

@@ -8,7 +8,7 @@ The codebase is already split into `api`, `application`, and `ingestion`, but se
 
 | Area | Current signal | Refactoring risk |
 |---|---:|---|
-| `application/services/fetch_service.py` | 1,799 lines | Fetch planning, task orchestration, retries, and reporting remain coupled after trade-window, range-planning, and timeout-runner extraction. |
+| `application/services/fetch_service.py` | 1,669 lines | Fetch planning, task execution, retries, and reporting remain coupled after trade-window, range-planning, timeout-runner, and history-row helper extraction. |
 | `application/services/silver_service.py` | 1,244 lines | Dataset-specific build orchestration remains shared after sidecar and trade-frame extraction. |
 | `ingestion/lake.py` | 566 lines | Bronze save APIs remain after partition layout, sidecar, metadata query, dataframe reader, and write-helper extraction. |
 | `api/commands/loader.py` | 1,063 lines | CLI orchestration still remains coupled to command behavior after checkpoint key and symbol-fetch adapter extraction. |
@@ -243,6 +243,8 @@ Exit criteria:
   callers while retaining orchestration.
 - Fetch timeout execution, process fallback handling, and heartbeat wrapping live in
   `application/services/fetch_executors.py`; `fetch_service.py` keeps compatibility aliases for existing tests/callers.
+- Bound-filtered history row callbacks, open-time key extraction, bounded daily fetch dedupe, and bootstrap row
+  filtering live in `application/services/fetch_history_rows.py`; `fetch_service.py` keeps compatibility aliases.
 - Existing CLI behavior remains backward compatible.
 
 ### Phase 4: Lake Adapter Split
