@@ -75,6 +75,7 @@ TRADE_BOUNDARY_TOLERANCE_MS = _range_planning.TRADE_BOUNDARY_TOLERANCE_MS
 _day_end_ms = _range_planning.day_end_ms
 _day_start_ms = _range_planning.day_start_ms
 _day_windows_in_random_order = _range_planning.day_windows_in_random_order
+_build_missing_ranges_with_optional_head_gap = _range_planning.build_missing_ranges_with_optional_head_gap
 _missing_trade_day_ranges = _range_planning.missing_trade_day_ranges
 _ranges_in_random_order = _range_planning.ranges_in_random_order
 _split_range_into_utc_days = _range_planning.split_range_into_utc_days
@@ -139,34 +140,6 @@ def _fetch_bootstrap_history_rows(
         on_history_chunk=on_history_chunk,
         start_open_ms_bound=start_open_ms_bound,
     )
-
-
-def _build_missing_ranges_with_optional_head_gap(
-    *,
-    existing_open_times: list[datetime],
-    interval_ms: int,
-    end_open_ms: int,
-    start_open_ms_bound: int | None,
-    ranges_builder: Callable[..., list[tuple[int, int]]],
-) -> list[tuple[int, int]]:
-    """Build missing ranges with optional head-gap extension from explicit start bound.
-
-    This applies one shared gap-planning policy across dataset fetchers: internal gaps,
-    tail gap to ``end_open_ms``, and optional head-gap when an earlier explicit start
-    boundary is configured.
-    """
-
-    missing_ranges = ranges_builder(
-        existing_open_times=existing_open_times,
-        interval_ms=interval_ms,
-        end_open_ms=end_open_ms,
-    )
-    earliest_existing_ms = int(min(existing_open_times).timestamp() * 1000)
-    if start_open_ms_bound is not None and start_open_ms_bound < earliest_existing_ms:
-        head_end_ms = min(earliest_existing_ms - interval_ms, end_open_ms)
-        if start_open_ms_bound <= head_end_ms:
-            missing_ranges.append((start_open_ms_bound, head_end_ms))
-    return missing_ranges
 
 
 def fetch_symbol_candles(
