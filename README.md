@@ -224,8 +224,6 @@ Current Bronze missing-day snapshot generated from `lake/bronze` on 2026-06-25 2
 | `perp_trades` | 3 | 2018-08-14 | 2026-06-11 | 5,739 | 2,095 | 3,644 | 63.50% |
 | `option_trades` | 3 | 2018-08-14 | 2026-06-25 | 5,754 | 5,579 | 175 | 3.04% |
 
-Per-series Bronze missing-day detail:
-
 | Dataset Type | Exchange | Instrument | Symbol | Timeframe | Start Date | End Date | Expected Days | Observed Days | Missing Days | Missing % |
 |---|---|---|---|---|---|---|---:|---:|---:|---:|
 | `funding` | deribit | perp | `BTC-PERPETUAL` | 8h | 2019-04-30 | 2026-06-24 | 2,613 | 2,613 | 0 | 0.00% |
