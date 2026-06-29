@@ -15,9 +15,11 @@ from application.dataset_contracts import (
     SILVER_OI_OBSERVED_COLUMNS,
     SILVER_TRADES_M1_FEATURE_COLUMNS,
     SILVER_TRADES_OBSERVED_COLUMNS,
-    SILVER_VOLATILITY_OBSERVED_COLUMNS,
 )
-from application.services import silver_trades
+from application.dataset_contracts import (
+    SILVER_VOLATILITY_OBSERVED_COLUMNS as SILVER_VOLATILITY_OBSERVED_COLUMNS,
+)
+from application.services import silver_trades, silver_volatility
 
 _build_trade_feature_frame = silver_trades.build_trade_feature_frame
 _build_trade_observed_frame = silver_trades.build_trade_observed_frame
@@ -1133,112 +1135,24 @@ def build_volatility_observed_for_symbol(
 ) -> SilverBuildReport:
     """Build monthly volatility-observed silver outputs from bronze volatility datasets."""
 
-    pl = _require_polars()
-    months = discover_months(
+    report = silver_volatility.build_volatility_observed_for_symbol(
         bronze_root=bronze_root,
-        market=bronze_dataset_type,
+        silver_root=silver_root,
         exchange=exchange,
         symbol=symbol,
         timeframe=timeframe,
-        instrument_type="perp",
+        bronze_dataset_type=bronze_dataset_type,
+        output_dataset_type=output_dataset_type,
+        dependencies=silver_volatility.VolatilityObservedDependencies(
+            require_polars=_require_polars,
+            discover_months=discover_months,
+            bronze_month_files=_bronze_month_files,
+            silver_month_path=_silver_month_path,
+            normalize_symbol_expr=_normalize_symbol_expr,
+            iso_utc=_iso_utc,
+            report_factory=SilverBuildReport,
+        ),
     )
-    agg_rows_in = 0
-    agg_rows_out = 0
-    agg_duplicates_removed = 0
-    agg_invalid_rows = 0
-    min_timestamp: datetime | None = None
-    max_timestamp: datetime | None = None
-
-    for month in months:
-        files = _bronze_month_files(
-            bronze_root=bronze_root,
-            market=bronze_dataset_type,
-            exchange=exchange,
-            symbol=symbol,
-            timeframe=timeframe,
-            month=month,
-            instrument_type="perp",
-        )
-        if not files:
-            continue
-        frame = pl.scan_parquet(files).collect()
-        rows_in = frame.height
-        if rows_in == 0:
-            continue
-
-        frame = frame.with_columns(
-            [
-                pl.col("open_time").cast(pl.Datetime(time_unit="us", time_zone="UTC")).alias("timestamp"),
-                pl.col("value").cast(pl.Float64).alias("volatility_value"),
-                _normalize_symbol_expr(pl, "symbol").alias("symbol"),
-                pl.col("exchange").cast(pl.Utf8).str.strip_chars().str.to_lowercase().alias("exchange"),
-                pl.col("instrument_type").cast(pl.Utf8).str.strip_chars().str.to_lowercase().alias("instrument_type"),
-                pl.col("dataset_type").cast(pl.Utf8).str.strip_chars().str.to_lowercase().alias("dataset_type"),
-                pl.col("source_endpoint").cast(pl.Utf8).alias("source_endpoint"),
-                pl.col("ingested_at").cast(pl.Datetime(time_unit="us", time_zone="UTC")).alias("ingested_at"),
-            ]
-        )
-
-        invalid_expr = (
-            pl.col("timestamp").is_null()
-            | pl.col("symbol").is_null()
-            | (pl.col("symbol").str.len_chars() == 0)
-            | pl.col("volatility_value").is_null()
-            | (~pl.col("volatility_value").is_finite())
-            | (pl.col("volatility_value") < 0.0)
-        )
-        invalid_rows = frame.select(invalid_expr.cast(pl.Int64).sum().alias("count")).item()
-        cleaned = frame.filter(~invalid_expr)
-        observed = (
-            cleaned.unique(
-                subset=["exchange", "symbol", "dataset_type", "timestamp"],
-                keep="last",
-                maintain_order=True,
-            )
-            .sort(["exchange", "symbol", "timestamp"])
-            .with_columns(pl.col("timestamp").alias("volatility_source_timestamp"))
-            .select(SILVER_VOLATILITY_OBSERVED_COLUMNS)
-        )
-        duplicates_removed = cleaned.height - observed.height
-
-        target = _silver_month_path(
-            silver_root=silver_root,
-            market=output_dataset_type,
-            exchange=exchange,
-            symbol=symbol,
-            timeframe=timeframe,
-            month=month,
-        )
-        target.parent.mkdir(parents=True, exist_ok=True)
-        observed.write_parquet(target)
-
-        month_min = observed.select(pl.col("timestamp").min()).item()
-        month_max = observed.select(pl.col("timestamp").max()).item()
-        if isinstance(month_min, datetime) and (min_timestamp is None or month_min < min_timestamp):
-            min_timestamp = month_min
-        if isinstance(month_max, datetime) and (max_timestamp is None or month_max > max_timestamp):
-            max_timestamp = month_max
-
-        agg_rows_in += rows_in
-        agg_rows_out += observed.height
-        agg_duplicates_removed += int(duplicates_removed)
-        agg_invalid_rows += int(invalid_rows)
-
-    return SilverBuildReport(
-        dataset=output_dataset_type,
-        exchange=exchange,
-        symbol=symbol,
-        timeframe=timeframe,
-        period_start=months[0] if months else None,
-        period_end=months[-1] if months else None,
-        months_processed=months,
-        rows_in=agg_rows_in,
-        rows_out=agg_rows_out,
-        duplicates_removed=agg_duplicates_removed,
-        invalid_ohlc_rows=agg_invalid_rows,
-        null_price_rows=0,
-        min_timestamp=_iso_utc(min_timestamp),
-        max_timestamp=_iso_utc(max_timestamp),
-        symbols=[symbol],
-        columns=SILVER_VOLATILITY_OBSERVED_COLUMNS,
-    )
+    if not isinstance(report, SilverBuildReport):
+        raise TypeError("volatility observed builder returned an unexpected report type")
+    return report
