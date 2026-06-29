@@ -8,7 +8,7 @@ The codebase is already split into `api`, `application`, and `ingestion`, but se
 
 | Area | Current signal | Refactoring risk |
 |---|---:|---|
-| `application/services/fetch_service.py` | 1,901 lines | Fetch planning, task execution, retries, and reporting remain coupled after trade-window helper extraction. |
+| `application/services/fetch_service.py` | 1,810 lines | Fetch execution, retries, and reporting remain coupled after trade-window and range-planning helper extraction. |
 | `application/services/silver_service.py` | 1,322 lines | Dataset-specific transformations share one large service surface; Silver sidecar writing is isolated in `application/services/silver_sidecars.py`. |
 | `ingestion/lake.py` | 693 lines | Bronze persistence remains after partition layout, sidecar, metadata query, and dataframe reader extraction. |
 | `api/commands/loader.py` | 1,081 lines | CLI orchestration and command behavior remain coupled after checkpoint key bookkeeping extraction. |
@@ -236,6 +236,9 @@ Exit criteria:
 - Trade-window planning, recoverable fetch-error classification, deterministic trade dedupe, bounded window fetches,
   and trade progress logging live in `application/services/fetch_trade_windows.py`; `fetch_service.py` keeps
   compatibility aliases for existing callers while retaining orchestration.
+- UTC day-window planning, deterministic missing-range ordering, and daily trade coverage-gap planning live in
+  `application/services/fetch_range_planning.py`; `fetch_service.py` keeps compatibility aliases for existing tests and
+  callers while retaining orchestration.
 - Existing CLI behavior remains backward compatible.
 
 ### Phase 4: Lake Adapter Split
