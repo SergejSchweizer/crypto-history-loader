@@ -6,7 +6,6 @@ import logging
 import multiprocessing as _mp
 from collections.abc import Callable
 from datetime import UTC, date, datetime
-from typing import TypeVar
 
 from application.dto import (
     CandleFetchResultDTO,
@@ -20,14 +19,16 @@ from application.dto import (
     VolatilityFetchResultDTO,
     VolatilityFetchTaskDTO,
 )
-from application.schema import dataset_contract
 from application.services import fetch_executors as _fetch_executors
+from application.services import fetch_funding_symbol as _funding_symbol
 from application.services import fetch_history_rows as _history_rows
 from application.services import fetch_ohlcv_symbol as _ohlcv_symbol
+from application.services import fetch_open_interest_symbol as _oi_symbol
 from application.services import fetch_range_planning as _range_planning
 from application.services import fetch_task_execution as _task_execution
 from application.services import fetch_trade_task_execution as _trade_task_execution
 from application.services import fetch_trade_windows as _trade_windows
+from application.services import fetch_volatility_symbol as _volatility_symbol
 from application.services.fetch_executors import elapsed_seconds
 from application.services.fetch_runtime_policy import heartbeat_seconds, task_timeout_seconds
 from application.services.fetch_task_callbacks import bind_task_chunk_callback
@@ -68,16 +69,12 @@ from ingestion.volatility import (
     volatility_interval_to_milliseconds,
 )
 
-OI_DATASET_TYPE = dataset_contract("oi").dataset_type
-TRow = TypeVar("TRow")
 logger = logging.getLogger(__name__)
 
 mp = _mp
 TRADE_BOUNDARY_TOLERANCE_MS = _range_planning.TRADE_BOUNDARY_TOLERANCE_MS
 _day_end_ms = _range_planning.day_end_ms
 _day_start_ms = _range_planning.day_start_ms
-_day_windows_in_random_order = _range_planning.day_windows_in_random_order
-_build_missing_ranges_with_optional_head_gap = _range_planning.build_missing_ranges_with_optional_head_gap
 _missing_trade_day_ranges = _range_planning.missing_trade_day_ranges
 _ranges_in_random_order = _range_planning.ranges_in_random_order
 _split_range_into_utc_days = _range_planning.split_range_into_utc_days
@@ -107,41 +104,6 @@ def _heartbeat_seconds() -> float:
     """Return heartbeat interval in seconds for long-running fetch tasks."""
 
     return heartbeat_seconds()
-
-
-def _fetch_bounded_daily_rows(
-    *,
-    start_open_ms_bound: int,
-    end_open_ms: int,
-    range_fetcher: Callable[..., list[TRow]],
-    fetch_kwargs: dict[str, object],
-    on_history_chunk: Callable[[list[TRow]], None] | None,
-) -> list[TRow]:
-    """Fetch inclusive bounded history in UTC-day windows with deterministic deduplication."""
-
-    return _history_rows.fetch_bounded_daily_rows_with_start_bound(
-        day_windows=_day_windows_in_random_order(start_open_ms_bound, end_open_ms),
-        range_fetcher=range_fetcher,
-        fetch_kwargs=fetch_kwargs,
-        on_history_chunk=on_history_chunk,
-    )
-
-
-def _fetch_bootstrap_history_rows(
-    *,
-    history_fetcher: Callable[..., list[TRow]],
-    fetch_kwargs: dict[str, object],
-    on_history_chunk: Callable[[list[TRow]], None] | None,
-    start_open_ms_bound: int | None,
-) -> list[TRow]:
-    """Run history bootstrap fetch, then apply deterministic bound-filtered deduplication."""
-
-    return _history_rows.fetch_bootstrap_history_rows_with_start_bound(
-        history_fetcher=history_fetcher,
-        fetch_kwargs=fetch_kwargs,
-        on_history_chunk=on_history_chunk,
-        start_open_ms_bound=start_open_ms_bound,
-    )
 
 
 def fetch_symbol_candles(
@@ -205,136 +167,25 @@ def fetch_symbol_open_interest(
 ) -> list[OpenInterestPoint]:
     """Fetch open-interest for one symbol with auto bootstrap/gap-fill behavior."""
 
-    if market != "perp":
-        return []
-
-    normalized_interval = timeframe_normalizer(exchange=exchange, value=timeframe)
-    storage_symbol = symbol_normalizer(exchange=exchange, symbol=symbol, market=market)
-    interval_ms = interval_ms_resolver(exchange=exchange, interval=normalized_interval)
-    end_open_ms = now_open_resolver(interval_ms=interval_ms)
-    if start_open_ms_bound is not None and end_open_ms < start_open_ms_bound:
-        return []
-
-    if tail_delta_only:
-        latest_reader = latest_open_time_reader
-        if latest_reader is None:
-            raise ValueError("latest_open_time_reader is required when tail_delta_only is enabled")
-        latest_open_time = latest_reader(
-            lake_root=lake_root,
-            dataset_type=OI_DATASET_TYPE,
-            market=market,
-            exchange=exchange,
-            symbol=storage_symbol,
-            timeframe=normalized_interval,
-        )
-        if latest_open_time is None:
-            if start_open_ms_bound is not None:
-                return _fetch_bounded_daily_rows(
-                    start_open_ms_bound=start_open_ms_bound,
-                    end_open_ms=end_open_ms,
-                    range_fetcher=range_fetcher,
-                    fetch_kwargs={
-                        "exchange": exchange,
-                        "symbol": symbol,
-                        "interval": normalized_interval,
-                        "market": market,
-                    },
-                    on_history_chunk=on_history_chunk,
-                )
-            return _fetch_bootstrap_history_rows(
-                history_fetcher=history_fetcher,
-                fetch_kwargs={
-                    "exchange": exchange,
-                    "symbol": symbol,
-                    "interval": normalized_interval,
-                    "market": market,
-                },
-                on_history_chunk=on_history_chunk,
-                start_open_ms_bound=start_open_ms_bound,
-            )
-        start_open_ms = int(latest_open_time.timestamp() * 1000) + interval_ms
-        if start_open_ms_bound is not None:
-            start_open_ms = max(start_open_ms, start_open_ms_bound)
-        if start_open_ms > end_open_ms:
-            return []
-        fetched_rows: list[OpenInterestPoint] = []
-        for day_start_ms, day_end_ms in _day_windows_in_random_order(start_open_ms, end_open_ms):
-            fetched_rows.extend(
-                range_fetcher(
-                    exchange=exchange,
-                    symbol=symbol,
-                    interval=normalized_interval,
-                    start_open_ms=day_start_ms,
-                    end_open_ms=day_end_ms,
-                    market=market,
-                )
-            )
-        unique_by_open_time = {item.open_time: item for item in fetched_rows}
-        return [unique_by_open_time[key] for key in sorted(unique_by_open_time)]
-
-    stored_open_times = open_times_reader(
-        lake_root=lake_root,
-        dataset_type=OI_DATASET_TYPE,
-        market=market,
+    return _oi_symbol.fetch_symbol_open_interest(
         exchange=exchange,
-        symbol=storage_symbol,
-        timeframe=normalized_interval,
-    )
-
-    if not stored_open_times:
-        if start_open_ms_bound is not None:
-            return _fetch_bounded_daily_rows(
-                start_open_ms_bound=start_open_ms_bound,
-                end_open_ms=end_open_ms,
-                range_fetcher=range_fetcher,
-                fetch_kwargs={
-                    "exchange": exchange,
-                    "symbol": symbol,
-                    "interval": normalized_interval,
-                    "market": market,
-                },
-                on_history_chunk=on_history_chunk,
-            )
-        return _fetch_bootstrap_history_rows(
-            history_fetcher=history_fetcher,
-            fetch_kwargs={
-                "exchange": exchange,
-                "symbol": symbol,
-                "interval": normalized_interval,
-                "market": market,
-            },
-            on_history_chunk=on_history_chunk,
-            start_open_ms_bound=start_open_ms_bound,
-        )
-    if end_open_ms < int(min(stored_open_times).timestamp() * 1000):
-        return []
-
-    missing_ranges = _build_missing_ranges_with_optional_head_gap(
-        existing_open_times=stored_open_times,
-        interval_ms=interval_ms,
-        end_open_ms=end_open_ms,
-        start_open_ms_bound=start_open_ms_bound,
+        market=market,
+        symbol=symbol,
+        timeframe=timeframe,
+        lake_root=lake_root,
+        open_times_reader=open_times_reader,
+        timeframe_normalizer=timeframe_normalizer,
+        symbol_normalizer=symbol_normalizer,
+        interval_ms_resolver=interval_ms_resolver,
+        now_open_resolver=now_open_resolver,
         ranges_builder=ranges_builder,
+        history_fetcher=history_fetcher,
+        range_fetcher=range_fetcher,
+        latest_open_time_reader=latest_open_time_reader,
+        tail_delta_only=tail_delta_only,
+        on_history_chunk=on_history_chunk,
+        start_open_ms_bound=start_open_ms_bound,
     )
-    if not missing_ranges:
-        return []
-
-    fetched: list[OpenInterestPoint] = []
-    for start_open_ms, gap_end_ms in _ranges_in_random_order(missing_ranges):
-        for day_start_ms, day_end_ms in _day_windows_in_random_order(start_open_ms, gap_end_ms):
-            fetched.extend(
-                range_fetcher(
-                    exchange=exchange,
-                    symbol=symbol,
-                    interval=normalized_interval,
-                    start_open_ms=day_start_ms,
-                    end_open_ms=day_end_ms,
-                    market=market,
-                )
-            )
-
-    unique_by_open_time = {item.open_time: item for item in fetched}
-    return [unique_by_open_time[key] for key in sorted(unique_by_open_time)]
 
 
 def fetch_symbol_funding(
@@ -358,133 +209,25 @@ def fetch_symbol_funding(
 ) -> list[FundingPoint]:
     """Fetch funding for one symbol with auto bootstrap/gap-fill behavior."""
 
-    if market != "perp":
-        return []
-
-    normalized_interval = timeframe_normalizer(exchange=exchange, value=timeframe)
-    storage_symbol = symbol_normalizer(exchange=exchange, symbol=symbol, market=market)
-    interval_ms = interval_ms_resolver(exchange=exchange, interval=normalized_interval)
-    end_open_ms = now_open_resolver(interval_ms=interval_ms)
-    if start_open_ms_bound is not None and end_open_ms < start_open_ms_bound:
-        return []
-
-    if tail_delta_only:
-        latest_reader = latest_open_time_reader
-        if latest_reader is None:
-            raise ValueError("latest_open_time_reader is required when tail_delta_only is enabled")
-        latest_open_time = latest_reader(
-            lake_root=lake_root,
-            dataset_type="funding",
-            market=market,
-            exchange=exchange,
-            symbol=storage_symbol,
-            timeframe=normalized_interval,
-        )
-        if latest_open_time is None:
-            if start_open_ms_bound is not None:
-                return _fetch_bounded_daily_rows(
-                    start_open_ms_bound=start_open_ms_bound,
-                    end_open_ms=end_open_ms,
-                    range_fetcher=range_fetcher,
-                    fetch_kwargs={
-                        "exchange": exchange,
-                        "symbol": symbol,
-                        "interval": normalized_interval,
-                        "market": market,
-                    },
-                    on_history_chunk=on_history_chunk,
-                )
-            return _fetch_bootstrap_history_rows(
-                history_fetcher=history_fetcher,
-                fetch_kwargs={
-                    "exchange": exchange,
-                    "symbol": symbol,
-                    "interval": normalized_interval,
-                    "market": market,
-                },
-                on_history_chunk=on_history_chunk,
-                start_open_ms_bound=start_open_ms_bound,
-            )
-        start_open_ms = int(latest_open_time.timestamp() * 1000) + interval_ms
-        if start_open_ms_bound is not None:
-            start_open_ms = max(start_open_ms, start_open_ms_bound)
-        if start_open_ms > end_open_ms:
-            return []
-        # Funding is naturally sparse (e.g. 8h on Deribit), so one ranged call is
-        # substantially faster than many day-sized calls that each re-page backend data.
-        fetched_rows = range_fetcher(
-            exchange=exchange,
-            symbol=symbol,
-            interval=normalized_interval,
-            start_open_ms=start_open_ms,
-            end_open_ms=end_open_ms,
-            market=market,
-        )
-        unique_by_open_time = {item.open_time: item for item in fetched_rows}
-        return [unique_by_open_time[key] for key in sorted(unique_by_open_time)]
-
-    stored_open_times = open_times_reader(
-        lake_root=lake_root,
-        dataset_type="funding",
-        market=market,
+    return _funding_symbol.fetch_symbol_funding(
         exchange=exchange,
-        symbol=storage_symbol,
-        timeframe=normalized_interval,
-    )
-
-    if not stored_open_times:
-        if start_open_ms_bound is not None:
-            return _fetch_bounded_daily_rows(
-                start_open_ms_bound=start_open_ms_bound,
-                end_open_ms=end_open_ms,
-                range_fetcher=range_fetcher,
-                fetch_kwargs={
-                    "exchange": exchange,
-                    "symbol": symbol,
-                    "interval": normalized_interval,
-                    "market": market,
-                },
-                on_history_chunk=on_history_chunk,
-            )
-        return _fetch_bootstrap_history_rows(
-            history_fetcher=history_fetcher,
-            fetch_kwargs={
-                "exchange": exchange,
-                "symbol": symbol,
-                "interval": normalized_interval,
-                "market": market,
-            },
-            on_history_chunk=on_history_chunk,
-            start_open_ms_bound=start_open_ms_bound,
-        )
-    if end_open_ms < int(min(stored_open_times).timestamp() * 1000):
-        return []
-
-    missing_ranges = _build_missing_ranges_with_optional_head_gap(
-        existing_open_times=stored_open_times,
-        interval_ms=interval_ms,
-        end_open_ms=end_open_ms,
-        start_open_ms_bound=start_open_ms_bound,
+        market=market,
+        symbol=symbol,
+        timeframe=timeframe,
+        lake_root=lake_root,
+        open_times_reader=open_times_reader,
+        timeframe_normalizer=timeframe_normalizer,
+        symbol_normalizer=symbol_normalizer,
+        interval_ms_resolver=interval_ms_resolver,
+        now_open_resolver=now_open_resolver,
         ranges_builder=ranges_builder,
+        history_fetcher=history_fetcher,
+        range_fetcher=range_fetcher,
+        latest_open_time_reader=latest_open_time_reader,
+        tail_delta_only=tail_delta_only,
+        on_history_chunk=on_history_chunk,
+        start_open_ms_bound=start_open_ms_bound,
     )
-    if not missing_ranges:
-        return []
-
-    fetched: list[FundingPoint] = []
-    for start_open_ms, gap_end_ms in _ranges_in_random_order(missing_ranges):
-        fetched.extend(
-            range_fetcher(
-                exchange=exchange,
-                symbol=symbol,
-                interval=normalized_interval,
-                start_open_ms=start_open_ms,
-                end_open_ms=gap_end_ms,
-                market=market,
-            )
-        )
-
-    unique_by_open_time = {item.open_time: item for item in fetched}
-    return [unique_by_open_time[key] for key in sorted(unique_by_open_time)]
 
 
 def fetch_symbol_trades(
@@ -873,129 +616,25 @@ def fetch_symbol_volatility(
 ) -> list[VolatilityPoint]:
     """Fetch one volatility dataset for one symbol with bootstrap/gap-fill behavior."""
 
-    if market != "perp":
-        return []
-
-    normalized_interval = timeframe_normalizer(exchange=exchange, value=timeframe)
-    interval_ms = interval_ms_resolver(exchange=exchange, interval=normalized_interval)
-    end_open_ms = now_open_resolver(interval_ms=interval_ms)
-    if start_open_ms_bound is not None and end_open_ms < start_open_ms_bound:
-        return []
-
-    if tail_delta_only:
-        latest_reader = latest_open_time_reader
-        if latest_reader is None:
-            raise ValueError("latest_open_time_reader is required when tail_delta_only is enabled")
-        latest_open_time = latest_reader(
-            lake_root=lake_root,
-            dataset_type=dataset_type,
-            market=market,
-            exchange=exchange,
-            symbol=symbol.upper(),
-            timeframe=normalized_interval,
-        )
-        if latest_open_time is None:
-            if start_open_ms_bound is not None:
-                return _fetch_bounded_daily_rows(
-                    start_open_ms_bound=start_open_ms_bound,
-                    end_open_ms=end_open_ms,
-                    range_fetcher=range_fetcher,
-                    fetch_kwargs={
-                        "exchange": exchange,
-                        "symbol": symbol,
-                        "interval": normalized_interval,
-                        "market": market,
-                    },
-                    on_history_chunk=on_history_chunk,
-                )
-            return _fetch_bootstrap_history_rows(
-                history_fetcher=history_fetcher,
-                fetch_kwargs={
-                    "exchange": exchange,
-                    "symbol": symbol,
-                    "interval": normalized_interval,
-                    "market": market,
-                },
-                on_history_chunk=on_history_chunk,
-                start_open_ms_bound=start_open_ms_bound,
-            )
-        start_open_ms = int(latest_open_time.timestamp() * 1000) + interval_ms
-        if start_open_ms_bound is not None:
-            start_open_ms = max(start_open_ms, start_open_ms_bound)
-        if start_open_ms > end_open_ms:
-            return []
-        fetched_rows = range_fetcher(
-            exchange=exchange,
-            symbol=symbol,
-            interval=normalized_interval,
-            start_open_ms=start_open_ms,
-            end_open_ms=end_open_ms,
-            market=market,
-        )
-        unique_by_open_time = {item.open_time: item for item in fetched_rows}
-        return [unique_by_open_time[key] for key in sorted(unique_by_open_time)]
-
-    stored_open_times = open_times_reader(
+    return _volatility_symbol.fetch_symbol_volatility(
+        exchange=exchange,
+        market=market,
+        symbol=symbol,
+        timeframe=timeframe,
         lake_root=lake_root,
         dataset_type=dataset_type,
-        market=market,
-        exchange=exchange,
-        symbol=symbol.upper(),
-        timeframe=normalized_interval,
-    )
-    if not stored_open_times:
-        if start_open_ms_bound is not None:
-            return _fetch_bounded_daily_rows(
-                start_open_ms_bound=start_open_ms_bound,
-                end_open_ms=end_open_ms,
-                range_fetcher=range_fetcher,
-                fetch_kwargs={
-                    "exchange": exchange,
-                    "symbol": symbol,
-                    "interval": normalized_interval,
-                    "market": market,
-                },
-                on_history_chunk=on_history_chunk,
-            )
-        return _fetch_bootstrap_history_rows(
-            history_fetcher=history_fetcher,
-            fetch_kwargs={
-                "exchange": exchange,
-                "symbol": symbol,
-                "interval": normalized_interval,
-                "market": market,
-            },
-            on_history_chunk=on_history_chunk,
-            start_open_ms_bound=start_open_ms_bound,
-        )
-    if end_open_ms < int(min(stored_open_times).timestamp() * 1000):
-        return []
-
-    missing_ranges = _build_missing_ranges_with_optional_head_gap(
-        existing_open_times=stored_open_times,
-        interval_ms=interval_ms,
-        end_open_ms=end_open_ms,
-        start_open_ms_bound=start_open_ms_bound,
+        open_times_reader=open_times_reader,
+        timeframe_normalizer=timeframe_normalizer,
+        interval_ms_resolver=interval_ms_resolver,
+        now_open_resolver=now_open_resolver,
         ranges_builder=ranges_builder,
+        history_fetcher=history_fetcher,
+        range_fetcher=range_fetcher,
+        latest_open_time_reader=latest_open_time_reader,
+        tail_delta_only=tail_delta_only,
+        on_history_chunk=on_history_chunk,
+        start_open_ms_bound=start_open_ms_bound,
     )
-    if not missing_ranges:
-        return []
-
-    fetched: list[VolatilityPoint] = []
-    for start_open_ms, gap_end_ms in _ranges_in_random_order(missing_ranges):
-        fetched.extend(
-            range_fetcher(
-                exchange=exchange,
-                symbol=symbol,
-                interval=normalized_interval,
-                start_open_ms=start_open_ms,
-                end_open_ms=gap_end_ms,
-                market=market,
-            )
-        )
-
-    unique_by_open_time = {item.open_time: item for item in fetched}
-    return [unique_by_open_time[key] for key in sorted(unique_by_open_time)]
 
 
 def fetch_candle_tasks_parallel(

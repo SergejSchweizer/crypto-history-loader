@@ -274,6 +274,8 @@ Exit criteria:
   `application/services/fetch_trade_task_execution.py`; `fetch_service.py` keeps the public compatibility entry point.
 - OHLCV symbol-level Bronze fetch planning now lives in `application/services/fetch_ohlcv_symbol.py`;
   `application/services/fetch_service.py` keeps the existing public compatibility entry point.
+- Open-interest, funding, and volatility symbol-level Bronze fetch planning now live in focused dataset modules;
+  `application/services/fetch_service.py` keeps the existing public compatibility entry points.
 - Bronze symbol-fetch dependency bundle construction now lives beside the symbol fetch adapters in
   `api/commands/loader_fetchers.py`; `api/commands/loader.py` keeps a compatibility factory that passes the current
   monkeypatchable module globals.
