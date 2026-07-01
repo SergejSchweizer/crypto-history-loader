@@ -8,22 +8,24 @@ The codebase is already split into `api`, `application`, and `ingestion`, but se
 
 | Area | Current signal | Refactoring risk |
 |---|---:|---|
-| `application/services/fetch_service.py` | 1,605 lines | Fetch planning, task execution, retries, and reporting remain coupled after trade-window, range-planning, timeout-runner, history-row helper, and task-callback extraction. |
+| `application/services/fetch_service.py` | 1,234 lines | Symbol-level fetch planning remains after trade-window, range-planning, timeout-runner, history-row helper, task-callback, and task-execution extraction. |
 | `application/services/silver_service.py` | 695 lines | Dataset-specific build orchestration remains shared after sidecar, trade-frame, volatility observed, OI, and funding extraction. |
-| `ingestion/lake.py` | 418 lines | Bronze save APIs remain after partition layout, read-helper, sidecar, metadata query, dataframe reader, and write-helper extraction. |
-| `api/commands/loader.py` | 975 lines | CLI orchestration still remains coupled to command behavior after checkpoint key, parser, symbol-fetch adapter, and output-helper extraction. |
-| `application/services/gold_service.py` | 766 lines | Frame loading, validation, joins, and output writing remain coupled after feature profiling and versioning extraction. |
-| `ingestion/feature_profile.py` | 416 lines | Shared feature metadata and plotting are isolated, but still adapter-heavy and need interface extraction. |
+| `ingestion/lake.py` | 52 lines | Compatibility facade remains after partition layout, read-helper, sidecar, metadata query, dataframe reader, record-helper, and Bronze write extraction. |
+| `api/commands/loader.py` | 976 lines | CLI orchestration still remains coupled to command behavior after checkpoint key, parser, symbol-fetch adapter, and output-helper extraction. |
+| `application/services/gold_service.py` | 482 lines | Gold artifact build orchestration and output writing remain after feature profiling, versioning, audit, and frame-helper extraction. |
+| `ingestion/feature_profile.py` | 359 lines | Shared feature metadata is isolated; this module now primarily owns plot rendering and compatibility exports. |
 
 Existing safety net:
 
-- 41 test modules exist under `tests/`.
-- Import-linter currently enforces four dependency contracts: `application -> api`, `ingestion -> api`,
-  `ingestion -> application`, and `ingestion.exchanges -> application` are forbidden.
+- 77 test modules exist under `tests/`.
+- Import-linter currently enforces forbidden dependency contracts for `application -> api`, `ingestion -> api`,
+  `ingestion -> application`, `ingestion.exchanges -> application`, and `api -> ingestion.lake*` persistence
+  internals, plus an acyclic root-package contract.
 - Repository tooling currently targets Python 3.11 and Pyright standard mode.
 - CI, pre-commit, `make check`, and `tests/test_quality_gate_contract.py` now assert the same core quality-gate
   sequence: Ruff lint/format, Mypy, Pyright, Ty, import-linter, config validation, and pytest.
-- Coverage enforcement is configured in `pyproject.toml` under `[tool.coverage.report]`.
+- Coverage enforcement is configured in `pyproject.toml` under `[tool.coverage.report]`; the current enforced minimum
+  is 85%, while the target policy remains 90%.
 - Fetch task timeout, heartbeat, and trade window sizing are now resolved through
   `application/services/fetch_runtime_policy.py`; durable `config.yaml` values for the main fetch/trade knobs are
   bounded by Pydantic validation.
@@ -198,6 +200,8 @@ Progress:
 
 - Architecture contracts now include an acyclic-sibling check for the root packages, in addition to the existing
   forbidden dependency directions.
+- Architecture contracts now forbid API modules from importing lake persistence internals directly; API command modules
+  must route persistence and lake queries through application-facing services.
 - Descriptive-statistics lake reads now route through `application/services/lake_query_service.py`, reducing direct
   API ownership of lake adapter imports.
 - Bronze loader lake readers and sidecar repair now route through application-facing lake query/maintenance services,
@@ -352,5 +356,7 @@ Progress:
 Exit criteria:
 
 - CI, pre-commit, `make check`, and repository tests enforce the same required gate list.
+- Coverage was measured at 87.19% with `uv run --extra dev pytest` on 2026-07-01; raising the enforced threshold to
+  90% currently requires additional targeted tests before the default gate can remain green.
 - Completion checklist is fully checked.
 - Full validation passes or any skipped gate has an explicit documented reason and follow-up.

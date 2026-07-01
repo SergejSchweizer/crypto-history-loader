@@ -36,6 +36,22 @@ source_modules =
 forbidden_modules =
     application
 
+[importlinter:contract:no_api_to_lake_persistence_internals]
+name = Forbid API depending on lake persistence internals
+type = forbidden
+source_modules =
+    api
+forbidden_modules =
+    ingestion.lake
+    ingestion.lake_bronze_writes
+    ingestion.lake_dataframe
+    ingestion.lake_queries
+    ingestion.lake_reads
+    ingestion.lake_records
+    ingestion.lake_sidecars
+    ingestion.lake_writes
+allow_indirect_imports = true
+
 [importlinter:contract:acyclic_root_packages]
 name = Keep root packages acyclic
 type = acyclic_siblings

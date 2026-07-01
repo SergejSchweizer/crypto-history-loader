@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import ast
 import configparser
 import subprocess
 import sys
@@ -37,15 +36,21 @@ def test_import_linter_includes_acyclic_root_package_contract() -> None:
 def test_api_does_not_import_lake_adapter_directly() -> None:
     """API modules should reach lake persistence through application-facing services."""
 
-    violations: list[str] = []
-    for path in sorted(Path("api").rglob("*.py")):
-        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-        for node in ast.walk(tree):
-            if isinstance(node, ast.ImportFrom) and node.module == "ingestion.lake":
-                violations.append(f"{path}:{node.lineno}")
-            if isinstance(node, ast.Import):
-                for alias in node.names:
-                    if alias.name == "ingestion.lake":
-                        violations.append(f"{path}:{node.lineno}")
+    config = configparser.ConfigParser()
+    config.read(".importlinter")
 
-    assert violations == []
+    section = "importlinter:contract:no_api_to_lake_persistence_internals"
+    assert section in config
+    assert config[section]["type"] == "forbidden"
+    assert config[section].getboolean("allow_indirect_imports") is True
+    assert set(config[section]["source_modules"].split()) == {"api"}
+    assert set(config[section]["forbidden_modules"].split()) == {
+        "ingestion.lake",
+        "ingestion.lake_bronze_writes",
+        "ingestion.lake_dataframe",
+        "ingestion.lake_queries",
+        "ingestion.lake_reads",
+        "ingestion.lake_records",
+        "ingestion.lake_sidecars",
+        "ingestion.lake_writes",
+    }
