@@ -11,7 +11,7 @@ The codebase is already split into `api`, `application`, and `ingestion`, but se
 | `application/services/fetch_service.py` | 449 lines | Compatibility facade remains after task execution, symbol-level fetch planning, and shared helper extraction. |
 | `application/services/silver_service.py` | 695 lines | Dataset-specific build orchestration remains shared after sidecar, trade-frame, volatility observed, OI, and funding extraction. |
 | `ingestion/lake.py` | 52 lines | Compatibility facade remains after partition layout, read-helper, sidecar, metadata query, dataframe reader, record-helper, and Bronze write extraction. |
-| `api/commands/loader.py` | 976 lines | CLI orchestration still remains coupled to command behavior after checkpoint key, parser, symbol-fetch adapter, and output-helper extraction. |
+| `api/commands/loader.py` | 555 lines | Command entry-point wiring remains after checkpoint key, parser, symbol-fetch adapter, output-helper, private compatibility-wrapper, and Bronze workflow extraction. |
 | `application/services/gold_service.py` | 482 lines | Gold artifact build orchestration and output writing remain after feature profiling, versioning, audit, and frame-helper extraction. |
 | `ingestion/feature_profile.py` | 359 lines | Shared feature metadata is isolated; this module now primarily owns plot rendering and compatibility exports. |
 
@@ -281,6 +281,10 @@ Exit criteria:
 - Bronze symbol-fetch dependency bundle construction now lives beside the symbol fetch adapters in
   `api/commands/loader_fetchers.py`; `api/commands/loader.py` keeps a compatibility factory that passes the current
   monkeypatchable module globals.
+- Stateless private compatibility wrappers for Bronze planning, checkpointing, and start-date parsing now live in
+  `api/commands/loader_compat.py`; `api/commands/loader.py` keeps the previous private names as aliases.
+- Bronze run workflow coordination now lives in `api/commands/loader_workflow.py`; `api/commands/loader.py` builds the
+  patchable dependency bundle and keeps the public command entry point.
 - Existing CLI behavior remains backward compatible.
 
 ### Phase 4: Lake Adapter Split

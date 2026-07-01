@@ -3,13 +3,11 @@
 from __future__ import annotations
 
 import argparse
-import json
 import logging
 from collections.abc import Callable
-from datetime import UTC, datetime, timedelta
-from pathlib import Path
 from typing import Any, cast
 
+from api.commands import loader_compat as _loader_compat
 from api.commands import loader_fetchers as _loader_fetchers
 from api.commands import loader_output_utils as _loader_output_utils
 from api.commands import loader_parser as _loader_parser
@@ -22,20 +20,10 @@ from api.commands.loader_dataset_handlers import (
 )
 from api.commands.loader_execution import fetch_all_task_groups as fetch_all_task_groups_execution
 from api.commands.loader_fetchers import BronzeSymbolFetchDependencies
-from api.commands.loader_output import BronzeRunState, IncrementalPersistor, finalize_bronze_output
-from api.commands.loader_planning import (
-    build_bronze_fetch_plan,
-    canonical_symbol_key,
-    parse_exchange_symbol_start_dates,
-    parse_start_date_to_open_ms,
-    parse_symbol_start_dates,
-    resolved_symbol_groups,
-    sanitize_symbols,
-)
+from api.commands.loader_workflow import BronzeWorkflowDependencies
+from api.commands.loader_workflow import run_bronze_build as _run_bronze_build_workflow
 from application.datasets import dataset_spec
 from application.dto import (
-    BronzeExecutionPolicyDTO,
-    BronzeFetchPlanDTO,
     CandleFetchTaskDTO,
     FundingFetchTaskDTO,
     OpenInterestFetchTaskDTO,
@@ -49,25 +37,9 @@ from application.services.bronze_reporting_service import (
 )
 from application.services.bronze_runtime_service import (
     BronzeRuntimeBoundsContext,
-    CheckpointDataset,
-    add_completed_checkpoint_key,
-    apply_checkpoint_filter_with_key_maps,
-    bronze_checkpoint_fingerprint,
-    bronze_checkpoint_key_maps,
-    bronze_checkpoint_path,
-    build_bronze_execution_policy,
     build_bronze_runtime_bounds_context,
-    checkpoint_task_keys,
-    dataset_task_key_maps,
-    has_checkpoint_state,
-    hydrate_checkpoint_aliases,
-    load_bronze_checkpoint,
     resolve_symbol_start_open_ms_bound,
-    task_key_tuple_to_string,
-    volatility_task_key_map,
-    write_bronze_checkpoint,
 )
-from application.services.fetch_runtime_policy import fetch_concurrency
 from application.services.fetch_service import (
     fetch_candle_tasks_parallel,
     fetch_funding_tasks_parallel,
@@ -135,123 +107,28 @@ _last_closed_open_ms = last_closed_open_ms
 _missing_ranges_ms = missing_ranges_ms
 _serialize_candle = _loader_output_utils.serialize_candle
 _sidecar_path_list = _loader_output_utils.sidecar_path_list
+_sanitize_symbols = _loader_compat.sanitize_symbols
+_resolved_symbol_groups = _loader_compat.resolved_symbol_groups
+_build_bronze_fetch_plan = _loader_compat.build_bronze_fetch_plan
+_build_bronze_execution_policy = _loader_compat.build_bronze_execution_policy
+_task_key_tuple_to_string = _loader_compat.task_key_tuple_to_string
+_volatility_task_key_map = _loader_compat.volatility_task_key_map
+_dataset_task_key_maps = _loader_compat.dataset_task_key_maps
+_hydrate_checkpoint_aliases = _loader_compat.hydrate_checkpoint_aliases
+_bronze_checkpoint_fingerprint = _loader_compat.bronze_checkpoint_fingerprint
+_bronze_checkpoint_path = _loader_compat.bronze_checkpoint_path
+_load_bronze_checkpoint = _loader_compat.load_bronze_checkpoint
+_write_bronze_checkpoint = _loader_compat.write_bronze_checkpoint
+_parse_start_date_to_open_ms = _loader_compat.parse_start_date_to_open_ms
+_canonical_symbol_key = _loader_compat.canonical_symbol_key
+_parse_symbol_start_dates = _loader_compat.parse_symbol_start_dates
+_parse_exchange_symbol_start_dates = _loader_compat.parse_exchange_symbol_start_dates
 
 
 def _current_runtime_bounds_context() -> BronzeRuntimeBoundsContext:
     """Return effective runtime bounds context with global fallback support."""
 
     return _RUNTIME_BOUNDS_CONTEXT
-
-
-def _sanitize_symbols(raw_symbols: object, logger: logging.Logger) -> list[str]:  # pyright: ignore[reportUnusedFunction]
-    """Return validated symbol list, dropping null/blank/non-string entries."""
-
-    return sanitize_symbols(raw_symbols=raw_symbols, logger=logger)
-
-
-def _resolved_symbol_groups(  # pyright: ignore[reportUnusedFunction]
-    args: argparse.Namespace, logger: logging.Logger
-) -> tuple[list[str], list[str], list[str]]:
-    """Return deterministically ordered symbol groups for Bronze task planning."""
-
-    return resolved_symbol_groups(args=args, logger=logger)
-
-
-def _build_bronze_fetch_plan(args: argparse.Namespace, logger: logging.Logger) -> BronzeFetchPlanDTO:
-    """Build deterministic Bronze task plan shared across all dataset fetchers."""
-
-    return build_bronze_fetch_plan(args=args, logger=logger)
-
-
-def _build_bronze_execution_policy() -> BronzeExecutionPolicyDTO:
-    """Build standardized Bronze execution policy."""
-
-    return build_bronze_execution_policy(configured_concurrency=fetch_concurrency())
-
-
-def _task_key_tuple_to_string(parts: tuple[object, ...]) -> str:
-    """Serialize tuple task key to stable checkpoint string."""
-
-    return task_key_tuple_to_string(parts)
-
-
-def _volatility_task_key_map(plan: BronzeFetchPlanDTO) -> dict[tuple[Exchange, str, str], str]:
-    """Return tuple->checkpoint-key mapping for volatility dataset tasks."""
-
-    return volatility_task_key_map(plan)
-
-
-def _dataset_task_key_maps(
-    plan: BronzeFetchPlanDTO,
-) -> tuple[
-    dict[tuple[Exchange, Market, str, str], str],
-    dict[tuple[Exchange, str, str], str],
-    dict[tuple[Exchange, str, str], str],
-    dict[tuple[Exchange, TradeMarket, str], str],
-]:
-    """Return tuple->checkpoint-key mappings derived from registry dataset tasks."""
-
-    return dataset_task_key_maps(plan)
-
-
-def _hydrate_checkpoint_aliases(
-    *,
-    completed: dict[str, set[str]],
-    candle_tasks: list[tuple[Exchange, Market, str, str]],
-    oi_tasks: list[tuple[Exchange, str, str]],
-    funding_tasks: list[tuple[Exchange, str, str]],
-    volatility_index_data_tasks: list[tuple[Exchange, str, str]],
-    trade_tasks: list[tuple[Exchange, TradeMarket, str]],
-    candle_key_map: dict[tuple[Exchange, Market, str, str], str],
-    oi_key_map: dict[tuple[Exchange, str, str], str],
-    funding_key_map: dict[tuple[Exchange, str, str], str],
-    volatility_key_map: dict[tuple[Exchange, str, str], str],
-    trade_key_map: dict[tuple[Exchange, TradeMarket, str], str],
-) -> None:
-    """Augment completed checkpoint keys with registry aliases for backward compatibility."""
-
-    hydrate_checkpoint_aliases(
-        completed=completed,
-        candle_tasks=candle_tasks,
-        oi_tasks=oi_tasks,
-        funding_tasks=funding_tasks,
-        volatility_index_data_tasks=volatility_index_data_tasks,
-        trade_tasks=trade_tasks,
-        candle_key_map=candle_key_map,
-        oi_key_map=oi_key_map,
-        funding_key_map=funding_key_map,
-        volatility_key_map=volatility_key_map,
-        trade_key_map=trade_key_map,
-    )
-
-
-def _bronze_checkpoint_fingerprint(args: argparse.Namespace, plan: BronzeFetchPlanDTO) -> str:
-    """Build stable fingerprint for one Bronze invocation plan."""
-
-    return bronze_checkpoint_fingerprint(args=args, plan=plan)
-
-
-def _bronze_checkpoint_path() -> Path:
-    """Return Bronze restart-checkpoint path."""
-
-    return bronze_checkpoint_path()
-
-
-def _load_bronze_checkpoint(path: Path, fingerprint: str, logger: logging.Logger) -> dict[str, set[str]]:
-    """Load matching Bronze checkpoint completed-task sets."""
-
-    return load_bronze_checkpoint(path=path, fingerprint=fingerprint, logger=logger)
-
-
-def _write_bronze_checkpoint(
-    path: Path,
-    *,
-    fingerprint: str,
-    completed: dict[str, set[str]],
-) -> None:
-    """Persist Bronze checkpoint atomically."""
-
-    write_bronze_checkpoint(path, fingerprint=fingerprint, completed=completed)
 
 
 def add_bronze_build_parser(subparsers: Any) -> None:
@@ -401,32 +278,6 @@ def _symbol_start_open_ms_bound(exchange: Exchange, symbol: str) -> int | None:
         symbol=symbol,
         context=_current_runtime_bounds_context(),
     )
-
-
-def _parse_start_date_to_open_ms(start_date: str | None) -> int | None:  # pyright: ignore[reportUnusedFunction]
-    """Parse inclusive UTC start date ``YYYY-MM-DD`` to epoch milliseconds."""
-
-    return parse_start_date_to_open_ms(start_date=start_date)
-
-
-def _canonical_symbol_key(symbol: str) -> str:  # pyright: ignore[reportUnusedFunction]
-    """Return canonical base symbol key for per-symbol start-date matching."""
-
-    return canonical_symbol_key(symbol=symbol)
-
-
-def _parse_symbol_start_dates(entries: list[str] | None) -> dict[str, int]:  # pyright: ignore[reportUnusedFunction]
-    """Parse ``SYMBOL=YYYY-MM-DD`` entries into canonical symbol->epoch-ms map."""
-
-    return parse_symbol_start_dates(entries=entries)
-
-
-def _parse_exchange_symbol_start_dates(  # pyright: ignore[reportUnusedFunction]
-    entries: list[str] | None,
-) -> dict[str, int]:
-    """Parse ``EXCHANGE:SYMBOL=YYYY-MM-DD`` entries into canonical exchange:symbol->epoch-ms map."""
-
-    return parse_exchange_symbol_start_dates(entries=entries)
 
 
 def _configure_bronze_start_bounds(args: argparse.Namespace, logger: logging.Logger) -> None:
@@ -669,308 +520,36 @@ def _fetch_all_task_groups(
 def run_bronze_build(args: argparse.Namespace, logger: logging.Logger) -> None:
     """Run bronze-build command."""
 
-    _configure_bronze_start_bounds(args=args, logger=logger)
-    if _current_runtime_bounds_context().tail_delta_only:
-        rolling_bound = datetime.now(UTC) - timedelta(days=30)
-        logger.info(
-            "Bronze default tail-mode cap enabled max_missing_window_days=30 rolling_start_utc=%s",
-            rolling_bound.strftime("%Y-%m-%dT%H:%M:%SZ"),
-        )
+    _run_bronze_build_workflow(args=args, logger=logger, dependencies=_bronze_workflow_dependencies())
 
-    try:
-        with SingleInstanceLock(".run/crypto-history-loader.lock"):
-            plan = _build_bronze_fetch_plan(args=args, logger=logger)
-            ohlcv_markets = plan.ohlcv_markets
-            data_types = plan.data_types
-            oi_requested = "oi" in data_types
-            funding_requested = "funding" in data_types
-            volatility_index_data_requested = "volatility_index_data" in data_types
-            perp_trades_requested = "perp_trades" in data_types
-            option_trades_requested = "option_trades" in data_types
-            multi_market = len(data_types) > 1
-            state = BronzeRunState.from_plan(plan)
-            logger.info(
-                "Deterministic schedule markets=%s symbols=%s perp_trade_symbols=%s option_trade_symbols=%s",
-                data_types,
-                plan.symbols,
-                plan.perp_trade_symbols,
-                plan.option_trade_symbols,
-            )
-            key_maps = bronze_checkpoint_key_maps(plan)
-            candle_key_map = key_maps.candle
-            oi_key_map = key_maps.oi
-            funding_key_map = key_maps.funding
-            volatility_key_map = key_maps.volatility_index_data
-            trade_key_map = key_maps.trade
-            checkpoint_path = _bronze_checkpoint_path()
-            checkpoint_enabled = bool(args.save_parquet_lake) or checkpoint_path.exists()
-            checkpoint_fingerprint = _bronze_checkpoint_fingerprint(args=args, plan=plan)
-            checkpoint_completed = (
-                _load_bronze_checkpoint(
-                    path=checkpoint_path,
-                    fingerprint=checkpoint_fingerprint,
-                    logger=logger,
-                )
-                if checkpoint_enabled
-                else {"candle": set(), "oi": set(), "funding": set(), "volatility_index_data": set(), "trade": set()}
-            )
-            _hydrate_checkpoint_aliases(
-                completed=checkpoint_completed,
-                candle_tasks=state.candle_tasks,
-                oi_tasks=state.oi_tasks,
-                funding_tasks=state.funding_tasks,
-                volatility_index_data_tasks=state.volatility_index_data_tasks,
-                trade_tasks=state.trade_tasks,
-                candle_key_map=candle_key_map,
-                oi_key_map=oi_key_map,
-                funding_key_map=funding_key_map,
-                volatility_key_map=volatility_key_map,
-                trade_key_map=trade_key_map,
-            )
 
-            pending_tasks = apply_checkpoint_filter_with_key_maps(
-                candle_tasks=state.candle_tasks,
-                oi_tasks=state.oi_tasks,
-                funding_tasks=state.funding_tasks,
-                volatility_index_data_tasks=state.volatility_index_data_tasks,
-                trade_tasks=state.trade_tasks,
-                completed=checkpoint_completed,
-                key_maps=key_maps,
-            )
-            state.candle_tasks = pending_tasks.candle_tasks
-            state.oi_tasks = pending_tasks.oi_tasks
-            state.funding_tasks = pending_tasks.funding_tasks
-            state.volatility_index_data_tasks = pending_tasks.volatility_index_data_tasks
-            state.trade_tasks = pending_tasks.trade_tasks
-            if has_checkpoint_state(checkpoint_completed):
-                logger.info(
-                    (
-                        "Resuming from Bronze checkpoint '%s' pending_tasks "
-                        "candle=%s oi=%s funding=%s volatility_index_data=%s trade=%s"
-                    ),
-                    checkpoint_path,
-                    len(state.candle_tasks),
-                    len(state.oi_tasks),
-                    len(state.funding_tasks),
-                    len(state.volatility_index_data_tasks),
-                    len(state.trade_tasks),
-                )
+def _bronze_workflow_dependencies() -> BronzeWorkflowDependencies:
+    """Build workflow dependencies from current loader module globals."""
 
-            policy = _build_bronze_execution_policy()
-            candle_concurrency = policy.candle_concurrency
-            oi_concurrency = policy.oi_concurrency
-            funding_concurrency = policy.funding_concurrency
-            volatility_concurrency = policy.funding_concurrency
-            trade_concurrency = policy.trade_concurrency
-            incremental_parquet_on_fetch = bool(args.save_parquet_lake)
-            logger.info(
-                (
-                    "Fetch mode enabled for spot/perp, oi, funding, volatility_index_data, and trades "
-                    "with concurrency=%s (configured=%s)"
-                ),
-                policy.effective_concurrency,
-                policy.configured_concurrency,
-            )
-            if incremental_parquet_on_fetch:
-                logger.info("Incremental parquet flush enabled during fetch execution")
-
-            def _mark_checkpoint_complete(dataset: str, key: tuple[object, ...]) -> None:
-                add_completed_checkpoint_key(
-                    completed=checkpoint_completed,
-                    dataset=cast(CheckpointDataset, dataset),
-                    key=key,
-                    key_maps=key_maps,
-                )
-                if checkpoint_enabled:
-                    _write_bronze_checkpoint(
-                        checkpoint_path,
-                        fingerprint=checkpoint_fingerprint,
-                        completed=checkpoint_completed,
-                    )
-
-            incremental_persistor = IncrementalPersistor(
-                lake_root=cast(str, args.lake_root),
-                mark_checkpoint_complete=_mark_checkpoint_complete,
-                persist_fn=persist_loader_outputs_dto,
-            )
-
-            fetch_results = cast(
-                Any,
-                _fetch_all_task_groups(
-                    candle_tasks=state.candle_tasks,
-                    oi_tasks=state.oi_tasks,
-                    funding_tasks=state.funding_tasks,
-                    volatility_index_data_tasks=state.volatility_index_data_tasks,
-                    trade_tasks=state.trade_tasks,
-                    lake_root=cast(str, args.lake_root),
-                    candle_concurrency=candle_concurrency,
-                    oi_concurrency=oi_concurrency,
-                    funding_concurrency=funding_concurrency,
-                    volatility_concurrency=volatility_concurrency,
-                    trade_concurrency=trade_concurrency,
-                    logger=logger,
-                    on_candle_task_complete=(
-                        lambda task, rows: incremental_persistor.on_candle_task_complete(task, rows, logger)
-                    )
-                    if incremental_parquet_on_fetch
-                    else None,
-                    on_oi_task_complete=(
-                        lambda task, rows: incremental_persistor.on_oi_task_complete(task, rows, logger)
-                    )
-                    if incremental_parquet_on_fetch
-                    else None,
-                    on_funding_task_complete=(
-                        lambda task, rows: incremental_persistor.on_funding_task_complete(task, rows, logger)
-                    )
-                    if incremental_parquet_on_fetch
-                    else None,
-                    on_candle_task_chunk=(
-                        lambda task, rows: incremental_persistor.on_candle_task_chunk(task, rows, logger)
-                    )
-                    if incremental_parquet_on_fetch
-                    else None,
-                    on_oi_task_chunk=(lambda task, rows: incremental_persistor.on_oi_task_chunk(task, rows, logger))
-                    if incremental_parquet_on_fetch
-                    else None,
-                    on_funding_task_chunk=(
-                        lambda task, rows: incremental_persistor.on_funding_task_chunk(task, rows, logger)
-                    )
-                    if incremental_parquet_on_fetch
-                    else None,
-                    on_volatility_index_data_task_chunk=(
-                        lambda task, rows: incremental_persistor.on_volatility_index_data_task_chunk(task, rows, logger)
-                    )
-                    if incremental_parquet_on_fetch
-                    else None,
-                    on_trade_task_complete=(
-                        lambda task, rows: incremental_persistor.on_trade_task_complete(task, rows, logger)
-                    )
-                    if incremental_parquet_on_fetch
-                    else None,
-                    on_trade_task_chunk=(
-                        lambda task, rows: incremental_persistor.on_trade_task_chunk(task, rows, logger)
-                    )
-                    if incremental_parquet_on_fetch
-                    else None,
-                ),
-            )
-            if len(fetch_results) == 8:
-                (
-                    task_results,
-                    task_errors,
-                    oi_results,
-                    oi_errors,
-                    funding_results,
-                    funding_errors,
-                    trade_results,
-                    trade_errors,
-                ) = fetch_results
-                volatility_index_data_results = {}
-                volatility_index_data_errors = {}
-            else:
-                (
-                    task_results,
-                    task_errors,
-                    oi_results,
-                    oi_errors,
-                    funding_results,
-                    funding_errors,
-                    volatility_index_data_results,
-                    volatility_index_data_errors,
-                    trade_results,
-                    trade_errors,
-                ) = fetch_results
-            for key in task_results:
-                _mark_checkpoint_complete("candle", key)
-            for oi_key in oi_results:
-                _mark_checkpoint_complete("oi", oi_key)
-            for funding_key in funding_results:
-                _mark_checkpoint_complete("funding", funding_key)
-            for volatility_key in volatility_index_data_results:
-                _mark_checkpoint_complete("volatility_index_data", volatility_key)
-            for trade_key in trade_results:
-                _mark_checkpoint_complete("trade", trade_key)
-            pending_task_keys = checkpoint_task_keys(
-                candle_tasks=state.candle_tasks,
-                oi_tasks=state.oi_tasks,
-                funding_tasks=state.funding_tasks,
-                volatility_index_data_tasks=state.volatility_index_data_tasks,
-                trade_tasks=state.trade_tasks,
-                key_maps=key_maps,
-            )
-            success_task_keys = checkpoint_task_keys(
-                candle_tasks=task_results,
-                oi_tasks=oi_results,
-                funding_tasks=funding_results,
-                volatility_index_data_tasks=volatility_index_data_results,
-                trade_tasks=trade_results,
-                key_maps=key_maps,
-            )
-            fairness_rows = symbol_progress_rows_from_dataset_tasks(
-                dataset_tasks=[task for task in plan.dataset_tasks if task.checkpoint_key() in pending_task_keys],
-                success_keys=success_task_keys,
-            )
-            finalize_bronze_output(
-                logger=logger,
-                output=state.output,
-                tasks=state.candle_tasks,
-                oi_tasks=state.oi_tasks,
-                funding_tasks=state.funding_tasks,
-                volatility_index_data_tasks=state.volatility_index_data_tasks,
-                trade_tasks=state.trade_tasks,
-                task_results=task_results,
-                task_errors=task_errors,
-                oi_results=oi_results,
-                oi_errors=oi_errors,
-                funding_results=funding_results,
-                funding_errors=funding_errors,
-                volatility_index_data_results=volatility_index_data_results,
-                volatility_index_data_errors=volatility_index_data_errors,
-                trade_results=trade_results,
-                trade_errors=trade_errors,
-                multi_market=multi_market,
-                oi_requested=oi_requested,
-                funding_requested=funding_requested,
-                volatility_index_data_requested=volatility_index_data_requested,
-                perp_trades_requested=perp_trades_requested,
-                option_trades_requested=option_trades_requested,
-                candles_for_storage=state.candles_for_storage,
-                open_interest_for_storage=state.open_interest_for_storage,
-                funding_for_storage=state.funding_for_storage,
-                volatility_index_data_for_storage=state.volatility_index_data_for_storage,
-                trades_for_storage=state.trades_for_storage,
-                ohlcv_markets=ohlcv_markets,
-                args=cast(Any, args),
-                incremental_parquet_on_fetch=incremental_parquet_on_fetch,
-                incremental_parquet_files=incremental_persistor.incremental_parquet_files,
-                oi_dataset_type=OI_DATASET_TYPE,
-                sidecar_path_list_fn=_sidecar_path_list,
-                ensure_bronze_sidecars_fn=ensure_bronze_sidecars,
-                populate_ohlcv_output_fn=populate_ohlcv_output,
-                populate_oi_output_fn=populate_oi_output,
-                populate_funding_output_fn=populate_funding_output,
-                populate_volatility_output_fn=populate_volatility_output,
-                populate_trades_output_fn=populate_trades_output,
-                symbol_progress_rows_fn=symbol_progress_rows,
-                fairness_rows=fairness_rows,
-                trade_error_breakdown_fn=trade_error_breakdown,
-                candle_serializer=_serialize_candle,
-                persist_fn=persist_loader_outputs_dto,
-            )
-
-            if not args.no_json_output:
-                print(json.dumps(state.output, indent=2))
-            if checkpoint_enabled and not (
-                task_errors or oi_errors or funding_errors or volatility_index_data_errors or trade_errors
-            ):
-                checkpoint_path.unlink(missing_ok=True)
-                logger.info("Cleared Bronze checkpoint '%s' after successful run", checkpoint_path)
-            elif checkpoint_enabled:
-                logger.warning(
-                    "Retaining Bronze checkpoint '%s' for resume; failures remain",
-                    checkpoint_path,
-                )
-            logger.info("Command complete: bronze-build")
-    except SingleInstanceError as exc:
-        logger.warning("Single-instance lock active")
-        raise SystemExit(str(exc)) from exc
+    return BronzeWorkflowDependencies(
+        configure_bronze_start_bounds=_configure_bronze_start_bounds,
+        current_runtime_bounds_context=_current_runtime_bounds_context,
+        single_instance_lock=SingleInstanceLock,
+        single_instance_error=SingleInstanceError,
+        build_bronze_fetch_plan=_build_bronze_fetch_plan,
+        build_bronze_execution_policy=_build_bronze_execution_policy,
+        bronze_checkpoint_path=_bronze_checkpoint_path,
+        bronze_checkpoint_fingerprint=_bronze_checkpoint_fingerprint,
+        load_bronze_checkpoint=_load_bronze_checkpoint,
+        hydrate_checkpoint_aliases=_hydrate_checkpoint_aliases,
+        write_bronze_checkpoint=_write_bronze_checkpoint,
+        fetch_all_task_groups=_fetch_all_task_groups,
+        persist_loader_outputs=persist_loader_outputs_dto,
+        sidecar_path_list=_sidecar_path_list,
+        ensure_bronze_sidecars=ensure_bronze_sidecars,
+        populate_ohlcv_output=populate_ohlcv_output,
+        populate_oi_output=populate_oi_output,
+        populate_funding_output=populate_funding_output,
+        populate_volatility_output=populate_volatility_output,
+        populate_trades_output=populate_trades_output,
+        symbol_progress_rows=symbol_progress_rows,
+        symbol_progress_rows_from_dataset_tasks=symbol_progress_rows_from_dataset_tasks,
+        trade_error_breakdown=trade_error_breakdown,
+        candle_serializer=_serialize_candle,
+        oi_dataset_type=OI_DATASET_TYPE,
+    )
