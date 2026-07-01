@@ -7,9 +7,9 @@ import json
 import logging
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 from typing import Any, cast
 
+from api.commands import loader_compat as _loader_compat
 from api.commands import loader_fetchers as _loader_fetchers
 from api.commands import loader_output_utils as _loader_output_utils
 from api.commands import loader_parser as _loader_parser
@@ -23,19 +23,8 @@ from api.commands.loader_dataset_handlers import (
 from api.commands.loader_execution import fetch_all_task_groups as fetch_all_task_groups_execution
 from api.commands.loader_fetchers import BronzeSymbolFetchDependencies
 from api.commands.loader_output import BronzeRunState, IncrementalPersistor, finalize_bronze_output
-from api.commands.loader_planning import (
-    build_bronze_fetch_plan,
-    canonical_symbol_key,
-    parse_exchange_symbol_start_dates,
-    parse_start_date_to_open_ms,
-    parse_symbol_start_dates,
-    resolved_symbol_groups,
-    sanitize_symbols,
-)
 from application.datasets import dataset_spec
 from application.dto import (
-    BronzeExecutionPolicyDTO,
-    BronzeFetchPlanDTO,
     CandleFetchTaskDTO,
     FundingFetchTaskDTO,
     OpenInterestFetchTaskDTO,
@@ -52,22 +41,12 @@ from application.services.bronze_runtime_service import (
     CheckpointDataset,
     add_completed_checkpoint_key,
     apply_checkpoint_filter_with_key_maps,
-    bronze_checkpoint_fingerprint,
     bronze_checkpoint_key_maps,
-    bronze_checkpoint_path,
-    build_bronze_execution_policy,
     build_bronze_runtime_bounds_context,
     checkpoint_task_keys,
-    dataset_task_key_maps,
     has_checkpoint_state,
-    hydrate_checkpoint_aliases,
-    load_bronze_checkpoint,
     resolve_symbol_start_open_ms_bound,
-    task_key_tuple_to_string,
-    volatility_task_key_map,
-    write_bronze_checkpoint,
 )
-from application.services.fetch_runtime_policy import fetch_concurrency
 from application.services.fetch_service import (
     fetch_candle_tasks_parallel,
     fetch_funding_tasks_parallel,
@@ -135,123 +114,28 @@ _last_closed_open_ms = last_closed_open_ms
 _missing_ranges_ms = missing_ranges_ms
 _serialize_candle = _loader_output_utils.serialize_candle
 _sidecar_path_list = _loader_output_utils.sidecar_path_list
+_sanitize_symbols = _loader_compat.sanitize_symbols
+_resolved_symbol_groups = _loader_compat.resolved_symbol_groups
+_build_bronze_fetch_plan = _loader_compat.build_bronze_fetch_plan
+_build_bronze_execution_policy = _loader_compat.build_bronze_execution_policy
+_task_key_tuple_to_string = _loader_compat.task_key_tuple_to_string
+_volatility_task_key_map = _loader_compat.volatility_task_key_map
+_dataset_task_key_maps = _loader_compat.dataset_task_key_maps
+_hydrate_checkpoint_aliases = _loader_compat.hydrate_checkpoint_aliases
+_bronze_checkpoint_fingerprint = _loader_compat.bronze_checkpoint_fingerprint
+_bronze_checkpoint_path = _loader_compat.bronze_checkpoint_path
+_load_bronze_checkpoint = _loader_compat.load_bronze_checkpoint
+_write_bronze_checkpoint = _loader_compat.write_bronze_checkpoint
+_parse_start_date_to_open_ms = _loader_compat.parse_start_date_to_open_ms
+_canonical_symbol_key = _loader_compat.canonical_symbol_key
+_parse_symbol_start_dates = _loader_compat.parse_symbol_start_dates
+_parse_exchange_symbol_start_dates = _loader_compat.parse_exchange_symbol_start_dates
 
 
 def _current_runtime_bounds_context() -> BronzeRuntimeBoundsContext:
     """Return effective runtime bounds context with global fallback support."""
 
     return _RUNTIME_BOUNDS_CONTEXT
-
-
-def _sanitize_symbols(raw_symbols: object, logger: logging.Logger) -> list[str]:  # pyright: ignore[reportUnusedFunction]
-    """Return validated symbol list, dropping null/blank/non-string entries."""
-
-    return sanitize_symbols(raw_symbols=raw_symbols, logger=logger)
-
-
-def _resolved_symbol_groups(  # pyright: ignore[reportUnusedFunction]
-    args: argparse.Namespace, logger: logging.Logger
-) -> tuple[list[str], list[str], list[str]]:
-    """Return deterministically ordered symbol groups for Bronze task planning."""
-
-    return resolved_symbol_groups(args=args, logger=logger)
-
-
-def _build_bronze_fetch_plan(args: argparse.Namespace, logger: logging.Logger) -> BronzeFetchPlanDTO:
-    """Build deterministic Bronze task plan shared across all dataset fetchers."""
-
-    return build_bronze_fetch_plan(args=args, logger=logger)
-
-
-def _build_bronze_execution_policy() -> BronzeExecutionPolicyDTO:
-    """Build standardized Bronze execution policy."""
-
-    return build_bronze_execution_policy(configured_concurrency=fetch_concurrency())
-
-
-def _task_key_tuple_to_string(parts: tuple[object, ...]) -> str:
-    """Serialize tuple task key to stable checkpoint string."""
-
-    return task_key_tuple_to_string(parts)
-
-
-def _volatility_task_key_map(plan: BronzeFetchPlanDTO) -> dict[tuple[Exchange, str, str], str]:
-    """Return tuple->checkpoint-key mapping for volatility dataset tasks."""
-
-    return volatility_task_key_map(plan)
-
-
-def _dataset_task_key_maps(
-    plan: BronzeFetchPlanDTO,
-) -> tuple[
-    dict[tuple[Exchange, Market, str, str], str],
-    dict[tuple[Exchange, str, str], str],
-    dict[tuple[Exchange, str, str], str],
-    dict[tuple[Exchange, TradeMarket, str], str],
-]:
-    """Return tuple->checkpoint-key mappings derived from registry dataset tasks."""
-
-    return dataset_task_key_maps(plan)
-
-
-def _hydrate_checkpoint_aliases(
-    *,
-    completed: dict[str, set[str]],
-    candle_tasks: list[tuple[Exchange, Market, str, str]],
-    oi_tasks: list[tuple[Exchange, str, str]],
-    funding_tasks: list[tuple[Exchange, str, str]],
-    volatility_index_data_tasks: list[tuple[Exchange, str, str]],
-    trade_tasks: list[tuple[Exchange, TradeMarket, str]],
-    candle_key_map: dict[tuple[Exchange, Market, str, str], str],
-    oi_key_map: dict[tuple[Exchange, str, str], str],
-    funding_key_map: dict[tuple[Exchange, str, str], str],
-    volatility_key_map: dict[tuple[Exchange, str, str], str],
-    trade_key_map: dict[tuple[Exchange, TradeMarket, str], str],
-) -> None:
-    """Augment completed checkpoint keys with registry aliases for backward compatibility."""
-
-    hydrate_checkpoint_aliases(
-        completed=completed,
-        candle_tasks=candle_tasks,
-        oi_tasks=oi_tasks,
-        funding_tasks=funding_tasks,
-        volatility_index_data_tasks=volatility_index_data_tasks,
-        trade_tasks=trade_tasks,
-        candle_key_map=candle_key_map,
-        oi_key_map=oi_key_map,
-        funding_key_map=funding_key_map,
-        volatility_key_map=volatility_key_map,
-        trade_key_map=trade_key_map,
-    )
-
-
-def _bronze_checkpoint_fingerprint(args: argparse.Namespace, plan: BronzeFetchPlanDTO) -> str:
-    """Build stable fingerprint for one Bronze invocation plan."""
-
-    return bronze_checkpoint_fingerprint(args=args, plan=plan)
-
-
-def _bronze_checkpoint_path() -> Path:
-    """Return Bronze restart-checkpoint path."""
-
-    return bronze_checkpoint_path()
-
-
-def _load_bronze_checkpoint(path: Path, fingerprint: str, logger: logging.Logger) -> dict[str, set[str]]:
-    """Load matching Bronze checkpoint completed-task sets."""
-
-    return load_bronze_checkpoint(path=path, fingerprint=fingerprint, logger=logger)
-
-
-def _write_bronze_checkpoint(
-    path: Path,
-    *,
-    fingerprint: str,
-    completed: dict[str, set[str]],
-) -> None:
-    """Persist Bronze checkpoint atomically."""
-
-    write_bronze_checkpoint(path, fingerprint=fingerprint, completed=completed)
 
 
 def add_bronze_build_parser(subparsers: Any) -> None:
@@ -401,32 +285,6 @@ def _symbol_start_open_ms_bound(exchange: Exchange, symbol: str) -> int | None:
         symbol=symbol,
         context=_current_runtime_bounds_context(),
     )
-
-
-def _parse_start_date_to_open_ms(start_date: str | None) -> int | None:  # pyright: ignore[reportUnusedFunction]
-    """Parse inclusive UTC start date ``YYYY-MM-DD`` to epoch milliseconds."""
-
-    return parse_start_date_to_open_ms(start_date=start_date)
-
-
-def _canonical_symbol_key(symbol: str) -> str:  # pyright: ignore[reportUnusedFunction]
-    """Return canonical base symbol key for per-symbol start-date matching."""
-
-    return canonical_symbol_key(symbol=symbol)
-
-
-def _parse_symbol_start_dates(entries: list[str] | None) -> dict[str, int]:  # pyright: ignore[reportUnusedFunction]
-    """Parse ``SYMBOL=YYYY-MM-DD`` entries into canonical symbol->epoch-ms map."""
-
-    return parse_symbol_start_dates(entries=entries)
-
-
-def _parse_exchange_symbol_start_dates(  # pyright: ignore[reportUnusedFunction]
-    entries: list[str] | None,
-) -> dict[str, int]:
-    """Parse ``EXCHANGE:SYMBOL=YYYY-MM-DD`` entries into canonical exchange:symbol->epoch-ms map."""
-
-    return parse_exchange_symbol_start_dates(entries=entries)
 
 
 def _configure_bronze_start_bounds(args: argparse.Namespace, logger: logging.Logger) -> None:
