@@ -5,10 +5,12 @@ from __future__ import annotations
 import pytest
 
 from application.services.fetch_runtime_policy import (
+    DEFAULT_FETCH_CONCURRENCY,
     MAX_TRADE_WINDOW_MS,
     MIN_TRADE_WINDOW_MS,
     OPTION_TRADES_WINDOW_MS,
     PERP_TRADES_WINDOW_MS,
+    fetch_concurrency,
     heartbeat_seconds,
     load_fetch_runtime_policy,
     task_timeout_seconds,
@@ -44,6 +46,7 @@ def test_load_fetch_runtime_policy_accepts_explicit_env_mapping() -> None:
         {
             "DEPTH_FETCH_TASK_TIMEOUT_S": "12.5",
             "DEPTH_FETCH_HEARTBEAT_S": "4",
+            "DEPTH_FETCH_CONCURRENCY": "6",
             "DEPTH_PERP_TRADES_WINDOW_MINUTES": "30",
             "DEPTH_OPTION_TRADES_WINDOW_MINUTES": "120",
         }
@@ -51,6 +54,7 @@ def test_load_fetch_runtime_policy_accepts_explicit_env_mapping() -> None:
 
     assert policy.task_timeout_s == 12.5
     assert policy.heartbeat_s == 4.0
+    assert policy.concurrency == 6
     assert policy.perp_trade_window_ms == 30 * 60 * 1000
     assert policy.option_trade_window_ms == 120 * 60 * 1000
 
@@ -72,6 +76,7 @@ def test_load_fetch_runtime_policy_falls_back_for_invalid_values() -> None:
         {
             "DEPTH_FETCH_TASK_TIMEOUT_S": "bad",
             "DEPTH_FETCH_HEARTBEAT_S": "bad",
+            "DEPTH_FETCH_CONCURRENCY": "bad",
             "DEPTH_PERP_TRADES_WINDOW_MINUTES": "bad",
             "DEPTH_OPTION_TRADES_WINDOW_MINUTES": "bad",
         }
@@ -79,8 +84,16 @@ def test_load_fetch_runtime_policy_falls_back_for_invalid_values() -> None:
 
     assert policy.task_timeout_s is None
     assert policy.heartbeat_s == 30.0
+    assert policy.concurrency == DEFAULT_FETCH_CONCURRENCY
     assert policy.perp_trade_window_ms == PERP_TRADES_WINDOW_MS
     assert policy.option_trade_window_ms == OPTION_TRADES_WINDOW_MS
+
+
+def test_fetch_concurrency_is_bounded() -> None:
+    assert fetch_concurrency({"DEPTH_FETCH_CONCURRENCY": "0"}) == 1
+    assert fetch_concurrency({"DEPTH_FETCH_CONCURRENCY": "6"}) == 6
+    assert fetch_concurrency({"DEPTH_FETCH_CONCURRENCY": "99"}) == 8
+    assert fetch_concurrency({"DEPTH_FETCH_CONCURRENCY": "bad"}) == DEFAULT_FETCH_CONCURRENCY
 
 
 def test_trade_window_ms_uses_market_specific_env(monkeypatch: pytest.MonkeyPatch) -> None:

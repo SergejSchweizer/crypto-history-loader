@@ -5,11 +5,11 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from ingestion.lake import latest_open_time_in_lake as _latest_open_time_in_lake
-from ingestion.lake import latest_open_time_in_lake_by_dataset as _latest_open_time_in_lake_by_dataset
-from ingestion.lake import load_combined_dataframe_from_lake
-from ingestion.lake import open_times_in_lake as _open_times_in_lake
-from ingestion.lake import open_times_in_lake_by_dataset as _open_times_in_lake_by_dataset
+from ingestion.lake_dataframe import load_combined_dataframe_from_lake
+from ingestion.lake_queries import latest_open_time_in_lake as _latest_open_time_in_lake
+from ingestion.lake_queries import latest_open_time_in_lake_by_dataset as _latest_open_time_in_lake_by_dataset
+from ingestion.lake_queries import open_times_in_lake as _open_times_in_lake
+from ingestion.lake_queries import open_times_in_lake_by_dataset as _open_times_in_lake_by_dataset
 
 
 def open_times_in_lake(**kwargs: Any) -> list[datetime]:

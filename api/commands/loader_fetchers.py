@@ -45,6 +45,63 @@ class BronzeSymbolFetchDependencies:
     fetch_trades_range: Callable[..., list[TradeTick | OptionTradeTick]]
 
 
+def build_symbol_fetch_dependencies(
+    *,
+    open_times_in_lake: Callable[..., list[datetime]],
+    open_times_in_lake_by_dataset: Callable[..., list[datetime]],
+    latest_open_time_in_lake: Callable[..., datetime | None],
+    latest_open_time_in_lake_by_dataset: Callable[..., datetime | None],
+    normalize_storage_symbol: Callable[..., str],
+    interval_to_milliseconds: Callable[..., int],
+    open_interest_interval_to_milliseconds: Callable[..., int],
+    funding_interval_to_milliseconds: Callable[..., int],
+    volatility_interval_to_milliseconds: Callable[..., int],
+    normalize_open_interest_timeframe: Callable[..., str],
+    normalize_funding_timeframe: Callable[..., str],
+    normalize_volatility_timeframe: Callable[..., str],
+    last_closed_open_ms: Callable[..., int],
+    missing_ranges_ms: Callable[..., list[tuple[int, int]]],
+    fetch_candles_all_history: Callable[..., list[SpotCandle]],
+    fetch_candles_range: Callable[..., list[SpotCandle]],
+    fetch_open_interest_all_history: Callable[..., list[OpenInterestPoint]],
+    fetch_open_interest_range: Callable[..., list[OpenInterestPoint]],
+    fetch_funding_all_history: Callable[..., list[FundingPoint]],
+    fetch_funding_range: Callable[..., list[FundingPoint]],
+    fetch_volatility_index_all_history: Callable[..., list[VolatilityPoint]],
+    fetch_volatility_index_range: Callable[..., list[VolatilityPoint]],
+    fetch_trades_all_history: Callable[..., list[TradeTick | OptionTradeTick]],
+    fetch_trades_range: Callable[..., list[TradeTick | OptionTradeTick]],
+) -> BronzeSymbolFetchDependencies:
+    """Build the dependency bundle used by Bronze symbol fetch adapters."""
+
+    return BronzeSymbolFetchDependencies(
+        open_times_in_lake=open_times_in_lake,
+        open_times_in_lake_by_dataset=open_times_in_lake_by_dataset,
+        latest_open_time_in_lake=latest_open_time_in_lake,
+        latest_open_time_in_lake_by_dataset=latest_open_time_in_lake_by_dataset,
+        normalize_storage_symbol=normalize_storage_symbol,
+        interval_to_milliseconds=interval_to_milliseconds,
+        open_interest_interval_to_milliseconds=open_interest_interval_to_milliseconds,
+        funding_interval_to_milliseconds=funding_interval_to_milliseconds,
+        volatility_interval_to_milliseconds=volatility_interval_to_milliseconds,
+        normalize_open_interest_timeframe=normalize_open_interest_timeframe,
+        normalize_funding_timeframe=normalize_funding_timeframe,
+        normalize_volatility_timeframe=normalize_volatility_timeframe,
+        last_closed_open_ms=last_closed_open_ms,
+        missing_ranges_ms=missing_ranges_ms,
+        fetch_candles_all_history=fetch_candles_all_history,
+        fetch_candles_range=fetch_candles_range,
+        fetch_open_interest_all_history=fetch_open_interest_all_history,
+        fetch_open_interest_range=fetch_open_interest_range,
+        fetch_funding_all_history=fetch_funding_all_history,
+        fetch_funding_range=fetch_funding_range,
+        fetch_volatility_index_all_history=fetch_volatility_index_all_history,
+        fetch_volatility_index_range=fetch_volatility_index_range,
+        fetch_trades_all_history=fetch_trades_all_history,
+        fetch_trades_range=fetch_trades_range,
+    )
+
+
 def serialize_candle(candle: SpotCandle) -> dict[str, object]:
     """Serialize a candle for command JSON output."""
 

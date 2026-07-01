@@ -11,6 +11,8 @@ OPTION_TRADES_WINDOW_MS = 60 * 60 * 1000
 MIN_TRADE_WINDOW_MS = 60 * 1000
 MAX_TRADE_WINDOW_MS = 24 * 60 * 60 * 1000
 DEFAULT_FETCH_HEARTBEAT_S = 30.0
+DEFAULT_FETCH_CONCURRENCY = 4
+MAX_FETCH_CONCURRENCY = 8
 
 
 @dataclass(frozen=True)
@@ -21,12 +23,14 @@ class FetchRuntimePolicy:
         task_timeout_s: Optional hard timeout for individual fetch tasks. ``None``
             disables timeout enforcement.
         heartbeat_s: Interval for long-running task progress messages.
+        concurrency: Bounded task concurrency shared by Bronze fetch groups.
         perp_trade_window_ms: Bounded inclusive window size for perp trade fetches.
         option_trade_window_ms: Bounded inclusive window size for option trade fetches.
     """
 
     task_timeout_s: float | None
     heartbeat_s: float
+    concurrency: int
     perp_trade_window_ms: int
     option_trade_window_ms: int
 
@@ -47,6 +51,13 @@ def load_fetch_runtime_policy(env: Mapping[str, str] | None = None) -> FetchRunt
     return FetchRuntimePolicy(
         task_timeout_s=task_timeout if task_timeout > 0 else None,
         heartbeat_s=heartbeat if heartbeat > 0 else DEFAULT_FETCH_HEARTBEAT_S,
+        concurrency=_env_int_bounded(
+            source,
+            "DEPTH_FETCH_CONCURRENCY",
+            default=DEFAULT_FETCH_CONCURRENCY,
+            minimum=1,
+            maximum=MAX_FETCH_CONCURRENCY,
+        ),
         perp_trade_window_ms=_env_window_ms(
             source,
             env_name="DEPTH_PERP_TRADES_WINDOW_MINUTES",
@@ -70,6 +81,12 @@ def heartbeat_seconds() -> float:
     """Return heartbeat interval in seconds for long-running fetch tasks."""
 
     return load_fetch_runtime_policy().heartbeat_s
+
+
+def fetch_concurrency(env: Mapping[str, str] | None = None) -> int:
+    """Return bounded fetch concurrency from environment-style config."""
+
+    return load_fetch_runtime_policy(env).concurrency
 
 
 def trade_window_ms(market: str) -> int:
@@ -100,3 +117,14 @@ def _env_window_ms(env: Mapping[str, str], *, env_name: str, default_ms: int) ->
     except ValueError:
         return default_ms
     return min(MAX_TRADE_WINDOW_MS, max(MIN_TRADE_WINDOW_MS, minutes * 60 * 1000))
+
+
+def _env_int_bounded(env: Mapping[str, str], name: str, *, default: int, minimum: int, maximum: int) -> int:
+    raw = env.get(name)
+    if raw is None:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        return default
+    return min(maximum, max(minimum, value))

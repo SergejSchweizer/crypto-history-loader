@@ -8,7 +8,7 @@ from typing import Any, cast
 
 import pytest
 
-from application.services.runtime_service import configure_logging, env_list, load_env_file
+from application.services.runtime_service import configure_logging, env_list, fetch_concurrency, load_env_file
 
 
 def test_configure_logging_uses_module_name_for_log_file(
@@ -61,6 +61,14 @@ def test_load_env_file_populates_missing_environment_values(
     assert env_list("SYMBOLS", []) == ["BTC", "ETH"]
     assert env_list("MISSING_LIST", ["BTC"]) == ["BTC"]
     assert env_list("EXISTING_VALUE", []) == ["from_process"]
+
+
+def test_fetch_concurrency_uses_fetch_runtime_policy(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Compatibility wrapper should delegate to the fetch runtime policy owner."""
+
+    monkeypatch.setenv("DEPTH_FETCH_CONCURRENCY", "99")
+
+    assert fetch_concurrency() == 8
 
 
 def test_configure_logging_ignores_global_file_override_for_module_logger(

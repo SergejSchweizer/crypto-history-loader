@@ -8,7 +8,8 @@ from hashlib import sha256
 from pathlib import Path
 from typing import Any
 
-from ingestion.feature_profile import feature_metadata, write_feature_distribution_plot
+from ingestion.feature_metadata import feature_metadata
+from ingestion.feature_profile import write_feature_distribution_plot
 from ingestion.lake_layout import (
     PartitionKey,
     dataset_data_files,

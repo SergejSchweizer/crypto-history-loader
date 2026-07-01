@@ -67,6 +67,7 @@ from application.services.bronze_runtime_service import (
     volatility_task_key_map,
     write_bronze_checkpoint,
 )
+from application.services.fetch_runtime_policy import fetch_concurrency
 from application.services.fetch_service import (
     fetch_candle_tasks_parallel,
     fetch_funding_tasks_parallel,
@@ -87,7 +88,7 @@ from application.services.lake_query_service import (
     open_times_in_lake,
     open_times_in_lake_by_dataset,
 )
-from application.services.runtime_service import SingleInstanceError, SingleInstanceLock, fetch_concurrency
+from application.services.runtime_service import SingleInstanceError, SingleInstanceLock
 from application.services.storage_service import persist_loader_outputs_dto
 from ingestion.funding import (
     FundingPoint,
@@ -262,7 +263,7 @@ def add_bronze_build_parser(subparsers: Any) -> None:
 def _symbol_fetch_dependencies() -> BronzeSymbolFetchDependencies:
     """Build symbol-fetch dependency adapters from current loader module globals."""
 
-    return BronzeSymbolFetchDependencies(
+    return _loader_fetchers.build_symbol_fetch_dependencies(
         open_times_in_lake=open_times_in_lake,
         open_times_in_lake_by_dataset=open_times_in_lake_by_dataset,
         latest_open_time_in_lake=latest_open_time_in_lake,

@@ -3,15 +3,13 @@
 from __future__ import annotations
 
 import logging
-import os
 import time
 from collections.abc import Callable
 from typing import Any, cast
 
+from ingestion.exchanges import deribit_trade_policy
 from ingestion.exchanges.deribit import normalize_symbol
 from ingestion.exchanges.deribit_trade_common import (
-    env_float_non_negative,
-    env_int_min,
     extract_result_rows,
     has_more,
     is_route_failure,
@@ -37,11 +35,11 @@ def _perp_trades_base_url() -> str:
     ``DEPTH_DERIBIT_PERP_TRADES_BASE_URL`` for debugging or custom routing.
     """
 
-    value = os.getenv(
+    return deribit_trade_policy.normalized_base_url(
         "DEPTH_DERIBIT_PERP_TRADES_BASE_URL",
-        os.getenv("DEPTH_DERIBIT_TRADES_BASE_URL", DERIBIT_PERP_TRADES_BASE_URL_DEFAULT),
-    ).strip()
-    return value.rstrip("/")
+        "DEPTH_DERIBIT_TRADES_BASE_URL",
+        default=DERIBIT_PERP_TRADES_BASE_URL_DEFAULT,
+    )
 
 
 def _perp_trades_base_urls() -> list[str]:
@@ -69,37 +67,36 @@ def _has_more(payload: dict[str, Any]) -> bool:
 
 
 def _inter_request_sleep_seconds() -> float:
-    value = os.getenv(
+    return deribit_trade_policy.non_negative_float(
         "DEPTH_DERIBIT_PERP_TRADES_INTER_REQUEST_SLEEP_S",
-        os.getenv("DEPTH_DERIBIT_TRADES_INTER_REQUEST_SLEEP_S", "0.15"),
+        "DEPTH_DERIBIT_TRADES_INTER_REQUEST_SLEEP_S",
+        default=deribit_trade_policy.DEFAULT_INTER_REQUEST_SLEEP_S,
     )
-    return env_float_non_negative(value=value, default=0.15)
 
 
 def _route_retry_attempts() -> int:
-    value = os.getenv(
+    return deribit_trade_policy.int_at_least(
         "DEPTH_DERIBIT_PERP_TRADES_ROUTE_RETRY_ATTEMPTS",
-        os.getenv("DEPTH_DERIBIT_TRADES_ROUTE_RETRY_ATTEMPTS", "3"),
+        "DEPTH_DERIBIT_TRADES_ROUTE_RETRY_ATTEMPTS",
+        default=deribit_trade_policy.DEFAULT_ROUTE_RETRY_ATTEMPTS,
+        minimum=1,
     )
-    return env_int_min(value=value, default=3, minimum=1)
 
 
 def _route_retry_backoff_base_seconds() -> float:
-    value = os.getenv(
+    return deribit_trade_policy.non_negative_float(
         "DEPTH_DERIBIT_PERP_TRADES_ROUTE_RETRY_BACKOFF_BASE_S",
-        os.getenv("DEPTH_DERIBIT_TRADES_ROUTE_RETRY_BACKOFF_BASE_S", "0.5"),
+        "DEPTH_DERIBIT_TRADES_ROUTE_RETRY_BACKOFF_BASE_S",
+        default=deribit_trade_policy.DEFAULT_ROUTE_RETRY_BACKOFF_BASE_S,
     )
-    return env_float_non_negative(value=value, default=0.5)
 
 
 def _default_page_size() -> int:
-    value = os.getenv(
+    return deribit_trade_policy.page_size(
         "DEPTH_DERIBIT_PERP_TRADES_PAGE_SIZE",
-        os.getenv("DEPTH_DERIBIT_TRADES_PAGE_SIZE", str(DERIBIT_PERP_TRADES_DEFAULT_PAGE_SIZE)),
-    )
-    return min(
-        env_int_min(value=value, default=DERIBIT_PERP_TRADES_DEFAULT_PAGE_SIZE, minimum=1),
-        DERIBIT_PERP_TRADES_MAX_PAGE_SIZE,
+        "DEPTH_DERIBIT_TRADES_PAGE_SIZE",
+        default=DERIBIT_PERP_TRADES_DEFAULT_PAGE_SIZE,
+        maximum=DERIBIT_PERP_TRADES_MAX_PAGE_SIZE,
     )
 
 
@@ -122,11 +119,9 @@ def fetch_perp_trades_range(
     cursor = start_open_ms
     collected: list[dict[str, object]] = []
     page_size = min(count if count is not None else _default_page_size(), DERIBIT_PERP_TRADES_MAX_PAGE_SIZE)
-    max_pages = int(
-        os.getenv(
-            "DEPTH_DERIBIT_PERP_TRADES_MAX_PAGES_PER_RANGE",
-            os.getenv("DEPTH_DERIBIT_TRADES_MAX_PAGES_PER_RANGE", "5000"),
-        )
+    max_pages = deribit_trade_policy.max_pages_per_range(
+        "DEPTH_DERIBIT_PERP_TRADES_MAX_PAGES_PER_RANGE",
+        "DEPTH_DERIBIT_TRADES_MAX_PAGES_PER_RANGE",
     )
     inter_request_sleep_s = _inter_request_sleep_seconds()
     route_retry_attempts = _route_retry_attempts()

@@ -6,7 +6,7 @@ from collections.abc import Callable
 
 from application.dto import LoaderStorageDTO, PersistOptionsDTO, PersistResultDTO
 from ingestion.funding import FundingPoint
-from ingestion.lake import (
+from ingestion.lake_bronze_writes import (
     save_funding_parquet_lake,
     save_open_interest_parquet_lake,
     save_spot_candles_parquet_lake,

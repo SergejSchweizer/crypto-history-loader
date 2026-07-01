@@ -9,6 +9,7 @@ import pytest
 
 from api.commands.loader_fetchers import (
     BronzeSymbolFetchDependencies,
+    build_symbol_fetch_dependencies,
     fetch_symbol_candles,
     serialize_candle,
 )
@@ -63,6 +64,19 @@ def test_fetch_symbol_candles_uses_runtime_start_bound() -> None:
     assert calls == [(start_ms, end_ms)]
 
 
+def test_build_symbol_fetch_dependencies_preserves_adapter_functions() -> None:
+    """Dependency bundle construction should keep loader adapter ownership explicit."""
+
+    dependencies = _dependencies(
+        fetch_candles_range=lambda **_kwargs: [_sample_candle()],
+        last_closed_open_ms=lambda **_kwargs: 1,
+    )
+
+    assert dependencies.fetch_candles_range() == [_sample_candle()]
+    assert dependencies.last_closed_open_ms() == 1
+    assert dependencies.normalize_funding_timeframe() == "8h"
+
+
 def _sample_candle() -> SpotCandle:
     return SpotCandle(
         exchange="deribit",
@@ -85,7 +99,7 @@ def _dependencies(
     fetch_candles_range: Any,
     last_closed_open_ms: Any,
 ) -> BronzeSymbolFetchDependencies:
-    return BronzeSymbolFetchDependencies(
+    return build_symbol_fetch_dependencies(
         open_times_in_lake=lambda **_kwargs: [],
         open_times_in_lake_by_dataset=lambda **_kwargs: [],
         latest_open_time_in_lake=lambda **_kwargs: None,

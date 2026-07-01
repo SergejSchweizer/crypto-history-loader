@@ -7,9 +7,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol
 
-from ingestion.feature_profile import (
+from application.services.feature_metadata_service import (
     feature_hash,
     feature_metadata,
+)
+from application.services.feature_plot_service import (
     write_feature_distribution_plot,
 )
 

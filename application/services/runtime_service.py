@@ -8,11 +8,21 @@ import os
 from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
 
+from application.services.fetch_runtime_policy import (
+    DEFAULT_FETCH_CONCURRENCY as _DEFAULT_FETCH_CONCURRENCY,
+)
+from application.services.fetch_runtime_policy import (
+    MAX_FETCH_CONCURRENCY as _MAX_FETCH_CONCURRENCY,
+)
+from application.services.fetch_runtime_policy import (
+    fetch_concurrency as _fetch_concurrency,
+)
+
 LOGGER_NAME = "crypto_history_loader"
 DEFAULT_LOG_DIR = ".logs"
 DEFAULT_LOG_FILE = "crypto-history-loader.log"
-DEFAULT_FETCH_CONCURRENCY = 4
-MAX_FETCH_CONCURRENCY = 8
+DEFAULT_FETCH_CONCURRENCY = _DEFAULT_FETCH_CONCURRENCY
+MAX_FETCH_CONCURRENCY = _MAX_FETCH_CONCURRENCY
 
 
 def load_env_file(path: str = ".env") -> None:
@@ -186,9 +196,4 @@ def configure_logging(module_name: str = "crypto-history-loader", *, debug: bool
 def fetch_concurrency() -> int:
     """Return bounded fetch concurrency from environment."""
 
-    raw = os.getenv("DEPTH_FETCH_CONCURRENCY", str(DEFAULT_FETCH_CONCURRENCY))
-    try:
-        value = int(raw)
-    except ValueError:
-        return DEFAULT_FETCH_CONCURRENCY
-    return min(MAX_FETCH_CONCURRENCY, max(1, value))
+    return _fetch_concurrency()

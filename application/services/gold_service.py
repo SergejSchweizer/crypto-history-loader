@@ -16,12 +16,17 @@ from application.dataset_contracts import (
     GOLD_DATASET_CONTRACTS,
     gold_dataset_contract,
 )
-from application.services import gold_versioning
-from ingestion import feature_profile
+from application.services import (
+    feature_metadata_service,
+    feature_plot_service,
+    gold_audit,
+    gold_frames,
+    gold_versioning,
+)
 
-_feature_hash = feature_profile.feature_hash
-_feature_metadata = feature_profile.feature_metadata
-_write_feature_distribution_plot = feature_profile.write_feature_distribution_plot
+_feature_hash = feature_metadata_service.feature_hash
+_feature_metadata = feature_metadata_service.feature_metadata
+_write_feature_distribution_plot = feature_plot_service.write_feature_distribution_plot
 
 _FULL_MARKET_REQUIREMENTS: list[tuple[str, str]] = [
     requirement.as_tuple() for requirement in FULL_MARKET_GOLD_REQUIREMENTS
@@ -41,11 +46,7 @@ _contract_bump_level = gold_versioning.contract_bump_level
 
 
 def _require_polars() -> Any:
-    try:
-        import polars as pl
-    except ImportError as exc:
-        raise RuntimeError("polars is required for gold-build. Install project dependencies.") from exc
-    return pl
+    return gold_frames.require_polars()
 
 
 @dataclass(frozen=True)
@@ -117,15 +118,7 @@ def _git_commit_hash() -> str:
 def normalize_symbol(value: str) -> str:
     """Normalize to canonical base asset symbol used across the repo (e.g. BTC, ETH, SOL)."""
 
-    raw = value.strip().upper()
-    normalized = raw.replace("_", "-").replace("/", "-")
-    parts = [part for part in normalized.split("-") if part]
-    if parts:
-        return parts[0]
-    for candidate in ("BTC", "ETH", "SOL"):
-        if raw.startswith(candidate):
-            return candidate
-    return raw
+    return gold_frames.normalize_symbol(value)
 
 
 def discover_gold_symbols(silver_root: str, exchange: str) -> list[str]:
@@ -175,18 +168,12 @@ def _discover_symbols_for_dataset(
 ) -> set[str]:
     """Discover normalized symbols available for one silver dataset/timeframe."""
 
-    root = Path(silver_root) / f"dataset_type={dataset_type}" / f"exchange={exchange}"
-    symbols: set[str] = set()
-    if not root.exists():
-        return symbols
-    for path in root.glob("symbol=*/timeframe=*"):
-        if path.name != f"timeframe={timeframe}":
-            continue
-        parent = path.parent.name
-        if not parent.startswith("symbol="):
-            continue
-        symbols.add(normalize_symbol(parent.split("=", 1)[1]))
-    return symbols
+    return gold_frames.discover_symbols_for_dataset(
+        silver_root=silver_root,
+        exchange=exchange,
+        dataset_type=dataset_type,
+        timeframe=timeframe,
+    )
 
 
 def _dataset_requirements(dataset_id: str) -> list[tuple[str, str]]:
@@ -198,96 +185,19 @@ def _dataset_includes_l2(dataset_id: str) -> bool:
 
 
 def _read_latest_l2_gold_frame(*, l2_root: str, exchange: str, symbol: str) -> tuple[Any, Path]:
-    pl = _require_polars()
-    root = Path(l2_root)
-    # Support either a direct L2 artifact root or a root containing the previous dataset folder.
-    nested = root / "dataset_id=gold.l2.micro.m1"
-    if nested.exists():
-        root = nested
-    candidates: list[Path] = []
-    # Preferred nested layout.
-    for path in root.glob("exchange=*/symbol=*/version=*/build_id=*/data.parquet"):
-        exchange_segment = next((part for part in path.parts if part.startswith("exchange=")), None)
-        if exchange_segment is None:
-            continue
-        raw_exchange = exchange_segment.split("=", 1)[1]
-        if raw_exchange != exchange:
-            continue
-        symbol_segment = next((part for part in path.parts if part.startswith("symbol=")), None)
-        if symbol_segment is None:
-            continue
-        raw_symbol = symbol_segment.split("=", 1)[1]
-        if normalize_symbol(raw_symbol) != normalize_symbol(symbol):
-            continue
-        candidates.append(path)
-    # Backward-compatible flat layout: <SYMBOL>_L2_<hash>_<hash>.parquet
-    if not candidates:
-        for path in root.glob("**/*_L2_*.parquet"):
-            base = path.name.split("_L2_", 1)[0]
-            if normalize_symbol(base) != normalize_symbol(symbol):
-                continue
-            candidates.append(path)
-    candidates = sorted(candidates, key=lambda p: p.stat().st_mtime)
-    if not candidates:
-        raise ValueError(f"Missing L2 parquet for symbol={symbol} under l2_root={l2_root}")
-    chosen = candidates[-1]
-    return pl.read_parquet(str(chosen)), chosen
+    return gold_frames.read_latest_l2_gold_frame(l2_root=l2_root, exchange=exchange, symbol=symbol)
 
 
 def _prepare_l2(pl: Any, frame: Any, symbol: str) -> Any:
-    key_cols = {"ts_minute", "exchange", "symbol"}
-    if "ts_minute" not in frame.columns:
-        raise ValueError("L2 parquet missing required column 'ts_minute'")
-    if "exchange" not in frame.columns:
-        frame = frame.with_columns(pl.lit("deribit").alias("exchange"))
-    if "symbol" not in frame.columns:
-        frame = frame.with_columns(pl.lit(symbol).alias("symbol"))
-    renamed = []
-    for col in frame.columns:
-        if col in key_cols:
-            continue
-        renamed.append(pl.col(col).alias(f"l2_{col}"))
-    return (
-        frame.with_columns(
-            [
-                pl.col("ts_minute")
-                .cast(pl.Datetime(time_unit="us", time_zone="UTC"))
-                .dt.truncate("1m")
-                .alias("timestamp_m1"),
-                pl.lit(symbol).alias("symbol"),
-            ]
-        )
-        .select(["timestamp_m1", "exchange", "symbol", *renamed])
-        .sort("timestamp_m1")
-    )
+    return gold_frames.prepare_l2(pl, frame, symbol)
 
 
 def _l2_invalid_mask_expr(pl: Any, columns: set[str]) -> Any:
-    cond = pl.lit(False)
-    if "l2_coverage_ratio" in columns:
-        cond = cond | (pl.col("l2_coverage_ratio") < 0.0) | (pl.col("l2_coverage_ratio") > 1.0)
-    if "l2_snapshot_count" in columns:
-        cond = cond | (pl.col("l2_snapshot_count") < 0)
-    if "l2_first_snapshot_ts" in columns and "l2_last_snapshot_ts" in columns:
-        cond = cond | (pl.col("l2_first_snapshot_ts") > pl.col("l2_last_snapshot_ts"))
-    return cond
+    return gold_frames.l2_invalid_mask_expr(pl, columns)
 
 
 def _validate_or_filter_l2_quality(pl: Any, frame: Any, mode: str) -> tuple[Any, dict[str, int]]:
-    if mode not in {"strict", "lenient"}:
-        raise ValueError(f"Unsupported l2_validation_mode: {mode}")
-    l2_columns = set(frame.columns)
-    if "l2_coverage_ratio" not in l2_columns and "l2_snapshot_count" not in l2_columns:
-        raise ValueError("L2 validation failed: no supported L2 quality columns present")
-    invalid_mask = _l2_invalid_mask_expr(pl, l2_columns)
-    invalid_rows = frame.filter(invalid_mask).height
-    if invalid_rows == 0:
-        return frame, {"l2_invalid_rows_found": 0, "l2_invalid_rows_dropped": 0}
-    if mode == "strict":
-        raise ValueError(f"L2 validation failed: {invalid_rows} invalid rows detected")
-    filtered = frame.filter(~invalid_mask)
-    dropped = frame.height - filtered.height
-    return filtered, {"l2_invalid_rows_found": invalid_rows, "l2_invalid_rows_dropped": dropped}
+    return gold_frames.validate_or_filter_l2_quality(pl, frame, mode)
 
 
 def _read_dataset_frame(
@@ -298,214 +208,45 @@ def _read_dataset_frame(
     dataset_type: str,
     timeframe: str,
 ) -> Any:
-    pl = _require_polars()
-    dataset_root = Path(silver_root) / f"dataset_type={dataset_type}" / f"exchange={exchange}"
-    candidate_files: list[Path] = []
-    symbol_dirs = sorted(dataset_root.glob(f"symbol=*/timeframe={timeframe}"))
-    for sym_dir in symbol_dirs:
-        sym_segment = sym_dir.parent.name
-        if not sym_segment.startswith("symbol="):
-            continue
-        raw_symbol = sym_segment.split("=", 1)[1]
-        if normalize_symbol(raw_symbol) != symbol:
-            continue
-        candidate_files.extend(path for path in sorted(sym_dir.glob("**/*.parquet")) if path.is_file())
-    if not candidate_files:
-        raise ValueError(f"Missing silver dataset for symbol={symbol}: {dataset_type}")
-    selected_file = max(candidate_files, key=lambda path: (path.stat().st_mtime, str(path)))
-    frame = pl.read_parquet(str(selected_file))
-    return frame
+    return gold_frames.read_dataset_frame(
+        silver_root=silver_root,
+        exchange=exchange,
+        symbol=symbol,
+        dataset_type=dataset_type,
+        timeframe=timeframe,
+    )
 
 
 def _prepare_spot_or_perp(pl: Any, frame: Any, prefix: str, symbol: str) -> Any:
-    return (
-        frame.with_columns(
-            [
-                pl.col("open_time").cast(pl.Datetime(time_unit="us", time_zone="UTC")).alias("timestamp_m1"),
-                pl.lit(symbol).alias("symbol"),
-            ]
-        )
-        .select(
-            [
-                "timestamp_m1",
-                "exchange",
-                "symbol",
-                pl.col("open_price").cast(pl.Float64).alias(f"{prefix}_open_price"),
-                pl.col("high_price").cast(pl.Float64).alias(f"{prefix}_high_price"),
-                pl.col("low_price").cast(pl.Float64).alias(f"{prefix}_low_price"),
-                pl.col("close_price").cast(pl.Float64).alias(f"{prefix}_close_price"),
-                pl.col("volume").cast(pl.Float64).alias(f"{prefix}_volume"),
-            ]
-        )
-        .sort("timestamp_m1")
-    )
+    return gold_frames.prepare_spot_or_perp(pl, frame, prefix, symbol)
 
 
 def _prepare_oi(pl: Any, frame: Any, symbol: str) -> Any:
-    return (
-        frame.with_columns(
-            [
-                pl.col("timestamp_m1").cast(pl.Datetime(time_unit="us", time_zone="UTC")),
-                pl.lit(symbol).alias("symbol"),
-            ]
-        )
-        .select(
-            [
-                "timestamp_m1",
-                "exchange",
-                "symbol",
-                pl.col("open_interest").cast(pl.Float64).alias("oi_open_interest"),
-                pl.col("oi_is_observed").cast(pl.Boolean),
-                pl.col("oi_is_ffill").cast(pl.Boolean),
-                pl.col("minutes_since_oi_observation").cast(pl.Int64),
-                pl.col("oi_observation_lag_sec").cast(pl.Int64),
-            ]
-        )
-        .sort("timestamp_m1")
-    )
+    return gold_frames.prepare_oi(pl, frame, symbol)
 
 
 def _prepare_funding(pl: Any, frame: Any, symbol: str) -> Any:
-    return (
-        frame.with_columns(
-            [
-                pl.col("timestamp").cast(pl.Datetime(time_unit="us", time_zone="UTC")).alias("timestamp_m1"),
-                pl.lit(symbol).alias("symbol"),
-            ]
-        )
-        .select(
-            [
-                "timestamp_m1",
-                "exchange",
-                "symbol",
-                pl.col("funding_rate_last_known").cast(pl.Float64),
-                pl.col("minutes_since_funding").cast(pl.Int64),
-                pl.col("is_funding_observation_minute").cast(pl.Boolean),
-                pl.col("funding_data_available").cast(pl.Boolean),
-            ]
-        )
-        .sort("timestamp_m1")
-    )
+    return gold_frames.prepare_funding(pl, frame, symbol)
 
 
 def _prepare_trades(pl: Any, frame: Any, symbol: str) -> Any:
-    return (
-        frame.with_columns(
-            [
-                pl.col("timestamp_m1").cast(pl.Datetime(time_unit="us", time_zone="UTC")),
-                pl.lit(symbol).alias("symbol"),
-            ]
-        )
-        .select(
-            [
-                "timestamp_m1",
-                "exchange",
-                "symbol",
-                pl.col("open_price").cast(pl.Float64).alias("trades_open_price"),
-                pl.col("high_price").cast(pl.Float64).alias("trades_high_price"),
-                pl.col("low_price").cast(pl.Float64).alias("trades_low_price"),
-                pl.col("close_price").cast(pl.Float64).alias("trades_close_price"),
-                pl.col("volume").cast(pl.Float64).alias("trades_volume"),
-                pl.col("quote_volume").cast(pl.Float64).alias("trades_quote_volume"),
-                pl.col("trade_count").cast(pl.Int64).alias("trades_trade_count"),
-                pl.col("buy_volume").cast(pl.Float64).alias("trades_buy_volume"),
-                pl.col("sell_volume").cast(pl.Float64).alias("trades_sell_volume"),
-                pl.col("buy_trade_count").cast(pl.Int64).alias("trades_buy_trade_count"),
-                pl.col("sell_trade_count").cast(pl.Int64).alias("trades_sell_trade_count"),
-                pl.col("buy_volume_share").cast(pl.Float64).alias("trades_buy_volume_share"),
-            ]
-        )
-        .sort("timestamp_m1")
-    )
+    return gold_frames.prepare_trades(pl, frame, symbol)
 
 
 def _prepare_option_trades(pl: Any, frame: Any, symbol: str) -> Any:
-    return (
-        frame.with_columns(
-            [
-                pl.col("timestamp_m1").cast(pl.Datetime(time_unit="us", time_zone="UTC")),
-                pl.lit(symbol).alias("symbol"),
-            ]
-        )
-        .select(
-            [
-                "timestamp_m1",
-                "exchange",
-                "symbol",
-                pl.col("open_price").cast(pl.Float64).alias("option_trades_open_price"),
-                pl.col("high_price").cast(pl.Float64).alias("option_trades_high_price"),
-                pl.col("low_price").cast(pl.Float64).alias("option_trades_low_price"),
-                pl.col("close_price").cast(pl.Float64).alias("option_trades_close_price"),
-                pl.col("volume").cast(pl.Float64).alias("option_trades_volume"),
-                pl.col("quote_volume").cast(pl.Float64).alias("option_trades_quote_volume"),
-                pl.col("trade_count").cast(pl.Int64).alias("option_trades_trade_count"),
-                pl.col("buy_volume").cast(pl.Float64).alias("option_trades_buy_volume"),
-                pl.col("sell_volume").cast(pl.Float64).alias("option_trades_sell_volume"),
-                pl.col("buy_trade_count").cast(pl.Int64).alias("option_trades_buy_trade_count"),
-                pl.col("sell_trade_count").cast(pl.Int64).alias("option_trades_sell_trade_count"),
-                pl.col("buy_volume_share").cast(pl.Float64).alias("option_trades_buy_volume_share"),
-            ]
-        )
-        .sort("timestamp_m1")
-    )
+    return gold_frames.prepare_option_trades(pl, frame, symbol)
 
 
 def _prepare_volatility_index_data(pl: Any, frame: Any, symbol: str) -> Any:
-    return (
-        frame.with_columns(
-            [
-                pl.col("timestamp").cast(pl.Datetime(time_unit="us", time_zone="UTC")).alias("timestamp_m1"),
-                pl.lit(symbol).alias("symbol"),
-            ]
-        )
-        .select(
-            [
-                "timestamp_m1",
-                "exchange",
-                "symbol",
-                pl.col("volatility_value").cast(pl.Float64).alias("volatility_index_value"),
-            ]
-        )
-        .sort("timestamp_m1")
-    )
+    return gold_frames.prepare_volatility_index_data(pl, frame, symbol)
 
 
 def _prepare_dataset_frame(pl: Any, dataset_type: str, frame: Any, symbol: str) -> Any:
-    dataset_preparers: dict[str, Any] = {
-        "spot": lambda: _prepare_spot_or_perp(pl, frame, "spot", symbol),
-        "perp": lambda: _prepare_spot_or_perp(pl, frame, "perp", symbol),
-        "oi_1m_feature": lambda: _prepare_oi(pl, frame, symbol),
-        "funding_1m_feature": lambda: _prepare_funding(pl, frame, symbol),
-        "perp_trades_1m_feature": lambda: _prepare_trades(pl, frame, symbol),
-        "option_trades_1m_feature": lambda: _prepare_option_trades(pl, frame, symbol),
-        "volatility_index_data_observed": lambda: _prepare_volatility_index_data(pl, frame, symbol),
-        "gold_l2_m1": lambda: _prepare_l2(pl, frame, symbol),
-    }
-    preparer = dataset_preparers.get(dataset_type)
-    if preparer is None:
-        raise ValueError(f"Unsupported dataset_type for preparation: {dataset_type}")
-    return preparer()
+    return gold_frames.prepare_dataset_frame(pl, dataset_type, frame, symbol)
 
 
 def _build_minute_grid(pl: Any, prepared: list[Any], exchange: str, symbol: str) -> Any:
-    mins: list[datetime] = []
-    maxs: list[datetime] = []
-    for frame in prepared:
-        if frame.height == 0:
-            continue
-        min_ts = frame.select(pl.col("timestamp_m1").min()).item()
-        max_ts = frame.select(pl.col("timestamp_m1").max()).item()
-        if isinstance(min_ts, datetime) and isinstance(max_ts, datetime):
-            mins.append(min_ts)
-            maxs.append(max_ts)
-    if not mins or not maxs:
-        raise ValueError("No timestamp coverage available across prepared datasets")
-    start = min(mins)
-    end = max(maxs)
-    timestamp_grid = pl.datetime_range(start, end, interval="1m", eager=True).alias("timestamp_m1")
-    return pl.DataFrame({"timestamp_m1": timestamp_grid}).with_columns(
-        [pl.lit(exchange).alias("exchange"), pl.lit(symbol).alias("symbol")]
-    )
+    return gold_frames.build_minute_grid(pl, prepared, exchange, symbol)
 
 
 def _json_payload_hash(payload: dict[str, object]) -> str:
@@ -514,47 +255,22 @@ def _json_payload_hash(payload: dict[str, object]) -> str:
 
 
 def _feature_source_dataset(column_name: str) -> str:
-    return feature_profile.feature_source_dataset(column_name)
+    return feature_metadata_service.feature_source_dataset(column_name)
 
 
 def _time_span_coverage(frame: Any) -> tuple[datetime | None, datetime | None, int | None, int | None, float | None]:
     pl = _require_polars()
-    min_ts = frame.select(pl.col("timestamp_m1").min()).item()
-    max_ts = frame.select(pl.col("timestamp_m1").max()).item()
-    expected_minutes: int | None = None
-    missing_minutes: int | None = None
-    observed_coverage_ratio: float | None = None
-    if isinstance(min_ts, datetime) and isinstance(max_ts, datetime):
-        expected_minutes = int(((max_ts - min_ts).total_seconds() // 60) + 1)
-        if expected_minutes > 0:
-            observed_coverage_ratio = frame.height / float(expected_minutes)
-            missing_minutes = max(expected_minutes - frame.height, 0)
-    return min_ts, max_ts, expected_minutes, missing_minutes, observed_coverage_ratio
+    return gold_audit.time_span_coverage(pl, frame)
 
 
 def _source_dataset_summary(
     pl: Any, raw_by_dataset: dict[str, Any], l2_source_path: Path | None
 ) -> dict[str, dict[str, object]]:
-    summary: dict[str, dict[str, object]] = {}
-    for dataset_type, raw in raw_by_dataset.items():
-        source_key = f"{dataset_type}_1m" if dataset_type in {"spot", "perp"} else dataset_type
-        source_symbols = (
-            sorted(set(raw.get_column("symbol").cast(pl.Utf8).to_list())) if "symbol" in raw.columns else []
-        )
-        summary[source_key] = {
-            "columns": raw.columns,
-            "rows": raw.height,
-            "source_symbols": source_symbols,
-        }
-        if dataset_type == "gold_l2_m1" and l2_source_path is not None:
-            summary[source_key]["source_artifact"] = l2_source_path.name
-    return summary
+    return gold_audit.source_dataset_summary(pl, raw_by_dataset, l2_source_path)
 
 
 def _missing_value_audit(pl: Any, frame: Any) -> tuple[dict[str, int], int]:
-    missing_by_column = {col: int(frame.select(pl.col(col).is_null().sum()).item()) for col in frame.columns}
-    missing_total = int(sum(missing_by_column.values()))
-    return missing_by_column, missing_total
+    return gold_audit.missing_value_audit(pl, frame)
 
 
 def build_gold_for_symbol(
