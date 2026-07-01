@@ -23,6 +23,7 @@ from application.dto import (
 from application.schema import dataset_contract
 from application.services import fetch_executors as _fetch_executors
 from application.services import fetch_history_rows as _history_rows
+from application.services import fetch_ohlcv_symbol as _ohlcv_symbol
 from application.services import fetch_range_planning as _range_planning
 from application.services import fetch_task_execution as _task_execution
 from application.services import fetch_trade_task_execution as _trade_task_execution
@@ -163,130 +164,24 @@ def fetch_symbol_candles(
 ) -> list[SpotCandle]:
     """Fetch candles for one symbol with auto bootstrap/gap-fill behavior."""
 
-    storage_symbol = symbol_normalizer(exchange=exchange, symbol=symbol, market=market)
-    interval_ms = interval_ms_resolver(exchange=exchange, interval=timeframe)
-    end_open_ms = now_open_resolver(interval_ms=interval_ms)
-    if start_open_ms_bound is not None and end_open_ms < start_open_ms_bound:
-        return []
-
-    if tail_delta_only:
-        latest_reader = latest_open_time_reader
-        if latest_reader is None:
-            raise ValueError("latest_open_time_reader is required when tail_delta_only is enabled")
-        latest_open_time = latest_reader(
-            lake_root=lake_root,
-            market=market,
-            exchange=exchange,
-            symbol=storage_symbol,
-            timeframe=timeframe,
-        )
-        if latest_open_time is None:
-            if start_open_ms_bound is not None:
-                return _fetch_bounded_daily_rows(
-                    start_open_ms_bound=start_open_ms_bound,
-                    end_open_ms=end_open_ms,
-                    range_fetcher=range_fetcher,
-                    fetch_kwargs={
-                        "exchange": exchange,
-                        "symbol": symbol,
-                        "interval": timeframe,
-                        "market": market,
-                    },
-                    on_history_chunk=on_history_chunk,
-                )
-            return _fetch_bootstrap_history_rows(
-                history_fetcher=history_fetcher,
-                fetch_kwargs={
-                    "exchange": exchange,
-                    "symbol": symbol,
-                    "market": market,
-                    "interval": timeframe,
-                },
-                on_history_chunk=on_history_chunk,
-                start_open_ms_bound=start_open_ms_bound,
-            )
-        start_open_ms = int(latest_open_time.timestamp() * 1000) + interval_ms
-        if start_open_ms_bound is not None:
-            start_open_ms = max(start_open_ms, start_open_ms_bound)
-        if start_open_ms > end_open_ms:
-            return []
-        fetched_rows: list[SpotCandle] = []
-        for day_start_ms, day_end_ms in _day_windows_in_random_order(start_open_ms, end_open_ms):
-            fetched_rows.extend(
-                range_fetcher(
-                    exchange=exchange,
-                    symbol=symbol,
-                    interval=timeframe,
-                    start_open_ms=day_start_ms,
-                    end_open_ms=day_end_ms,
-                    market=market,
-                )
-            )
-        unique_by_open_time = {item.open_time: item for item in fetched_rows}
-        return [unique_by_open_time[key] for key in sorted(unique_by_open_time)]
-
-    stored_open_times = open_times_reader(
-        lake_root=lake_root,
-        market=market,
+    return _ohlcv_symbol.fetch_symbol_candles(
         exchange=exchange,
-        symbol=storage_symbol,
+        market=market,
+        symbol=symbol,
         timeframe=timeframe,
-    )
-
-    if not stored_open_times:
-        if start_open_ms_bound is not None:
-            return _fetch_bounded_daily_rows(
-                start_open_ms_bound=start_open_ms_bound,
-                end_open_ms=end_open_ms,
-                range_fetcher=range_fetcher,
-                fetch_kwargs={
-                    "exchange": exchange,
-                    "symbol": symbol,
-                    "interval": timeframe,
-                    "market": market,
-                },
-                on_history_chunk=on_history_chunk,
-            )
-        return _fetch_bootstrap_history_rows(
-            history_fetcher=history_fetcher,
-            fetch_kwargs={
-                "exchange": exchange,
-                "symbol": symbol,
-                "market": market,
-                "interval": timeframe,
-            },
-            on_history_chunk=on_history_chunk,
-            start_open_ms_bound=start_open_ms_bound,
-        )
-    if end_open_ms < int(min(stored_open_times).timestamp() * 1000):
-        return []
-
-    missing_ranges = _build_missing_ranges_with_optional_head_gap(
-        existing_open_times=stored_open_times,
-        interval_ms=interval_ms,
-        end_open_ms=end_open_ms,
-        start_open_ms_bound=start_open_ms_bound,
+        lake_root=lake_root,
+        open_times_reader=open_times_reader,
+        symbol_normalizer=symbol_normalizer,
+        interval_ms_resolver=interval_ms_resolver,
+        now_open_resolver=now_open_resolver,
         ranges_builder=ranges_builder,
+        history_fetcher=history_fetcher,
+        range_fetcher=range_fetcher,
+        latest_open_time_reader=latest_open_time_reader,
+        tail_delta_only=tail_delta_only,
+        on_history_chunk=on_history_chunk,
+        start_open_ms_bound=start_open_ms_bound,
     )
-    if not missing_ranges:
-        return []
-
-    fetched: list[SpotCandle] = []
-    for start_open_ms, gap_end_ms in _ranges_in_random_order(missing_ranges):
-        for day_start_ms, day_end_ms in _day_windows_in_random_order(start_open_ms, gap_end_ms):
-            fetched.extend(
-                range_fetcher(
-                    exchange=exchange,
-                    symbol=symbol,
-                    interval=timeframe,
-                    start_open_ms=day_start_ms,
-                    end_open_ms=day_end_ms,
-                    market=market,
-                )
-            )
-
-    unique_by_open_time = {item.open_time: item for item in fetched}
-    return [unique_by_open_time[key] for key in sorted(unique_by_open_time)]
 
 
 def fetch_symbol_open_interest(
