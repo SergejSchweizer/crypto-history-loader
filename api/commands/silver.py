@@ -25,6 +25,7 @@ from application.services.silver_sidecars import write_monthly_sidecars
 from ingestion.funding import DERIBIT_FUNDING_NATIVE_INTERVAL
 
 _MARKET_DISCOVERY_CONFIG: dict[str, tuple[str, str, str]] = {
+    "peprs_ohlcv": ("peprs_ohlcv", "perp", "1m"),
     "funding": ("funding", "perp", DERIBIT_FUNDING_NATIVE_INTERVAL),
     "oi": ("oi", "perp", "1m"),
     "perp_trades": ("perp_trades", "perp", "tick"),
@@ -45,7 +46,7 @@ def add_silver_build_parser(subparsers: Any) -> None:
         nargs="+",
         choices=[
             "spot",
-            "perp",
+            "peprs_ohlcv",
             "oi",
             "funding",
             "perp_trades",
@@ -54,7 +55,7 @@ def add_silver_build_parser(subparsers: Any) -> None:
         ],
         default=[
             "spot",
-            "perp",
+            "peprs_ohlcv",
             "oi",
             "funding",
             "perp_trades",

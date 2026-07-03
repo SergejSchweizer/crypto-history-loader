@@ -33,7 +33,7 @@ def test_build_steps_uses_configured_market_args_with_trades(tmp_path: Path) -> 
             "bronze": {
                 "enabled": True,
                 "command": "bronze-build",
-                "cli_args": ["--dataset", "spot", "perp", "oi", "funding", "perp_trades"],
+                "cli_args": ["--dataset", "spot", "peprs_ohlcv", "oi", "funding", "perp_trades"],
             },
             "silver": {"enabled": False, "command": "silver-build", "cli_args": []},
             "gold": {"enabled": False, "command": "gold-build", "cli_args": []},
@@ -63,7 +63,7 @@ def test_build_steps_bronze_inherits_start_bounds_from_bronze_config(tmp_path: P
             "bronze": {
                 "enabled": True,
                 "command": "bronze-build",
-                "cli_args": ["--dataset", "spot", "perp"],
+                "cli_args": ["--dataset", "spot", "peprs_ohlcv"],
             },
         },
     }

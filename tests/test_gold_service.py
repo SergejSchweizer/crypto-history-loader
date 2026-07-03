@@ -65,7 +65,7 @@ def test_contract_bump_level_branches() -> None:
         "contract_signature": {
             "columns": ["a", "b"],
             "join_policy": "full_outer_coalesce",
-            "source_dataset_keys": ["spot_1m", "perp_1m"],
+            "source_dataset_keys": ["spot_1m", "peprs_ohlcv_1m"],
         }
     }
     assert _contract_bump_level(
@@ -125,7 +125,7 @@ def test_dataset_specs_symbol_normalization_and_hash_helpers() -> None:
     assert normalize_symbol("btc/usdc") == "BTC"
     assert normalize_symbol("eth-perpetual") == "ETH"
     assert _feature_source_dataset("spot_close_price") == "spot_1m"
-    assert _feature_source_dataset("perp_close_price") == "perp_1m"
+    assert _feature_source_dataset("perp_close_price") == "peprs_ohlcv_1m"
     assert _feature_source_dataset("oi_observation_lag_sec") == "oi_1m_feature"
     assert _feature_source_dataset("funding_rate_last_known") == "funding_1m_feature"
     assert _feature_source_dataset("trades_open_price") == "perp_trades_1m_feature"
@@ -339,7 +339,7 @@ def test_build_gold_for_symbol_writes_hashed_parquet_and_manifest(tmp_path: Path
     )
     _write_silver_month(
         silver,
-        dataset_type="perp",
+        dataset_type="peprs_ohlcv",
         exchange=exchange,
         symbol="BTC-PERPETUAL",
         timeframe="1m",
@@ -489,14 +489,14 @@ def test_build_gold_for_symbol_writes_hashed_parquet_and_manifest(tmp_path: Path
     assert "spot_1m" in payload["source_silver_datasets"]
     assert "columns" in payload["source_silver_datasets"]["spot_1m"]
     assert "open_time" in payload["source_silver_datasets"]["spot_1m"]["columns"]
-    assert "perp_1m" in payload["source_silver_datasets"]
+    assert "peprs_ohlcv_1m" in payload["source_silver_datasets"]
     assert "oi_1m_feature" in payload["source_silver_datasets"]
     assert "funding_1m_feature" in payload["source_silver_datasets"]
     assert "perp_trades_1m_feature" in payload["source_silver_datasets"]
     assert "option_trades_1m_feature" in payload["source_silver_datasets"]
     assert "volatility_index_data_observed" in payload["source_silver_datasets"]
     assert payload["source_silver_datasets"]["spot_1m"]["source_symbols"] == ["BTC"]
-    assert payload["source_silver_datasets"]["perp_1m"]["source_symbols"] == ["BTC"]
+    assert payload["source_silver_datasets"]["peprs_ohlcv_1m"]["source_symbols"] == ["BTC"]
     assert "feature_metadata" in payload
     assert "spot_close_price" in payload["feature_metadata"]
     assert payload["feature_metadata"]["spot_close_price"]["source_exchange"] == exchange
@@ -566,7 +566,7 @@ def test_build_gold_uses_latest_silver_artifacts_only(tmp_path: Path) -> None:
 
     _write_silver_month(
         silver,
-        dataset_type="perp",
+        dataset_type="peprs_ohlcv",
         exchange=exchange,
         symbol="BTC-PERPETUAL",
         timeframe="1m",
@@ -621,7 +621,7 @@ def test_build_gold_for_symbol_normalizes_input_symbol(tmp_path: Path) -> None:
             ],
         ),
         (
-            "perp",
+            "peprs_ohlcv",
             [
                 {
                     "open_time": t0,
@@ -877,7 +877,7 @@ def test_discover_gold_symbols_requires_trades_dataset(tmp_path: Path) -> None:
     )
     _write_silver_month(
         silver,
-        dataset_type="perp",
+        dataset_type="peprs_ohlcv",
         exchange=exchange,
         symbol="BTC-PERPETUAL",
         timeframe="1m",
@@ -977,7 +977,7 @@ def test_build_gold_hybrid_full_l2_contains_l2_features(tmp_path: Path) -> None:
     )
     _write_silver_month(
         silver,
-        dataset_type="perp",
+        dataset_type="peprs_ohlcv",
         exchange=exchange,
         symbol="BTC-PERPETUAL",
         timeframe="1m",
@@ -1160,7 +1160,7 @@ def test_build_gold_hybrid_full_l2_uses_requested_exchange_l2(tmp_path: Path) ->
     )
     _write_silver_month(
         silver,
-        dataset_type="perp",
+        dataset_type="peprs_ohlcv",
         exchange=exchange,
         symbol="BTC-PERPETUAL",
         timeframe="1m",
@@ -1353,7 +1353,7 @@ def test_build_gold_hybrid_full_l2_rejects_invalid_l2_coverage_ratio(tmp_path: P
     )
     _write_silver_month(
         silver,
-        dataset_type="perp",
+        dataset_type="peprs_ohlcv",
         exchange=exchange,
         symbol="BTC-PERPETUAL",
         timeframe="1m",
@@ -1529,7 +1529,7 @@ def test_build_gold_hybrid_full_l2_lenient_drops_invalid_rows(tmp_path: Path) ->
     )
     _write_silver_month(
         silver,
-        dataset_type="perp",
+        dataset_type="peprs_ohlcv",
         exchange=exchange,
         symbol="BTC-PERPETUAL",
         timeframe="1m",
@@ -1712,7 +1712,7 @@ def test_build_gold_full_keeps_minute_grid_and_reports_missing_values(tmp_path: 
     )
     _write_silver_month(
         silver,
-        dataset_type="perp",
+        dataset_type="peprs_ohlcv",
         exchange=exchange,
         symbol="BTC-PERPETUAL",
         timeframe="1m",
@@ -1902,7 +1902,7 @@ def test_build_gold_uses_latest_similar_silver_dataset_variant(tmp_path: Path) -
 
     _write_silver_month(
         silver,
-        dataset_type="perp",
+        dataset_type="peprs_ohlcv",
         exchange=exchange,
         symbol="BTC-PERPETUAL",
         timeframe="1m",
@@ -1964,7 +1964,7 @@ def test_build_gold_prunes_to_latest_three_versions(tmp_path: Path) -> None:
     )
     _write_silver_month(
         silver,
-        dataset_type="perp",
+        dataset_type="peprs_ohlcv",
         exchange=exchange,
         symbol="BTC-PERPETUAL",
         timeframe="1m",
@@ -2031,7 +2031,7 @@ def test_build_gold_prunes_to_latest_three_artifacts_with_same_version(tmp_path:
     )
     _write_silver_month(
         silver,
-        dataset_type="perp",
+        dataset_type="peprs_ohlcv",
         exchange=exchange,
         symbol="BTC-PERPETUAL",
         timeframe="1m",

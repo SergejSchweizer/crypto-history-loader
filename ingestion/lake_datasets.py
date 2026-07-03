@@ -21,5 +21,5 @@ def ohlcv_dataset_type_for_market(market: str) -> str:
     if market == "spot":
         return "spot"
     if market == "perp":
-        return "perp"
+        return "peprs_ohlcv"
     raise ValueError(f"Unsupported OHLCV market '{market}'")

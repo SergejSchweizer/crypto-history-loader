@@ -371,7 +371,7 @@ def prepare_dataset_frame(pl: Any, dataset_type: str, frame: Any, symbol: str) -
 
     dataset_preparers: dict[str, Any] = {
         "spot": lambda: prepare_spot_or_perp(pl, frame, "spot", symbol),
-        "perp": lambda: prepare_spot_or_perp(pl, frame, "perp", symbol),
+        "peprs_ohlcv": lambda: prepare_spot_or_perp(pl, frame, "perp", symbol),
         "oi_1m_feature": lambda: prepare_oi(pl, frame, symbol),
         "funding_1m_feature": lambda: prepare_funding(pl, frame, symbol),
         "perp_trades_1m_feature": lambda: prepare_trades(pl, frame, symbol),

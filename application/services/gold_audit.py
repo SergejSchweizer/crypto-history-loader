@@ -33,7 +33,7 @@ def source_dataset_summary(
 
     summary: dict[str, dict[str, object]] = {}
     for dataset_type, raw in raw_by_dataset.items():
-        source_key = f"{dataset_type}_1m" if dataset_type in {"spot", "perp"} else dataset_type
+        source_key = f"{dataset_type}_1m" if dataset_type in {"spot", "peprs_ohlcv"} else dataset_type
         source_symbols = (
             sorted(set(raw.get_column("symbol").cast(pl.Utf8).to_list())) if "symbol" in raw.columns else []
         )

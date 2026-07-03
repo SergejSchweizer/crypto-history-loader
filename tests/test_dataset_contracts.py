@@ -18,7 +18,7 @@ def test_silver_contracts_cover_service_output_columns() -> None:
 
     expected_columns = {
         "spot": silver_service.SILVER_OHLCV_COLUMNS,
-        "perp": silver_service.SILVER_OHLCV_COLUMNS,
+        "peprs_ohlcv": silver_service.SILVER_OHLCV_COLUMNS,
         "funding_observed": silver_service.SILVER_FUNDING_OBSERVED_COLUMNS,
         "funding_1m_feature": silver_service.SILVER_FUNDING_FEATURE_COLUMNS,
         "oi_observed": silver_service.SILVER_OI_OBSERVED_COLUMNS,

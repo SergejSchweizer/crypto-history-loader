@@ -42,7 +42,7 @@ def _write_bronze_day_file(
     instrument_type: str | None = None,
 ) -> None:
     ds = dataset_type or market
-    instrument = instrument_type or market
+    instrument = instrument_type or ("perp" if market == "peprs_ohlcv" else market)
     target = (
         root
         / f"dataset_type={ds}"
@@ -65,7 +65,7 @@ def test_build_silver_for_symbol_writes_monthly_parquet_and_aggregated_report(tm
     symbol = "BTC-PERPETUAL"
     base = {
         "schema_version": "v1",
-        "dataset_type": "perp",
+        "dataset_type": "peprs_ohlcv",
         "exchange": "deribit",
         "symbol": symbol,
         "instrument_type": "perp",
@@ -133,7 +133,7 @@ def test_build_silver_for_symbol_writes_monthly_parquet_and_aggregated_report(tm
     ]
     _write_bronze_day_file(
         bronze,
-        market="perp",
+        market="peprs_ohlcv",
         exchange="deribit",
         symbol=symbol,
         timeframe="1m",
@@ -143,7 +143,7 @@ def test_build_silver_for_symbol_writes_monthly_parquet_and_aggregated_report(tm
     )
     _write_bronze_day_file(
         bronze,
-        market="perp",
+        market="peprs_ohlcv",
         exchange="deribit",
         symbol=symbol,
         timeframe="1m",
@@ -152,13 +152,13 @@ def test_build_silver_for_symbol_writes_monthly_parquet_and_aggregated_report(tm
         rows=rows_day2,
     )
 
-    assert discover_symbols(str(bronze), "perp", "deribit") == [symbol]
-    assert discover_months(str(bronze), "perp", "deribit", symbol) == ["2026-05"]
+    assert discover_symbols(str(bronze), "peprs_ohlcv", "deribit") == [symbol]
+    assert discover_months(str(bronze), "peprs_ohlcv", "deribit", symbol) == ["2026-05"]
 
     report = build_silver_for_symbol(
         bronze_root=str(bronze),
         silver_root=str(silver),
-        market="perp",
+        market="peprs_ohlcv",
         exchange="deribit",
         symbol=symbol,
         timeframe="1m",
@@ -175,7 +175,7 @@ def test_build_silver_for_symbol_writes_monthly_parquet_and_aggregated_report(tm
 
     silver_file = (
         silver
-        / "dataset_type=perp"
+        / "dataset_type=peprs_ohlcv"
         / "exchange=deribit"
         / f"symbol={symbol}"
         / "timeframe=1m"
@@ -189,7 +189,7 @@ def test_build_silver_for_symbol_writes_monthly_parquet_and_aggregated_report(tm
 
     manifest_paths, plot_paths = write_monthly_sidecars(
         silver_root=str(silver),
-        market="perp",
+        market="peprs_ohlcv",
         exchange="deribit",
         symbol=symbol,
         report=report,
@@ -202,7 +202,7 @@ def test_build_silver_for_symbol_writes_monthly_parquet_and_aggregated_report(tm
     assert monthly_manifest_path.exists()
     assert monthly_manifest_path.name == f"{symbol}-2026-05.json"
     monthly_payload = json.loads(monthly_manifest_path.read_text(encoding="utf-8"))
-    assert monthly_payload["dataset"] == "perp_1m"
+    assert monthly_payload["dataset"] == "peprs_ohlcv_1m"
     assert "column_hash" in monthly_payload
     assert "source_silver_datasets" in monthly_payload
     assert "feature_metadata" in monthly_payload

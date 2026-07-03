@@ -7,8 +7,11 @@
 # Root files to keep tracked.
 !.gitignore
 !AGENTS.md
+!DECISONS.md
 !README.md
 !REPORT.md
+!RISKS.md
+!TIMELINE.md
 !Makefile
 !main.py
 !pyproject.toml

@@ -27,7 +27,7 @@ def test_write_monthly_sidecars_writes_manifest_from_parquet(tmp_path: Path) -> 
     silver_root = tmp_path / "silver"
     parquet_path = (
         silver_root
-        / "dataset_type=perp"
+        / "dataset_type=peprs_ohlcv"
         / "exchange=deribit"
         / "symbol=BTC"
         / "timeframe=1m"
@@ -49,11 +49,11 @@ def test_write_monthly_sidecars_writes_manifest_from_parquet(tmp_path: Path) -> 
 
     manifest_paths, plot_paths = write_monthly_sidecars(
         silver_root=str(silver_root),
-        market="perp",
+        market="peprs_ohlcv",
         exchange="deribit",
         symbol="BTC",
         report=_Report(
-            dataset="perp_1m",
+            dataset="peprs_ohlcv_1m",
             exchange="deribit",
             symbol="BTC",
             timeframe="1m",
@@ -66,6 +66,6 @@ def test_write_monthly_sidecars_writes_manifest_from_parquet(tmp_path: Path) -> 
     assert plot_paths == []
     assert len(manifest_paths) == 1
     payload = json.loads(Path(manifest_paths[0]).read_text(encoding="utf-8"))
-    assert payload["dataset"] == "perp_1m"
-    assert payload["source_silver_datasets"]["perp_1m"]["source_symbols"] == ["BTC"]
+    assert payload["dataset"] == "peprs_ohlcv_1m"
+    assert payload["source_silver_datasets"]["peprs_ohlcv_1m"]["source_symbols"] == ["BTC"]
     assert payload["feature_metadata"]["close_price"]["source_exchange"] == "deribit"
