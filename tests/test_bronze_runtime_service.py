@@ -31,7 +31,7 @@ def _plan() -> BronzeFetchPlanDTO:
 def _registry_plan() -> BronzeFetchPlanDTO:
     return BronzeFetchPlanDTO(
         exchanges=["deribit"],
-        data_types=["funding", "oi", "perp_trades", "spot", "volatility_index_data"],
+        data_types=["funding", "oi", "perps_trades", "spot", "volatility_index_data"],
         ohlcv_markets=["spot"],
         symbols=["BTC"],
         perp_trade_symbols=["BTC"],
@@ -46,7 +46,7 @@ def _registry_plan() -> BronzeFetchPlanDTO:
             DatasetTask("deribit", "oi", "perp", "BTC", "1m", "perp"),
             DatasetTask("deribit", "funding", "perp", "BTC", "1m", "perp"),
             DatasetTask("deribit", "volatility_index_data", "perp", "BTC", "1m", "perp"),
-            DatasetTask("deribit", "perp_trades", "perp", "BTC", "tick", "perp"),
+            DatasetTask("deribit", "perps_trades", "perp", "BTC", "tick", "perp"),
         ],
     )
 
@@ -169,7 +169,7 @@ def test_dataset_task_key_maps_use_registry_checkpoint_keys() -> None:
     assert candle_map[("deribit", "spot", "BTC", "1m")] == "deribit|spot|spot|BTC|1m|spot"
     assert oi_map[("deribit", "BTC", "1m")] == "deribit|oi|perp|BTC|1m|perp"
     assert funding_map[("deribit", "BTC", "1m")] == "deribit|funding|perp|BTC|1m|perp"
-    assert trade_map[("deribit", "perp", "BTC")] == "deribit|perp_trades|perp|BTC|tick|perp"
+    assert trade_map[("deribit", "perp", "BTC")] == "deribit|perps_trades|perp|BTC|tick|perp"
 
 
 def test_bronze_checkpoint_key_maps_include_volatility_tasks() -> None:
@@ -208,7 +208,7 @@ def test_checkpoint_task_keys_and_completion_use_dataset_maps() -> None:
         key_maps=key_maps,
     )
 
-    assert serialized == "deribit|perp_trades|perp|BTC|tick|perp"
+    assert serialized == "deribit|perps_trades|perp|BTC|tick|perp"
     assert completed["trade"] == {serialized}
     assert task_keys == {"deribit|spot|spot|BTC|1m|spot", serialized}
 
@@ -218,7 +218,7 @@ def test_apply_checkpoint_filter_with_key_maps_drops_registry_completed_tasks() 
     key_maps = runtime.bronze_checkpoint_key_maps(plan)
     completed = runtime.empty_checkpoint_state()
     completed["candle"].add("deribit|spot|spot|BTC|1m|spot")
-    completed["trade"].add("deribit|perp_trades|perp|BTC|tick|perp")
+    completed["trade"].add("deribit|perps_trades|perp|BTC|tick|perp")
 
     pending = runtime.apply_checkpoint_filter_with_key_maps(
         candle_tasks=plan.candle_tasks,
@@ -264,7 +264,7 @@ def test_hydrate_checkpoint_aliases_adds_registry_keys_for_legacy_completed_keys
     assert "deribit|spot|spot|BTC|1m|spot" in completed["candle"]
     assert "deribit|oi|perp|BTC|1m|perp" in completed["oi"]
     assert "deribit|funding|perp|BTC|1m|perp" in completed["funding"]
-    assert "deribit|perp_trades|perp|BTC|tick|perp" in completed["trade"]
+    assert "deribit|perps_trades|perp|BTC|tick|perp" in completed["trade"]
 
 
 def test_apply_checkpoint_filter_drops_completed_tasks() -> None:

@@ -297,7 +297,7 @@ class IncrementalPersistor:
         self.incremental_parquet_files.extend(storage_result.parquet_files)
         self._log_new_daily_partitions(
             logger=logger,
-            data_type="option_trades" if task.market == "option" else "perp_trades",
+            data_type="option_trades" if task.market == "option" else "perps_trades",
             exchange=task.exchange,
             market=task.market,
             symbol=task.symbol,
@@ -419,7 +419,7 @@ def finalize_bronze_output(
     oi_requested: bool,
     funding_requested: bool,
     volatility_index_data_requested: bool,
-    perp_trades_requested: bool,
+    perps_trades_requested: bool,
     option_trades_requested: bool,
     candles_for_storage: dict[Market, dict[str, dict[str, list[SpotCandle]]]],
     open_interest_for_storage: dict[Market, dict[str, dict[str, list[OpenInterestPoint]]]],
@@ -501,7 +501,7 @@ def finalize_bronze_output(
             multi_market=multi_market,
             storage=funding_for_storage,
         )
-    if perp_trades_requested or option_trades_requested:
+    if perps_trades_requested or option_trades_requested:
         populate_trades_output_fn(
             output=output,
             tasks=trade_tasks,
@@ -527,7 +527,7 @@ def finalize_bronze_output(
                         lake_root=args.lake_root,
                         oi_requested=oi_requested,
                         funding_requested=funding_requested,
-                        trades_requested=perp_trades_requested or option_trades_requested,
+                        trades_requested=perps_trades_requested or option_trades_requested,
                     ),
                 ),
             )
@@ -551,8 +551,8 @@ def finalize_bronze_output(
             selected_dataset_types.add("funding")
         if volatility_index_data_requested:
             selected_dataset_types.add("volatility_index_data")
-        if perp_trades_requested:
-            selected_dataset_types.add("perp_trades")
+        if perps_trades_requested:
+            selected_dataset_types.add("perps_trades")
         if option_trades_requested:
             selected_dataset_types.add("option_trades")
         repaired_parquet_files = ensure_bronze_sidecars_fn(
@@ -566,14 +566,14 @@ def finalize_bronze_output(
         output["_manifest_files"] = sidecar_path_list_fn(parquet_files, ".json")
         output["_plot_files"] = sidecar_path_list_fn(parquet_files, ".png")
 
-    if perp_trades_requested or option_trades_requested:
+    if perps_trades_requested or option_trades_requested:
         breakdown = trade_error_breakdown_fn(cast(dict[tuple[str, str, str], str], trade_errors))
         output["_trade_error_breakdown"] = breakdown
         trade_parquet_files = sorted(
             {
                 str(Path(path).resolve())
                 for path in cast(list[str], output.get("_parquet_files", []))
-                if ("dataset_type=perp_trades" in path or "dataset_type=option_trades" in path)
+                if ("dataset_type=perps_trades" in path or "dataset_type=option_trades" in path)
                 and path.endswith(".parquet")
             }
         )

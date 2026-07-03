@@ -28,7 +28,7 @@ def feature_source_dataset(column_name: str) -> str:
     if column_name.startswith("funding_"):
         return "funding_1m_feature"
     if column_name.startswith("trades_"):
-        return "perp_trades_1m_feature"
+        return "perps_trades_1m_feature"
     if column_name.startswith(("volatility_index_data_", "volatility_index_")):
         return "volatility_index_data_observed"
     return "gold_merged"

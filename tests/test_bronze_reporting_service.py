@@ -75,7 +75,7 @@ def test_symbol_progress_rows_from_dataset_tasks_uses_checkpoint_keys() -> None:
         ),
         DatasetTask(
             exchange="deribit",
-            dataset_type="perp_trades",
+            dataset_type="perps_trades",
             instrument_type="perp",
             symbol="ETH",
             timeframe="tick",

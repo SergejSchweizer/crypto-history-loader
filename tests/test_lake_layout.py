@@ -71,7 +71,7 @@ def test_dataset_data_files_supports_current_and_previous_layouts(tmp_path: Path
 def test_date_and_partition_key_parsing() -> None:
     path = (
         Path("lake/bronze")
-        / "dataset_type=perp_trades"
+        / "dataset_type=perps_trades"
         / "exchange=deribit"
         / "instrument_type=perp"
         / "symbol=BTC-PERPETUAL"
@@ -84,7 +84,7 @@ def test_date_and_partition_key_parsing() -> None:
 
     assert date_from_partition_path(path) == date(2026, 4, 27)
     assert partition_key_from_parquet_path(path) == (
-        "perp_trades",
+        "perps_trades",
         ("deribit", "perp", "BTC-PERPETUAL", "tick", "2026-04-27"),
     )
 

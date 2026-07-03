@@ -128,7 +128,7 @@ def test_dataset_specs_symbol_normalization_and_hash_helpers() -> None:
     assert _feature_source_dataset("perp_close_price") == "peprs_ohlcv_1m"
     assert _feature_source_dataset("oi_observation_lag_sec") == "oi_1m_feature"
     assert _feature_source_dataset("funding_rate_last_known") == "funding_1m_feature"
-    assert _feature_source_dataset("trades_open_price") == "perp_trades_1m_feature"
+    assert _feature_source_dataset("trades_open_price") == "perps_trades_1m_feature"
     assert _feature_source_dataset("option_trades_open_price") == "option_trades_1m_feature"
     assert _feature_source_dataset("volatility_index_data_value") == "volatility_index_data_observed"
     assert _feature_source_dataset("volatility_index_value") == "volatility_index_data_observed"
@@ -182,7 +182,7 @@ def _write_l2_gold_parquet(root: Path, *, symbol: str, exchange: str, rows: list
     pl.DataFrame(rows).write_parquet(target)
 
 
-def _write_perp_trades_1m_feature_month(
+def _write_perps_trades_1m_feature_month(
     root: Path,
     *,
     exchange: str,
@@ -214,7 +214,7 @@ def _write_perp_trades_1m_feature_month(
         )
     _write_silver_month(
         root,
-        dataset_type="perp_trades_1m_feature",
+        dataset_type="perps_trades_1m_feature",
         exchange=exchange,
         symbol=symbol,
         timeframe="1m",
@@ -425,7 +425,7 @@ def test_build_gold_for_symbol_writes_hashed_parquet_and_manifest(tmp_path: Path
             },
         ],
     )
-    _write_perp_trades_1m_feature_month(
+    _write_perps_trades_1m_feature_month(
         silver,
         exchange=exchange,
         symbol="BTC-PERPETUAL",
@@ -492,7 +492,7 @@ def test_build_gold_for_symbol_writes_hashed_parquet_and_manifest(tmp_path: Path
     assert "peprs_ohlcv_1m" in payload["source_silver_datasets"]
     assert "oi_1m_feature" in payload["source_silver_datasets"]
     assert "funding_1m_feature" in payload["source_silver_datasets"]
-    assert "perp_trades_1m_feature" in payload["source_silver_datasets"]
+    assert "perps_trades_1m_feature" in payload["source_silver_datasets"]
     assert "option_trades_1m_feature" in payload["source_silver_datasets"]
     assert "volatility_index_data_observed" in payload["source_silver_datasets"]
     assert payload["source_silver_datasets"]["spot_1m"]["source_symbols"] == ["BTC"]
@@ -665,7 +665,7 @@ def test_build_gold_for_symbol_normalizes_input_symbol(tmp_path: Path) -> None:
             ],
         ),
         (
-            "perp_trades_1m_feature",
+            "perps_trades_1m_feature",
             [
                 {
                     "timestamp_m1": t0,
@@ -770,7 +770,7 @@ def test_build_gold_for_symbol_trades_only_dataset(tmp_path: Path) -> None:
     t0 = datetime(2026, 5, 1, 0, 0, tzinfo=UTC)
     t1 = datetime(2026, 5, 1, 0, 1, tzinfo=UTC)
 
-    _write_perp_trades_1m_feature_month(
+    _write_perps_trades_1m_feature_month(
         silver,
         exchange=exchange,
         symbol="BTC-PERPETUAL",
@@ -806,14 +806,14 @@ def test_build_gold_for_symbol_trades_only_dataset(tmp_path: Path) -> None:
         gold_root=str(gold),
         exchange=exchange,
         symbol=symbol,
-        dataset_id="gold.market.perp_trades.m1",
+        dataset_id="gold.market.perps_trades.m1",
         manifest=True,
     )
 
-    assert "dataset_id=gold.market.perp_trades.m1" in report.parquet_path
+    assert "dataset_id=gold.market.perps_trades.m1" in report.parquet_path
     payload = json.loads(_require_manifest_path(report).read_text(encoding="utf-8"))
-    assert payload["dataset_id"] == "gold.market.perp_trades.m1"
-    assert "perp_trades_1m_feature" in payload["source_silver_datasets"]
+    assert payload["dataset_id"] == "gold.market.perps_trades.m1"
+    assert "perps_trades_1m_feature" in payload["source_silver_datasets"]
 
 
 def test_build_gold_for_symbol_option_trades_only_dataset(tmp_path: Path) -> None:
@@ -1063,7 +1063,7 @@ def test_build_gold_hybrid_full_l2_contains_l2_features(tmp_path: Path) -> None:
             },
         ],
     )
-    _write_perp_trades_1m_feature_month(
+    _write_perps_trades_1m_feature_month(
         silver,
         exchange=exchange,
         symbol="BTC-PERPETUAL",
@@ -1246,7 +1246,7 @@ def test_build_gold_hybrid_full_l2_uses_requested_exchange_l2(tmp_path: Path) ->
             },
         ],
     )
-    _write_perp_trades_1m_feature_month(
+    _write_perps_trades_1m_feature_month(
         silver,
         exchange=exchange,
         symbol="BTC-PERPETUAL",
@@ -1439,7 +1439,7 @@ def test_build_gold_hybrid_full_l2_rejects_invalid_l2_coverage_ratio(tmp_path: P
             },
         ],
     )
-    _write_perp_trades_1m_feature_month(
+    _write_perps_trades_1m_feature_month(
         silver,
         exchange=exchange,
         symbol="BTC-PERPETUAL",
@@ -1615,7 +1615,7 @@ def test_build_gold_hybrid_full_l2_lenient_drops_invalid_rows(tmp_path: Path) ->
             },
         ],
     )
-    _write_perp_trades_1m_feature_month(
+    _write_perps_trades_1m_feature_month(
         silver,
         exchange=exchange,
         symbol="BTC-PERPETUAL",
@@ -1798,7 +1798,7 @@ def test_build_gold_full_keeps_minute_grid_and_reports_missing_values(tmp_path: 
             },
         ],
     )
-    _write_perp_trades_1m_feature_month(
+    _write_perps_trades_1m_feature_month(
         silver,
         exchange=exchange,
         symbol="BTC-PERPETUAL",

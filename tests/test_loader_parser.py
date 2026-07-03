@@ -36,7 +36,7 @@ def test_bronze_parser_accepts_trade_datasets_and_runtime_bounds() -> None:
         [
             "bronze-build",
             "--dataset",
-            "perp_trades",
+            "perps_trades",
             "option_trades",
             "--symbols",
             "BTC",
@@ -49,7 +49,7 @@ def test_bronze_parser_accepts_trade_datasets_and_runtime_bounds() -> None:
         ]
     )
 
-    assert args.dataset == ["perp_trades", "option_trades"]
+    assert args.dataset == ["perps_trades", "option_trades"]
     assert args.symbols == ["BTC", "ETH"]
     assert args.tail_delta_only is True
     assert args.start_date == "2023-04-24"

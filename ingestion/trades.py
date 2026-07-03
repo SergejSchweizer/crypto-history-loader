@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Literal, cast
 
-from ingestion.exchanges import deribit_option_trades, deribit_perp_trades
+from ingestion.exchanges import deribit_option_trades, deribit_perps_trades
 from ingestion.spot import Exchange, normalize_storage_symbol
 
 TradeMarket = Literal["spot", "perp", "option"]
@@ -185,7 +185,7 @@ def fetch_trades_all_history(
             return
         on_history_chunk([_parse_trade_row(exchange, normalized_symbol, market_non_option, row) for row in rows])
 
-    rows = deribit_perp_trades.fetch_perp_trades_all(
+    rows = deribit_perps_trades.fetch_perps_trades_all(
         symbol=normalized_symbol,
         market=market_non_option,
         on_page=_on_page if on_history_chunk is not None else None,
@@ -217,7 +217,7 @@ def fetch_trades_range(
         )
         return [_parse_option_trade_row(exchange, normalized_symbol, row) for row in rows]
     market_non_option: Literal["spot", "perp"] = market
-    rows = deribit_perp_trades.fetch_perp_trades_range(
+    rows = deribit_perps_trades.fetch_perps_trades_range(
         symbol=normalized_symbol,
         market=market_non_option,
         start_open_ms=start_open_ms,

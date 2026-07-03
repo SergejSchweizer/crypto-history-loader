@@ -82,24 +82,24 @@ def test_run_silver_build_uses_tick_timeframe_for_trades_discovery(
     ) -> list[str]:
         del bronze_root, exchange, instrument_type
         captured.append((market, timeframe))
-        if market == "perp_trades":
+        if market == "perps_trades":
             return ["BTC-PERPETUAL"]
         return []
 
     def fake_build_trades(**kwargs: object) -> silver_cmd.SilverBuildReport:
         built.append((str(kwargs["symbol"]), str(kwargs.get("timeframe", kwargs.get("observed_timeframe", "")))))
-        return _report("perp_trades_1m_feature")
+        return _report("perps_trades_1m_feature")
 
     monkeypatch.setattr(silver_cmd, "discover_symbols", fake_discover_symbols)
-    monkeypatch.setattr(silver_cmd, "build_perp_trades_observed_for_symbol", fake_build_trades)
-    monkeypatch.setattr(silver_cmd, "build_perp_trades_1m_feature_for_symbol", fake_build_trades)
+    monkeypatch.setattr(silver_cmd, "build_perps_trades_observed_for_symbol", fake_build_trades)
+    monkeypatch.setattr(silver_cmd, "build_perps_trades_1m_feature_for_symbol", fake_build_trades)
     monkeypatch.setattr(silver_cmd, "write_monthly_sidecars", lambda **kwargs: ([], []))
 
     args = argparse.Namespace(
         bronze_root="lake/bronze",
         silver_root="lake/silver",
         exchange="deribit",
-        market=["perp_trades"],
+        market=["perps_trades"],
         symbols=None,
         timeframe="1m",
         manifest=False,
@@ -108,7 +108,7 @@ def test_run_silver_build_uses_tick_timeframe_for_trades_discovery(
     )
     silver_cmd.run_silver_build(args=args, logger=logging.getLogger("test"))
 
-    assert captured == [("perp_trades", "tick")]
+    assert captured == [("perps_trades", "tick")]
     assert built == [("BTC-PERPETUAL", "tick"), ("BTC-PERPETUAL", "tick")]
 
 
@@ -131,7 +131,7 @@ def test_run_silver_build_uses_tick_timeframe_for_option_trades_discovery(
             return ["BTC"]
         return []
 
-    def fake_build_perp_trades_observed(**kwargs: object) -> silver_cmd.SilverBuildReport:
+    def fake_build_perps_trades_observed(**kwargs: object) -> silver_cmd.SilverBuildReport:
         built.append(str(kwargs.get("output_dataset_type", "missing")))
         return _report("option_trades_observed")
 
@@ -140,8 +140,8 @@ def test_run_silver_build_uses_tick_timeframe_for_option_trades_discovery(
         return _report("option_trades_1m_feature")
 
     monkeypatch.setattr(silver_cmd, "discover_symbols", fake_discover_symbols)
-    monkeypatch.setattr(silver_cmd, "build_perp_trades_observed_for_symbol", fake_build_perp_trades_observed)
-    monkeypatch.setattr(silver_cmd, "build_perp_trades_1m_feature_for_symbol", fake_build_trades_feature)
+    monkeypatch.setattr(silver_cmd, "build_perps_trades_observed_for_symbol", fake_build_perps_trades_observed)
+    monkeypatch.setattr(silver_cmd, "build_perps_trades_1m_feature_for_symbol", fake_build_trades_feature)
     monkeypatch.setattr(silver_cmd, "write_monthly_sidecars", lambda **kwargs: ([], []))
 
     args = argparse.Namespace(

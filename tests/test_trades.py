@@ -25,7 +25,7 @@ def test_fetch_trades_range_parses_deribit_rows(monkeypatch) -> None:  # type: i
             }
         ]
 
-    monkeypatch.setattr("ingestion.exchanges.deribit_perp_trades.fetch_perp_trades_range", _fake_fetch)
+    monkeypatch.setattr("ingestion.exchanges.deribit_perps_trades.fetch_perps_trades_range", _fake_fetch)
     rows = fetch_trades_range(
         exchange="deribit",
         symbol="BTC",
@@ -58,7 +58,7 @@ def test_fetch_trades_all_history_streams_perp_pages(monkeypatch) -> None:  # ty
         return []
 
     chunks: list[list[TradeTick | OptionTradeTick]] = []
-    monkeypatch.setattr("ingestion.exchanges.deribit_perp_trades.fetch_perp_trades_all", _fake_fetch_all)
+    monkeypatch.setattr("ingestion.exchanges.deribit_perps_trades.fetch_perps_trades_all", _fake_fetch_all)
     rows = fetch_trades_all_history(
         exchange="deribit",
         symbol="BTC-PERPETUAL",
@@ -122,7 +122,7 @@ def test_save_trades_parquet_lake_writes_dataset(tmp_path: Path) -> None:
     )
     assert len(files) == 1
     path = Path(files[0])
-    assert "dataset_type=perp_trades" in files[0]
+    assert "dataset_type=perps_trades" in files[0]
     table = pq.ParquetFile(path).read()
     row = table.to_pylist()[0]
     assert row["trade_id"] == "t-1"

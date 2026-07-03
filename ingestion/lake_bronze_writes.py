@@ -163,7 +163,7 @@ def save_trades_parquet_lake(
 
     run_id = utc_run_id()
     ingested_at = datetime.now(UTC)
-    dataset_type = "option_trades" if market == "option" else "perp_trades"
+    dataset_type = "option_trades" if market == "option" else "perps_trades"
 
     grouped: defaultdict[PartitionKey, list[dict[str, object]]] = defaultdict(list)
     for symbol_map in trades_by_exchange.values():

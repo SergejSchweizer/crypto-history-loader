@@ -18,14 +18,14 @@ def build_trade_tasks(
     exchanges: list[Exchange],
     perp_trade_symbols: list[str],
     option_trade_symbols: list[str],
-    perp_trades_requested: bool,
+    perps_trades_requested: bool,
     option_trades_requested: bool,
 ) -> list[tuple[Exchange, TradeMarket, str]]:
     """Build trade task tuples with symbol-first round-robin ordering."""
 
     requested_specs: list[DatasetSpec] = []
-    if perp_trades_requested:
-        requested_specs.append(dataset_spec("perp_trades"))
+    if perps_trades_requested:
+        requested_specs.append(dataset_spec("perps_trades"))
     if option_trades_requested:
         requested_specs.append(dataset_spec("option_trades"))
     return build_trade_tasks_from_specs(
@@ -74,7 +74,7 @@ def build_trade_tasks_from_specs(
 def _trade_dataset_key(market: TradeMarket) -> str:
     """Return output dataset key for one trade market."""
 
-    return "option_trades" if market == "option" else "perp_trades"
+    return "option_trades" if market == "option" else "perps_trades"
 
 
 def _serialize_trade_row(item: TradeTick | OptionTradeTick) -> dict[str, object]:

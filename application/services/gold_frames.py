@@ -374,7 +374,7 @@ def prepare_dataset_frame(pl: Any, dataset_type: str, frame: Any, symbol: str) -
         "peprs_ohlcv": lambda: prepare_spot_or_perp(pl, frame, "perp", symbol),
         "oi_1m_feature": lambda: prepare_oi(pl, frame, symbol),
         "funding_1m_feature": lambda: prepare_funding(pl, frame, symbol),
-        "perp_trades_1m_feature": lambda: prepare_trades(pl, frame, symbol),
+        "perps_trades_1m_feature": lambda: prepare_trades(pl, frame, symbol),
         "option_trades_1m_feature": lambda: prepare_option_trades(pl, frame, symbol),
         "volatility_index_data_observed": lambda: prepare_volatility_index_data(pl, frame, symbol),
         "gold_l2_m1": lambda: prepare_l2(pl, frame, symbol),

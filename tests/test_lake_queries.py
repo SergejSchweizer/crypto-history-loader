@@ -82,7 +82,7 @@ def test_partition_dates_and_bounds_read_trade_partitions(tmp_path: Path) -> Non
 
     dates = partition_dates_in_lake_by_dataset(
         lake_root=str(tmp_path),
-        dataset_type="perp_trades",
+        dataset_type="perps_trades",
         market="perp",
         exchange="deribit",
         symbol="BTC-PERPETUAL",
@@ -90,7 +90,7 @@ def test_partition_dates_and_bounds_read_trade_partitions(tmp_path: Path) -> Non
     )
     bounds = open_time_bounds_in_lake_by_dataset(
         lake_root=str(tmp_path),
-        dataset_type="perp_trades",
+        dataset_type="perps_trades",
         market="perp",
         exchange="deribit",
         symbol="BTC-PERPETUAL",

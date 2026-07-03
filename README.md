@@ -21,7 +21,7 @@ Author: Sergej Schweizer
   - [4.2 Perpetual (`dataset_type=peprs_ohlcv`)](#42-perpetual-dataset_typepeprs_ohlcv)
   - [4.3 Open Interest (`dataset_type=oi`)](#43-open-interest-dataset_typeoi)
   - [4.4 Funding (`dataset_type=funding`)](#44-funding-dataset_typefunding)
-  - [4.5 `perp_trades` (`dataset_type=perp_trades`)](#45-perp_trades-dataset_typeperp_trades)
+  - [4.5 `perps_trades` (`dataset_type=perps_trades`)](#45-perps_trades-dataset_typeperps_trades)
   - [4.6 `option_trades` (`dataset_type=option_trades`)](#46-option_trades-dataset_typeoption_trades)
 - [5. Example Commands](#5-example-commands)
   - [5.1 End-to-End Pipeline](#51-end-to-end-pipeline)
@@ -77,7 +77,7 @@ Trade Ticks:
 
 | CLI Domain | Bronze `dataset_type` | Instrument Type | Task Kind | Default Timeframe | Symbol Source | Description |
 |---|---|---|---|---|---|---|
-| `perp_trades` | `perp_trades` | `perp` | `trade` | `tick` | `--symbols` | Historical perpetual trade ticks |
+| `perps_trades` | `perps_trades` | `perp` | `trade` | `tick` | `--symbols` | Historical perpetual trade ticks |
 | `option_trades` | `option_trades` | `option` | `trade` | `tick` | `--symbols` | Historical option trade ticks |
 
 Volatility:
@@ -90,8 +90,8 @@ Volatility:
 
 ### CLI Contract
 
-- `bronze-build --dataset` choices: `spot peprs_ohlcv oi funding perp_trades option_trades volatility_index_data`
-- `--symbols` applies to all selected datasets (`spot`, `peprs_ohlcv`, `oi`, `funding`, `perp_trades`, `option_trades`, `volatility_index_data`)
+- `bronze-build --dataset` choices: `spot peprs_ohlcv oi funding perps_trades option_trades volatility_index_data`
+- `--symbols` applies to all selected datasets (`spot`, `peprs_ohlcv`, `oi`, `funding`, `perps_trades`, `option_trades`, `volatility_index_data`)
 
 Current exchange support:
 
@@ -194,7 +194,7 @@ Recommended permissions:
 ```bash
 uv run python main.py --debug bronze-build \
  --exchange deribit \
- --market spot peprs_ohlcv oi funding perp_trades option_trades volatility_index_data \
+ --market spot peprs_ohlcv oi funding perps_trades option_trades volatility_index_data \
  --symbols BTC ETH SOL \
  --full-gap-fill \
  --save-parquet-lake \
@@ -207,7 +207,7 @@ Trade symbol inheritance:
 
 Raw ingests are defined by `application/datasets.py` and persisted by Bronze writers in
 `ingestion/lake.py`. The repository currently defines seven registry-backed raw dataset types:
-`spot`, `peprs_ohlcv`, `oi`, `funding`, `perp_trades`, `option_trades`, and `volatility_index_data`.
+`spot`, `peprs_ohlcv`, `oi`, `funding`, `perps_trades`, `option_trades`, and `volatility_index_data`.
 
 All datasets share structural metadata columns:
 `schema_version`, `dataset_type`, `exchange`, `symbol`, `instrument_type`, `event_time`,
@@ -228,7 +228,7 @@ Current Bronze missing-day snapshot generated from `lake/bronze` on 2026-07-01 0
 | `oi` | 3 | 2018-08-15 | 2026-06-30 | 7,110 | 7,110 | 0 | 0.00% |
 | `option_trades` | 3 | 2018-08-14 | 2026-07-01 | 5,780 | 5,780 | 0 | 0.00% |
 | `peprs_ohlcv` | 3 | 2018-08-14 | 2026-07-01 | 7,071 | 7,071 | 0 | 0.00% |
-| `perp_trades` | 3 | 2018-08-14 | 2026-06-11 | 5,739 | 2,565 | 3,174 | 55.31% |
+| `perps_trades` | 3 | 2018-08-14 | 2026-06-11 | 5,739 | 2,565 | 3,174 | 55.31% |
 | `spot` | 3 | 2023-04-24 | 2026-07-01 | 3,186 | 3,186 | 0 | 0.00% |
 | `volatility_index_data` | 3 | 2022-11-07 | 2026-05-25 | 83 | 83 | 0 | 0.00% |
 
@@ -249,9 +249,9 @@ Current Bronze missing-day snapshot generated from `lake/bronze` on 2026-07-01 0
 | `peprs_ohlcv` | deribit | perp | `BTC-PERPETUAL` | 1m | 2018-08-14 | 2026-07-01 | 2,879 | 2,879 | 0 | 0.00% |
 | `peprs_ohlcv` | deribit | perp | `ETH-PERPETUAL` | 1m | 2019-03-14 | 2026-07-01 | 2,667 | 2,667 | 0 | 0.00% |
 | `peprs_ohlcv` | deribit | perp | `SOL-PERPETUAL` | 1m | 2022-04-29 | 2026-07-01 | 1,525 | 1,525 | 0 | 0.00% |
-| `perp_trades` | deribit | perp | `BTC-PERPETUAL` | tick | 2018-08-14 | 2026-06-11 | 2,859 | 1,396 | 1,463 | 51.17% |
-| `perp_trades` | deribit | perp | `ETH-PERPETUAL` | tick | 2019-03-14 | 2026-05-29 | 2,634 | 923 | 1,711 | 64.96% |
-| `perp_trades` | deribit | perp | `SOL-PERPETUAL` | tick | 2022-04-29 | 2022-12-30 | 246 | 246 | 0 | 0.00% |
+| `perps_trades` | deribit | perp | `BTC-PERPETUAL` | tick | 2018-08-14 | 2026-06-11 | 2,859 | 1,396 | 1,463 | 51.17% |
+| `perps_trades` | deribit | perp | `ETH-PERPETUAL` | tick | 2019-03-14 | 2026-05-29 | 2,634 | 923 | 1,711 | 64.96% |
+| `perps_trades` | deribit | perp | `SOL-PERPETUAL` | tick | 2022-04-29 | 2022-12-30 | 246 | 246 | 0 | 0.00% |
 | `spot` | deribit | spot | `BTC_USDC` | 1m | 2023-04-24 | 2026-07-01 | 1,165 | 1,165 | 0 | 0.00% |
 | `spot` | deribit | spot | `ETH_USDC` | 1m | 2023-04-24 | 2026-07-01 | 1,165 | 1,165 | 0 | 0.00% |
 | `spot` | deribit | spot | `SOL_USDC` | 1m | 2024-02-27 | 2026-07-01 | 856 | 856 | 0 | 0.00% |
@@ -348,7 +348,7 @@ Description: returns perpetual OHLCV candle arrays (open/high/low/close/volume) 
 | `close_price` | USD (or quote/base) | End-of-interval perpetual mark. | Canonical join key with funding/OI minute features. |
 | `volume` | contracts/base units | Leveraged venue traded size. | Compared with spot volume and tick-flow aggregates for speculation intensity. |
 | `quote_volume` | quote-currency units | Perpetual notional turnover. | Used for cross-market notional participation diagnostics. |
-| `trade_count` | count | Number of perp executions. | Coarse complement to `perp_trades` microstructure rows. |
+| `trade_count` | count | Number of perp executions. | Coarse complement to `perps_trades` microstructure rows. |
 | `origin_payload` | JSON/object | Full source-shaped raw record for audit/replay. | Reconciliation source for derived Silver features. |
 
 Coverage:
@@ -453,12 +453,12 @@ Coverage:
 | `deribit` | `ETH-PERPETUAL` | `8h` | `2019-04-30` | `2026-06-30` | 0 | 0.00% |
 | `deribit` | `SOL-PERPETUAL` | `8h` | `2022-03-16` | `2026-06-30` | 0 | 0.00% |
 
-## 4.5 `perp_trades` (`dataset_type=perp_trades`)
+## 4.5 `perps_trades` (`dataset_type=perps_trades`)
 
 ### 1. Bronze layer
 
 Market role: tick-level perpetual execution flow and aggressor direction.
-Relationship: microstructure input for `perp_trades_1m_feature` and downstream Gold joins.
+Relationship: microstructure input for `perps_trades_1m_feature` and downstream Gold joins.
 Time aggregation: native `tick` (one row per trade).
 
 ### 1.1 Deribit endpoint
@@ -473,12 +473,12 @@ Runtime override: set `DEPTH_DERIBIT_PERP_TRADES_PAGE_SIZE` to tune request page
 
 ### 2. Silver layer
 
-- Builder 1: `build_perp_trades_observed_for_symbol`.
+- Builder 1: `build_perps_trades_observed_for_symbol`.
 - Missing values: rows with null/non-finite `price` or `quantity` are dropped; missing/unknown `side` is normalized to `unknown` where required for deterministic aggregations.
 - Normalize typed trade columns: `trade_time`, `trade_id`, `price`, `quantity`, `side`.
 - Filter invalid rows: `price <= 0`, `quantity <= 0`, null/non-finite values.
 - Deduplicate observed rows by `exchange/instrument_type/symbol/trade_time/trade_id`.
-- Builder 2: `build_perp_trades_1m_feature_for_symbol`.
+- Builder 2: `build_perps_trades_1m_feature_for_symbol`.
 - Aggregate `tick` rows to `1m` OHLC columns: `open_price`, `high_price`, `low_price`, `close_price`.
 - Aggregate flow columns: `volume`, `quote_volume`, `trade_count`, `buy_volume`, `sell_volume`, `buy_trade_count`, `sell_trade_count`, `buy_volume_share`.
 - Time aggregation: `tick -> 1m`.
@@ -587,7 +587,7 @@ Bronze:
 ```bash
 uv run python main.py bronze-build \
   --exchange deribit \
-  --dataset spot peprs_ohlcv oi funding perp_trades option_trades \
+  --dataset spot peprs_ohlcv oi funding perps_trades option_trades \
   --symbols BTC ETH SOL
 ```
 
@@ -598,7 +598,7 @@ uv run python main.py silver-build \
   --bronze-root lake/bronze \
   --silver-root lake/silver \
   --exchange deribit \
-  --dataset spot peprs_ohlcv oi funding perp_trades option_trades \
+  --dataset spot peprs_ohlcv oi funding perps_trades option_trades \
   --timeframe 1m \
   --maxprocesses 4
 ```
@@ -618,7 +618,7 @@ uv run python main.py gold-build \
 
 Symbol-group controls for Bronze:
 
-- `--symbols` applies to all selected datasets (`spot`, `peprs_ohlcv`, `oi`, `funding`, `perp_trades`, `option_trades`)
+- `--symbols` applies to all selected datasets (`spot`, `peprs_ohlcv`, `oi`, `funding`, `perps_trades`, `option_trades`)
 - default symbols are `BTC ETH SOL`
 
 Bronze checkpoint path:
@@ -639,7 +639,7 @@ Manual reset:
 rm -f .run/checkpoints/bronze-build.json
 ```
 
-`perp_trades` storage path: `dataset_type=perp_trades`.
+`perps_trades` storage path: `dataset_type=perps_trades`.
 
 Gold source selection:
 
@@ -655,7 +655,7 @@ Gold retention policy:
 
 Available Gold dataset IDs:
 
-- `gold.market.perp_trades.m1` (`perp_trades` flow only)
+- `gold.market.perps_trades.m1` (`perps_trades` flow only)
 - `gold.market.option_trades.m1` (`option_trades` flow only)
 - `gold.market.core.m1`
 - `gold.market.core_funding.m1`

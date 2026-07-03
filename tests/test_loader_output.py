@@ -15,7 +15,7 @@ from ingestion.volatility import VolatilityPoint
 class _PersistResult:
     """Minimal persistence result used by output-helper tests."""
 
-    parquet_files = ["lake/bronze/dataset_type=perp_trades/date=2026-04-27/data.parquet"]
+    parquet_files = ["lake/bronze/dataset_type=perps_trades/date=2026-04-27/data.parquet"]
 
     def to_output_dict(self) -> dict[str, object]:
         """Return a serializable result payload."""
@@ -26,7 +26,7 @@ class _PersistResult:
 def test_bronze_run_state_initializes_output_and_tasks_from_plan() -> None:
     plan = BronzeFetchPlanDTO(
         exchanges=["deribit"],
-        data_types=["spot", "oi", "funding", "volatility_index_data", "perp_trades"],
+        data_types=["spot", "oi", "funding", "volatility_index_data", "perps_trades"],
         ohlcv_markets=["spot"],
         symbols=["BTC"],
         perp_trade_symbols=["BTC"],

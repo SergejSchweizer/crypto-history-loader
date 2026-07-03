@@ -486,14 +486,14 @@ def build_oi_1m_feature_for_symbol(
     return report
 
 
-def build_perp_trades_1m_feature_for_symbol(
+def build_perps_trades_1m_feature_for_symbol(
     *,
     silver_root: str,
     exchange: str,
     symbol: str,
     observed_timeframe: str = "tick",
-    observed_dataset_type: str = "perp_trades_observed",
-    output_dataset_type: str = "perp_trades_1m_feature",
+    observed_dataset_type: str = "perps_trades_observed",
+    output_dataset_type: str = "perps_trades_1m_feature",
 ) -> SilverBuildReport:
     """Build monthly trade 1m features from observed tick-trade data."""
 
@@ -570,7 +570,7 @@ def build_perp_trades_1m_feature_for_symbol(
     )
 
 
-def build_perp_trades_observed_for_symbol(
+def build_perps_trades_observed_for_symbol(
     *,
     bronze_root: str,
     silver_root: str,
@@ -578,8 +578,8 @@ def build_perp_trades_observed_for_symbol(
     symbol: str,
     instrument_type: str = "perp",
     timeframe: str = "tick",
-    bronze_dataset_type: str = "perp_trades",
-    output_dataset_type: str = "perp_trades_observed",
+    bronze_dataset_type: str = "perps_trades",
+    output_dataset_type: str = "perps_trades_observed",
 ) -> SilverBuildReport:
     """Build monthly observed tick-trade dataset from bronze trade records."""
 
