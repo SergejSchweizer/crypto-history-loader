@@ -21,7 +21,7 @@ def test_run_export_descriptive_stats_requires_timezone() -> None:
         exchanges=None,
         symbols=None,
         timeframes=None,
-        instrument_types=["spot", "perp"],
+        instrument_types=["spot_ohlcv", "perp"],
         no_json_output=True,
     )
     with pytest.raises(ValueError, match="must include timezone offset"):
@@ -37,7 +37,7 @@ def test_run_export_descriptive_stats_requires_start_before_end() -> None:
         exchanges=None,
         symbols=None,
         timeframes=None,
-        instrument_types=["spot", "perp"],
+        instrument_types=["spot_ohlcv", "perp"],
         no_json_output=True,
     )
     with pytest.raises(ValueError, match="start-time must be <= end-time"):
@@ -62,7 +62,7 @@ def test_run_export_descriptive_stats_emits_none_for_missing_columns(
         exchanges=None,
         symbols=None,
         timeframes=None,
-        instrument_types=["spot", "perp"],
+        instrument_types=["spot_ohlcv", "perp"],
         no_json_output=True,
     )
     stats_cmd.run_export_descriptive_stats(args=args, logger=logging.getLogger("test"))
@@ -90,7 +90,7 @@ def test_run_export_descriptive_stats_emits_json_when_enabled(
         exchanges=None,
         symbols=None,
         timeframes=None,
-        instrument_types=["spot", "perp"],
+        instrument_types=["spot_ohlcv", "perp"],
         no_json_output=False,
     )
     stats_cmd.run_export_descriptive_stats(args=args, logger=logging.getLogger("test"))

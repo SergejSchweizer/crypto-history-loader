@@ -217,8 +217,8 @@ def _read_dataset_frame(
     )
 
 
-def _prepare_spot_or_perp(pl: Any, frame: Any, prefix: str, symbol: str) -> Any:
-    return gold_frames.prepare_spot_or_perp(pl, frame, prefix, symbol)
+def _prepare_spot_ohlcv_or_perp(pl: Any, frame: Any, prefix: str, symbol: str) -> Any:
+    return gold_frames.prepare_spot_ohlcv_or_perp(pl, frame, prefix, symbol)
 
 
 def _prepare_oi(pl: Any, frame: Any, symbol: str) -> Any:

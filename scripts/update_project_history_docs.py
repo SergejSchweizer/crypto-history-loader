@@ -3,15 +3,17 @@
 from __future__ import annotations
 
 import argparse
+import re
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 FIELD_SEPARATOR = "\x1f"
-TERM_REPLACEMENTS = {
-    "perp" + "_trades": "perps_trades",
-}
+TERM_REPLACEMENTS = (
+    (re.compile(r"perp_trades"), "perps_trades"),
+    (re.compile(r"\b" + "sp" + r"ot\b(?!_ohlcv)"), "spot_ohlcv"),
+)
 
 
 @dataclass(frozen=True)
@@ -228,8 +230,8 @@ def normalize_project_terms(value: str) -> str:
     """Render historical subjects with current project terminology."""
 
     normalized = value
-    for old, new in TERM_REPLACEMENTS.items():
-        normalized = normalized.replace(old, new)
+    for pattern, new in TERM_REPLACEMENTS:
+        normalized = pattern.sub(new, normalized)
     return normalized
 
 

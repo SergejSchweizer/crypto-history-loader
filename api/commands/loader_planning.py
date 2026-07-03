@@ -21,7 +21,7 @@ from application.services.bronze_runtime_service import (
 from application.services.bronze_runtime_service import (
     parse_symbol_start_dates as _parse_symbol_start_dates,
 )
-from ingestion.spot import Exchange, Market, normalize_timeframe
+from ingestion.spot_ohlcv import Exchange, Market, normalize_timeframe
 
 BRONZE_FIXED_TIMEFRAME = "1m"
 

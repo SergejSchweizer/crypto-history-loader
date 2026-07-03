@@ -17,7 +17,7 @@ def test_silver_contracts_cover_service_output_columns() -> None:
     """Silver services should use the same output columns declared by contracts."""
 
     expected_columns = {
-        "spot": silver_service.SILVER_OHLCV_COLUMNS,
+        "spot_ohlcv": silver_service.SILVER_OHLCV_COLUMNS,
         "peprs_ohlcv": silver_service.SILVER_OHLCV_COLUMNS,
         "funding_observed": silver_service.SILVER_FUNDING_OBSERVED_COLUMNS,
         "funding_1m_feature": silver_service.SILVER_FUNDING_FEATURE_COLUMNS,

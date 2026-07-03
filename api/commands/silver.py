@@ -1,4 +1,4 @@
-"""Silver build command for spot/perp OHLCV transformation."""
+"""Silver build command for spot_ohlcv/perp OHLCV transformation."""
 
 from __future__ import annotations
 
@@ -45,7 +45,7 @@ def add_silver_build_parser(subparsers: Any) -> None:
         "--dataset",
         nargs="+",
         choices=[
-            "spot",
+            "spot_ohlcv",
             "peprs_ohlcv",
             "oi",
             "funding",
@@ -54,7 +54,7 @@ def add_silver_build_parser(subparsers: Any) -> None:
             "volatility_index_data",
         ],
         default=[
-            "spot",
+            "spot_ohlcv",
             "peprs_ohlcv",
             "oi",
             "funding",

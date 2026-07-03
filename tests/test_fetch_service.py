@@ -32,7 +32,7 @@ from application.services.fetch_service import (
 from ingestion.funding import FundingPoint
 from ingestion.http_client import HttpClientError
 from ingestion.open_interest import OpenInterestPoint
-from ingestion.spot import SpotCandle
+from ingestion.spot_ohlcv import SpotCandle
 from ingestion.trades import OptionTradeTick, TradeMarket, TradeTick
 
 
@@ -53,8 +53,8 @@ def _sleep_then_empty_oi(**kwargs: object) -> list[OpenInterestPoint]:
 
 
 def test_fetch_candle_tasks_parallel_splits_success_and_errors() -> None:
-    task_ok = CandleFetchTaskDTO(exchange="deribit", market="spot", symbol="BTCUSDT", timeframe="1m")
-    task_fail = CandleFetchTaskDTO(exchange="deribit", market="spot", symbol="ETHUSDT", timeframe="1m")
+    task_ok = CandleFetchTaskDTO(exchange="deribit", market="spot_ohlcv", symbol="BTCUSDT", timeframe="1m")
+    task_fail = CandleFetchTaskDTO(exchange="deribit", market="spot_ohlcv", symbol="ETHUSDT", timeframe="1m")
 
     candle = SpotCandle(
         exchange="deribit",
@@ -139,7 +139,7 @@ def test_fetch_symbol_candles_tail_delta_only_uses_latest_open_time() -> None:
 
     candles = fetch_symbol_candles(
         exchange="deribit",
-        market="spot",
+        market="spot_ohlcv",
         symbol="BTCUSDT",
         timeframe="1m",
         lake_root="lake/bronze",
@@ -184,7 +184,7 @@ def test_fetch_symbol_candles_tail_delta_only_uses_start_bound_when_no_history()
 
     candles = fetch_symbol_candles(
         exchange="deribit",
-        market="spot",
+        market="spot_ohlcv",
         symbol="BTCUSDT",
         timeframe="1m",
         lake_root="lake/bronze",
@@ -395,7 +395,7 @@ def test_fetch_symbol_candles_full_gap_fill_includes_head_gap_from_start_bound()
 
     candles = fetch_symbol_candles(
         exchange="deribit",
-        market="spot",
+        market="spot_ohlcv",
         symbol="BTCUSDT",
         timeframe="1m",
         lake_root="lake/bronze",
@@ -953,7 +953,7 @@ def test_fetch_symbol_candles_bootstrap_with_start_bound_uses_day_range_fetch() 
 
     rows = fetch_symbol_candles(
         exchange="deribit",
-        market="spot",
+        market="spot_ohlcv",
         symbol="BTCUSDT",
         timeframe="1m",
         lake_root="lake/bronze",
@@ -1051,7 +1051,7 @@ def test_fetch_symbol_funding_bootstrap_with_start_bound_uses_day_range_fetch() 
 
 
 def test_fetch_candle_tasks_parallel_records_rows_for_slow_fetcher(monkeypatch: pytest.MonkeyPatch) -> None:
-    task = CandleFetchTaskDTO(exchange="deribit", market="spot", symbol="BTCUSDT", timeframe="1m")
+    task = CandleFetchTaskDTO(exchange="deribit", market="spot_ohlcv", symbol="BTCUSDT", timeframe="1m")
 
     def _slow_fetcher(exchange: str, market: str, symbol: str, timeframe: str, lake_root: str) -> list[SpotCandle]:
         del exchange, market, symbol, timeframe, lake_root
@@ -1078,7 +1078,7 @@ def test_fetch_candle_tasks_parallel_suppresses_heartbeat_logs_without_timeout(
 ) -> None:
     monkeypatch.delenv("DEPTH_FETCH_TASK_TIMEOUT_S", raising=False)
     monkeypatch.setenv("DEPTH_FETCH_HEARTBEAT_S", "0.1")
-    task = CandleFetchTaskDTO(exchange="deribit", market="spot", symbol="BTCUSDT", timeframe="1m")
+    task = CandleFetchTaskDTO(exchange="deribit", market="spot_ohlcv", symbol="BTCUSDT", timeframe="1m")
 
     def _slow_fetcher(exchange: str, market: str, symbol: str, timeframe: str, lake_root: str) -> list[SpotCandle]:
         del exchange, market, symbol, timeframe, lake_root
@@ -1612,7 +1612,7 @@ def test_fetch_funding_tasks_parallel_records_on_task_complete_errors() -> None:
 
 
 def test_fetch_candle_tasks_parallel_retries_without_history_chunk_when_unsupported() -> None:
-    task = CandleFetchTaskDTO(exchange="deribit", market="spot", symbol="BTCUSDT", timeframe="1m")
+    task = CandleFetchTaskDTO(exchange="deribit", market="spot_ohlcv", symbol="BTCUSDT", timeframe="1m")
     seen_chunk_kwarg: list[bool] = []
 
     def _fetcher(
@@ -1649,7 +1649,7 @@ def test_fetch_symbol_open_interest_non_perp_returns_empty() -> None:
     assert (
         fetch_symbol_open_interest(
             exchange="deribit",
-            market="spot",
+            market="spot_ohlcv",
             symbol="BTC",
             timeframe="1m",
             lake_root="lake/bronze",
@@ -1703,7 +1703,7 @@ def test_fetch_symbol_funding_non_perp_and_tail_requires_reader() -> None:
     assert (
         fetch_symbol_funding(
             exchange="deribit",
-            market="spot",
+            market="spot_ohlcv",
             symbol="BTC",
             timeframe="8h",
             lake_root="lake/bronze",

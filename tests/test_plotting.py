@@ -16,7 +16,7 @@ from ingestion.plotting import (
     save_funding_plot,
     save_open_interest_plot,
 )
-from ingestion.spot import SpotCandle
+from ingestion.spot_ohlcv import SpotCandle
 
 
 def _sample_candle() -> SpotCandle:
@@ -38,7 +38,7 @@ def _sample_candle() -> SpotCandle:
 
 def test_price_value_selector() -> None:
     candle = _sample_candle()
-    assert price_value(candle, "spot") == 105.0
+    assert price_value(candle, "spot_ohlcv") == 105.0
     assert price_value(candle, "close") == 105.0
     assert price_value(candle, "open") == 100.0
     assert price_value(candle, "high") == 110.0

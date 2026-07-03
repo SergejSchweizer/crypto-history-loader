@@ -9,10 +9,10 @@ from ingestion.funding import FundingPoint
 from ingestion.lake_datasets import OI_DATASET_TYPE, ohlcv_dataset_type_for_market
 from ingestion.lake_layout import partition_data_files
 from ingestion.open_interest import OpenInterestPoint
-from ingestion.spot import SpotCandle
+from ingestion.spot_ohlcv import SpotCandle
 
 
-def load_spot_candles_from_lake(
+def load_spot_ohlcv_candles_from_lake(
     lake_root: str,
     market: str,
     exchange: str,
@@ -25,7 +25,7 @@ def load_spot_candles_from_lake(
 
     Args:
         lake_root: Root directory of the Bronze parquet lake.
-        market: Instrument type and OHLCV dataset family, such as ``spot`` or ``perp``.
+        market: Instrument type and OHLCV dataset family, such as ``spot_ohlcv`` or ``perp``.
         exchange: Exchange partition value.
         symbol: Symbol partition value.
         timeframe: Timeframe partition value.

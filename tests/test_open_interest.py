@@ -15,12 +15,12 @@ def test_normalize_open_interest_timeframe_deribit() -> None:
     assert oi.normalize_open_interest_timeframe("deribit", "M1") == "1m"
 
 
-def test_fetch_open_interest_all_history_returns_empty_for_spot() -> None:
+def test_fetch_open_interest_all_history_returns_empty_for_spot_ohlcv() -> None:
     rows = oi.fetch_open_interest_all_history(
         exchange="deribit",
         symbol="BTC",
         interval="1m",
-        market="spot",
+        market="spot_ohlcv",
     )
     assert rows == []
 

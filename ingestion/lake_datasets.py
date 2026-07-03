@@ -18,8 +18,8 @@ def ohlcv_dataset_type_for_market(market: str) -> str:
         ValueError: Market is not an OHLCV dataset family.
     """
 
-    if market == "spot":
-        return "spot"
+    if market == "spot_ohlcv":
+        return "spot_ohlcv"
     if market == "perp":
         return "peprs_ohlcv"
     raise ValueError(f"Unsupported OHLCV market '{market}'")

@@ -37,14 +37,14 @@ def test_source_dataset_summary_includes_symbols_and_l2_artifact() -> None:
     """Gold source summaries should preserve legacy manifest keys and L2 artifact names."""
 
     raw_by_dataset = {
-        "spot": pl.DataFrame({"symbol": ["BTC", "BTC"], "open_time": [1, 2]}),
+        "spot_ohlcv": pl.DataFrame({"symbol": ["BTC", "BTC"], "open_time": [1, 2]}),
         "gold_l2_m1": pl.DataFrame({"symbol": ["BTC"], "l2_coverage_ratio": [1.0]}),
     }
 
     summary = source_dataset_summary(pl, raw_by_dataset, Path("BTC_L2_hash.parquet"))
 
-    assert summary["spot_1m"]["source_symbols"] == ["BTC"]
-    assert summary["spot_1m"]["rows"] == 2
+    assert summary["spot_ohlcv_1m"]["source_symbols"] == ["BTC"]
+    assert summary["spot_ohlcv_1m"]["rows"] == 2
     assert summary["gold_l2_m1"]["source_artifact"] == "BTC_L2_hash.parquet"
 
 

@@ -6,8 +6,8 @@ from application.datasets import DATASET_REGISTRY, dataset_names_for_task_kind, 
 from application.schema import dataset_contract
 
 
-def test_dataset_contract_maps_spot_perp_oi() -> None:
-    spot = dataset_contract("spot")
+def test_dataset_contract_maps_spot_ohlcv_perp_oi() -> None:
+    spot_ohlcv = dataset_contract("spot_ohlcv")
     peprs_ohlcv = dataset_contract("peprs_ohlcv")
     oi = dataset_contract("oi")
     funding = dataset_contract("funding")
@@ -15,8 +15,8 @@ def test_dataset_contract_maps_spot_perp_oi() -> None:
     option_trades = dataset_contract("option_trades")
     volatility_index_data = dataset_contract("volatility_index_data")
 
-    assert spot.dataset_type == "spot"
-    assert spot.instrument_type == "spot"
+    assert spot_ohlcv.dataset_type == "spot_ohlcv"
+    assert spot_ohlcv.instrument_type == "spot_ohlcv"
 
     assert peprs_ohlcv.dataset_type == "peprs_ohlcv"
     assert peprs_ohlcv.instrument_type == "perp"
@@ -36,7 +36,7 @@ def test_dataset_contract_maps_spot_perp_oi() -> None:
 
 def test_dataset_registry_covers_contract_names() -> None:
     assert set(DATASET_REGISTRY) == {
-        "spot",
+        "spot_ohlcv",
         "peprs_ohlcv",
         "oi",
         "funding",

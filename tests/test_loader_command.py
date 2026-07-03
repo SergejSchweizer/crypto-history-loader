@@ -14,7 +14,7 @@ import pytest
 from api.commands import loader as loader_cmd
 from application.dto import CandleFetchTaskDTO, PersistResultDTO, TradeFetchTaskDTO
 from application.services.bronze_runtime_service import BronzeRuntimeBoundsContext
-from ingestion.spot import SpotCandle
+from ingestion.spot_ohlcv import SpotCandle
 from ingestion.trades import OptionTradeTick, TradeTick
 
 
@@ -45,9 +45,9 @@ def test_run_bronze_build_emits_manifest_and_plot_file_lists(tmp_path: Path, mon
     )
     parquet_path = (
         tmp_path
-        / "dataset_type=spot"
+        / "dataset_type=spot_ohlcv"
         / "exchange=deribit"
-        / "instrument_type=spot"
+        / "instrument_type=spot_ohlcv"
         / "symbol=BTCUSDT"
         / "timeframe=1m"
         / "month=2026-05"
@@ -59,11 +59,11 @@ def test_run_bronze_build_emits_manifest_and_plot_file_lists(tmp_path: Path, mon
         callback = kwargs.get("on_candle_task_chunk")
         if callable(callback):
             cast(Any, callback)(
-                CandleFetchTaskDTO(exchange="deribit", market="spot", symbol="BTCUSDT", timeframe="1m"),
+                CandleFetchTaskDTO(exchange="deribit", market="spot_ohlcv", symbol="BTCUSDT", timeframe="1m"),
                 [candle],
             )
         return (
-            {("deribit", "spot", "BTCUSDT", "1m"): [candle]},
+            {("deribit", "spot_ohlcv", "BTCUSDT", "1m"): [candle]},
             {},
             {},
             {},
@@ -87,7 +87,7 @@ def test_run_bronze_build_emits_manifest_and_plot_file_lists(tmp_path: Path, mon
     args = argparse.Namespace(
         exchange="deribit",
         exchanges=None,
-        market=["spot"],
+        market=["spot_ohlcv"],
         symbols=["BTCUSDT"],
         perp_trade_symbols=["BTC"],
         option_trade_symbols=["BTC"],
@@ -298,7 +298,7 @@ def test_run_bronze_build_drops_invalid_symbols_before_scheduling(monkeypatch) -
     args = argparse.Namespace(
         exchange="deribit",
         exchanges=None,
-        market=["spot", "peprs_ohlcv", "oi", "funding"],
+        market=["spot_ohlcv", "peprs_ohlcv", "oi", "funding"],
         symbols=["BTC", None, " ", "\t", "ETH"],
         perp_trade_symbols=["BTC", None, " ", "\t", "ETH"],
         option_trade_symbols=["BTC", None, " ", "\t", "ETH"],
@@ -331,7 +331,7 @@ def test_run_bronze_build_raises_when_no_valid_symbols(monkeypatch) -> None:  # 
     args = argparse.Namespace(
         exchange="deribit",
         exchanges=None,
-        market=["spot"],
+        market=["spot_ohlcv"],
         symbols=[None, "", "  "],
         perp_trade_symbols=["BTC"],
         option_trade_symbols=["BTC"],
@@ -409,7 +409,7 @@ def test_build_bronze_fetch_plan_is_deterministic_and_sorted() -> None:
     args = argparse.Namespace(
         exchange="deribit",
         exchanges=["deribit"],
-        market=["funding", "spot", "oi", "peprs_ohlcv"],
+        market=["funding", "spot_ohlcv", "oi", "peprs_ohlcv"],
         symbols=["ETH", "BTC"],
         perp_trade_symbols=["ETH", "BTC"],
         option_trade_symbols=["SOL", "BTC"],
@@ -417,21 +417,21 @@ def test_build_bronze_fetch_plan_is_deterministic_and_sorted() -> None:
 
     plan = loader_cmd._build_bronze_fetch_plan(args=args, logger=logging.getLogger("test"))
 
-    assert plan.data_types == ["funding", "oi", "peprs_ohlcv", "spot"]
+    assert plan.data_types == ["funding", "oi", "peprs_ohlcv", "spot_ohlcv"]
     assert plan.symbols == ["BTC", "ETH"]
     assert plan.candle_tasks == [
         ("deribit", "perp", "BTC", "1m"),
-        ("deribit", "spot", "BTC", "1m"),
+        ("deribit", "spot_ohlcv", "BTC", "1m"),
         ("deribit", "perp", "ETH", "1m"),
-        ("deribit", "spot", "ETH", "1m"),
+        ("deribit", "spot_ohlcv", "ETH", "1m"),
     ]
     assert plan.oi_tasks == [("deribit", "BTC", "1m"), ("deribit", "ETH", "1m")]
     assert plan.funding_tasks == [("deribit", "BTC", "1m"), ("deribit", "ETH", "1m")]
     assert [(task.dataset_type, task.instrument_type) for task in plan.dataset_tasks] == [
         ("peprs_ohlcv", "perp"),
-        ("spot", "spot"),
+        ("spot_ohlcv", "spot_ohlcv"),
         ("peprs_ohlcv", "perp"),
-        ("spot", "spot"),
+        ("spot_ohlcv", "spot_ohlcv"),
         ("funding", "perp"),
         ("funding", "perp"),
         ("oi", "perp"),
@@ -443,7 +443,7 @@ def test_dataset_task_key_maps_use_registry_checkpoint_keys() -> None:
     args = argparse.Namespace(
         exchange="deribit",
         exchanges=["deribit"],
-        market=["spot", "oi", "perps_trades"],
+        market=["spot_ohlcv", "oi", "perps_trades"],
         symbols=["BTC"],
         perp_trade_symbols=["BTC"],
         option_trade_symbols=["BTC"],
@@ -451,7 +451,7 @@ def test_dataset_task_key_maps_use_registry_checkpoint_keys() -> None:
     plan = loader_cmd._build_bronze_fetch_plan(args=args, logger=logging.getLogger("test"))
     candle_map, oi_map, funding_map, trade_map = loader_cmd._dataset_task_key_maps(plan)
 
-    assert candle_map[("deribit", "spot", "BTC", "1m")] == "deribit|spot|spot|BTC|1m|spot"
+    assert candle_map[("deribit", "spot_ohlcv", "BTC", "1m")] == "deribit|spot_ohlcv|spot_ohlcv|BTC|1m|spot_ohlcv"
     assert oi_map[("deribit", "BTC", "1m")] == "deribit|oi|perp|BTC|1m|perp"
     assert ("deribit", "BTC", "1m") not in funding_map
     assert trade_map[("deribit", "perp", "BTC")] == "deribit|perps_trades|perp|BTC|tick|perp"
@@ -487,7 +487,7 @@ def test_run_bronze_build_resumes_from_checkpoint_and_clears_on_success(
     args = argparse.Namespace(
         exchange="deribit",
         exchanges=None,
-        market=["spot"],
+        market=["spot_ohlcv"],
         symbols=["BTC", "ETH"],
         perp_trade_symbols=["BTC"],
         option_trade_symbols=["BTC"],
@@ -503,7 +503,7 @@ def test_run_bronze_build_resumes_from_checkpoint_and_clears_on_success(
         checkpoint_path,
         fingerprint=fingerprint,
         completed={
-            "candle": {"deribit|spot|BTC|1m"},
+            "candle": {"deribit|spot_ohlcv|BTC|1m"},
             "oi": set(),
             "funding": set(),
             "volatility_index_data": set(),
@@ -513,6 +513,6 @@ def test_run_bronze_build_resumes_from_checkpoint_and_clears_on_success(
 
     loader_cmd.run_bronze_build(args=args, logger=logging.getLogger("test"))
 
-    assert ("deribit", "spot", "BTC", "1m") not in scheduled
-    assert ("deribit", "spot", "ETH", "1m") in scheduled
+    assert ("deribit", "spot_ohlcv", "BTC", "1m") not in scheduled
+    assert ("deribit", "spot_ohlcv", "ETH", "1m") in scheduled
     assert not checkpoint_path.exists()

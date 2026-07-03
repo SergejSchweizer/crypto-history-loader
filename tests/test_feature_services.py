@@ -12,7 +12,7 @@ from application.services import feature_metadata_service, feature_plot_service
 def test_feature_metadata_service_exposes_stable_contract_helpers() -> None:
     """Application services should use metadata through an application-owned boundary."""
 
-    assert feature_metadata_service.feature_source_dataset("spot_close_price") == "spot_1m"
+    assert feature_metadata_service.feature_source_dataset("spot_ohlcv_close_price") == "spot_ohlcv_1m"
     assert feature_metadata_service.feature_hash(["a", "b"]) != feature_metadata_service.feature_hash(["b", "a"])
 
 

@@ -23,12 +23,12 @@ from ingestion.lake_records import (
 )
 from ingestion.lake_writes import require_pyarrow, write_grouped_rows
 from ingestion.open_interest import OpenInterestPoint
-from ingestion.spot import SpotCandle
+from ingestion.spot_ohlcv import SpotCandle
 from ingestion.trades import OptionTradeTick, TradeMarket, TradeTick
 from ingestion.volatility import VolatilityPoint
 
 
-def save_spot_candles_parquet_lake(
+def save_spot_ohlcv_candles_parquet_lake(
     candles_by_exchange: dict[str, dict[str, list[SpotCandle]]],
     market: str,
     lake_root: str,

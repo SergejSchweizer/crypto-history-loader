@@ -22,12 +22,12 @@ def test_trade_error_breakdown_counts_classes() -> None:
 
 def test_symbol_progress_rows_calculates_ratios() -> None:
     rows = symbol_progress_rows(
-        candle_tasks=[("deribit", "spot", "BTC", "1m"), ("deribit", "spot", "ETH", "1m")],
+        candle_tasks=[("deribit", "spot_ohlcv", "BTC", "1m"), ("deribit", "spot_ohlcv", "ETH", "1m")],
         oi_tasks=[],
         funding_tasks=[],
         volatility_index_data_tasks=[],
         trade_tasks=[("deribit", "perp", "BTC")],
-        candle_results={("deribit", "spot", "BTC", "1m"): object()},
+        candle_results={("deribit", "spot_ohlcv", "BTC", "1m"): object()},
         oi_results={},
         funding_results={},
         volatility_index_data_results={},
@@ -59,11 +59,11 @@ def test_symbol_progress_rows_from_dataset_tasks_uses_checkpoint_keys() -> None:
     tasks = [
         DatasetTask(
             exchange="deribit",
-            dataset_type="spot",
-            instrument_type="spot",
+            dataset_type="spot_ohlcv",
+            instrument_type="spot_ohlcv",
             symbol="BTC",
             timeframe="1m",
-            market="spot",
+            market="spot_ohlcv",
         ),
         DatasetTask(
             exchange="deribit",

@@ -13,7 +13,7 @@ from ingestion.exchanges import deribit
 from ingestion.http_client import HttpClientError
 
 Exchange = Literal["deribit"]
-Market = Literal["spot", "perp"]
+Market = Literal["spot_ohlcv", "perp"]
 logger = logging.getLogger(__name__)
 
 
@@ -24,7 +24,7 @@ class SpotCandle:
     Example:
         ```python
         from datetime import UTC, datetime
-        from ingestion.spot import SpotCandle
+        from ingestion.spot_ohlcv import SpotCandle
 
         candle = SpotCandle(
             exchange="deribit",
@@ -130,7 +130,7 @@ def fetch_candles(
     symbol: str,
     interval: str = "1m",
     limit: int = 100,
-    market: Market = "spot",
+    market: Market = "spot_ohlcv",
 ) -> list[SpotCandle]:
     """Fetch latest candles from supported exchanges."""
 
@@ -155,7 +155,7 @@ def fetch_candles_all_history(
     exchange: Exchange,
     symbol: str,
     interval: str = "1m",
-    market: Market = "spot",
+    market: Market = "spot_ohlcv",
     on_history_chunk: Callable[[list[SpotCandle]], None] | None = None,
 ) -> list[SpotCandle]:
     """Fetch all available candles from exchange history."""
@@ -203,7 +203,7 @@ def fetch_candles_range(
     interval: str,
     start_open_ms: int,
     end_open_ms: int,
-    market: Market = "spot",
+    market: Market = "spot_ohlcv",
 ) -> list[SpotCandle]:
     """Fetch candles by open-time range inclusive."""
 

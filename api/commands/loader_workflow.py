@@ -160,7 +160,7 @@ def run_bronze_build(
             incremental_parquet_on_fetch = bool(args.save_parquet_lake)
             logger.info(
                 (
-                    "Fetch mode enabled for spot/perp, oi, funding, volatility_index_data, and trades "
+                    "Fetch mode enabled for spot_ohlcv/perp, oi, funding, volatility_index_data, and trades "
                     "with concurrency=%s (configured=%s)"
                 ),
                 policy.effective_concurrency,

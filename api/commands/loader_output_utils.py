@@ -6,7 +6,7 @@ from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
 
-from ingestion.spot import SpotCandle
+from ingestion.spot_ohlcv import SpotCandle
 
 
 def sidecar_path_list(parquet_files: list[str], suffix: str) -> list[str]:
@@ -24,7 +24,7 @@ def sidecar_path_list(parquet_files: list[str], suffix: str) -> list[str]:
 
 
 def serialize_candle(candle: SpotCandle) -> dict[str, object]:
-    """Serialize one spot candle for JSON-compatible loader output.
+    """Serialize one spot_ohlcv candle for JSON-compatible loader output.
 
     Args:
         candle: Spot candle DTO returned by an exchange fetcher.

@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from application.datasets import DatasetTask
 from ingestion.funding import FundingPoint
 from ingestion.open_interest import OpenInterestPoint
-from ingestion.spot import Exchange, Market, SpotCandle
+from ingestion.spot_ohlcv import Exchange, Market, SpotCandle
 from ingestion.trades import OptionTradeTick, TradeMarket, TradeTick
 from ingestion.volatility import VolatilityPoint
 
@@ -86,7 +86,7 @@ class CandleFetchTaskDTO:
 
     Example:
         ```python
-        task = CandleFetchTaskDTO(exchange="deribit", market="spot", symbol="BTC", timeframe="1m")
+        task = CandleFetchTaskDTO(exchange="deribit", market="spot_ohlcv", symbol="BTC", timeframe="1m")
         ```
     """
 

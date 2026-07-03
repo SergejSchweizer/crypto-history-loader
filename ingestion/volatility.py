@@ -9,7 +9,7 @@ from typing import Any, Literal, cast
 
 from ingestion.exchanges import deribit_volatility
 from ingestion.http_client import HttpClientError
-from ingestion.spot import Exchange, Market
+from ingestion.spot_ohlcv import Exchange, Market
 
 VolatilityDatasetType = Literal["volatility_index", "volatility_index_data"]
 

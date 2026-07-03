@@ -17,7 +17,7 @@ def test_fetch_all_task_groups_dispatches_all_task_kinds() -> None:
         **kwargs: object,
     ) -> tuple[dict[tuple[str, str, str, str], list[int]], dict[tuple[str, str, str, str], str]]:  # noqa: E501
         calls.append(("candle", dict(kwargs)))
-        return ({("deribit", "spot", "BTC", "1m"): [1]}, {})
+        return ({("deribit", "spot_ohlcv", "BTC", "1m"): [1]}, {})
 
     def _fetch_oi_fn(**kwargs: object) -> tuple[dict[tuple[str, str, str], list[int]], dict[tuple[str, str, str], str]]:
         calls.append(("oi", dict(kwargs)))
@@ -45,7 +45,7 @@ def test_fetch_all_task_groups_dispatches_all_task_kinds() -> None:
         dict[tuple[str, str, str], list[int]],
         dict[tuple[str, str, str], str],
     ] = fetch_all_task_groups(
-        candle_tasks=[("deribit", "spot", "BTC", "1m")],
+        candle_tasks=[("deribit", "spot_ohlcv", "BTC", "1m")],
         oi_tasks=[("deribit", "BTC", "1m")],
         funding_tasks=[("deribit", "BTC", "1m")],
         trade_tasks=[("deribit", "perp", "BTC")],
@@ -61,13 +61,13 @@ def test_fetch_all_task_groups_dispatches_all_task_kinds() -> None:
         fetch_trades_fn=_fetch_trades_fn,
     )
 
-    assert result[0] == {("deribit", "spot", "BTC", "1m"): [1]}
+    assert result[0] == {("deribit", "spot_ohlcv", "BTC", "1m"): [1]}
     assert result[2] == {("deribit", "BTC", "1m"): [2]}
     assert result[4] == {("deribit", "BTC", "1m"): [3]}
     assert result[6] == {("deribit", "perp", "BTC"): [4]}
 
     call_map = {name: kwargs for name, kwargs in calls}
-    assert cast(dict[str, Any], call_map["candle"])["tasks"] == [("deribit", "spot", "BTC", "1m")]
+    assert cast(dict[str, Any], call_map["candle"])["tasks"] == [("deribit", "spot_ohlcv", "BTC", "1m")]
     assert cast(dict[str, Any], call_map["oi"])["oi_tasks"] == [("deribit", "BTC", "1m")]
     assert cast(dict[str, Any], call_map["funding"])["funding_tasks"] == [("deribit", "BTC", "1m")]
     assert cast(dict[str, Any], call_map["trade"])["trade_tasks"] == [("deribit", "perp", "BTC")]

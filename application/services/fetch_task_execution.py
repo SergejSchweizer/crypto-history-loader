@@ -21,7 +21,7 @@ from application.services.fetch_executors import elapsed_seconds, run_with_optio
 from application.services.fetch_task_callbacks import bind_task_chunk_callback
 from ingestion.funding import FundingPoint
 from ingestion.open_interest import OpenInterestPoint
-from ingestion.spot import Exchange, Market, SpotCandle
+from ingestion.spot_ohlcv import Exchange, Market, SpotCandle
 from ingestion.volatility import VolatilityPoint
 
 TRow = TypeVar("TRow")

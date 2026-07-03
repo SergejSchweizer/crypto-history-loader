@@ -11,17 +11,17 @@ from ingestion.funding import FundingPoint
 from ingestion.lake import (
     save_funding_parquet_lake,
     save_open_interest_parquet_lake,
-    save_spot_candles_parquet_lake,
+    save_spot_ohlcv_candles_parquet_lake,
     save_trades_parquet_lake,
     save_volatility_parquet_lake,
 )
 from ingestion.open_interest import OpenInterestPoint
-from ingestion.spot import SpotCandle
+from ingestion.spot_ohlcv import SpotCandle
 from ingestion.trades import OptionTradeTick, TradeTick
 from ingestion.volatility import VolatilityPoint
 
 
-def test_bronze_spot_schema_contract_order(tmp_path: Path) -> None:
+def test_bronze_spot_ohlcv_schema_contract_order(tmp_path: Path) -> None:
     candle = SpotCandle(
         exchange="deribit",
         symbol="BTC_USDC",
@@ -36,7 +36,9 @@ def test_bronze_spot_schema_contract_order(tmp_path: Path) -> None:
         quote_volume=1000.0,
         trade_count=12,
     )
-    files = save_spot_candles_parquet_lake({"deribit": {"BTC": [candle]}}, market="spot", lake_root=str(tmp_path))
+    files = save_spot_ohlcv_candles_parquet_lake(
+        {"deribit": {"BTC": [candle]}}, market="spot_ohlcv", lake_root=str(tmp_path)
+    )
     schema = pq.ParquetFile(files[0]).schema_arrow
     assert schema.names[:6] == ["schema_version", "dataset_type", "exchange", "symbol", "instrument_type", "event_time"]
     assert schema.names[-1] == "origin_payload"

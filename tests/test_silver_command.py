@@ -166,7 +166,7 @@ def test_run_silver_build_rejects_invalid_maxprocesses() -> None:
         bronze_root="lake/bronze",
         silver_root="lake/silver",
         exchange="deribit",
-        market=["spot"],
+        market=["spot_ohlcv"],
         symbols=["BTC"],
         timeframe="1m",
         manifest=False,

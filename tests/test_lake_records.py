@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from ingestion.lake_records import candle_partition_key, candle_record, trade_partition_key, trade_record
-from ingestion.spot import SpotCandle
+from ingestion.spot_ohlcv import SpotCandle
 from ingestion.trades import OptionTradeTick, TradeTick
 
 
@@ -32,12 +32,12 @@ def test_candle_partition_and_record_mapping() -> None:
     candle = _sample_candle()
     ingested_at = datetime(2026, 4, 27, 12, 0, tzinfo=UTC)
 
-    assert candle_partition_key(candle, "spot") == ("deribit", "spot", "BTCUSDT", "1m", "2026-04-27")
+    assert candle_partition_key(candle, "spot_ohlcv") == ("deribit", "spot_ohlcv", "BTCUSDT", "1m", "2026-04-27")
 
-    row = candle_record(candle, "spot", run_id="run-1", ingested_at=ingested_at)
+    row = candle_record(candle, "spot_ohlcv", run_id="run-1", ingested_at=ingested_at)
 
-    assert row["dataset_type"] == "spot"
-    assert row["instrument_type"] == "spot"
+    assert row["dataset_type"] == "spot_ohlcv"
+    assert row["instrument_type"] == "spot_ohlcv"
     assert row["event_time"] == candle.open_time
     assert row["ingested_at"] == ingested_at
     assert row["origin_payload"] == {

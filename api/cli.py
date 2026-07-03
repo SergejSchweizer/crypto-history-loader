@@ -15,7 +15,7 @@ from api.commands.gold import add_gold_build_parser, run_gold_build
 from api.commands.loader import add_bronze_build_parser
 from api.commands.silver import add_silver_build_parser, run_silver_build
 from api.commands.stats import add_export_descriptive_stats_parser, run_export_descriptive_stats
-from api.commands.timeframes import add_list_spot_timeframes_parser, run_list_spot_timeframes
+from api.commands.timeframes import add_list_spot_ohlcv_timeframes_parser, run_list_spot_ohlcv_timeframes
 from application.services.bronze_runtime_service import BronzeRuntimeBoundsContext
 from application.services.config_validation import validate_runtime_config
 from application.services.fetch_service import fetch_symbol_candles
@@ -45,7 +45,7 @@ from ingestion.open_interest import (
     normalize_open_interest_timeframe,
     open_interest_interval_to_milliseconds,
 )
-from ingestion.spot import (
+from ingestion.spot_ohlcv import (
     Exchange,
     Market,
     SpotCandle,
@@ -142,7 +142,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_bronze_build_parser(subparsers)
     add_silver_build_parser(subparsers)
     add_gold_build_parser(subparsers)
-    add_list_spot_timeframes_parser(subparsers)
+    add_list_spot_ohlcv_timeframes_parser(subparsers)
     add_export_descriptive_stats_parser(subparsers)
 
     return parser
@@ -310,8 +310,8 @@ def main() -> None:
         run_silver_build(args=args, logger=logger)
     elif args.command == "gold-build":
         run_gold_build(args=args, logger=logger)
-    elif args.command == "list-spot-timeframes":
-        run_list_spot_timeframes(args=args, logger=logger)
+    elif args.command == "list-spot_ohlcv-timeframes":
+        run_list_spot_ohlcv_timeframes(args=args, logger=logger)
     elif args.command == "export-descriptive-stats":
         cast(Any, stats_cmd).load_combined_ohlcv_dataframe = load_combined_ohlcv_dataframe
         run_export_descriptive_stats(args=args, logger=logger)

@@ -24,12 +24,12 @@ Mitigation: Keep debug logs, checkpoint keys, deterministic windows, and complet
 
 Evidence:
 
+- 2026-07-03 `4393c40` Rename perpetual trades dataset
 - 2026-07-01 `f55d766` [codex] Extract OHLCV symbol fetch planning (#46)
 - 2026-06-29 `7232cc4` Extract fetch head gap planning (#42)
 - 2026-06-29 `23082ec` Extract loader symbol fetch adapters
 - 2026-06-29 `4691a58` Extract fetch range planning helpers
 - 2026-06-28 `770047a` Extract fetch trade window helpers
-- 2026-06-27 `deca10a` Route lake access through application services
 
 ## R002. Dataset naming drift can break Bronze, Silver, and Gold joins
 
@@ -41,12 +41,12 @@ Mitigation: Rename work must update registry specs, lake paths, contracts, CLI c
 
 Evidence:
 
+- 2026-07-03 `4393c40` Rename perpetual trades dataset
 - 2026-07-03 `91d7475` Rename perpetual OHLCV dataset
 - 2026-06-27 `a44abc8` Extract dataset transformation contracts (#19)
 - 2026-05-25 `b8b5b82` Refine raw dataset docs and Deribit endpoint sections (#7)
 - 2026-05-25 `3e96121` Refactor README and align dataset/CLI/runtime updates (#5)
 - 2026-05-17 `32c3d28` Remove option instruments dataset, suppress heartbeat logs, and stabilize coverage
-- 2026-05-17 `af4b7a2` refactor: rename perp trades dataset_type to perps_trades across pipeline
 
 ## R003. Large refactors can blur architecture boundaries
 

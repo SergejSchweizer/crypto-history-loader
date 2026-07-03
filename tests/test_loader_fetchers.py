@@ -14,7 +14,7 @@ from api.commands.loader_fetchers import (
     serialize_candle,
 )
 from application.services.bronze_runtime_service import BronzeRuntimeBoundsContext
-from ingestion.spot import SpotCandle
+from ingestion.spot_ohlcv import SpotCandle
 
 
 def test_serialize_candle_converts_datetimes_to_iso_strings() -> None:
@@ -54,7 +54,7 @@ def test_fetch_symbol_candles_uses_runtime_start_bound() -> None:
         dependencies=dependencies,
         runtime_context=runtime_context,
         exchange="deribit",
-        market="spot",
+        market="spot_ohlcv",
         symbol="BTCUSDT",
         timeframe="1m",
         lake_root="lake/bronze",

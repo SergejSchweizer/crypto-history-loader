@@ -11,7 +11,13 @@ from typing import Any, cast
 
 from ingestion.exchanges import deribit_open_interest
 from ingestion.http_client import HttpClientError
-from ingestion.spot import Exchange, Market, interval_to_milliseconds, normalize_storage_symbol, normalize_timeframe
+from ingestion.spot_ohlcv import (
+    Exchange,
+    Market,
+    interval_to_milliseconds,
+    normalize_storage_symbol,
+    normalize_timeframe,
+)
 
 
 @dataclass(frozen=True)

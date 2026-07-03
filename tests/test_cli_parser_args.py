@@ -34,7 +34,7 @@ from api.cli import build_parser
         (["silver-build", "--bronze-root", "lake/test-bronze"], {"bronze_root": "lake/test-bronze"}),
         (["silver-build", "--silver-root", "lake/test-silver"], {"silver_root": "lake/test-silver"}),
         (["silver-build", "--exchange", "deribit"], {"exchange": "deribit"}),
-        (["silver-build", "--dataset", "spot"], {"dataset": ["spot"]}),
+        (["silver-build", "--dataset", "spot_ohlcv"], {"dataset": ["spot_ohlcv"]}),
         (["silver-build", "--dataset", "option_trades"], {"dataset": ["option_trades"]}),
         (["silver-build", "--symbols", "BTC"], {"symbols": ["BTC"]}),
         (["silver-build", "--timeframe", "1m"], {"timeframe": "1m"}),
@@ -62,8 +62,8 @@ from api.cli import build_parser
         (["gold-build", "--retention-keep-versions", "5"], {"retention_keep_versions": 5}),
         (["gold-build", "--maxprocesses", "4"], {"maxprocesses": 4}),
         (["gold-build", "--no-json-output"], {"no_json_output": True}),
-        (["list-spot-timeframes", "--exchange", "deribit"], {"exchange": "deribit"}),
-        (["list-spot-timeframes", "--exchanges", "deribit"], {"exchanges": ["deribit"]}),
+        (["list-spot_ohlcv-timeframes", "--exchange", "deribit"], {"exchange": "deribit"}),
+        (["list-spot_ohlcv-timeframes", "--exchanges", "deribit"], {"exchanges": ["deribit"]}),
         (["export-descriptive-stats", "--lake-root", "lake/test-bronze"], {"lake_root": "lake/test-bronze"}),
         (["export-descriptive-stats", "--output-csv", "docs/tables/out.csv"], {"output_csv": "docs/tables/out.csv"}),
         (
@@ -78,8 +78,8 @@ from api.cli import build_parser
         (["export-descriptive-stats", "--symbols", "BTC"], {"symbols": ["BTC"]}),
         (["export-descriptive-stats", "--timeframes", "1m"], {"timeframes": ["1m"]}),
         (
-            ["export-descriptive-stats", "--instrument-types", "spot"],
-            {"instrument_types": ["spot"]},
+            ["export-descriptive-stats", "--instrument-types", "spot_ohlcv"],
+            {"instrument_types": ["spot_ohlcv"]},
         ),
         (["export-descriptive-stats", "--no-json-output"], {"no_json_output": True}),
     ],
@@ -137,9 +137,9 @@ def test_apply_yaml_defaults_keeps_save_parquet_cli_only() -> None:
 
 
 def test_resolve_command_config_supports_bronze_aliases() -> None:
-    config = {"loader": {"save_parquet_lake": True}, "silver-build": {"market": ["spot"]}}
+    config = {"loader": {"save_parquet_lake": True}, "silver-build": {"market": ["spot_ohlcv"]}}
     assert cli._resolve_command_config("bronze-build", config) == {"save_parquet_lake": True}  # type: ignore[attr-defined]
-    assert cli._resolve_command_config("silver-build", config) == {"market": ["spot"]}  # type: ignore[attr-defined]
+    assert cli._resolve_command_config("silver-build", config) == {"market": ["spot_ohlcv"]}  # type: ignore[attr-defined]
 
 
 def test_apply_env_from_config_sets_non_null_entries(monkeypatch: pytest.MonkeyPatch) -> None:

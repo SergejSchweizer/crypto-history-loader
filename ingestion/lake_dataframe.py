@@ -41,7 +41,7 @@ def load_combined_dataframe_from_lake(
     limit: int | None = None,
     include_open_interest: bool = False,
 ) -> Any:
-    """Load combined spot/perp OHLCV rows from the Bronze lake as a Polars DataFrame.
+    """Load combined spot_ohlcv/perp OHLCV rows from the Bronze lake as a Polars DataFrame.
 
     Args:
         lake_root: Root directory containing Bronze parquet partitions.
@@ -77,7 +77,7 @@ def load_combined_dataframe_from_lake(
         timeframes=timeframes,
         instrument_types=instrument_types,
     )
-    data_files = sorted([*dataset_data_files(lake_root, "spot"), *dataset_data_files(lake_root, "peprs_ohlcv")])
+    data_files = sorted([*dataset_data_files(lake_root, "spot_ohlcv"), *dataset_data_files(lake_root, "peprs_ohlcv")])
 
     frames = _load_filtered_frames(
         pl=pl,

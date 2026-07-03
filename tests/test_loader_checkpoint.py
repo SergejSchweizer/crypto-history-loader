@@ -10,13 +10,13 @@ def _serialize(parts: tuple[object, ...]) -> str:
 
 
 def test_apply_checkpoint_filter_drops_completed_tasks() -> None:
-    candle_tasks = [("deribit", "spot", "BTC", "1m"), ("deribit", "perp", "ETH", "1m")]
+    candle_tasks = [("deribit", "spot_ohlcv", "BTC", "1m"), ("deribit", "perp", "ETH", "1m")]
     oi_tasks = [("deribit", "BTC", "1m")]
     funding_tasks = [("deribit", "ETH", "1m")]
     volatility_index_data_tasks = [("deribit", "ETH", "1m")]
     trade_tasks = [("deribit", "perp", "BTC"), ("deribit", "option", "ETH")]
     completed = {
-        "candle": {_serialize(("deribit", "spot", "BTC", "1m"))},
+        "candle": {_serialize(("deribit", "spot_ohlcv", "BTC", "1m"))},
         "oi": set(),
         "funding": {_serialize(("deribit", "ETH", "1m"))},
         "volatility_index_data": {_serialize(("deribit", "BTC", "1m"))},

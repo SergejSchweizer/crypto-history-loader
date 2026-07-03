@@ -79,7 +79,7 @@ def interval_to_milliseconds(interval: str) -> int:
 
 
 def normalize_symbol(symbol: str, market: str) -> str:
-    """Normalize user symbols for Deribit spot/perpetual markets."""
+    """Normalize user symbols for Deribit spot_ohlcv/perpetual markets."""
 
     upper = symbol.upper()
     if market == "perp":
@@ -95,7 +95,7 @@ def normalize_symbol(symbol: str, market: str) -> str:
             "Unsupported Deribit perp symbol. Use BTC-PERPETUAL/ETH-PERPETUAL/SOL-PERPETUAL or BTC/ETH/SOL aliases."
         )
 
-    if market == "spot":
+    if market == "spot_ohlcv":
         if upper in {"BTC", "BTCUSDT", "BTCUSD", "BTC_USDC"}:
             return "BTC_USDC"
         if upper in {"ETH", "ETHUSDT", "ETHUSD", "ETH_USDC"}:
@@ -104,9 +104,11 @@ def normalize_symbol(symbol: str, market: str) -> str:
             return "SOL_USDC"
         if "_" in upper:
             return upper
-        raise ValueError("Unsupported Deribit spot symbol. Use BTC_USDC/ETH_USDC/SOL_USDC or BTC/ETH/SOL aliases.")
+        raise ValueError(
+            "Unsupported Deribit spot_ohlcv symbol. Use BTC_USDC/ETH_USDC/SOL_USDC or BTC/ETH/SOL aliases."
+        )
 
-    raise ValueError("market must be either 'spot' or 'perp'")
+    raise ValueError("market must be either 'spot_ohlcv' or 'perp'")
 
 
 def fetch_klines(symbol: str, market: str, interval: str, limit: int) -> list[list[object]]:

@@ -7,11 +7,11 @@ from pathlib import Path
 
 import pyarrow.parquet as pq
 
-from ingestion.lake_bronze_writes import save_spot_candles_parquet_lake
-from ingestion.spot import SpotCandle
+from ingestion.lake_bronze_writes import save_spot_ohlcv_candles_parquet_lake
+from ingestion.spot_ohlcv import SpotCandle
 
 
-def test_save_spot_candles_parquet_lake_writes_partition_from_bronze_writer(tmp_path: Path) -> None:
+def test_save_spot_ohlcv_candles_parquet_lake_writes_partition_from_bronze_writer(tmp_path: Path) -> None:
     """Bronze writer module should own public save behavior, not only the lake facade."""
 
     candle = SpotCandle(
@@ -29,16 +29,16 @@ def test_save_spot_candles_parquet_lake_writes_partition_from_bronze_writer(tmp_
         trade_count=10,
     )
 
-    files = save_spot_candles_parquet_lake(
+    files = save_spot_ohlcv_candles_parquet_lake(
         {"deribit": {"BTCUSDT": [candle]}},
-        market="spot",
+        market="spot_ohlcv",
         lake_root=str(tmp_path),
     )
 
     assert len(files) == 1
     path = Path(files[0])
     rows = pq.ParquetFile(path).read().to_pylist()
-    assert rows[0]["dataset_type"] == "spot"
+    assert rows[0]["dataset_type"] == "spot_ohlcv"
     assert rows[0]["symbol"] == "BTCUSDT"
-    assert "/dataset_type=spot/" in files[0]
+    assert "/dataset_type=spot_ohlcv/" in files[0]
     assert "/date=2026-04-27/" in files[0]
