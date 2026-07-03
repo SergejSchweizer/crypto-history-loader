@@ -77,7 +77,7 @@ def load_combined_dataframe_from_lake(
         timeframes=timeframes,
         instrument_types=instrument_types,
     )
-    data_files = sorted([*dataset_data_files(lake_root, "spot"), *dataset_data_files(lake_root, "perp")])
+    data_files = sorted([*dataset_data_files(lake_root, "spot"), *dataset_data_files(lake_root, "peprs_ohlcv")])
 
     frames = _load_filtered_frames(
         pl=pl,

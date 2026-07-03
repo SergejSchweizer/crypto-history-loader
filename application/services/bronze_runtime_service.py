@@ -269,7 +269,7 @@ def dataset_task_key_maps(
     trade_map: dict[TradeTaskKey, str] = {}
     for task in plan.dataset_tasks:
         key = task.checkpoint_key()
-        if task.dataset_type in {"spot", "perp"}:
+        if task.dataset_type in {"spot", "peprs_ohlcv"}:
             candle_map[task.candle_tuple()] = key
         elif task.dataset_type == "oi":
             oi_map[task.interval_tuple()] = key

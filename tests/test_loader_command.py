@@ -298,7 +298,7 @@ def test_run_bronze_build_drops_invalid_symbols_before_scheduling(monkeypatch) -
     args = argparse.Namespace(
         exchange="deribit",
         exchanges=None,
-        market=["spot", "perp", "oi", "funding"],
+        market=["spot", "peprs_ohlcv", "oi", "funding"],
         symbols=["BTC", None, " ", "\t", "ETH"],
         perp_trade_symbols=["BTC", None, " ", "\t", "ETH"],
         option_trade_symbols=["BTC", None, " ", "\t", "ETH"],
@@ -409,7 +409,7 @@ def test_build_bronze_fetch_plan_is_deterministic_and_sorted() -> None:
     args = argparse.Namespace(
         exchange="deribit",
         exchanges=["deribit"],
-        market=["funding", "spot", "oi", "perp"],
+        market=["funding", "spot", "oi", "peprs_ohlcv"],
         symbols=["ETH", "BTC"],
         perp_trade_symbols=["ETH", "BTC"],
         option_trade_symbols=["SOL", "BTC"],
@@ -417,7 +417,7 @@ def test_build_bronze_fetch_plan_is_deterministic_and_sorted() -> None:
 
     plan = loader_cmd._build_bronze_fetch_plan(args=args, logger=logging.getLogger("test"))
 
-    assert plan.data_types == ["funding", "oi", "perp", "spot"]
+    assert plan.data_types == ["funding", "oi", "peprs_ohlcv", "spot"]
     assert plan.symbols == ["BTC", "ETH"]
     assert plan.candle_tasks == [
         ("deribit", "perp", "BTC", "1m"),
@@ -428,9 +428,9 @@ def test_build_bronze_fetch_plan_is_deterministic_and_sorted() -> None:
     assert plan.oi_tasks == [("deribit", "BTC", "1m"), ("deribit", "ETH", "1m")]
     assert plan.funding_tasks == [("deribit", "BTC", "1m"), ("deribit", "ETH", "1m")]
     assert [(task.dataset_type, task.instrument_type) for task in plan.dataset_tasks] == [
-        ("perp", "perp"),
+        ("peprs_ohlcv", "perp"),
         ("spot", "spot"),
-        ("perp", "perp"),
+        ("peprs_ohlcv", "perp"),
         ("spot", "spot"),
         ("funding", "perp"),
         ("funding", "perp"),

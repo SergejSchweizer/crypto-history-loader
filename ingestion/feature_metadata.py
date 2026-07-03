@@ -22,7 +22,7 @@ def feature_source_dataset(column_name: str) -> str:
     if column_name.startswith("spot_"):
         return "spot_1m"
     if column_name.startswith("perp_"):
-        return "perp_1m"
+        return "peprs_ohlcv_1m"
     if column_name.startswith("oi_"):
         return "oi_1m_feature"
     if column_name.startswith("funding_"):

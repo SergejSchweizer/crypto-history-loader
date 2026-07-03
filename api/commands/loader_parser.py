@@ -30,7 +30,7 @@ def add_ingest_parser(
         nargs="+",
         choices=MARKET_CHOICES,
         default=["spot"],
-        help="One or more data types to fetch, e.g. --dataset spot perp oi funding",
+        help="One or more data types to fetch, e.g. --dataset spot peprs_ohlcv oi funding",
     )
     parser.add_argument(
         "--symbols",

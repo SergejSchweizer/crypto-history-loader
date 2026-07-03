@@ -544,7 +544,7 @@ def finalize_bronze_output(
         if any(market == "spot" for market in ohlcv_markets):
             selected_dataset_types.add("spot")
         if any(market == "perp" for market in ohlcv_markets):
-            selected_dataset_types.add("perp")
+            selected_dataset_types.add("peprs_ohlcv")
         if oi_requested:
             selected_dataset_types.add(oi_dataset_type)
         if funding_requested:

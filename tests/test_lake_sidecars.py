@@ -10,7 +10,7 @@ def test_default_bronze_sidecar_dataset_types_are_stable() -> None:
 
     assert DEFAULT_BRONZE_SIDECAR_DATASET_TYPES == (
         "spot",
-        "perp",
+        "peprs_ohlcv",
         "oi",
         "funding",
         "perp_trades",
