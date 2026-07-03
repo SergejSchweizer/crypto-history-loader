@@ -19,7 +19,7 @@ from ingestion.funding import (
     normalize_funding_timeframe,
 )
 from ingestion.lake_queries import open_times_in_lake_by_dataset
-from ingestion.spot import Exchange, Market, normalize_storage_symbol
+from ingestion.spot_ohlcv import Exchange, Market, normalize_storage_symbol
 
 
 def fetch_symbol_funding(

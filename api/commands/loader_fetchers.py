@@ -10,7 +10,7 @@ from application.services import fetch_service
 from application.services.bronze_runtime_service import BronzeRuntimeBoundsContext, resolve_symbol_start_open_ms_bound
 from ingestion.funding import FundingPoint
 from ingestion.open_interest import OpenInterestPoint
-from ingestion.spot import Exchange, Market, SpotCandle
+from ingestion.spot_ohlcv import Exchange, Market, SpotCandle
 from ingestion.trades import OptionTradeTick, TradeMarket, TradeTick
 from ingestion.volatility import VolatilityPoint
 

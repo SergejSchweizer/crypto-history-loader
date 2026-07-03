@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 
 from application.services.storage_service import persist_loader_outputs
 from ingestion.open_interest import OpenInterestPoint
-from ingestion.spot import Market, SpotCandle
+from ingestion.spot_ohlcv import Market, SpotCandle
 
 
 def _sample_candle() -> SpotCandle:
@@ -40,15 +40,15 @@ def _sample_oi() -> OpenInterestPoint:
 
 def test_persist_loader_outputs_writes_parquet_outputs() -> None:
     candles: dict[Market, dict[str, dict[str, list[SpotCandle]]]] = {
-        "spot": {"deribit": {"BTCUSDT": [_sample_candle()]}}
+        "spot_ohlcv": {"deribit": {"BTCUSDT": [_sample_candle()]}}
     }
     oi: dict[Market, dict[str, dict[str, list[OpenInterestPoint]]]] = {"perp": {"deribit": {"BTCUSDT": [_sample_oi()]}}}
-    calls: dict[str, int] = {"spot": 0, "oi": 0}
+    calls: dict[str, int] = {"spot_ohlcv": 0, "oi": 0}
 
-    def fake_save_spot_lake_fn(**kwargs: object) -> list[str]:
+    def fake_save_spot_ohlcv_lake_fn(**kwargs: object) -> list[str]:
         del kwargs
-        calls["spot"] += 1
-        return ["spot.parquet"]
+        calls["spot_ohlcv"] += 1
+        return ["spot_ohlcv.parquet"]
 
     def fake_save_oi_lake_fn(**kwargs: object) -> list[str]:
         del kwargs
@@ -61,9 +61,9 @@ def test_persist_loader_outputs_writes_parquet_outputs() -> None:
         save_parquet_lake=True,
         lake_root="lake/bronze",
         oi_requested=True,
-        save_spot_lake_fn=fake_save_spot_lake_fn,
+        save_spot_ohlcv_lake_fn=fake_save_spot_ohlcv_lake_fn,
         save_oi_lake_fn=fake_save_oi_lake_fn,
     )
 
-    assert result["_parquet_files"] == ["spot.parquet", "oi.parquet"]
-    assert calls == {"spot": 1, "oi": 1}
+    assert result["_parquet_files"] == ["spot_ohlcv.parquet", "oi.parquet"]
+    assert calls == {"spot_ohlcv": 1, "oi": 1}

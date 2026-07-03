@@ -19,8 +19,8 @@ def feature_source_dataset(column_name: str) -> str:
 
     if column_name.startswith("option_trades_"):
         return "option_trades_1m_feature"
-    if column_name.startswith("spot_"):
-        return "spot_1m"
+    if column_name.startswith("spot_ohlcv_"):
+        return "spot_ohlcv_1m"
     if column_name.startswith("perp_"):
         return "peprs_ohlcv_1m"
     if column_name.startswith("oi_"):

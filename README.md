@@ -17,7 +17,7 @@ Author: Sergej Schweizer
   - [3.1 System prerequisites](#31-system-prerequisites)
   - [3.2 Python environment setup](#32-python-environment-setup)
 - [4. Raw Datasets](#4-raw-datasets)
-  - [4.1 Spot (`dataset_type=spot`)](#41-spot-dataset_typespot)
+  - [4.1 Spot (`dataset_type=spot_ohlcv`)](#41-spot_ohlcv-dataset_typespot_ohlcv)
   - [4.2 Perpetual (`dataset_type=peprs_ohlcv`)](#42-perpetual-dataset_typepeprs_ohlcv)
   - [4.3 Open Interest (`dataset_type=oi`)](#43-open-interest-dataset_typeoi)
   - [4.4 Funding (`dataset_type=funding`)](#44-funding-dataset_typefunding)
@@ -63,7 +63,7 @@ OHLCV:
 
 | CLI Domain | Bronze `dataset_type` | Instrument Type | Task Kind | Default Timeframe | Symbol Source | Description |
 |---|---|---|---|---|---|---|
-| `spot` | `spot` | `spot` | `ohlcv` | `1m` | `--symbols` | Physical spot OHLCV candles |
+| `spot_ohlcv` | `spot_ohlcv` | `spot_ohlcv` | `ohlcv` | `1m` | `--symbols` | Physical spot_ohlcv OHLCV candles |
 | `peprs_ohlcv` | `peprs_ohlcv` | `perp` | `ohlcv` | `1m` | `--symbols` | Perpetual futures OHLCV candles |
 
 Interval State:
@@ -90,8 +90,8 @@ Volatility:
 
 ### CLI Contract
 
-- `bronze-build --dataset` choices: `spot peprs_ohlcv oi funding perps_trades option_trades volatility_index_data`
-- `--symbols` applies to all selected datasets (`spot`, `peprs_ohlcv`, `oi`, `funding`, `perps_trades`, `option_trades`, `volatility_index_data`)
+- `bronze-build --dataset` choices: `spot_ohlcv peprs_ohlcv oi funding perps_trades option_trades volatility_index_data`
+- `--symbols` applies to all selected datasets (`spot_ohlcv`, `peprs_ohlcv`, `oi`, `funding`, `perps_trades`, `option_trades`, `volatility_index_data`)
 
 Current exchange support:
 
@@ -194,7 +194,7 @@ Recommended permissions:
 ```bash
 uv run python main.py --debug bronze-build \
  --exchange deribit \
- --market spot peprs_ohlcv oi funding perps_trades option_trades volatility_index_data \
+ --market spot_ohlcv peprs_ohlcv oi funding perps_trades option_trades volatility_index_data \
  --symbols BTC ETH SOL \
  --full-gap-fill \
  --save-parquet-lake \
@@ -207,7 +207,7 @@ Trade symbol inheritance:
 
 Raw ingests are defined by `application/datasets.py` and persisted by Bronze writers in
 `ingestion/lake.py`. The repository currently defines seven registry-backed raw dataset types:
-`spot`, `peprs_ohlcv`, `oi`, `funding`, `perps_trades`, `option_trades`, and `volatility_index_data`.
+`spot_ohlcv`, `peprs_ohlcv`, `oi`, `funding`, `perps_trades`, `option_trades`, and `volatility_index_data`.
 
 All datasets share structural metadata columns:
 `schema_version`, `dataset_type`, `exchange`, `symbol`, `instrument_type`, `event_time`,
@@ -229,7 +229,7 @@ Current Bronze missing-day snapshot generated from `lake/bronze` on 2026-07-01 0
 | `option_trades` | 3 | 2018-08-14 | 2026-07-01 | 5,780 | 5,780 | 0 | 0.00% |
 | `peprs_ohlcv` | 3 | 2018-08-14 | 2026-07-01 | 7,071 | 7,071 | 0 | 0.00% |
 | `perps_trades` | 3 | 2018-08-14 | 2026-06-11 | 5,739 | 2,565 | 3,174 | 55.31% |
-| `spot` | 3 | 2023-04-24 | 2026-07-01 | 3,186 | 3,186 | 0 | 0.00% |
+| `spot_ohlcv` | 3 | 2023-04-24 | 2026-07-01 | 3,186 | 3,186 | 0 | 0.00% |
 | `volatility_index_data` | 3 | 2022-11-07 | 2026-05-25 | 83 | 83 | 0 | 0.00% |
 
 | Dataset Type | Exchange | Instrument | Symbol | Timeframe | Start Date | End Date | Expected Days | Observed Days | Missing Days | Missing % |
@@ -252,18 +252,18 @@ Current Bronze missing-day snapshot generated from `lake/bronze` on 2026-07-01 0
 | `perps_trades` | deribit | perp | `BTC-PERPETUAL` | tick | 2018-08-14 | 2026-06-11 | 2,859 | 1,396 | 1,463 | 51.17% |
 | `perps_trades` | deribit | perp | `ETH-PERPETUAL` | tick | 2019-03-14 | 2026-05-29 | 2,634 | 923 | 1,711 | 64.96% |
 | `perps_trades` | deribit | perp | `SOL-PERPETUAL` | tick | 2022-04-29 | 2022-12-30 | 246 | 246 | 0 | 0.00% |
-| `spot` | deribit | spot | `BTC_USDC` | 1m | 2023-04-24 | 2026-07-01 | 1,165 | 1,165 | 0 | 0.00% |
-| `spot` | deribit | spot | `ETH_USDC` | 1m | 2023-04-24 | 2026-07-01 | 1,165 | 1,165 | 0 | 0.00% |
-| `spot` | deribit | spot | `SOL_USDC` | 1m | 2024-02-27 | 2026-07-01 | 856 | 856 | 0 | 0.00% |
+| `spot_ohlcv` | deribit | spot_ohlcv | `BTC_USDC` | 1m | 2023-04-24 | 2026-07-01 | 1,165 | 1,165 | 0 | 0.00% |
+| `spot_ohlcv` | deribit | spot_ohlcv | `ETH_USDC` | 1m | 2023-04-24 | 2026-07-01 | 1,165 | 1,165 | 0 | 0.00% |
+| `spot_ohlcv` | deribit | spot_ohlcv | `SOL_USDC` | 1m | 2024-02-27 | 2026-07-01 | 856 | 856 | 0 | 0.00% |
 | `volatility_index_data` | deribit | perp | `BTC` | 1m | 2026-04-24 | 2026-05-25 | 32 | 32 | 0 | 0.00% |
 | `volatility_index_data` | deribit | perp | `ETH` | 1m | 2026-04-24 | 2026-05-25 | 32 | 32 | 0 | 0.00% |
 | `volatility_index_data` | deribit | perp | `SOL` | 1m | 2022-11-07 | 2022-11-25 | 19 | 19 | 0 | 0.00% |
 
-## 4.1 Spot (`dataset_type=spot`)
+## 4.1 Spot (`dataset_type=spot_ohlcv`)
 
 ### 1. Bronze layer
 
-Market role: physical spot-market state and baseline for directional/volatility context.
+Market role: physical spot_ohlcv-market state and baseline for directional/volatility context.
 Relationship: joins with `perp` by symbol/minute for basis and premium analysis.
 Time aggregation: native `1m` OHLCV ingestion (no Bronze resampling).
 
@@ -287,8 +287,8 @@ Description: returns TradingView-style OHLCV candle arrays for a symbol and reso
 - Log return: `r_t = ln(close_price_t / close_price_{t-1})`.
 - Range volatility (Parkinson): `sigma^2_{P,t} = (1 / (4 ln 2)) * (ln(high_price_t / low_price_t))^2`.
 - Dollar participation: `turnover_t = quote_volume_t`; trade intensity: `intensity_t = trade_count_t`.
-- Spot-perp basis anchor (self-financing leg input): `basis_t = perp_close_t - spot_close_t`.
-- Market-neutral residual alpha seed: `epsilon_t = r^{spot}_t - beta_t * r^{mkt}_t`.
+- Spot-perp basis anchor (self-financing leg input): `basis_t = perp_close_t - spot_ohlcv_close_t`.
+- Market-neutral residual alpha seed: `epsilon_t = r^{spot_ohlcv}_t - beta_t * r^{mkt}_t`.
 
 | Column | Unit | Market meaning | Relationship to other datasets/columns |
 |---|---|---|---|
@@ -314,7 +314,7 @@ Coverage:
 ### 1. Bronze layer
 
 Market role: leveraged perpetual state for faster risk transfer and price discovery.
-Relationship: consumed jointly with `spot`, `funding`, and `oi` for carry/crowding context.
+Relationship: consumed jointly with `spot_ohlcv`, `funding`, and `oi` for carry/crowding context.
 Time aggregation: native `1m` OHLCV ingestion.
 
 ### 1.1 Deribit endpoint
@@ -324,7 +324,7 @@ Description: returns perpetual OHLCV candle arrays (open/high/low/close/volume) 
 
 ### 2. Silver layer
 
-- Builder: `build_silver_for_symbol` (same contract as spot).
+- Builder: `build_silver_for_symbol` (same contract as spot_ohlcv).
 - Missing values: rows with null `open_price`, `high_price`, `low_price`, or `close_price` are dropped; `volume`, `quote_volume`, and `trade_count` are preserved as provided by the source.
 - Filter rows with null OHLC columns: `open_price`, `high_price`, `low_price`, `close_price`.
 - Enforce candle consistency: `high_price >= max(open_price, close_price)` and `low_price <= min(open_price, close_price)`.
@@ -334,7 +334,7 @@ Description: returns perpetual OHLCV candle arrays (open/high/low/close/volume) 
 
 ### 3. High-value features
 
-- Basis level vs spot: `basis_t = perp_close_t - spot_close_t`.
+- Basis level vs spot_ohlcv: `basis_t = perp_close_t - spot_ohlcv_close_t`.
 - Basis momentum: `delta_basis_t = basis_t - basis_{t-1}`.
 - Intrabar realized range proxy: `rv_t = ln(high_price_t / low_price_t)^2`.
 - Notional pressure: `pressure_t = quote_volume_t / rolling_mean(quote_volume, n)`.
@@ -342,11 +342,11 @@ Description: returns perpetual OHLCV candle arrays (open/high/low/close/volume) 
 
 | Column | Unit | Market meaning | Relationship to other datasets/columns |
 |---|---|---|---|
-| `open_price` | USD (or quote/base) | Opening perpetual mark for interval. | Used against spot prices to infer carry and dislocation. |
+| `open_price` | USD (or quote/base) | Opening perpetual mark for interval. | Used against spot_ohlcv prices to infer carry and dislocation. |
 | `high_price` | USD (or quote/base) | Intrabar maximum price. | Coupled with OI/funding shifts to detect squeeze conditions. |
 | `low_price` | USD (or quote/base) | Intrabar minimum price. | Combined with OI drawdowns for liquidation diagnostics. |
 | `close_price` | USD (or quote/base) | End-of-interval perpetual mark. | Canonical join key with funding/OI minute features. |
-| `volume` | contracts/base units | Leveraged venue traded size. | Compared with spot volume and tick-flow aggregates for speculation intensity. |
+| `volume` | contracts/base units | Leveraged venue traded size. | Compared with spot_ohlcv volume and tick-flow aggregates for speculation intensity. |
 | `quote_volume` | quote-currency units | Perpetual notional turnover. | Used for cross-market notional participation diagnostics. |
 | `trade_count` | count | Number of perp executions. | Coarse complement to `perps_trades` microstructure rows. |
 | `origin_payload` | JSON/object | Full source-shaped raw record for audit/replay. | Reconciliation source for derived Silver features. |
@@ -543,7 +543,7 @@ Runtime override: set `DEPTH_DERIBIT_OPTION_TRADES_PAGE_SIZE` to tune request pa
 - Call-put pressure (when split is available): `cp_t = (call_buy_notional_t - put_buy_notional_t) / total_notional_t`.
 - Activity shock: `shock_t = (trade_count_t - rolling_mean(trade_count, n)) / rolling_std(trade_count, n)`.
 - Moneyness-weighted pressure (if `strike` joined): `mw_t = sum_i(weight_i * signed_notional_i)` with
-  `weight_i = exp(-|ln(strike_i / spot_t)|)`.
+  `weight_i = exp(-|ln(strike_i / spot_ohlcv_t)|)`.
 - Volatility timing trigger: `enter_vol_t = 1[opt_imb_t > q_{0.9} and funding_shock_t > 0]`.
 
 | Column | Unit | Market meaning | Relationship to other datasets/columns |
@@ -555,7 +555,7 @@ Runtime override: set `DEPTH_DERIBIT_OPTION_TRADES_PAGE_SIZE` to tune request pa
 | `is_maker` | boolean | Maker-side indicator proxy. | Liquidity-taking vs provision context. |
 | `instrument_name` | contract code | Full exchange contract identifier. | Parent for `expiry`, `strike`, `option_type` extraction. |
 | `expiry` | contract expiry code | Option maturity bucket. | Used with timestamp for term-structure activity mapping. |
-| `strike` | strike price (USD) | Contract strike level. | Combined with underlying spot/perp for moneyness context. |
+| `strike` | strike price (USD) | Contract strike level. | Combined with underlying spot_ohlcv/perp for moneyness context. |
 | `option_type` | category (`call`/`put`/`unknown`) | Contract payoff side. | Enables call/put activity skew features. |
 
 Coverage:
@@ -587,7 +587,7 @@ Bronze:
 ```bash
 uv run python main.py bronze-build \
   --exchange deribit \
-  --dataset spot peprs_ohlcv oi funding perps_trades option_trades \
+  --dataset spot_ohlcv peprs_ohlcv oi funding perps_trades option_trades \
   --symbols BTC ETH SOL
 ```
 
@@ -598,7 +598,7 @@ uv run python main.py silver-build \
   --bronze-root lake/bronze \
   --silver-root lake/silver \
   --exchange deribit \
-  --dataset spot peprs_ohlcv oi funding perps_trades option_trades \
+  --dataset spot_ohlcv peprs_ohlcv oi funding perps_trades option_trades \
   --timeframe 1m \
   --maxprocesses 4
 ```
@@ -618,7 +618,7 @@ uv run python main.py gold-build \
 
 Symbol-group controls for Bronze:
 
-- `--symbols` applies to all selected datasets (`spot`, `peprs_ohlcv`, `oi`, `funding`, `perps_trades`, `option_trades`)
+- `--symbols` applies to all selected datasets (`spot_ohlcv`, `peprs_ohlcv`, `oi`, `funding`, `perps_trades`, `option_trades`)
 - default symbols are `BTC ETH SOL`
 
 Bronze checkpoint path:

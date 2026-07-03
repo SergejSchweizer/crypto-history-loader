@@ -8,9 +8,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Literal
 
-from ingestion.spot import SpotCandle
+from ingestion.spot_ohlcv import SpotCandle
 
-PriceField = Literal["spot", "close", "open", "high", "low"]
+PriceField = Literal["spot_ohlcv", "close", "open", "high", "low"]
 
 # Unified dark schema (aligned with silver plots).
 _FIGURE_FACE = "#0b1220"
@@ -24,7 +24,7 @@ _MUTED_TEXT_COLOR = "#cbd5e1"
 def price_value(candle: SpotCandle, price_field: PriceField) -> float:
     """Select a price value from a candle based on requested field."""
 
-    if price_field in {"spot", "close"}:
+    if price_field in {"spot_ohlcv", "close"}:
         return candle.close_price
     if price_field == "open":
         return candle.open_price
@@ -57,7 +57,7 @@ def save_candle_plots(
     Args:
         candles_by_exchange: Nested mapping ``exchange -> symbol -> candles``.
         output_dir: Directory where plots are written.
-        price_field: Price field to plot (``spot`` maps to close).
+        price_field: Price field to plot (``spot_ohlcv`` maps to close).
 
     Returns:
         Absolute plot file paths.

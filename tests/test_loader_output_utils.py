@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from api.commands.loader_output_utils import serialize_candle, sidecar_path_list
-from ingestion.spot import SpotCandle
+from ingestion.spot_ohlcv import SpotCandle
 
 
 def test_sidecar_path_list_deduplicates_sorts_and_replaces_suffix(tmp_path: Path) -> None:

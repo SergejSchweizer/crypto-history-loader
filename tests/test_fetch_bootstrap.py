@@ -5,10 +5,10 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from application.services.fetch_bootstrap import fetch_bootstrap_history_rows, fetch_bounded_daily_rows
-from ingestion.spot import SpotCandle
+from ingestion.spot_ohlcv import SpotCandle
 
 
-def _spot(open_time: datetime, close: float) -> SpotCandle:
+def _spot_ohlcv(open_time: datetime, close: float) -> SpotCandle:
     return SpotCandle(
         exchange="deribit",
         symbol="BTCUSDT",
@@ -28,9 +28,9 @@ def _spot(open_time: datetime, close: float) -> SpotCandle:
 def test_fetch_bounded_daily_rows_dedupes_with_stable_last_write_wins() -> None:
     ts0 = datetime(2026, 1, 1, 0, 0, tzinfo=UTC)
     ts1 = datetime(2026, 1, 1, 0, 1, tzinfo=UTC)
-    first = _spot(ts0, 1.0)
-    replacement = _spot(ts0, 2.0)
-    second = _spot(ts1, 3.0)
+    first = _spot_ohlcv(ts0, 1.0)
+    replacement = _spot_ohlcv(ts0, 2.0)
+    second = _spot_ohlcv(ts1, 3.0)
 
     def _range_fetcher(**kwargs: object) -> list[SpotCandle]:
         start_open_ms = int(kwargs["start_open_ms"])
@@ -56,8 +56,8 @@ def test_fetch_bootstrap_history_rows_applies_callback_wrapper_and_filter() -> N
     def _history_fetcher(**kwargs: object) -> list[SpotCandle]:
         callback = kwargs["on_history_chunk"]
         assert callable(callback)
-        callback([_spot(ts0, 1.0), _spot(ts1, 2.0)])
-        return [_spot(ts0, 1.0), _spot(ts1, 2.0)]
+        callback([_spot_ohlcv(ts0, 1.0), _spot_ohlcv(ts1, 2.0)])
+        return [_spot_ohlcv(ts0, 1.0), _spot_ohlcv(ts1, 2.0)]
 
     def _wrap(callback: object) -> object:
         assert callable(callback)

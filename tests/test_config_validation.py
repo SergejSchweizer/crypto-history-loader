@@ -19,7 +19,7 @@ def test_validate_runtime_config_accepts_minimal_required_sections() -> None:
             "exchanges": ["deribit"],
             "symbols": ["BTC"],
             "timeframes": ["1m"],
-            "instrument_types": ["spot"],
+            "instrument_types": ["spot_ohlcv"],
         },
     }
     validate_runtime_config(payload)
@@ -37,7 +37,7 @@ def test_validate_runtime_config_rejects_invalid_export_types() -> None:
             "exchanges": "deribit",
             "symbols": ["BTC"],
             "timeframes": ["1m"],
-            "instrument_types": ["spot"],
+            "instrument_types": ["spot_ohlcv"],
         },
     }
     with pytest.raises(ValueError, match="Invalid config.yaml schema"):
@@ -67,7 +67,7 @@ def test_validate_runtime_config_accepts_fetch_runtime_env_policy() -> None:
             "exchanges": ["deribit"],
             "symbols": ["BTC"],
             "timeframes": ["1m"],
-            "instrument_types": ["spot"],
+            "instrument_types": ["spot_ohlcv"],
         },
     }
 
@@ -92,7 +92,7 @@ def test_validate_runtime_config_rejects_out_of_bounds_fetch_runtime_env_policy(
             "exchanges": ["deribit"],
             "symbols": ["BTC"],
             "timeframes": ["1m"],
-            "instrument_types": ["spot"],
+            "instrument_types": ["spot_ohlcv"],
         },
     }
 

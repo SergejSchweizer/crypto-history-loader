@@ -9,12 +9,12 @@ from ingestion.funding import FundingPoint
 from ingestion.lake_bronze_writes import (
     save_funding_parquet_lake,
     save_open_interest_parquet_lake,
-    save_spot_candles_parquet_lake,
+    save_spot_ohlcv_candles_parquet_lake,
     save_trades_parquet_lake,
     save_volatility_parquet_lake,
 )
 from ingestion.open_interest import OpenInterestPoint
-from ingestion.spot import Market, SpotCandle
+from ingestion.spot_ohlcv import Market, SpotCandle
 from ingestion.trades import OptionTradeTick, TradeMarket, TradeTick
 from ingestion.volatility import VolatilityPoint
 
@@ -22,7 +22,7 @@ from ingestion.volatility import VolatilityPoint
 def persist_loader_outputs_dto(
     storage: LoaderStorageDTO,
     options: PersistOptionsDTO,
-    save_spot_lake_fn: Callable[..., list[str]] = save_spot_candles_parquet_lake,
+    save_spot_ohlcv_lake_fn: Callable[..., list[str]] = save_spot_ohlcv_candles_parquet_lake,
     save_oi_lake_fn: Callable[..., list[str]] = save_open_interest_parquet_lake,
     save_funding_lake_fn: Callable[..., list[str]] = save_funding_parquet_lake,
     save_trades_lake_fn: Callable[..., list[str]] = save_trades_parquet_lake,
@@ -34,7 +34,7 @@ def persist_loader_outputs_dto(
     if options.save_parquet_lake:
         for market_key, candles_by_exchange in storage.candles.items():
             result.parquet_files.extend(
-                save_spot_lake_fn(
+                save_spot_ohlcv_lake_fn(
                     candles_by_exchange=candles_by_exchange,
                     market=market_key,
                     lake_root=options.lake_root,
@@ -89,7 +89,7 @@ def persist_loader_outputs(
     oi_requested: bool,
     funding_for_storage: dict[Market, dict[str, dict[str, list[FundingPoint]]]] | None = None,
     volatility_index_data_for_storage: dict[Market, dict[str, dict[str, list[VolatilityPoint]]]] | None = None,
-    save_spot_lake_fn: Callable[..., list[str]] = save_spot_candles_parquet_lake,
+    save_spot_ohlcv_lake_fn: Callable[..., list[str]] = save_spot_ohlcv_candles_parquet_lake,
     save_oi_lake_fn: Callable[..., list[str]] = save_open_interest_parquet_lake,
     save_funding_lake_fn: Callable[..., list[str]] = save_funding_parquet_lake,
     trades_for_storage: dict[TradeMarket, dict[str, dict[str, list[TradeTick | OptionTradeTick]]]] | None = None,
@@ -114,7 +114,7 @@ def persist_loader_outputs(
             volatility_index_data_requested=bool(volatility_index_data_for_storage),
             trades_requested=trades_requested,
         ),
-        save_spot_lake_fn=save_spot_lake_fn,
+        save_spot_ohlcv_lake_fn=save_spot_ohlcv_lake_fn,
         save_oi_lake_fn=save_oi_lake_fn,
         save_funding_lake_fn=save_funding_lake_fn,
         save_trades_lake_fn=save_trades_lake_fn,

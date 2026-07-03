@@ -8,7 +8,7 @@ from typing import Any, cast
 import pytest
 
 from application.services.fetch_ohlcv_symbol import fetch_symbol_candles
-from ingestion.spot import SpotCandle
+from ingestion.spot_ohlcv import SpotCandle
 
 
 def test_fetch_symbol_candles_tail_delta_only_uses_latest_open_time() -> None:
@@ -25,7 +25,7 @@ def test_fetch_symbol_candles_tail_delta_only_uses_latest_open_time() -> None:
 
     rows = fetch_symbol_candles(
         exchange="deribit",
-        market="spot",
+        market="spot_ohlcv",
         symbol="BTCUSDT",
         timeframe="1m",
         lake_root="lake/bronze",
@@ -57,7 +57,7 @@ def test_fetch_symbol_candles_bootstrap_with_start_bound_uses_day_range_fetch() 
 
     rows = fetch_symbol_candles(
         exchange="deribit",
-        market="spot",
+        market="spot_ohlcv",
         symbol="BTCUSDT",
         timeframe="1m",
         lake_root="lake/bronze",
@@ -89,7 +89,7 @@ def test_fetch_symbol_candles_full_gap_fill_includes_head_gap_from_start_bound()
 
     rows = fetch_symbol_candles(
         exchange="deribit",
-        market="spot",
+        market="spot_ohlcv",
         symbol="BTCUSDT",
         timeframe="1m",
         lake_root="lake/bronze",

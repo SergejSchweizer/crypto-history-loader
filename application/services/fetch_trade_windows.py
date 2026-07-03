@@ -10,7 +10,7 @@ from typing import cast
 from application.services.fetch_executors import elapsed_seconds
 from application.services.fetch_runtime_policy import trade_window_ms
 from ingestion.http_client import HttpClientError
-from ingestion.spot import Exchange
+from ingestion.spot_ohlcv import Exchange
 from ingestion.trades import OptionTradeTick, TradeMarket, TradeTick
 
 logger = logging.getLogger(__name__)

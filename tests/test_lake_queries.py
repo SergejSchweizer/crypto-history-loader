@@ -8,14 +8,14 @@ from pathlib import Path
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from ingestion.lake import save_spot_candles_parquet_lake, save_trades_parquet_lake
+from ingestion.lake import save_spot_ohlcv_candles_parquet_lake, save_trades_parquet_lake
 from ingestion.lake_queries import (
     latest_open_time_in_lake,
     open_time_bounds_in_lake_by_dataset,
     open_times_in_lake,
     partition_dates_in_lake_by_dataset,
 )
-from ingestion.spot import SpotCandle
+from ingestion.spot_ohlcv import SpotCandle
 from ingestion.trades import TradeTick
 
 
@@ -54,18 +54,18 @@ def _trade(trade_id: str, trade_time: datetime) -> TradeTick:
 def test_open_times_and_latest_open_time_read_saved_ohlcv_rows(tmp_path: Path) -> None:
     first = _candle(datetime(2026, 4, 27, 10, 0, tzinfo=UTC))
     second = _candle(datetime(2026, 5, 1, 0, 0, tzinfo=UTC))
-    save_spot_candles_parquet_lake({"deribit": {"BTCUSDT": [second, first, first]}}, "spot", str(tmp_path))
+    save_spot_ohlcv_candles_parquet_lake({"deribit": {"BTCUSDT": [second, first, first]}}, "spot_ohlcv", str(tmp_path))
 
     values = open_times_in_lake(
         lake_root=str(tmp_path),
-        market="spot",
+        market="spot_ohlcv",
         exchange="deribit",
         symbol="BTCUSDT",
         timeframe="1m",
     )
     latest = latest_open_time_in_lake(
         lake_root=str(tmp_path),
-        market="spot",
+        market="spot_ohlcv",
         exchange="deribit",
         symbol="BTCUSDT",
         timeframe="1m",
@@ -105,9 +105,9 @@ def test_partition_dates_and_bounds_read_trade_partitions(tmp_path: Path) -> Non
 def test_open_time_bounds_falls_back_when_parquet_stats_are_unavailable(tmp_path: Path) -> None:
     partition = (
         tmp_path
-        / "dataset_type=spot"
+        / "dataset_type=spot_ohlcv"
         / "exchange=deribit"
-        / "instrument_type=spot"
+        / "instrument_type=spot_ohlcv"
         / "symbol=BTCUSDT"
         / "timeframe=1m"
         / "year=2026"
@@ -122,8 +122,8 @@ def test_open_time_bounds_falls_back_when_parquet_stats_are_unavailable(tmp_path
 
     bounds = open_time_bounds_in_lake_by_dataset(
         lake_root=str(tmp_path),
-        dataset_type="spot",
-        market="spot",
+        dataset_type="spot_ohlcv",
+        market="spot_ohlcv",
         exchange="deribit",
         symbol="BTCUSDT",
         timeframe="1m",

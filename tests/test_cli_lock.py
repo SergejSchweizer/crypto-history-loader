@@ -13,7 +13,7 @@ import pytest
 
 from api import cli
 from api.cli import SingleInstanceError, SingleInstanceLock
-from ingestion.spot import SpotCandle
+from ingestion.spot_ohlcv import SpotCandle
 
 
 @pytest.fixture(autouse=True)
@@ -76,7 +76,7 @@ def test_auto_mode_fetches_all_history_when_no_lake_data(monkeypatch: pytest.Mon
 
     candles = cli._fetch_symbol_candles(
         exchange="deribit",
-        market="spot",
+        market="spot_ohlcv",
         symbol="BTCUSDT",
         timeframe="1m",
         lake_root="lake/bronze",
@@ -114,7 +114,7 @@ def test_gap_fill_fetches_internal_and_tail_gaps(monkeypatch: pytest.MonkeyPatch
 
     candles = cli._fetch_symbol_candles(
         exchange="deribit",
-        market="spot",
+        market="spot_ohlcv",
         symbol="BTCUSDT",
         timeframe="1m",
         lake_root="lake/bronze",
@@ -148,7 +148,7 @@ def test_main_loader_command_still_uses_single_instance_lock(
             "--exchange",
             "deribit",
             "--dataset",
-            "spot",
+            "spot_ohlcv",
             "--symbols",
             "BTCUSDT",
             "--no-json-output",
@@ -193,7 +193,7 @@ def test_main_loader_uses_deterministic_symbol_schedule(monkeypatch: pytest.Monk
             "--exchange",
             "deribit",
             "--dataset",
-            "spot",
+            "spot_ohlcv",
             "--symbols",
             "BTCUSDT",
             "ETHUSDT",
@@ -242,7 +242,7 @@ def test_main_bronze_ingest_command_uses_loader_runtime(monkeypatch: pytest.Monk
             "--exchange",
             "deribit",
             "--dataset",
-            "spot",
+            "spot_ohlcv",
             "--symbols",
             "BTCUSDT",
             "--no-json-output",
@@ -286,7 +286,7 @@ def test_main_loader_uses_deterministic_market_schedule(monkeypatch: pytest.Monk
             "--exchange",
             "deribit",
             "--dataset",
-            "spot",
+            "spot_ohlcv",
             "peprs_ohlcv",
             "--symbols",
             "BTCUSDT",
@@ -297,7 +297,7 @@ def test_main_loader_uses_deterministic_market_schedule(monkeypatch: pytest.Monk
     cli.main()
 
     unique_market_order = list(dict.fromkeys(seen_markets))
-    assert unique_market_order == ["perp", "spot"]
+    assert unique_market_order == ["perp", "spot_ohlcv"]
 
 
 def test_main_loader_uses_deterministic_dataset_group_order(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -345,7 +345,7 @@ def test_main_loader_uses_deterministic_dataset_group_order(monkeypatch: pytest.
             "--exchange",
             "deribit",
             "--dataset",
-            "spot",
+            "spot_ohlcv",
             "peprs_ohlcv",
             "oi",
             "funding",
@@ -357,7 +357,7 @@ def test_main_loader_uses_deterministic_dataset_group_order(monkeypatch: pytest.
 
     cli.main()
 
-    assert scheduled_groups == ["perp", "spot", "oi", "funding"]
+    assert scheduled_groups == ["perp", "spot_ohlcv", "oi", "funding"]
 
 
 def test_export_descriptive_stats_writes_csv(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -413,7 +413,7 @@ def test_loader_rejects_removed_timeframe_argument(monkeypatch: pytest.MonkeyPat
             "--exchange",
             "deribit",
             "--dataset",
-            "spot",
+            "spot_ohlcv",
             "--symbols",
             "BTCUSDT",
             "--timeframe",

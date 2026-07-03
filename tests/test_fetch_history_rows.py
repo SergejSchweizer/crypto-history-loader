@@ -12,10 +12,10 @@ from application.services.fetch_history_rows import (
     row_open_time_ms,
 )
 from ingestion.open_interest import OpenInterestPoint
-from ingestion.spot import SpotCandle
+from ingestion.spot_ohlcv import SpotCandle
 
 
-def _spot(open_time: datetime, close: float) -> SpotCandle:
+def _spot_ohlcv(open_time: datetime, close: float) -> SpotCandle:
     return SpotCandle(
         exchange="deribit",
         symbol="BTCUSDT",
@@ -66,8 +66,8 @@ def test_fetch_bounded_daily_rows_with_start_bound_dedupes_by_open_time() -> Non
     def _range_fetcher(**kwargs: object) -> list[SpotCandle]:
         start_open_ms = int(kwargs["start_open_ms"])
         if start_open_ms == 1:
-            return [_spot(ts0, 1.0), _spot(ts0, 2.0)]
-        return [_spot(ts1, 3.0)]
+            return [_spot_ohlcv(ts0, 1.0), _spot_ohlcv(ts0, 2.0)]
+        return [_spot_ohlcv(ts1, 3.0)]
 
     rows = fetch_bounded_daily_rows_with_start_bound(
         day_windows=[(1, 2), (3, 4)],
@@ -88,8 +88,8 @@ def test_fetch_bootstrap_history_rows_with_start_bound_filters_chunks_and_rows()
     def _history_fetcher(**kwargs: object) -> list[SpotCandle]:
         callback = kwargs["on_history_chunk"]
         assert callable(callback)
-        callback([_spot(ts0, 1.0), _spot(ts1, 2.0)])
-        return [_spot(ts0, 1.0), _spot(ts1, 2.0), _spot(ts1, 3.0)]
+        callback([_spot_ohlcv(ts0, 1.0), _spot_ohlcv(ts1, 2.0)])
+        return [_spot_ohlcv(ts0, 1.0), _spot_ohlcv(ts1, 2.0), _spot_ohlcv(ts1, 3.0)]
 
     rows = fetch_bootstrap_history_rows_with_start_bound(
         history_fetcher=_history_fetcher,

@@ -33,7 +33,7 @@ def test_load_combined_ohlcv_dataframe_hides_open_interest_flag(monkeypatch) -> 
         exchanges=["deribit"],
         symbols=["BTC"],
         timeframes=["1m"],
-        instrument_types=["spot"],
+        instrument_types=["spot_ohlcv"],
         start_time=start_time,
         end_time=end_time,
     )
@@ -44,7 +44,7 @@ def test_load_combined_ohlcv_dataframe_hides_open_interest_flag(monkeypatch) -> 
         "exchanges": ["deribit"],
         "symbols": ["BTC"],
         "timeframes": ["1m"],
-        "instrument_types": ["spot"],
+        "instrument_types": ["spot_ohlcv"],
         "start_time": start_time,
         "end_time": end_time,
         "include_open_interest": False,

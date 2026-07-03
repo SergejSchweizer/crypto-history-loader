@@ -33,11 +33,11 @@ def test_contract_bump_level_falls_back_to_legacy_manifest_shape() -> None:
     current = {
         "columns": ["a", "b"],
         "join_policy": "full_outer_coalesce",
-        "source_dataset_keys": ["spot_1m"],
+        "source_dataset_keys": ["spot_ohlcv_1m"],
     }
     previous = {
         "columns": ["a", "b"],
-        "source_silver_datasets": {"spot_1m": {"rows": 2}},
+        "source_silver_datasets": {"spot_ohlcv_1m": {"rows": 2}},
     }
 
     assert contract_bump_level(

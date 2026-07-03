@@ -43,7 +43,7 @@ def test_contract_bump_level_branches() -> None:
     current = {
         "columns": ["a", "b"],
         "join_policy": "full_outer_coalesce",
-        "source_dataset_keys": ["spot_1m"],
+        "source_dataset_keys": ["spot_ohlcv_1m"],
     }
     prev_invalid = {
         "contract_signature": {"columns": "x", "join_policy": "full_outer_coalesce", "source_dataset_keys": []}
@@ -55,7 +55,7 @@ def test_contract_bump_level_branches() -> None:
         "invalid_contract_signature",
     )
     prev_join = {
-        "contract_signature": {"columns": ["a", "b"], "join_policy": "inner", "source_dataset_keys": ["spot_1m"]}
+        "contract_signature": {"columns": ["a", "b"], "join_policy": "inner", "source_dataset_keys": ["spot_ohlcv_1m"]}
     }
     assert _contract_bump_level(prev_join, current, previous_source_data_hash="h1", current_source_data_hash="h1") == (
         "major",
@@ -65,7 +65,7 @@ def test_contract_bump_level_branches() -> None:
         "contract_signature": {
             "columns": ["a", "b"],
             "join_policy": "full_outer_coalesce",
-            "source_dataset_keys": ["spot_1m", "peprs_ohlcv_1m"],
+            "source_dataset_keys": ["spot_ohlcv_1m", "peprs_ohlcv_1m"],
         }
     }
     assert _contract_bump_level(
@@ -78,7 +78,7 @@ def test_contract_bump_level_branches() -> None:
         "contract_signature": {
             "columns": ["a", "b", "c"],
             "join_policy": "full_outer_coalesce",
-            "source_dataset_keys": ["spot_1m"],
+            "source_dataset_keys": ["spot_ohlcv_1m"],
         }
     }
     assert _contract_bump_level(
@@ -91,7 +91,7 @@ def test_contract_bump_level_branches() -> None:
         "contract_signature": {
             "columns": ["b", "a"],
             "join_policy": "full_outer_coalesce",
-            "source_dataset_keys": ["spot_1m"],
+            "source_dataset_keys": ["spot_ohlcv_1m"],
         }
     }
     assert _contract_bump_level(prev_order, current, previous_source_data_hash="h1", current_source_data_hash="h1") == (
@@ -124,7 +124,7 @@ def test_dataset_specs_symbol_normalization_and_hash_helpers() -> None:
 
     assert normalize_symbol("btc/usdc") == "BTC"
     assert normalize_symbol("eth-perpetual") == "ETH"
-    assert _feature_source_dataset("spot_close_price") == "spot_1m"
+    assert _feature_source_dataset("spot_ohlcv_close_price") == "spot_ohlcv_1m"
     assert _feature_source_dataset("perp_close_price") == "peprs_ohlcv_1m"
     assert _feature_source_dataset("oi_observation_lag_sec") == "oi_1m_feature"
     assert _feature_source_dataset("funding_rate_last_known") == "funding_1m_feature"
@@ -309,7 +309,7 @@ def test_build_gold_for_symbol_writes_hashed_parquet_and_manifest(tmp_path: Path
 
     _write_silver_month(
         silver,
-        dataset_type="spot",
+        dataset_type="spot_ohlcv",
         exchange=exchange,
         symbol="BTC_USDC",
         timeframe="1m",
@@ -486,22 +486,22 @@ def test_build_gold_for_symbol_writes_hashed_parquet_and_manifest(tmp_path: Path
     assert payload["rows_out"] == 2
     assert "plot_generated" in payload
     assert "source_silver_datasets" in payload
-    assert "spot_1m" in payload["source_silver_datasets"]
-    assert "columns" in payload["source_silver_datasets"]["spot_1m"]
-    assert "open_time" in payload["source_silver_datasets"]["spot_1m"]["columns"]
+    assert "spot_ohlcv_1m" in payload["source_silver_datasets"]
+    assert "columns" in payload["source_silver_datasets"]["spot_ohlcv_1m"]
+    assert "open_time" in payload["source_silver_datasets"]["spot_ohlcv_1m"]["columns"]
     assert "peprs_ohlcv_1m" in payload["source_silver_datasets"]
     assert "oi_1m_feature" in payload["source_silver_datasets"]
     assert "funding_1m_feature" in payload["source_silver_datasets"]
     assert "perps_trades_1m_feature" in payload["source_silver_datasets"]
     assert "option_trades_1m_feature" in payload["source_silver_datasets"]
     assert "volatility_index_data_observed" in payload["source_silver_datasets"]
-    assert payload["source_silver_datasets"]["spot_1m"]["source_symbols"] == ["BTC"]
+    assert payload["source_silver_datasets"]["spot_ohlcv_1m"]["source_symbols"] == ["BTC"]
     assert payload["source_silver_datasets"]["peprs_ohlcv_1m"]["source_symbols"] == ["BTC"]
     assert "feature_metadata" in payload
-    assert "spot_close_price" in payload["feature_metadata"]
-    assert payload["feature_metadata"]["spot_close_price"]["source_exchange"] == exchange
-    assert "time_range" in payload["feature_metadata"]["spot_close_price"]
-    assert payload["feature_metadata"]["spot_close_price"]["time_range"]["min_timestamp"] is not None
+    assert "spot_ohlcv_close_price" in payload["feature_metadata"]
+    assert payload["feature_metadata"]["spot_ohlcv_close_price"]["source_exchange"] == exchange
+    assert "time_range" in payload["feature_metadata"]["spot_ohlcv_close_price"]
+    assert payload["feature_metadata"]["spot_ohlcv_close_price"]["time_range"]["min_timestamp"] is not None
     assert payload["dataset_id"] == "gold.market.full.m1"
     assert payload["dataset_version"] == "v1.0.0"
     assert "feature_set_hash" in payload
@@ -518,10 +518,12 @@ def test_build_gold_uses_latest_silver_artifacts_only(tmp_path: Path) -> None:
     t0 = datetime(2026, 5, 1, 0, 0, tzinfo=UTC)
     t1 = datetime(2026, 5, 1, 0, 1, tzinfo=UTC)
 
-    spot_timeframe_dir = silver / "dataset_type=spot" / f"exchange={exchange}" / "symbol=BTC_USDC" / "timeframe=1m"
-    spot_timeframe_dir.mkdir(parents=True, exist_ok=True)
-    old_spot_path = spot_timeframe_dir / "BTC_2026_05_old.parquet"
-    new_spot_path = spot_timeframe_dir / "BTC_2026_05_new.parquet"
+    spot_ohlcv_timeframe_dir = (
+        silver / "dataset_type=spot_ohlcv" / f"exchange={exchange}" / "symbol=BTC_USDC" / "timeframe=1m"
+    )
+    spot_ohlcv_timeframe_dir.mkdir(parents=True, exist_ok=True)
+    old_spot_ohlcv_path = spot_ohlcv_timeframe_dir / "BTC_2026_05_old.parquet"
+    new_spot_ohlcv_path = spot_ohlcv_timeframe_dir / "BTC_2026_05_new.parquet"
     pl.DataFrame(
         [
             {
@@ -545,7 +547,7 @@ def test_build_gold_uses_latest_silver_artifacts_only(tmp_path: Path) -> None:
                 "volume": 11.0,
             },
         ]
-    ).write_parquet(old_spot_path)
+    ).write_parquet(old_spot_ohlcv_path)
     pl.DataFrame(
         [
             {
@@ -559,10 +561,10 @@ def test_build_gold_uses_latest_silver_artifacts_only(tmp_path: Path) -> None:
                 "volume": 20.0,
             }
         ]
-    ).write_parquet(new_spot_path)
+    ).write_parquet(new_spot_ohlcv_path)
     now = datetime.now().timestamp()
-    os.utime(old_spot_path, (now - 120.0, now - 120.0))
-    os.utime(new_spot_path, (now, now))
+    os.utime(old_spot_ohlcv_path, (now - 120.0, now - 120.0))
+    os.utime(new_spot_ohlcv_path, (now, now))
 
     _write_silver_month(
         silver,
@@ -595,7 +597,7 @@ def test_build_gold_uses_latest_silver_artifacts_only(tmp_path: Path) -> None:
     assert report.rows_out == 1
 
     payload = json.loads(_require_manifest_path(report).read_text(encoding="utf-8"))
-    assert payload["source_silver_datasets"]["spot_1m"]["rows"] == 1
+    assert payload["source_silver_datasets"]["spot_ohlcv_1m"]["rows"] == 1
 
 
 def test_build_gold_for_symbol_normalizes_input_symbol(tmp_path: Path) -> None:
@@ -606,7 +608,7 @@ def test_build_gold_for_symbol_normalizes_input_symbol(tmp_path: Path) -> None:
 
     for dataset_type, rows in [
         (
-            "spot",
+            "spot_ohlcv",
             [
                 {
                     "open_time": t0,
@@ -857,7 +859,7 @@ def test_discover_gold_symbols_requires_trades_dataset(tmp_path: Path) -> None:
     t0 = datetime(2026, 5, 1, 0, 0, tzinfo=UTC)
     _write_silver_month(
         silver,
-        dataset_type="spot",
+        dataset_type="spot_ohlcv",
         exchange=exchange,
         symbol="BTC_USDC",
         timeframe="1m",
@@ -947,7 +949,7 @@ def test_build_gold_hybrid_full_l2_contains_l2_features(tmp_path: Path) -> None:
 
     _write_silver_month(
         silver,
-        dataset_type="spot",
+        dataset_type="spot_ohlcv",
         exchange=exchange,
         symbol="BTC_USDC",
         timeframe="1m",
@@ -1130,7 +1132,7 @@ def test_build_gold_hybrid_full_l2_uses_requested_exchange_l2(tmp_path: Path) ->
 
     _write_silver_month(
         silver,
-        dataset_type="spot",
+        dataset_type="spot_ohlcv",
         exchange=exchange,
         symbol="BTC_USDC",
         timeframe="1m",
@@ -1323,7 +1325,7 @@ def test_build_gold_hybrid_full_l2_rejects_invalid_l2_coverage_ratio(tmp_path: P
 
     _write_silver_month(
         silver,
-        dataset_type="spot",
+        dataset_type="spot_ohlcv",
         exchange=exchange,
         symbol="BTC_USDC",
         timeframe="1m",
@@ -1499,7 +1501,7 @@ def test_build_gold_hybrid_full_l2_lenient_drops_invalid_rows(tmp_path: Path) ->
 
     _write_silver_month(
         silver,
-        dataset_type="spot",
+        dataset_type="spot_ohlcv",
         exchange=exchange,
         symbol="BTC_USDC",
         timeframe="1m",
@@ -1682,7 +1684,7 @@ def test_build_gold_full_keeps_minute_grid_and_reports_missing_values(tmp_path: 
 
     _write_silver_month(
         silver,
-        dataset_type="spot",
+        dataset_type="spot_ohlcv",
         exchange=exchange,
         symbol="BTC_USDC",
         timeframe="1m",
@@ -1839,12 +1841,12 @@ def test_build_gold_full_keeps_minute_grid_and_reports_missing_values(tmp_path: 
     )
     written = pl.read_parquet(report.parquet_path).sort("timestamp_m1")
     assert written.height == 3
-    assert written["spot_close_price"].null_count() == 1
+    assert written["spot_ohlcv_close_price"].null_count() == 1
     payload = json.loads(_require_manifest_path(report).read_text(encoding="utf-8"))
     assert payload["missing_minutes_in_span"] == 0
     assert payload["missing_value_count_total"] >= 1
-    assert payload["missing_value_count_by_column"]["spot_close_price"] == 1
-    assert payload["feature_metadata"]["spot_close_price"]["missing_values"] == 1
+    assert payload["missing_value_count_by_column"]["spot_ohlcv_close_price"] == 1
+    assert payload["feature_metadata"]["spot_ohlcv_close_price"]["missing_values"] == 1
 
 
 def test_build_gold_uses_latest_similar_silver_dataset_variant(tmp_path: Path) -> None:
@@ -1854,19 +1856,24 @@ def test_build_gold_uses_latest_similar_silver_dataset_variant(tmp_path: Path) -
     exchange = "deribit"
     t0 = datetime(2026, 5, 1, 0, 0, tzinfo=UTC)
 
-    stale_spot = (
+    stale_spot_ohlcv = (
         silver
-        / "dataset_type=spot"
+        / "dataset_type=spot_ohlcv"
         / f"exchange={exchange}"
         / "symbol=BTC-USDC"
         / "timeframe=1m"
         / "BTC-USDC_2026_05.parquet"
     )
-    fresh_spot = (
-        silver / "dataset_type=spot" / f"exchange={exchange}" / "symbol=BTC" / "timeframe=1m" / "BTC_2026_05.parquet"
+    fresh_spot_ohlcv = (
+        silver
+        / "dataset_type=spot_ohlcv"
+        / f"exchange={exchange}"
+        / "symbol=BTC"
+        / "timeframe=1m"
+        / "BTC_2026_05.parquet"
     )
-    stale_spot.parent.mkdir(parents=True, exist_ok=True)
-    fresh_spot.parent.mkdir(parents=True, exist_ok=True)
+    stale_spot_ohlcv.parent.mkdir(parents=True, exist_ok=True)
+    fresh_spot_ohlcv.parent.mkdir(parents=True, exist_ok=True)
     pl.DataFrame(
         [
             {
@@ -1880,7 +1887,7 @@ def test_build_gold_uses_latest_similar_silver_dataset_variant(tmp_path: Path) -
                 "volume": 10.0,
             }
         ]
-    ).write_parquet(stale_spot)
+    ).write_parquet(stale_spot_ohlcv)
     pl.DataFrame(
         [
             {
@@ -1894,11 +1901,11 @@ def test_build_gold_uses_latest_similar_silver_dataset_variant(tmp_path: Path) -
                 "volume": 20.0,
             }
         ]
-    ).write_parquet(fresh_spot)
+    ).write_parquet(fresh_spot_ohlcv)
     stale_ts = datetime(2026, 5, 1, 0, 0, tzinfo=UTC).timestamp()
     fresh_ts = datetime(2026, 5, 2, 0, 0, tzinfo=UTC).timestamp()
-    os.utime(stale_spot, (stale_ts, stale_ts))
-    os.utime(fresh_spot, (fresh_ts, fresh_ts))
+    os.utime(stale_spot_ohlcv, (stale_ts, stale_ts))
+    os.utime(fresh_spot_ohlcv, (fresh_ts, fresh_ts))
 
     _write_silver_month(
         silver,
@@ -1932,7 +1939,7 @@ def test_build_gold_uses_latest_similar_silver_dataset_variant(tmp_path: Path) -
 
     written = pl.read_parquet(report.parquet_path).sort("timestamp_m1")
     assert written.height == 1
-    assert written.get_column("spot_close_price").to_list() == [2.0]
+    assert written.get_column("spot_ohlcv_close_price").to_list() == [2.0]
 
 
 def test_build_gold_prunes_to_latest_three_versions(tmp_path: Path) -> None:
@@ -1944,7 +1951,7 @@ def test_build_gold_prunes_to_latest_three_versions(tmp_path: Path) -> None:
 
     _write_silver_month(
         silver,
-        dataset_type="spot",
+        dataset_type="spot_ohlcv",
         exchange=exchange,
         symbol="BTC_USDC",
         timeframe="1m",
@@ -2011,7 +2018,7 @@ def test_build_gold_prunes_to_latest_three_artifacts_with_same_version(tmp_path:
 
     _write_silver_month(
         silver,
-        dataset_type="spot",
+        dataset_type="spot_ohlcv",
         exchange=exchange,
         symbol="BTC_USDC",
         timeframe="1m",

@@ -18,7 +18,7 @@ from ingestion.lake import (
     load_combined_dataframe_from_lake,
     load_funding_from_lake,
     load_open_interest_from_lake,
-    load_spot_candles_from_lake,
+    load_spot_ohlcv_candles_from_lake,
     merge_and_deduplicate_rows,
     open_time_bounds_in_lake_by_dataset,
     open_times_in_lake,
@@ -26,11 +26,11 @@ from ingestion.lake import (
     partition_path,
     save_funding_parquet_lake,
     save_open_interest_parquet_lake,
-    save_spot_candles_parquet_lake,
+    save_spot_ohlcv_candles_parquet_lake,
     save_trades_parquet_lake,
 )
 from ingestion.open_interest import OpenInterestPoint
-from ingestion.spot import SpotCandle
+from ingestion.spot_ohlcv import SpotCandle
 from ingestion.trades import TradeTick
 
 
@@ -53,22 +53,22 @@ def _sample_candle() -> SpotCandle:
 
 def test_partition_key_and_path() -> None:
     candle = _sample_candle()
-    key = candle_partition_key(candle=candle, market="spot")
-    assert key == ("deribit", "spot", "BTCUSDT", "1m", "2026-04-27")
+    key = candle_partition_key(candle=candle, market="spot_ohlcv")
+    assert key == ("deribit", "spot_ohlcv", "BTCUSDT", "1m", "2026-04-27")
 
-    result = partition_path("lake/bronze", "spot", key)
+    result = partition_path("lake/bronze", "spot_ohlcv", key)
     assert str(result).endswith(
-        "dataset_type=spot/exchange=deribit/instrument_type=spot/symbol=BTCUSDT/timeframe=1m/year=2026/month=2026-04/date=2026-04-27"
+        "dataset_type=spot_ohlcv/exchange=deribit/instrument_type=spot_ohlcv/symbol=BTCUSDT/timeframe=1m/year=2026/month=2026-04/date=2026-04-27"
     )
 
 
 def test_candle_record_contains_core_fields() -> None:
     candle = _sample_candle()
     ingested_at = datetime(2026, 4, 27, 12, 0, tzinfo=UTC)
-    record = candle_record(candle=candle, market="spot", run_id="run-1", ingested_at=ingested_at)
+    record = candle_record(candle=candle, market="spot_ohlcv", run_id="run-1", ingested_at=ingested_at)
 
-    assert record["dataset_type"] == "spot"
-    assert record["instrument_type"] == "spot"
+    assert record["dataset_type"] == "spot_ohlcv"
+    assert record["instrument_type"] == "spot_ohlcv"
     assert record["run_id"] == "run-1"
     assert record["open_price"] == 100.0
     assert record["close_price"] == 105.0
@@ -79,7 +79,7 @@ def test_merge_and_deduplicate_rows_keeps_latest_record() -> None:
     second_time = datetime(2026, 4, 27, 11, 0, tzinfo=UTC)
     base = {
         "exchange": "deribit",
-        "instrument_type": "spot",
+        "instrument_type": "spot_ohlcv",
         "symbol": "BTCUSDT",
         "timeframe": "1m",
         "open_time": first_time,
@@ -94,7 +94,7 @@ def test_merge_and_deduplicate_rows_keeps_latest_record() -> None:
     assert merged[0]["close"] == 102.0
 
 
-def test_save_spot_candles_parquet_lake_rewrites_single_partition_file(tmp_path: Path) -> None:
+def test_save_spot_ohlcv_candles_parquet_lake_rewrites_single_partition_file(tmp_path: Path) -> None:
     candle_1 = SpotCandle(
         exchange="deribit",
         symbol="BTCUSDT",
@@ -127,8 +127,8 @@ def test_save_spot_candles_parquet_lake_rewrites_single_partition_file(tmp_path:
     first = {"deribit": {"BTCUSDT": [candle_1]}}
     second = {"deribit": {"BTCUSDT": [candle_1, candle_2]}}
 
-    files_1 = save_spot_candles_parquet_lake(first, market="spot", lake_root=str(tmp_path))
-    files_2 = save_spot_candles_parquet_lake(second, market="spot", lake_root=str(tmp_path))
+    files_1 = save_spot_ohlcv_candles_parquet_lake(first, market="spot_ohlcv", lake_root=str(tmp_path))
+    files_2 = save_spot_ohlcv_candles_parquet_lake(second, market="spot_ohlcv", lake_root=str(tmp_path))
 
     assert files_1 == files_2
     assert len(files_2) == 1
@@ -167,11 +167,13 @@ def test_open_times_in_lake_returns_sorted_unique(tmp_path: Path) -> None:
         quote_volume=1100.0,
         trade_count=11,
     )
-    save_spot_candles_parquet_lake({"deribit": {"BTCUSDT": [candle_2, candle_1, candle_1]}}, "spot", str(tmp_path))
+    save_spot_ohlcv_candles_parquet_lake(
+        {"deribit": {"BTCUSDT": [candle_2, candle_1, candle_1]}}, "spot_ohlcv", str(tmp_path)
+    )
 
     values = open_times_in_lake(
         lake_root=str(tmp_path),
-        market="spot",
+        market="spot_ohlcv",
         exchange="deribit",
         symbol="BTCUSDT",
         timeframe="1m",
@@ -258,7 +260,7 @@ def test_open_time_bounds_in_lake_by_dataset_reads_trade_partition_bounds(tmp_pa
     assert values == {date(2026, 5, 1): (early.trade_time, late.trade_time)}
 
 
-def test_load_spot_candles_from_lake_reads_full_partition_history(tmp_path: Path) -> None:
+def test_load_spot_ohlcv_candles_from_lake_reads_full_partition_history(tmp_path: Path) -> None:
     candle_apr = SpotCandle(
         exchange="deribit",
         symbol="BTCUSDT",
@@ -288,15 +290,15 @@ def test_load_spot_candles_from_lake_reads_full_partition_history(tmp_path: Path
         trade_count=8,
     )
 
-    save_spot_candles_parquet_lake(
+    save_spot_ohlcv_candles_parquet_lake(
         {"deribit": {"BTCUSDT": [candle_may, candle_apr]}},
-        market="spot",
+        market="spot_ohlcv",
         lake_root=str(tmp_path),
     )
 
-    values = load_spot_candles_from_lake(
+    values = load_spot_ohlcv_candles_from_lake(
         lake_root=str(tmp_path),
-        market="spot",
+        market="spot_ohlcv",
         exchange="deribit",
         symbol="BTCUSDT",
         timeframe="1m",
@@ -397,9 +399,9 @@ def test_bronze_all_symbols_use_same_daily_partition_format(tmp_path: Path) -> N
         quote_volume=2400.0,
         trade_count=12,
     )
-    files = save_spot_candles_parquet_lake(
+    files = save_spot_ohlcv_candles_parquet_lake(
         {"deribit": {"BTCUSDT": [btc], "ETHUSDT": [eth]}},
-        market="spot",
+        market="spot_ohlcv",
         lake_root=str(tmp_path),
     )
     assert len(files) == 2
@@ -422,16 +424,16 @@ def test_ensure_bronze_sidecars_backfills_missing_sidecars(tmp_path: Path) -> No
         quote_volume=1000.0,
         trade_count=10,
     )
-    files = save_spot_candles_parquet_lake(
+    files = save_spot_ohlcv_candles_parquet_lake(
         {"deribit": {"BTCUSDT": [candle]}},
-        market="spot",
+        market="spot_ohlcv",
         lake_root=str(tmp_path),
     )
     parquet_path = Path(files[0])
     parquet_path.with_suffix(".json").unlink()
     parquet_path.with_suffix(".png").unlink()
 
-    repaired = ensure_bronze_sidecars(lake_root=str(tmp_path), dataset_types=["spot"])
+    repaired = ensure_bronze_sidecars(lake_root=str(tmp_path), dataset_types=["spot_ohlcv"])
 
     assert repaired == [str(parquet_path.resolve())]
     assert parquet_path.with_suffix(".json").exists()
@@ -502,8 +504,8 @@ def test_load_combined_dataframe_applies_filters_and_open_interest(tmp_path: Pat
         quote_volume=2000.0,
         trade_count=20,
     )
-    save_spot_candles_parquet_lake({"deribit": {"BTCUSDT": [btc_perp]}}, "perp", str(tmp_path))
-    save_spot_candles_parquet_lake({"deribit": {"ETHUSDT": [eth]}}, "spot", str(tmp_path))
+    save_spot_ohlcv_candles_parquet_lake({"deribit": {"BTCUSDT": [btc_perp]}}, "perp", str(tmp_path))
+    save_spot_ohlcv_candles_parquet_lake({"deribit": {"ETHUSDT": [eth]}}, "spot_ohlcv", str(tmp_path))
     oi = OpenInterestPoint(
         exchange="deribit",
         symbol="BTCUSDT",
@@ -561,6 +563,6 @@ def test_load_combined_dataframe_limit_applies(tmp_path: Path) -> None:
         quote_volume=1100.0,
         trade_count=11,
     )
-    save_spot_candles_parquet_lake({"deribit": {"BTCUSDT": [candle_1, candle_2]}}, "spot", str(tmp_path))
+    save_spot_ohlcv_candles_parquet_lake({"deribit": {"BTCUSDT": [candle_1, candle_2]}}, "spot_ohlcv", str(tmp_path))
     frame = load_combined_dataframe_from_lake(lake_root=str(tmp_path), limit=1)
     assert frame.height == 1

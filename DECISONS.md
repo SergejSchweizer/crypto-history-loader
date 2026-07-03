@@ -22,12 +22,12 @@ Consequence: New datasets need registry and contract updates before storage, Sil
 
 Evidence:
 
+- 2026-07-03 `4393c40` Rename perpetual trades dataset
 - 2026-07-03 `91d7475` Rename perpetual OHLCV dataset
 - 2026-06-27 `a44abc8` Extract dataset transformation contracts (#19)
 - 2026-06-11 `514d528` Use full-history medallion start bounds
 - 2026-05-25 `b8b5b82` Refine raw dataset docs and Deribit endpoint sections (#7)
 - 2026-05-25 `3e96121` Refactor README and align dataset/CLI/runtime updates (#5)
-- 2026-05-17 `32c3d28` Remove option instruments dataset, suppress heartbeat logs, and stabilize coverage
 
 ## D002. Keep Bronze orchestration registry-driven
 
@@ -42,7 +42,7 @@ Evidence:
 - 2026-06-29 `23082ec` Extract loader symbol fetch adapters
 - 2026-06-28 `ecbc7e8` Extract Bronze checkpoint key helpers
 - 2026-05-25 `3e96121` Refactor README and align dataset/CLI/runtime updates (#5)
-- 2026-05-25 `6bd2781` chore: update loader naming, spot start dates, and CI checks
+- 2026-05-25 `6bd2781` chore: update loader naming, spot_ohlcv start dates, and CI checks
 
 ## D003. Isolate lake storage layout behind helpers
 

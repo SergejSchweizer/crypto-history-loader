@@ -7,10 +7,10 @@ from pathlib import Path
 
 import pytest
 
-from ingestion.lake import save_open_interest_parquet_lake, save_spot_candles_parquet_lake
+from ingestion.lake import save_open_interest_parquet_lake, save_spot_ohlcv_candles_parquet_lake
 from ingestion.lake_dataframe import load_combined_dataframe_from_lake
 from ingestion.open_interest import OpenInterestPoint
-from ingestion.spot import SpotCandle
+from ingestion.spot_ohlcv import SpotCandle
 
 
 def test_load_combined_dataframe_limit_must_be_positive(tmp_path: Path) -> None:
@@ -51,8 +51,8 @@ def test_load_combined_dataframe_applies_filters_and_open_interest(tmp_path: Pat
         quote_volume=2000.0,
         trade_count=20,
     )
-    save_spot_candles_parquet_lake({"deribit": {"BTCUSDT": [candle]}}, "perp", str(tmp_path))
-    save_spot_candles_parquet_lake({"deribit": {"ETHUSDT": [filtered_out]}}, "spot", str(tmp_path))
+    save_spot_ohlcv_candles_parquet_lake({"deribit": {"BTCUSDT": [candle]}}, "perp", str(tmp_path))
+    save_spot_ohlcv_candles_parquet_lake({"deribit": {"ETHUSDT": [filtered_out]}}, "spot_ohlcv", str(tmp_path))
 
     open_interest = OpenInterestPoint(
         exchange="deribit",

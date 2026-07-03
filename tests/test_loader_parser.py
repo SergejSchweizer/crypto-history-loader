@@ -23,7 +23,7 @@ def test_bronze_parser_defaults_to_restart_safe_full_gap_fill() -> None:
 
     assert args.command == "bronze-build"
     assert args.exchange == "deribit"
-    assert args.dataset == ["spot"]
+    assert args.dataset == ["spot_ohlcv"]
     assert args.symbols == ["BTC", "ETH", "SOL"]
     assert args.tail_delta_only is False
     assert args.lake_root == "lake/bronze"

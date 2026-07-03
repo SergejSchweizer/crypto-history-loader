@@ -18,20 +18,24 @@ def test_normalize_symbol_and_discover_symbols_for_dataset(tmp_path: Path) -> No
     assert gold_frames.normalize_symbol("eth-perpetual") == "ETH"
 
     root = tmp_path / "silver"
-    (root / "dataset_type=spot" / "exchange=deribit" / "symbol=BTC-PERPETUAL" / "timeframe=1m").mkdir(parents=True)
-    (root / "dataset_type=spot" / "exchange=deribit" / "symbol=ETH-PERPETUAL" / "timeframe=5m").mkdir(parents=True)
+    (root / "dataset_type=spot_ohlcv" / "exchange=deribit" / "symbol=BTC-PERPETUAL" / "timeframe=1m").mkdir(
+        parents=True
+    )
+    (root / "dataset_type=spot_ohlcv" / "exchange=deribit" / "symbol=ETH-PERPETUAL" / "timeframe=5m").mkdir(
+        parents=True
+    )
 
     assert gold_frames.discover_symbols_for_dataset(
         silver_root=str(root),
         exchange="deribit",
-        dataset_type="spot",
+        dataset_type="spot_ohlcv",
         timeframe="1m",
     ) == {"BTC"}
 
 
 def test_read_dataset_frame_uses_newest_matching_symbol_file(tmp_path: Path) -> None:
     root = tmp_path / "silver"
-    symbol_root = root / "dataset_type=spot" / "exchange=deribit" / "symbol=BTC-PERPETUAL" / "timeframe=1m"
+    symbol_root = root / "dataset_type=spot_ohlcv" / "exchange=deribit" / "symbol=BTC-PERPETUAL" / "timeframe=1m"
     symbol_root.mkdir(parents=True)
     old_file = symbol_root / "old.parquet"
     new_file = symbol_root / "new.parquet"
@@ -44,7 +48,7 @@ def test_read_dataset_frame_uses_newest_matching_symbol_file(tmp_path: Path) -> 
         silver_root=str(root),
         exchange="deribit",
         symbol="BTC",
-        dataset_type="spot",
+        dataset_type="spot_ohlcv",
         timeframe="1m",
     )
 
@@ -122,18 +126,18 @@ def test_prepare_dataset_frame_and_minute_grid() -> None:
         }
     )
 
-    prepared = gold_frames.prepare_dataset_frame(pl, "spot", raw, "BTC")
+    prepared = gold_frames.prepare_dataset_frame(pl, "spot_ohlcv", raw, "BTC")
     grid = gold_frames.build_minute_grid(pl, [prepared], "deribit", "BTC")
 
     assert prepared.columns == [
         "timestamp_m1",
         "exchange",
         "symbol",
-        "spot_open_price",
-        "spot_high_price",
-        "spot_low_price",
-        "spot_close_price",
-        "spot_volume",
+        "spot_ohlcv_open_price",
+        "spot_ohlcv_high_price",
+        "spot_ohlcv_low_price",
+        "spot_ohlcv_close_price",
+        "spot_ohlcv_volume",
     ]
     assert grid.height == 3
     assert grid.get_column("symbol").to_list() == ["BTC", "BTC", "BTC"]

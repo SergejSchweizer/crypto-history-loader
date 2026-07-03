@@ -11,7 +11,7 @@ from typing import Any, cast
 
 from ingestion.exchanges import deribit_funding
 from ingestion.http_client import HttpClientError, HttpClientHttpError
-from ingestion.spot import Exchange, Market, interval_to_milliseconds, normalize_storage_symbol
+from ingestion.spot_ohlcv import Exchange, Market, interval_to_milliseconds, normalize_storage_symbol
 
 DERIBIT_FUNDING_NATIVE_INTERVAL = "8h"
 logger = logging.getLogger(__name__)

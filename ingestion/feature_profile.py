@@ -308,7 +308,7 @@ def _sample_frame_for_plot(frame: Any) -> Any:
 
 def _ordered_numeric_columns(frame: Any) -> list[str]:
     numeric_cols = [col for col, dtype in zip(frame.columns, frame.dtypes, strict=False) if dtype.is_numeric()]
-    market_cols = [col for col in numeric_cols if col.startswith(("spot_", "perp_"))]
+    market_cols = [col for col in numeric_cols if col.startswith(("spot_ohlcv_", "perp_"))]
     derived_cols = [col for col in numeric_cols if col.startswith(("oi_", "funding_"))]
     l2_cols = [col for col in numeric_cols if col.startswith("l2_")]
     other_cols = [col for col in numeric_cols if col not in set(market_cols + derived_cols + l2_cols)]

@@ -12,7 +12,7 @@ from application.dto import TradeFetchResultDTO, TradeFetchTaskDTO
 from application.services.fetch_executors import elapsed_seconds
 from application.services.fetch_task_callbacks import bind_task_chunk_callback
 from application.services.fetch_trade_windows import classify_trade_fetch_error
-from ingestion.spot import Exchange
+from ingestion.spot_ohlcv import Exchange
 from ingestion.trades import OptionTradeTick, TradeMarket, TradeTick
 
 

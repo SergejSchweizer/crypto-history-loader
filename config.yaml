@@ -1,6 +1,6 @@
 global:
   deribit_observed_start_dates:
-    spot:
+    spot_ohlcv:
       BTC: "2023-04-24"
       ETH: "2023-04-24"
       SOL: "2024-02-27"
@@ -23,11 +23,11 @@ export-descriptive-stats:
   exchanges: [deribit]
   symbols: [BTC, ETH, SOL]
   timeframes: [1m]
-  instrument_types: [spot, perp]
+  instrument_types: [spot_ohlcv, perp]
 
 bronze-build:
   exchange: deribit
-  dataset: [spot, peprs_ohlcv, oi, funding, perps_trades, option_trades]
+  dataset: [spot_ohlcv, peprs_ohlcv, oi, funding, perps_trades, option_trades]
   start_date: "2018-08-14"
   symbol_start_dates:
     - BTC=2018-08-14
@@ -46,7 +46,7 @@ medallion-pipeline:
       - --exchanges
       - deribit
       - --dataset
-      - spot
+      - spot_ohlcv
       - peprs_ohlcv
       - oi
       - funding
@@ -63,7 +63,7 @@ medallion-pipeline:
     command: silver-build
     cli_args:
       - --dataset
-      - spot
+      - spot_ohlcv
       - peprs_ohlcv
       - funding
       - oi

@@ -8,9 +8,9 @@ from datetime import UTC, datetime
 from typing import Any, Literal, cast
 
 from ingestion.exchanges import deribit_option_trades, deribit_perps_trades
-from ingestion.spot import Exchange, normalize_storage_symbol
+from ingestion.spot_ohlcv import Exchange, normalize_storage_symbol
 
-TradeMarket = Literal["spot", "perp", "option"]
+TradeMarket = Literal["spot_ohlcv", "perp", "option"]
 OptionType = Literal["call", "put", "unknown"]
 
 
@@ -74,7 +74,7 @@ def _normalize_trade_symbol(exchange: Exchange, symbol: str, market: TradeMarket
 
 
 def _parse_trade_row(
-    exchange: Exchange, symbol: str, market: Literal["spot", "perp"], row: dict[str, object]
+    exchange: Exchange, symbol: str, market: Literal["spot_ohlcv", "perp"], row: dict[str, object]
 ) -> TradeTick:
     ts_ms = int(cast(Any, row).get("timestamp", 0))
     trade_id = str(cast(Any, row).get("trade_id", ""))
@@ -178,7 +178,7 @@ def fetch_trades_all_history(
             on_history_chunk(parsed)
             return []
         return parsed
-    market_non_option: Literal["spot", "perp"] = market
+    market_non_option: Literal["spot_ohlcv", "perp"] = market
 
     def _on_page(rows: list[dict[str, object]]) -> None:
         if on_history_chunk is None:
@@ -216,7 +216,7 @@ def fetch_trades_range(
             count=page_size,
         )
         return [_parse_option_trade_row(exchange, normalized_symbol, row) for row in rows]
-    market_non_option: Literal["spot", "perp"] = market
+    market_non_option: Literal["spot_ohlcv", "perp"] = market
     rows = deribit_perps_trades.fetch_perps_trades_range(
         symbol=normalized_symbol,
         market=market_non_option,

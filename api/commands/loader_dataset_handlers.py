@@ -8,7 +8,7 @@ from typing import cast
 from application.datasets import CliDataType, DatasetSpec, dataset_spec
 from ingestion.funding import FundingPoint
 from ingestion.open_interest import OpenInterestPoint
-from ingestion.spot import Exchange, Market, SpotCandle
+from ingestion.spot_ohlcv import Exchange, Market, SpotCandle
 from ingestion.trades import OptionTradeTick, TradeMarket, TradeTick
 from ingestion.volatility import VolatilityPoint
 
@@ -65,7 +65,7 @@ def build_trade_tasks_from_specs(
             for spec in specs:
                 if symbol not in requested_symbols_by_dataset[spec.cli_data_type]:
                     continue
-                if spec.market not in {"spot", "perp", "option"}:
+                if spec.market not in {"spot_ohlcv", "perp", "option"}:
                     raise ValueError(f"Dataset '{spec.cli_data_type}' is not a trade dataset")
                 tasks.append((exchange, spec.market, symbol))
     return tasks

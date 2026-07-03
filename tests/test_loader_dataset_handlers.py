@@ -72,9 +72,9 @@ def test_build_trade_tasks_from_specs_keeps_symbol_first_ordering() -> None:
 
 def test_build_trade_tasks_from_specs_rejects_non_trade_dataset() -> None:
     spec = DatasetSpec(
-        cli_data_type="spot",
-        dataset_type="spot",
-        instrument_type="spot",
+        cli_data_type="spot_ohlcv",
+        dataset_type="spot_ohlcv",
+        instrument_type="spot_ohlcv",
         bronze_task_kind="ohlcv",
         symbol_group="symbols",
         market=None,

@@ -197,8 +197,8 @@ def read_dataset_frame(
     return pl.read_parquet(str(selected_file))
 
 
-def prepare_spot_or_perp(pl: Any, frame: Any, prefix: str, symbol: str) -> Any:
-    """Prepare spot or perpetual OHLCV bars for the Gold join contract."""
+def prepare_spot_ohlcv_or_perp(pl: Any, frame: Any, prefix: str, symbol: str) -> Any:
+    """Prepare spot_ohlcv or perpetual OHLCV bars for the Gold join contract."""
 
     return (
         frame.with_columns(
@@ -370,8 +370,8 @@ def prepare_dataset_frame(pl: Any, dataset_type: str, frame: Any, symbol: str) -
     """
 
     dataset_preparers: dict[str, Any] = {
-        "spot": lambda: prepare_spot_or_perp(pl, frame, "spot", symbol),
-        "peprs_ohlcv": lambda: prepare_spot_or_perp(pl, frame, "perp", symbol),
+        "spot_ohlcv": lambda: prepare_spot_ohlcv_or_perp(pl, frame, "spot_ohlcv", symbol),
+        "peprs_ohlcv": lambda: prepare_spot_ohlcv_or_perp(pl, frame, "perp", symbol),
         "oi_1m_feature": lambda: prepare_oi(pl, frame, symbol),
         "funding_1m_feature": lambda: prepare_funding(pl, frame, symbol),
         "perps_trades_1m_feature": lambda: prepare_trades(pl, frame, symbol),

@@ -1,4 +1,4 @@
-"""Tests for Deribit-only spot/perpetual ingestion parsing and validation."""
+"""Tests for Deribit-only spot_ohlcv/perpetual ingestion parsing and validation."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ import pytest
 
 from ingestion.exchanges import deribit
 from ingestion.http_client import HttpClientError
-from ingestion.spot import (
+from ingestion.spot_ohlcv import (
     fetch_candles,
     fetch_candles_all_history,
     fetch_candles_range,
@@ -87,15 +87,15 @@ def test_fetch_deribit_candles_respects_limit(monkeypatch: pytest.MonkeyPatch) -
 @pytest.mark.parametrize(
     ("market", "symbol", "expected_instrument", "expected_symbol"),
     [
-        ("spot", "BTCUSDT", "BTC_USDC", "BTC_USDC"),
+        ("spot_ohlcv", "BTCUSDT", "BTC_USDC", "BTC_USDC"),
         ("perp", "BTC", "BTC-PERPETUAL", "BTC-PERPETUAL"),
-        ("spot", "SOL", "SOL_USDC", "SOL_USDC"),
+        ("spot_ohlcv", "SOL", "SOL_USDC", "SOL_USDC"),
         ("perp", "SOL", "SOL-PERPETUAL", "SOL-PERPETUAL"),
     ],
 )
-def test_fetch_deribit_routes_spot_and_perp_symbols(
+def test_fetch_deribit_routes_spot_ohlcv_and_perp_symbols(
     monkeypatch: pytest.MonkeyPatch,
-    market: Literal["spot", "perp"],
+    market: Literal["spot_ohlcv", "perp"],
     symbol: str,
     expected_instrument: str,
     expected_symbol: str,
@@ -188,7 +188,7 @@ def test_fetch_candles_range_returns_empty_on_deribit_no_data_status(monkeypatch
 
     rows = fetch_candles_range(
         exchange="deribit",
-        market="spot",
+        market="spot_ohlcv",
         symbol="SOL",
         interval="1m",
         start_open_ms=1_000,

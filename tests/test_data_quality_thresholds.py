@@ -47,11 +47,11 @@ def test_quality_thresholds_gold_fixture_missing_values_bounded() -> None:
                 datetime(2026, 5, 1, 0, 2, tzinfo=UTC),
                 datetime(2026, 5, 1, 0, 3, tzinfo=UTC),
             ],
-            "spot_close_price": [1.0, 1.1, None, 1.2],
+            "spot_ohlcv_close_price": [1.0, 1.1, None, 1.2],
             "perp_close_price": [10.0, 10.2, 10.3, 10.4],
             "trades_trade_count": [5, 6, 4, 7],
         }
     )
     assert _coverage_ratio(frame, "timestamp_m1") >= 0.99
-    missing_ratio = frame["spot_close_price"].null_count() / frame.height
+    missing_ratio = frame["spot_ohlcv_close_price"].null_count() / frame.height
     assert missing_ratio <= 0.30

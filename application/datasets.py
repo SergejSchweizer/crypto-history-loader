@@ -5,12 +5,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal, cast
 
-from ingestion.spot import Exchange, Market
+from ingestion.spot_ohlcv import Exchange, Market
 from ingestion.trades import TradeMarket
 
-CliDataType = Literal["spot", "peprs_ohlcv", "oi", "funding", "perps_trades", "option_trades", "volatility_index_data"]
+CliDataType = Literal[
+    "spot_ohlcv", "peprs_ohlcv", "oi", "funding", "perps_trades", "option_trades", "volatility_index_data"
+]
 DatasetType = Literal[
-    "spot",
+    "spot_ohlcv",
     "peprs_ohlcv",
     "oi",
     "funding",
@@ -19,7 +21,7 @@ DatasetType = Literal[
     "volatility_index_data",
     "l2_orderbook",
 ]
-InstrumentType = Literal["spot", "perp", "option"]
+InstrumentType = Literal["spot_ohlcv", "perp", "option"]
 BronzeTaskKind = Literal["ohlcv", "open_interest", "funding", "trade", "volatility"]
 SymbolGroup = Literal["symbols", "perp_trade_symbols", "option_trade_symbols"]
 
@@ -53,7 +55,7 @@ class DatasetTask:
     def candle_tuple(self) -> tuple[Exchange, Market, str, str]:
         """Convert an OHLCV task to the tuple contract used by candle fetchers."""
 
-        if self.market not in {"spot", "perp"}:
+        if self.market not in {"spot_ohlcv", "perp"}:
             raise ValueError(f"Dataset task '{self.dataset_type}' is not an OHLCV task")
         return (self.exchange, cast(Market, self.market), self.symbol, self.timeframe)
 
@@ -65,7 +67,7 @@ class DatasetTask:
     def trade_tuple(self) -> tuple[Exchange, TradeMarket, str]:
         """Convert a trade task to the exchange/market/symbol tuple contract."""
 
-        if self.market not in {"spot", "perp", "option"}:
+        if self.market not in {"spot_ohlcv", "perp", "option"}:
             raise ValueError(f"Dataset task '{self.dataset_type}' is not a trade task")
         return (self.exchange, self.market, self.symbol)
 
@@ -96,13 +98,13 @@ class DatasetSpec:
 
 
 DATASET_REGISTRY: dict[CliDataType, DatasetSpec] = {
-    "spot": DatasetSpec(
-        cli_data_type="spot",
-        dataset_type="spot",
-        instrument_type="spot",
+    "spot_ohlcv": DatasetSpec(
+        cli_data_type="spot_ohlcv",
+        dataset_type="spot_ohlcv",
+        instrument_type="spot_ohlcv",
         bronze_task_kind="ohlcv",
         symbol_group="symbols",
-        market="spot",
+        market="spot_ohlcv",
     ),
     "peprs_ohlcv": DatasetSpec(
         cli_data_type="peprs_ohlcv",

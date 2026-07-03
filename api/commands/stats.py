@@ -31,8 +31,8 @@ def add_export_descriptive_stats_parser(subparsers: Any) -> None:
     parser.add_argument(
         "--instrument-types",
         nargs="+",
-        choices=["spot", "perp"],
-        default=["spot", "perp"],
+        choices=["spot_ohlcv", "perp"],
+        default=["spot_ohlcv", "perp"],
     )
     parser.add_argument("--no-json-output", action="store_true", help="Suppress JSON output")
 

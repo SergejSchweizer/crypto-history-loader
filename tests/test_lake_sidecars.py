@@ -9,7 +9,7 @@ def test_default_bronze_sidecar_dataset_types_are_stable() -> None:
     """Guard the default repair scan surface for Bronze sidecars."""
 
     assert DEFAULT_BRONZE_SIDECAR_DATASET_TYPES == (
-        "spot",
+        "spot_ohlcv",
         "peprs_ohlcv",
         "oi",
         "funding",

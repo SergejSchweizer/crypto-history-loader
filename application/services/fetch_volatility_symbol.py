@@ -12,7 +12,7 @@ from application.services.fetch_range_planning import (
 from application.services.fetch_symbol_history import fetch_bootstrap_history_rows, fetch_bounded_daily_rows
 from application.services.gapfill_service import _last_closed_open_ms, _missing_ranges_ms
 from ingestion.lake_queries import open_times_in_lake_by_dataset
-from ingestion.spot import Exchange, Market
+from ingestion.spot_ohlcv import Exchange, Market
 from ingestion.volatility import (
     VolatilityPoint,
     normalize_volatility_timeframe,

@@ -22,7 +22,7 @@ from ingestion.lake_queries import (
     open_times_in_lake_by_dataset,
     partition_dates_in_lake_by_dataset,
 )
-from ingestion.spot import Exchange, normalize_storage_symbol
+from ingestion.spot_ohlcv import Exchange, normalize_storage_symbol
 from ingestion.trades import OptionTradeTick, TradeMarket, TradeTick, fetch_trades_all_history, fetch_trades_range
 
 logger = logging.getLogger(__name__)

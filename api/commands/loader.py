@@ -76,7 +76,7 @@ from ingestion.open_interest import (
     normalize_open_interest_timeframe,
     open_interest_interval_to_milliseconds,
 )
-from ingestion.spot import (
+from ingestion.spot_ohlcv import (
     Exchange,
     Market,
     SpotCandle,

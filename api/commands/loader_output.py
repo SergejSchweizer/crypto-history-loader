@@ -21,7 +21,7 @@ from application.dto import (
 from application.services.storage_service import persist_loader_outputs_dto
 from ingestion.funding import FundingPoint
 from ingestion.open_interest import OpenInterestPoint
-from ingestion.spot import Exchange, Market, SpotCandle
+from ingestion.spot_ohlcv import Exchange, Market, SpotCandle
 from ingestion.trades import OptionTradeTick, TradeMarket, TradeTick
 from ingestion.volatility import VolatilityPoint
 
@@ -445,7 +445,7 @@ def finalize_bronze_output(
     persist_fn: Callable[..., object] = persist_loader_outputs_dto,
 ) -> None:
     logger.info(
-        "Fetch summary spot/perp: success=%s failed=%s | oi: success=%s failed=%s | "
+        "Fetch summary spot_ohlcv/perp: success=%s failed=%s | oi: success=%s failed=%s | "
         "funding: success=%s failed=%s | volatility_index_data: success=%s failed=%s | "
         "trades: success=%s failed=%s",
         len(task_results),
@@ -541,8 +541,8 @@ def finalize_bronze_output(
     if args.save_parquet_lake:
         parquet_files = cast(list[str], output.get("_parquet_files", []))
         selected_dataset_types: set[str] = set()
-        if any(market == "spot" for market in ohlcv_markets):
-            selected_dataset_types.add("spot")
+        if any(market == "spot_ohlcv" for market in ohlcv_markets):
+            selected_dataset_types.add("spot_ohlcv")
         if any(market == "perp" for market in ohlcv_markets):
             selected_dataset_types.add("peprs_ohlcv")
         if oi_requested:

@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Literal, cast
 
 from application.dto import BronzeExecutionPolicyDTO, BronzeFetchPlanDTO
-from ingestion.spot import Exchange, Market
+from ingestion.spot_ohlcv import Exchange, Market
 from ingestion.trades import TradeMarket
 
 CandleTaskKey = tuple[Exchange, Market, str, str]
@@ -269,7 +269,7 @@ def dataset_task_key_maps(
     trade_map: dict[TradeTaskKey, str] = {}
     for task in plan.dataset_tasks:
         key = task.checkpoint_key()
-        if task.dataset_type in {"spot", "peprs_ohlcv"}:
+        if task.dataset_type in {"spot_ohlcv", "peprs_ohlcv"}:
             candle_map[task.candle_tuple()] = key
         elif task.dataset_type == "oi":
             oi_map[task.interval_tuple()] = key
