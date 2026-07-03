@@ -6,11 +6,11 @@ from typing import Any, cast
 
 import pytest
 
-from ingestion.exchanges import deribit_perp_trades, deribit_trades
+from ingestion.exchanges import deribit_perps_trades, deribit_trades
 from ingestion.http_client import HttpClientError
 
 
-def test_fetch_perp_trades_range_defaults_to_500_row_pages(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+def test_fetch_perps_trades_range_defaults_to_500_row_pages(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     counts: list[int] = []
 
     def _fake_get_json(url: str, params: dict[str, object]) -> dict[str, object]:
@@ -23,8 +23,8 @@ def test_fetch_perp_trades_range_defaults_to_500_row_pages(monkeypatch) -> None:
             }
         }
 
-    monkeypatch.setattr(deribit_perp_trades, "get_json", _fake_get_json)
-    rows = deribit_perp_trades.fetch_perp_trades_range(
+    monkeypatch.setattr(deribit_perps_trades, "get_json", _fake_get_json)
+    rows = deribit_perps_trades.fetch_perps_trades_range(
         symbol="BTC-PERPETUAL",
         market="perp",
         start_open_ms=1_700_000_000_000,
@@ -35,7 +35,7 @@ def test_fetch_perp_trades_range_defaults_to_500_row_pages(monkeypatch) -> None:
     assert counts == [500]
 
 
-def test_fetch_perp_trades_range_page_size_env_override(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+def test_fetch_perps_trades_range_page_size_env_override(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     counts: list[int] = []
 
     def _fake_get_json(url: str, params: dict[str, object]) -> dict[str, object]:
@@ -49,8 +49,8 @@ def test_fetch_perp_trades_range_page_size_env_override(monkeypatch) -> None:  #
         }
 
     monkeypatch.setenv("DEPTH_DERIBIT_PERP_TRADES_PAGE_SIZE", "7")
-    monkeypatch.setattr(deribit_perp_trades, "get_json", _fake_get_json)
-    rows = deribit_perp_trades.fetch_perp_trades_range(
+    monkeypatch.setattr(deribit_perps_trades, "get_json", _fake_get_json)
+    rows = deribit_perps_trades.fetch_perps_trades_range(
         symbol="BTC-PERPETUAL",
         market="perp",
         start_open_ms=1_700_000_000_000,
@@ -61,7 +61,7 @@ def test_fetch_perp_trades_range_page_size_env_override(monkeypatch) -> None:  #
     assert counts == [7]
 
 
-def test_fetch_perp_trades_range_uses_legacy_page_size_env(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+def test_fetch_perps_trades_range_uses_legacy_page_size_env(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     counts: list[int] = []
 
     def _fake_get_json(url: str, params: dict[str, object]) -> dict[str, object]:
@@ -75,8 +75,8 @@ def test_fetch_perp_trades_range_uses_legacy_page_size_env(monkeypatch) -> None:
         }
 
     monkeypatch.setenv("DEPTH_DERIBIT_TRADES_PAGE_SIZE", "9")
-    monkeypatch.setattr(deribit_perp_trades, "get_json", _fake_get_json)
-    rows = deribit_perp_trades.fetch_perp_trades_range(
+    monkeypatch.setattr(deribit_perps_trades, "get_json", _fake_get_json)
+    rows = deribit_perps_trades.fetch_perps_trades_range(
         symbol="BTC-PERPETUAL",
         market="perp",
         start_open_ms=1_700_000_000_000,
@@ -87,7 +87,7 @@ def test_fetch_perp_trades_range_uses_legacy_page_size_env(monkeypatch) -> None:
     assert counts == [9]
 
 
-def test_legacy_deribit_trades_aliases_delegate_to_perp_trades(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+def test_legacy_deribit_trades_aliases_delegate_to_perps_trades(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     captured_range: dict[str, object] = {}
     captured_all: dict[str, object] = {}
 
@@ -99,8 +99,8 @@ def test_legacy_deribit_trades_aliases_delegate_to_perp_trades(monkeypatch) -> N
         captured_all.update(kwargs)
         return [{"timestamp": 2, "trade_id": "all"}]
 
-    monkeypatch.setattr(deribit_trades, "fetch_perp_trades_range", _fake_range)
-    monkeypatch.setattr(deribit_trades, "fetch_perp_trades_all", _fake_all)
+    monkeypatch.setattr(deribit_trades, "fetch_perps_trades_range", _fake_range)
+    monkeypatch.setattr(deribit_trades, "fetch_perps_trades_all", _fake_all)
 
     range_rows = deribit_trades.fetch_trades_range(
         symbol="BTC-PERPETUAL",
@@ -111,7 +111,7 @@ def test_legacy_deribit_trades_aliases_delegate_to_perp_trades(monkeypatch) -> N
     )
     all_rows = deribit_trades.fetch_trades_all(symbol="BTC-PERPETUAL", market="perp")
 
-    assert deribit_trades.DERIBIT_TRADES_DEFAULT_PAGE_SIZE == deribit_perp_trades.DERIBIT_PERP_TRADES_DEFAULT_PAGE_SIZE
+    assert deribit_trades.DERIBIT_TRADES_DEFAULT_PAGE_SIZE == deribit_perps_trades.DERIBIT_PERP_TRADES_DEFAULT_PAGE_SIZE
     assert range_rows == [{"timestamp": 1, "trade_id": "range"}]
     assert captured_range == {
         "symbol": "BTC-PERPETUAL",
@@ -124,7 +124,7 @@ def test_legacy_deribit_trades_aliases_delegate_to_perp_trades(monkeypatch) -> N
     assert captured_all == {"symbol": "BTC-PERPETUAL", "market": "perp", "on_page": None}
 
 
-def test_fetch_perp_trades_range_stops_when_has_more_false(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+def test_fetch_perps_trades_range_stops_when_has_more_false(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     calls: list[int] = []
 
     def _fake_get_json(url: str, params: dict[str, object]) -> dict[str, object]:
@@ -139,8 +139,8 @@ def test_fetch_perp_trades_range_stops_when_has_more_false(monkeypatch) -> None:
             }
         }
 
-    monkeypatch.setattr(deribit_perp_trades, "get_json", _fake_get_json)
-    rows = deribit_perp_trades.fetch_perp_trades_range(
+    monkeypatch.setattr(deribit_perps_trades, "get_json", _fake_get_json)
+    rows = deribit_perps_trades.fetch_perps_trades_range(
         symbol="BTC-PERPETUAL",
         market="perp",
         start_open_ms=1_700_000_000_000,
@@ -151,7 +151,7 @@ def test_fetch_perp_trades_range_stops_when_has_more_false(monkeypatch) -> None:
     assert len(calls) == 1
 
 
-def test_fetch_perp_trades_range_respects_max_pages_env(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+def test_fetch_perps_trades_range_respects_max_pages_env(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     calls: list[int] = []
 
     def _fake_get_json(url: str, params: dict[str, object]) -> dict[str, object]:
@@ -166,8 +166,8 @@ def test_fetch_perp_trades_range_respects_max_pages_env(monkeypatch) -> None:  #
         }
 
     monkeypatch.setenv("DEPTH_DERIBIT_PERP_TRADES_MAX_PAGES_PER_RANGE", "3")
-    monkeypatch.setattr(deribit_perp_trades, "get_json", _fake_get_json)
-    rows = deribit_perp_trades.fetch_perp_trades_range(
+    monkeypatch.setattr(deribit_perps_trades, "get_json", _fake_get_json)
+    rows = deribit_perps_trades.fetch_perps_trades_range(
         symbol="BTC-PERPETUAL",
         market="perp",
         start_open_ms=1_700_000_000_000,
@@ -178,7 +178,7 @@ def test_fetch_perp_trades_range_respects_max_pages_env(monkeypatch) -> None:  #
     assert len(rows) == 3
 
 
-def test_fetch_perp_trades_range_paginates_from_max_page_timestamp(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+def test_fetch_perps_trades_range_paginates_from_max_page_timestamp(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     calls: list[int] = []
 
     def _fake_get_json(url: str, params: dict[str, object]) -> dict[str, object]:
@@ -202,8 +202,8 @@ def test_fetch_perp_trades_range_paginates_from_max_page_timestamp(monkeypatch) 
             }
         }
 
-    monkeypatch.setattr(deribit_perp_trades, "get_json", _fake_get_json)
-    rows = deribit_perp_trades.fetch_perp_trades_range(
+    monkeypatch.setattr(deribit_perps_trades, "get_json", _fake_get_json)
+    rows = deribit_perps_trades.fetch_perps_trades_range(
         symbol="BTC-PERPETUAL",
         market="perp",
         start_open_ms=100,
@@ -219,12 +219,12 @@ def test_fetch_perp_trades_range_paginates_from_max_page_timestamp(monkeypatch) 
     ]
 
 
-def test_perp_trades_base_url_env_override(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+def test_perps_trades_base_url_env_override(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     monkeypatch.setenv("DEPTH_DERIBIT_PERP_TRADES_BASE_URL", "https://example.org///")
-    assert deribit_perp_trades._perp_trades_base_url() == "https://example.org"
+    assert deribit_perps_trades._perps_trades_base_url() == "https://example.org"
 
 
-def test_fetch_perp_trades_range_falls_back_on_route_failure(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+def test_fetch_perps_trades_range_falls_back_on_route_failure(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     calls: list[str] = []
 
     def _fake_get_json(url: str, params: dict[str, object]) -> dict[str, object]:
@@ -243,8 +243,8 @@ def test_fetch_perp_trades_range_falls_back_on_route_failure(monkeypatch) -> Non
             }
         }
 
-    monkeypatch.setattr(deribit_perp_trades, "get_json", _fake_get_json)
-    rows = deribit_perp_trades.fetch_perp_trades_range(
+    monkeypatch.setattr(deribit_perps_trades, "get_json", _fake_get_json)
+    rows = deribit_perps_trades.fetch_perps_trades_range(
         symbol="BTC-PERPETUAL",
         market="perp",
         start_open_ms=1_700_000_000_000,
@@ -256,7 +256,7 @@ def test_fetch_perp_trades_range_falls_back_on_route_failure(monkeypatch) -> Non
     assert any("www.deribit.com" in url for url in calls)
 
 
-def test_fetch_perp_trades_range_falls_back_on_timeout(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+def test_fetch_perps_trades_range_falls_back_on_timeout(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     calls: list[str] = []
 
     def _fake_get_json(url: str, params: dict[str, object]) -> dict[str, object]:
@@ -276,8 +276,8 @@ def test_fetch_perp_trades_range_falls_back_on_timeout(monkeypatch) -> None:  # 
         }
 
     monkeypatch.setenv("DEPTH_DERIBIT_PERP_TRADES_ROUTE_RETRY_ATTEMPTS", "1")
-    monkeypatch.setattr(deribit_perp_trades, "get_json", _fake_get_json)
-    rows = deribit_perp_trades.fetch_perp_trades_range(
+    monkeypatch.setattr(deribit_perps_trades, "get_json", _fake_get_json)
+    rows = deribit_perps_trades.fetch_perps_trades_range(
         symbol="BTC-PERPETUAL",
         market="perp",
         start_open_ms=1_700_000_000_000,
@@ -288,7 +288,7 @@ def test_fetch_perp_trades_range_falls_back_on_timeout(monkeypatch) -> None:  # 
     assert any("www.deribit.com" in url for url in calls)
 
 
-def test_fetch_perp_trades_range_retries_route_failure_before_success(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+def test_fetch_perps_trades_range_retries_route_failure_before_success(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     calls = {"n": 0}
 
     def _fake_get_json(url: str, params: dict[str, object]) -> dict[str, object]:
@@ -305,8 +305,8 @@ def test_fetch_perp_trades_range_retries_route_failure_before_success(monkeypatc
 
     monkeypatch.setenv("DEPTH_DERIBIT_PERP_TRADES_ROUTE_RETRY_ATTEMPTS", "3")
     monkeypatch.setenv("DEPTH_DERIBIT_PERP_TRADES_ROUTE_RETRY_BACKOFF_BASE_S", "0")
-    monkeypatch.setattr(deribit_perp_trades, "get_json", _fake_get_json)
-    rows = deribit_perp_trades.fetch_perp_trades_range(
+    monkeypatch.setattr(deribit_perps_trades, "get_json", _fake_get_json)
+    rows = deribit_perps_trades.fetch_perps_trades_range(
         symbol="BTC-PERPETUAL",
         market="perp",
         start_open_ms=1_700_000_000_000,
@@ -317,7 +317,7 @@ def test_fetch_perp_trades_range_retries_route_failure_before_success(monkeypatc
     assert calls["n"] == 3
 
 
-def test_fetch_perp_trades_range_falls_back_to_currency_endpoint_and_filters_instrument(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+def test_fetch_perps_trades_range_falls_back_to_currency_endpoint_and_filters_instrument(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     calls: list[str] = []
 
     def _fake_get_json(url: str, params: dict[str, object]) -> dict[str, object]:
@@ -343,8 +343,8 @@ def test_fetch_perp_trades_range_falls_back_to_currency_endpoint_and_filters_ins
             }
         }
 
-    monkeypatch.setattr(deribit_perp_trades, "get_json", _fake_get_json)
-    rows = deribit_perp_trades.fetch_perp_trades_range(
+    monkeypatch.setattr(deribit_perps_trades, "get_json", _fake_get_json)
+    rows = deribit_perps_trades.fetch_perps_trades_range(
         symbol="BTC-PERPETUAL",
         market="perp",
         start_open_ms=100,
@@ -358,17 +358,17 @@ def test_fetch_perp_trades_range_falls_back_to_currency_endpoint_and_filters_ins
 
 def test_extract_rows_and_has_more_helpers() -> None:
     payload = {"result": {"trades": [{"timestamp": 1, "trade_id": "a"}, "x"], "has_more": True}}
-    assert deribit_perp_trades._extract_result_rows(payload) == [{"timestamp": 1, "trade_id": "a"}]
-    assert deribit_perp_trades._has_more(payload) is True
-    assert deribit_perp_trades._has_more({"result": {}}) is False
-    assert deribit_perp_trades._extract_result_rows({"result": {"trades": "bad"}}) == []
-    with pytest.raises(ValueError, match="Unexpected Deribit perp_trades response payload"):
-        deribit_perp_trades._extract_result_rows({})
+    assert deribit_perps_trades._extract_result_rows(payload) == [{"timestamp": 1, "trade_id": "a"}]
+    assert deribit_perps_trades._has_more(payload) is True
+    assert deribit_perps_trades._has_more({"result": {}}) is False
+    assert deribit_perps_trades._extract_result_rows({"result": {"trades": "bad"}}) == []
+    with pytest.raises(ValueError, match="Unexpected Deribit perps_trades response payload"):
+        deribit_perps_trades._extract_result_rows({})
 
 
-def test_fetch_perp_trades_range_validates_inputs() -> None:
+def test_fetch_perps_trades_range_validates_inputs() -> None:
     assert (
-        deribit_perp_trades.fetch_perp_trades_range(
+        deribit_perps_trades.fetch_perps_trades_range(
             symbol="BTC-PERPETUAL",
             market="perp",
             start_open_ms=2,
@@ -377,7 +377,7 @@ def test_fetch_perp_trades_range_validates_inputs() -> None:
         == []
     )
     with pytest.raises(ValueError, match="count must be positive"):
-        deribit_perp_trades.fetch_perp_trades_range(
+        deribit_perps_trades.fetch_perps_trades_range(
             symbol="BTC-PERPETUAL",
             market="perp",
             start_open_ms=1,
@@ -386,10 +386,10 @@ def test_fetch_perp_trades_range_validates_inputs() -> None:
         )
 
 
-def test_fetch_perp_trades_range_rejects_non_dict_payload(monkeypatch) -> None:  # type: ignore[no-untyped-def]
-    monkeypatch.setattr(deribit_perp_trades, "get_json", lambda *args, **kwargs: [])  # type: ignore[return-value]
-    with pytest.raises(ValueError, match="Unexpected Deribit perp_trades response format"):
-        deribit_perp_trades.fetch_perp_trades_range(
+def test_fetch_perps_trades_range_rejects_non_dict_payload(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setattr(deribit_perps_trades, "get_json", lambda *args, **kwargs: [])  # type: ignore[return-value]
+    with pytest.raises(ValueError, match="Unexpected Deribit perps_trades response format"):
+        deribit_perps_trades.fetch_perps_trades_range(
             symbol="BTC-PERPETUAL",
             market="perp",
             start_open_ms=1,
@@ -398,7 +398,7 @@ def test_fetch_perp_trades_range_rejects_non_dict_payload(monkeypatch) -> None: 
         )
 
 
-def test_fetch_perp_trades_range_deduplicates_and_filters_range(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+def test_fetch_perps_trades_range_deduplicates_and_filters_range(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     def _fake_get_json(url: str, params: dict[str, object]) -> dict[str, object]:
         del url, params
         return {
@@ -413,8 +413,8 @@ def test_fetch_perp_trades_range_deduplicates_and_filters_range(monkeypatch) -> 
             }
         }
 
-    monkeypatch.setattr(deribit_perp_trades, "get_json", _fake_get_json)
-    rows = deribit_perp_trades.fetch_perp_trades_range(
+    monkeypatch.setattr(deribit_perps_trades, "get_json", _fake_get_json)
+    rows = deribit_perps_trades.fetch_perps_trades_range(
         symbol="BTC-PERPETUAL",
         market="perp",
         start_open_ms=100,
@@ -424,8 +424,8 @@ def test_fetch_perp_trades_range_deduplicates_and_filters_range(monkeypatch) -> 
     assert rows == [{"timestamp": 100, "trade_id": "a"}, {"timestamp": 101, "trade_id": "b"}]
 
 
-def test_fetch_perp_trades_all_with_on_page_and_dedup(monkeypatch) -> None:  # type: ignore[no-untyped-def]
-    monkeypatch.setattr(deribit_perp_trades, "_utc_now_ms", lambda: 2_000)
+def test_fetch_perps_trades_all_with_on_page_and_dedup(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setattr(deribit_perps_trades, "_utc_now_ms", lambda: 2_000)
     calls = {"n": 0}
 
     def _fake_range(**kwargs: object) -> list[dict[str, object]]:
@@ -437,7 +437,7 @@ def test_fetch_perp_trades_all_with_on_page_and_dedup(monkeypatch) -> None:  # t
         return []
 
     pages: list[list[dict[str, object]]] = []
-    monkeypatch.setattr(deribit_perp_trades, "fetch_perp_trades_range", _fake_range)
-    rows = deribit_perp_trades.fetch_perp_trades_all(symbol="BTC-PERPETUAL", market="perp", on_page=pages.append)
+    monkeypatch.setattr(deribit_perps_trades, "fetch_perps_trades_range", _fake_range)
+    rows = deribit_perps_trades.fetch_perps_trades_all(symbol="BTC-PERPETUAL", market="perp", on_page=pages.append)
     assert pages
     assert rows == [{"timestamp": 1_500, "trade_id": "x"}, {"timestamp": 1_600, "trade_id": "y"}]

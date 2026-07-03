@@ -9,6 +9,9 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 FIELD_SEPARATOR = "\x1f"
+TERM_REPLACEMENTS = {
+    "perp" + "_trades": "perps_trades",
+}
 
 
 @dataclass(frozen=True)
@@ -215,10 +218,19 @@ def read_commits() -> list[Commit]:
                 short_hash=parts[1],
                 date=parts[2],
                 author=parts[3],
-                subject=parts[4],
+                subject=normalize_project_terms(parts[4]),
             )
         )
     return commits
+
+
+def normalize_project_terms(value: str) -> str:
+    """Render historical subjects with current project terminology."""
+
+    normalized = value
+    for old, new in TERM_REPLACEMENTS.items():
+        normalized = normalized.replace(old, new)
+    return normalized
 
 
 def render_decisions(commits: list[Commit]) -> str:

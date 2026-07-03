@@ -94,7 +94,7 @@ def test_trade_record_mapping_includes_option_fields_only_for_options() -> None:
     perp_row = trade_record(perp, "perp", run_id="run-1", ingested_at=ingested_at)
     option_row = trade_record(option, "option", run_id="run-1", ingested_at=ingested_at)
 
-    assert perp_row["dataset_type"] == "perp_trades"
+    assert perp_row["dataset_type"] == "perps_trades"
     assert "instrument_name" not in perp_row
     assert option_row["dataset_type"] == "option_trades"
     assert option_row["instrument_name"] == "BTC-1JAN26-100000-C"

@@ -16,7 +16,7 @@ from api.cli import build_parser
         (["bronze-build", "--exchange", "deribit"], {"exchange": "deribit"}),
         (["--debug", "bronze-build", "--exchange", "deribit"], {"debug": True}),
         (["bronze-build", "--exchanges", "deribit"], {"exchanges": ["deribit"]}),
-        (["bronze-build", "--dataset", "perp_trades"], {"dataset": ["perp_trades"]}),
+        (["bronze-build", "--dataset", "perps_trades"], {"dataset": ["perps_trades"]}),
         (["bronze-build", "--dataset", "option_trades"], {"dataset": ["option_trades"]}),
         (["bronze-build", "--symbols", "BTC"], {"symbols": ["BTC"]}),
         (["bronze-build", "--save-parquet-lake"], {"save_parquet_lake": True}),
@@ -48,7 +48,7 @@ from api.cli import build_parser
         (["gold-build", "--exchange", "deribit"], {"exchange": "deribit"}),
         (["gold-build", "--symbols", "BTC"], {"symbols": ["BTC"]}),
         (["gold-build", "--dataset-id", "gold.market.full.m1"], {"dataset_id": "gold.market.full.m1"}),
-        (["gold-build", "--dataset-id", "gold.market.perp_trades.m1"], {"dataset_id": "gold.market.perp_trades.m1"}),
+        (["gold-build", "--dataset-id", "gold.market.perps_trades.m1"], {"dataset_id": "gold.market.perps_trades.m1"}),
         (
             ["gold-build", "--dataset-id", "gold.market.option_trades.m1"],
             {"dataset_id": "gold.market.option_trades.m1"},

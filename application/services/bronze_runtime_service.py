@@ -275,7 +275,7 @@ def dataset_task_key_maps(
             oi_map[task.interval_tuple()] = key
         elif task.dataset_type == "funding":
             funding_map[task.interval_tuple()] = key
-        elif task.dataset_type in {"perp_trades", "option_trades"}:
+        elif task.dataset_type in {"perps_trades", "option_trades"}:
             trade_map[task.trade_tuple()] = key
     return candle_map, oi_map, funding_map, trade_map
 

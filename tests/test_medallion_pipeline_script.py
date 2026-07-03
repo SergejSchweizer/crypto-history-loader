@@ -33,7 +33,7 @@ def test_build_steps_uses_configured_market_args_with_trades(tmp_path: Path) -> 
             "bronze": {
                 "enabled": True,
                 "command": "bronze-build",
-                "cli_args": ["--dataset", "spot", "peprs_ohlcv", "oi", "funding", "perp_trades"],
+                "cli_args": ["--dataset", "spot", "peprs_ohlcv", "oi", "funding", "perps_trades"],
             },
             "silver": {"enabled": False, "command": "silver-build", "cli_args": []},
             "gold": {"enabled": False, "command": "gold-build", "cli_args": []},
@@ -43,7 +43,7 @@ def test_build_steps_uses_configured_market_args_with_trades(tmp_path: Path) -> 
     assert len(steps) == 1
     args = steps[0].args
     assert "--dataset" in args
-    assert "perp_trades" in args
+    assert "perps_trades" in args
     assert "volatility_index_data" in args
 
 

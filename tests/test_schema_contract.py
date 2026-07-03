@@ -11,7 +11,7 @@ def test_dataset_contract_maps_spot_perp_oi() -> None:
     peprs_ohlcv = dataset_contract("peprs_ohlcv")
     oi = dataset_contract("oi")
     funding = dataset_contract("funding")
-    trades = dataset_contract("perp_trades")
+    trades = dataset_contract("perps_trades")
     option_trades = dataset_contract("option_trades")
     volatility_index_data = dataset_contract("volatility_index_data")
 
@@ -26,7 +26,7 @@ def test_dataset_contract_maps_spot_perp_oi() -> None:
 
     assert funding.dataset_type == "funding"
     assert funding.instrument_type == "perp"
-    assert trades.dataset_type == "perp_trades"
+    assert trades.dataset_type == "perps_trades"
     assert trades.instrument_type == "perp"
     assert option_trades.dataset_type == "option_trades"
     assert option_trades.instrument_type == "option"
@@ -40,11 +40,11 @@ def test_dataset_registry_covers_contract_names() -> None:
         "peprs_ohlcv",
         "oi",
         "funding",
-        "perp_trades",
+        "perps_trades",
         "option_trades",
         "volatility_index_data",
     }
-    assert dataset_spec("perp_trades").bronze_task_kind == "trade"
+    assert dataset_spec("perps_trades").bronze_task_kind == "trade"
     assert dataset_spec("option_trades").symbol_group == "option_trade_symbols"
-    assert dataset_names_for_task_kind("trade") == {"perp_trades", "option_trades"}
+    assert dataset_names_for_task_kind("trade") == {"perps_trades", "option_trades"}
     assert dataset_names_for_task_kind("volatility") == {"volatility_index_data"}

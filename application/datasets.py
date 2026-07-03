@@ -8,13 +8,13 @@ from typing import Literal, cast
 from ingestion.spot import Exchange, Market
 from ingestion.trades import TradeMarket
 
-CliDataType = Literal["spot", "peprs_ohlcv", "oi", "funding", "perp_trades", "option_trades", "volatility_index_data"]
+CliDataType = Literal["spot", "peprs_ohlcv", "oi", "funding", "perps_trades", "option_trades", "volatility_index_data"]
 DatasetType = Literal[
     "spot",
     "peprs_ohlcv",
     "oi",
     "funding",
-    "perp_trades",
+    "perps_trades",
     "option_trades",
     "volatility_index_data",
     "l2_orderbook",
@@ -128,9 +128,9 @@ DATASET_REGISTRY: dict[CliDataType, DatasetSpec] = {
         symbol_group="symbols",
         market="perp",
     ),
-    "perp_trades": DatasetSpec(
-        cli_data_type="perp_trades",
-        dataset_type="perp_trades",
+    "perps_trades": DatasetSpec(
+        cli_data_type="perps_trades",
+        dataset_type="perps_trades",
         instrument_type="perp",
         bronze_task_kind="trade",
         symbol_group="perp_trade_symbols",

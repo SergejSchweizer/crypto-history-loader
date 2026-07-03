@@ -1,4 +1,4 @@
-"""Deribit historical perp_trades adapter."""
+"""Deribit historical perps_trades adapter."""
 
 from __future__ import annotations
 
@@ -28,8 +28,8 @@ def _utc_now_ms() -> int:
     return utc_now_ms()
 
 
-def _perp_trades_base_url() -> str:
-    """Return Deribit perp_trades API base URL.
+def _perps_trades_base_url() -> str:
+    """Return Deribit perps_trades API base URL.
 
     Historical backfill requires the archive host. Can be overridden via
     ``DEPTH_DERIBIT_PERP_TRADES_BASE_URL`` for debugging or custom routing.
@@ -42,17 +42,17 @@ def _perp_trades_base_url() -> str:
     )
 
 
-def _perp_trades_base_urls() -> list[str]:
-    """Return ordered base URL candidates for perp_trades API."""
+def _perps_trades_base_urls() -> list[str]:
+    """Return ordered base URL candidates for perps_trades API."""
 
-    primary = _perp_trades_base_url()
+    primary = _perps_trades_base_url()
     if primary == DERIBIT_PERP_TRADES_FALLBACK_BASE_URL:
         return [primary]
     return [primary, DERIBIT_PERP_TRADES_FALLBACK_BASE_URL]
 
 
 def _extract_result_rows(payload: dict[str, Any]) -> list[dict[str, object]]:
-    return extract_result_rows(payload, payload_name="perp_trades")
+    return extract_result_rows(payload, payload_name="perps_trades")
 
 
 def _extract_rows_for_instrument(payload: dict[str, Any], *, instrument_name: str) -> list[dict[str, object]]:
@@ -100,7 +100,7 @@ def _default_page_size() -> int:
     )
 
 
-def fetch_perp_trades_range(
+def fetch_perps_trades_range(
     *,
     symbol: str,
     market: str,
@@ -108,7 +108,7 @@ def fetch_perp_trades_range(
     end_open_ms: int,
     count: int | None = None,
 ) -> list[dict[str, object]]:
-    """Fetch Deribit perp_trades in inclusive millisecond range."""
+    """Fetch Deribit perps_trades in inclusive millisecond range."""
 
     if end_open_ms < start_open_ms:
         return []
@@ -129,7 +129,7 @@ def fetch_perp_trades_range(
     pages = 0
 
     logger.debug(
-        "Deribit perp_trades range start instrument=%s start_ms=%s end_ms=%s page_size=%s max_pages=%s",
+        "Deribit perps_trades range start instrument=%s start_ms=%s end_ms=%s page_size=%s max_pages=%s",
         instrument_name,
         start_open_ms,
         end_open_ms,
@@ -140,7 +140,7 @@ def fetch_perp_trades_range(
         pages += 1
         if max_pages > 0 and pages > max_pages:
             logger.warning(
-                "Deribit perp_trades range page cap reached instrument=%s start_ms=%s end_ms=%s max_pages=%s",
+                "Deribit perps_trades range page cap reached instrument=%s start_ms=%s end_ms=%s max_pages=%s",
                 instrument_name,
                 start_open_ms,
                 end_open_ms,
@@ -166,7 +166,7 @@ def fetch_perp_trades_range(
         payload: Any | None = None
         endpoint_type: str | None = None
         last_error: Exception | None = None
-        for base_url in _perp_trades_base_urls():
+        for base_url in _perps_trades_base_urls():
             endpoint_attempts: tuple[tuple[str, dict[str, object], str], ...] = (
                 (
                     "get_last_trades_by_instrument_and_time",
@@ -185,7 +185,7 @@ def fetch_perp_trades_range(
                 for attempt in range(1, route_retry_attempts + 1):
                     logger.debug(
                         (
-                            "Deribit perp_trades request base_url=%s endpoint=%s instrument=%s cursor=%s "
+                            "Deribit perps_trades request base_url=%s endpoint=%s instrument=%s cursor=%s "
                             "end_ms=%s attempt=%s/%s"
                         ),
                         base_url,
@@ -209,7 +209,7 @@ def fetch_perp_trades_range(
                             if sleep_s > 0:
                                 logger.debug(
                                     (
-                                        "Deribit perp_trades retry sleep base_url=%s endpoint=%s instrument=%s "
+                                        "Deribit perps_trades retry sleep base_url=%s endpoint=%s instrument=%s "
                                         "cursor=%s sleep_s=%.3f"
                                     ),
                                     base_url,
@@ -222,7 +222,7 @@ def fetch_perp_trades_range(
                             continue
                         logger.warning(
                             (
-                                "Deribit perp_trades route failure via base_url=%s endpoint=%s instrument=%s "
+                                "Deribit perps_trades route failure via base_url=%s endpoint=%s instrument=%s "
                                 "cursor=%s; trying fallback"
                             ),
                             base_url,
@@ -238,7 +238,7 @@ def fetch_perp_trades_range(
             assert last_error is not None
             raise last_error
         if not isinstance(payload, dict):
-            raise ValueError("Unexpected Deribit perp_trades response format")
+            raise ValueError("Unexpected Deribit perps_trades response format")
         if endpoint_type == "get_last_trades_by_currency_and_time":
             rows = _extract_rows_for_instrument(payload, instrument_name=instrument_name)
         else:
@@ -258,7 +258,7 @@ def fetch_perp_trades_range(
             break
         if inter_request_sleep_s > 0:
             logger.debug(
-                "Deribit perp_trades inter-request sleep instrument=%s cursor=%s sleep_s=%.3f",
+                "Deribit perps_trades inter-request sleep instrument=%s cursor=%s sleep_s=%.3f",
                 instrument_name,
                 cursor,
                 inter_request_sleep_s,
@@ -267,7 +267,7 @@ def fetch_perp_trades_range(
         if pages % 100 == 0:
             logger.debug(
                 (
-                    "Deribit perp_trades range progress instrument=%s start_ms=%s end_ms=%s "
+                    "Deribit perps_trades range progress instrument=%s start_ms=%s end_ms=%s "
                     "pages=%s cursor_ms=%s rows_collected=%s"
                 ),
                 instrument_name,
@@ -286,7 +286,7 @@ def fetch_perp_trades_range(
             dedup[(ts, trade_id)] = row
     rows_out = [dedup[key] for key in sorted(dedup)]
     logger.debug(
-        "Deribit perp_trades range done instrument=%s start_ms=%s end_ms=%s pages=%s rows=%s deduped_rows=%s",
+        "Deribit perps_trades range done instrument=%s start_ms=%s end_ms=%s pages=%s rows=%s deduped_rows=%s",
         instrument_name,
         start_open_ms,
         end_open_ms,
@@ -297,13 +297,13 @@ def fetch_perp_trades_range(
     return rows_out
 
 
-def fetch_perp_trades_all(
+def fetch_perps_trades_all(
     *,
     symbol: str,
     market: str,
     on_page: Callable[[list[dict[str, object]]], None] | None = None,
 ) -> list[dict[str, object]]:
-    """Fetch available Deribit perp_trades history by paging backwards in fixed windows."""
+    """Fetch available Deribit perps_trades history by paging backwards in fixed windows."""
 
     window_ms = 24 * 60 * 60 * 1000
     end_ms = _utc_now_ms()
@@ -311,7 +311,7 @@ def fetch_perp_trades_all(
 
     while end_ms > 0:
         start_ms = max(0, end_ms - window_ms + 1)
-        page_rows = fetch_perp_trades_range(
+        page_rows = fetch_perps_trades_range(
             symbol=symbol,
             market=market,
             start_open_ms=start_ms,

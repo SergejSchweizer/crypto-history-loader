@@ -16,8 +16,8 @@ from application.services.silver_service import (
     build_funding_observed_for_symbol,
     build_oi_1m_feature_for_symbol,
     build_oi_observed_for_symbol,
-    build_perp_trades_1m_feature_for_symbol,
-    build_perp_trades_observed_for_symbol,
+    build_perps_trades_1m_feature_for_symbol,
+    build_perps_trades_observed_for_symbol,
     build_silver_for_symbol,
     build_volatility_observed_for_symbol,
     discover_months,
@@ -504,14 +504,14 @@ def test_build_oi_observed_and_1m_feature(tmp_path: Path) -> None:
     assert minute_2.select("oi_is_observed").item() is True
 
 
-def test_build_perp_trades_1m_feature_for_symbol(tmp_path: Path) -> None:
+def test_build_perps_trades_1m_feature_for_symbol(tmp_path: Path) -> None:
     bronze = tmp_path / "bronze"
     silver = tmp_path / "silver"
     symbol = "BTC-PERPETUAL"
     rows = [
         {
             "schema_version": "v1",
-            "dataset_type": "perp_trades",
+            "dataset_type": "perps_trades",
             "exchange": "deribit",
             "symbol": symbol,
             "instrument_type": "perp",
@@ -530,7 +530,7 @@ def test_build_perp_trades_1m_feature_for_symbol(tmp_path: Path) -> None:
         },
         {
             "schema_version": "v1",
-            "dataset_type": "perp_trades",
+            "dataset_type": "perps_trades",
             "exchange": "deribit",
             "symbol": symbol,
             "instrument_type": "perp",
@@ -549,7 +549,7 @@ def test_build_perp_trades_1m_feature_for_symbol(tmp_path: Path) -> None:
         },
         {
             "schema_version": "v1",
-            "dataset_type": "perp_trades",
+            "dataset_type": "perps_trades",
             "exchange": "deribit",
             "symbol": symbol,
             "instrument_type": "perp",
@@ -569,17 +569,17 @@ def test_build_perp_trades_1m_feature_for_symbol(tmp_path: Path) -> None:
     ]
     _write_bronze_day_file(
         bronze,
-        market="perp_trades",
+        market="perps_trades",
         exchange="deribit",
         symbol=symbol,
         timeframe="tick",
         month="2026-05",
         day="2026-05-01",
         rows=rows,
-        dataset_type="perp_trades",
+        dataset_type="perps_trades",
         instrument_type="perp",
     )
-    observed_report = build_perp_trades_observed_for_symbol(
+    observed_report = build_perps_trades_observed_for_symbol(
         bronze_root=str(bronze),
         silver_root=str(silver),
         exchange="deribit",
@@ -587,19 +587,19 @@ def test_build_perp_trades_1m_feature_for_symbol(tmp_path: Path) -> None:
         instrument_type="perp",
         timeframe="tick",
     )
-    assert observed_report.dataset == "perp_trades_observed"
-    report = build_perp_trades_1m_feature_for_symbol(
+    assert observed_report.dataset == "perps_trades_observed"
+    report = build_perps_trades_1m_feature_for_symbol(
         silver_root=str(silver),
         exchange="deribit",
         symbol=symbol,
         observed_timeframe="tick",
     )
-    assert report.dataset == "perp_trades_1m_feature"
+    assert report.dataset == "perps_trades_1m_feature"
     assert report.rows_in == 3
     assert report.rows_out == 2
     out_file = (
         silver
-        / "dataset_type=perp_trades_1m_feature"
+        / "dataset_type=perps_trades_1m_feature"
         / "exchange=deribit"
         / f"symbol={symbol}"
         / "timeframe=1m"
@@ -698,13 +698,13 @@ def test_build_trade_feature_frame_aggregates_minute_flow_features() -> None:
     assert row["buy_volume_share"] == pytest.approx(2.0 / 3.0)
 
 
-def test_build_perp_trades_1m_feature_filters_invalid_and_deduplicates(tmp_path: Path) -> None:
+def test_build_perps_trades_1m_feature_filters_invalid_and_deduplicates(tmp_path: Path) -> None:
     bronze = tmp_path / "bronze"
     silver = tmp_path / "silver"
     symbol = "BTC-PERPETUAL"
     base = {
         "schema_version": "v1",
-        "dataset_type": "perp_trades",
+        "dataset_type": "perps_trades",
         "exchange": "deribit",
         "symbol": symbol,
         "instrument_type": "perp",
@@ -755,17 +755,17 @@ def test_build_perp_trades_1m_feature_filters_invalid_and_deduplicates(tmp_path:
     ]
     _write_bronze_day_file(
         bronze,
-        market="perp_trades",
+        market="perps_trades",
         exchange="deribit",
         symbol=symbol,
         timeframe="tick",
         month="2026-05",
         day="2026-05-01",
         rows=rows,
-        dataset_type="perp_trades",
+        dataset_type="perps_trades",
         instrument_type="perp",
     )
-    observed_report = build_perp_trades_observed_for_symbol(
+    observed_report = build_perps_trades_observed_for_symbol(
         bronze_root=str(bronze),
         silver_root=str(silver),
         exchange="deribit",
@@ -777,7 +777,7 @@ def test_build_perp_trades_1m_feature_filters_invalid_and_deduplicates(tmp_path:
     assert observed_report.rows_out == 1
     assert observed_report.duplicates_removed == 1
     assert observed_report.invalid_ohlc_rows == 1
-    report = build_perp_trades_1m_feature_for_symbol(
+    report = build_perps_trades_1m_feature_for_symbol(
         silver_root=str(silver),
         exchange="deribit",
         symbol=symbol,
@@ -852,7 +852,7 @@ def test_build_option_trades_1m_feature_for_symbol(tmp_path: Path) -> None:
         instrument_type="option",
     )
 
-    observed_report = build_perp_trades_observed_for_symbol(
+    observed_report = build_perps_trades_observed_for_symbol(
         bronze_root=str(bronze),
         silver_root=str(silver),
         exchange="deribit",
@@ -864,7 +864,7 @@ def test_build_option_trades_1m_feature_for_symbol(tmp_path: Path) -> None:
     )
     assert observed_report.dataset == "option_trades_observed"
 
-    feature_report = build_perp_trades_1m_feature_for_symbol(
+    feature_report = build_perps_trades_1m_feature_for_symbol(
         silver_root=str(silver),
         exchange="deribit",
         symbol=symbol,

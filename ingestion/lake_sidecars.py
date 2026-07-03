@@ -16,7 +16,7 @@ from ingestion.lake_layout import (
     partition_key_from_parquet_path,
 )
 
-DEFAULT_BRONZE_SIDECAR_DATASET_TYPES = ("spot", "peprs_ohlcv", "oi", "funding", "perp_trades", "option_trades")
+DEFAULT_BRONZE_SIDECAR_DATASET_TYPES = ("spot", "peprs_ohlcv", "oi", "funding", "perps_trades", "option_trades")
 
 
 def write_bronze_sidecars(

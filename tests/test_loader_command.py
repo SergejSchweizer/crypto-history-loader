@@ -181,7 +181,7 @@ def test_run_bronze_build_persists_trade_chunks_incrementally(
     args = argparse.Namespace(
         exchange="deribit",
         exchanges=None,
-        market=["perp_trades", "option_trades"],
+        market=["perps_trades", "option_trades"],
         symbols=["BTC"],
         perp_trade_symbols=["BTC"],
         option_trade_symbols=["BTC"],
@@ -369,7 +369,7 @@ def test_run_bronze_build_uses_symbols_for_trade_tasks(monkeypatch) -> None:  # 
     args = argparse.Namespace(
         exchange="deribit",
         exchanges=None,
-        market=["perp_trades", "option_trades"],
+        market=["perps_trades", "option_trades"],
         symbols=["BTCUSDT", "ETHUSDT"],
         save_parquet_lake=False,
         lake_root="lake/bronze",
@@ -443,7 +443,7 @@ def test_dataset_task_key_maps_use_registry_checkpoint_keys() -> None:
     args = argparse.Namespace(
         exchange="deribit",
         exchanges=["deribit"],
-        market=["spot", "oi", "perp_trades"],
+        market=["spot", "oi", "perps_trades"],
         symbols=["BTC"],
         perp_trade_symbols=["BTC"],
         option_trade_symbols=["BTC"],
@@ -454,7 +454,7 @@ def test_dataset_task_key_maps_use_registry_checkpoint_keys() -> None:
     assert candle_map[("deribit", "spot", "BTC", "1m")] == "deribit|spot|spot|BTC|1m|spot"
     assert oi_map[("deribit", "BTC", "1m")] == "deribit|oi|perp|BTC|1m|perp"
     assert ("deribit", "BTC", "1m") not in funding_map
-    assert trade_map[("deribit", "perp", "BTC")] == "deribit|perp_trades|perp|BTC|tick|perp"
+    assert trade_map[("deribit", "perp", "BTC")] == "deribit|perps_trades|perp|BTC|tick|perp"
 
 
 def test_run_bronze_build_resumes_from_checkpoint_and_clears_on_success(

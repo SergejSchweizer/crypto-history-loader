@@ -13,7 +13,7 @@ def test_default_bronze_sidecar_dataset_types_are_stable() -> None:
         "peprs_ohlcv",
         "oi",
         "funding",
-        "perp_trades",
+        "perps_trades",
         "option_trades",
     )
 

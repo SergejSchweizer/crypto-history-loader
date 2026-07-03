@@ -20,7 +20,7 @@ def test_build_trade_tasks_uses_only_perp_market() -> None:
         exchanges=["deribit"],
         perp_trade_symbols=["BTC", "ETH"],
         option_trade_symbols=["BTC", "ETH"],
-        perp_trades_requested=True,
+        perps_trades_requested=True,
         option_trades_requested=False,
     )
 
@@ -35,7 +35,7 @@ def test_build_trade_tasks_returns_empty_when_not_requested() -> None:
         exchanges=["deribit"],
         perp_trade_symbols=["BTC"],
         option_trade_symbols=["BTC"],
-        perp_trades_requested=False,
+        perps_trades_requested=False,
         option_trades_requested=False,
     )
 
@@ -47,7 +47,7 @@ def test_build_trade_tasks_includes_option_market_when_requested() -> None:
         exchanges=["deribit"],
         perp_trade_symbols=["BTC"],
         option_trade_symbols=["ETH"],
-        perp_trades_requested=True,
+        perps_trades_requested=True,
         option_trades_requested=True,
     )
     assert tasks == [("deribit", "perp", "BTC"), ("deribit", "option", "ETH")]
@@ -56,7 +56,7 @@ def test_build_trade_tasks_includes_option_market_when_requested() -> None:
 def test_build_trade_tasks_from_specs_keeps_symbol_first_ordering() -> None:
     tasks = build_trade_tasks_from_specs(
         exchanges=["deribit"],
-        specs=[dataset_spec("perp_trades"), dataset_spec("option_trades")],
+        specs=[dataset_spec("perps_trades"), dataset_spec("option_trades")],
         symbols_by_group={
             "perp_trade_symbols": ["BTC", "ETH"],
             "option_trade_symbols": ["BTC"],

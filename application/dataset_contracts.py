@@ -210,8 +210,8 @@ SILVER_DATASET_CONTRACTS: dict[str, SilverDatasetContract] = {
         missing_data_policy="forward_fill",
         output_columns=tuple(SILVER_OI_M1_FEATURE_COLUMNS),
     ),
-    "perp_trades_observed": SilverDatasetContract(
-        dataset_type="perp_trades_observed",
+    "perps_trades_observed": SilverDatasetContract(
+        dataset_type="perps_trades_observed",
         timeframe="tick",
         timestamp_column="trade_time",
         timestamp_semantics="trade_time",
@@ -226,8 +226,8 @@ SILVER_DATASET_CONTRACTS: dict[str, SilverDatasetContract] = {
         missing_data_policy="drop_invalid",
         output_columns=tuple(SILVER_TRADES_OBSERVED_COLUMNS),
     ),
-    "perp_trades_1m_feature": SilverDatasetContract(
-        dataset_type="perp_trades_1m_feature",
+    "perps_trades_1m_feature": SilverDatasetContract(
+        dataset_type="perps_trades_1m_feature",
         timeframe="1m",
         timestamp_column="timestamp_m1",
         timestamp_semantics="minute_grid",
@@ -258,15 +258,15 @@ FULL_MARKET_GOLD_REQUIREMENTS = (
     GoldSourceRequirement("peprs_ohlcv", "1m"),
     GoldSourceRequirement("oi_1m_feature", "1m"),
     GoldSourceRequirement("funding_1m_feature", "1m"),
-    GoldSourceRequirement("perp_trades_1m_feature", "1m"),
+    GoldSourceRequirement("perps_trades_1m_feature", "1m"),
     GoldSourceRequirement("option_trades_1m_feature", "1m"),
     GoldSourceRequirement("volatility_index_data_observed", "1m"),
 )
 
 GOLD_DATASET_CONTRACTS: dict[str, GoldDatasetContract] = {
-    "gold.market.perp_trades.m1": GoldDatasetContract(
-        dataset_id="gold.market.perp_trades.m1",
-        requirements=(GoldSourceRequirement("perp_trades_1m_feature", "1m"),),
+    "gold.market.perps_trades.m1": GoldDatasetContract(
+        dataset_id="gold.market.perps_trades.m1",
+        requirements=(GoldSourceRequirement("perps_trades_1m_feature", "1m"),),
         include_l2=False,
     ),
     "gold.market.option_trades.m1": GoldDatasetContract(

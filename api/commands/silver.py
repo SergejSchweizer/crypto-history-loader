@@ -15,8 +15,8 @@ from application.services.silver_service import (
     build_funding_observed_for_symbol,
     build_oi_1m_feature_for_symbol,
     build_oi_observed_for_symbol,
-    build_perp_trades_1m_feature_for_symbol,
-    build_perp_trades_observed_for_symbol,
+    build_perps_trades_1m_feature_for_symbol,
+    build_perps_trades_observed_for_symbol,
     build_silver_for_symbol,
     build_volatility_observed_for_symbol,
     discover_symbols,
@@ -28,7 +28,7 @@ _MARKET_DISCOVERY_CONFIG: dict[str, tuple[str, str, str]] = {
     "peprs_ohlcv": ("peprs_ohlcv", "perp", "1m"),
     "funding": ("funding", "perp", DERIBIT_FUNDING_NATIVE_INTERVAL),
     "oi": ("oi", "perp", "1m"),
-    "perp_trades": ("perp_trades", "perp", "tick"),
+    "perps_trades": ("perps_trades", "perp", "tick"),
     "option_trades": ("option_trades", "option", "tick"),
     "volatility_index_data": ("volatility_index_data", "perp", "1m"),
 }
@@ -49,7 +49,7 @@ def add_silver_build_parser(subparsers: Any) -> None:
             "peprs_ohlcv",
             "oi",
             "funding",
-            "perp_trades",
+            "perps_trades",
             "option_trades",
             "volatility_index_data",
         ],
@@ -58,7 +58,7 @@ def add_silver_build_parser(subparsers: Any) -> None:
             "peprs_ohlcv",
             "oi",
             "funding",
-            "perp_trades",
+            "perps_trades",
             "option_trades",
             "volatility_index_data",
         ],
@@ -160,7 +160,7 @@ def run_silver_build(args: argparse.Namespace, logger: logging.Logger) -> None:
         return [observed_payload, feature_payload]
 
     def _run_trades(symbol: str) -> list[dict[str, object]]:
-        observed = build_perp_trades_observed_for_symbol(
+        observed = build_perps_trades_observed_for_symbol(
             bronze_root=bronze_root,
             silver_root=silver_root,
             exchange=exchange,
@@ -168,14 +168,14 @@ def run_silver_build(args: argparse.Namespace, logger: logging.Logger) -> None:
             instrument_type="perp",
             timeframe="tick",
         )
-        observed_payload = _report_payload("perp_trades_observed", symbol, observed)
-        feature = build_perp_trades_1m_feature_for_symbol(
+        observed_payload = _report_payload("perps_trades_observed", symbol, observed)
+        feature = build_perps_trades_1m_feature_for_symbol(
             silver_root=silver_root,
             exchange=exchange,
             symbol=symbol,
             observed_timeframe="tick",
         )
-        feature_payload = _report_payload("perp_trades_1m_feature", symbol, feature)
+        feature_payload = _report_payload("perps_trades_1m_feature", symbol, feature)
         logger.info(
             "Silver trades reports written symbol=%s observed_rows=%s feature_rows=%s",
             symbol,
@@ -185,7 +185,7 @@ def run_silver_build(args: argparse.Namespace, logger: logging.Logger) -> None:
         return [observed_payload, feature_payload]
 
     def _run_option_trades(symbol: str) -> list[dict[str, object]]:
-        observed = build_perp_trades_observed_for_symbol(
+        observed = build_perps_trades_observed_for_symbol(
             bronze_root=bronze_root,
             silver_root=silver_root,
             exchange=exchange,
@@ -196,7 +196,7 @@ def run_silver_build(args: argparse.Namespace, logger: logging.Logger) -> None:
             output_dataset_type="option_trades_observed",
         )
         observed_payload = _report_payload("option_trades_observed", symbol, observed)
-        feature = build_perp_trades_1m_feature_for_symbol(
+        feature = build_perps_trades_1m_feature_for_symbol(
             silver_root=silver_root,
             exchange=exchange,
             symbol=symbol,
@@ -253,7 +253,7 @@ def run_silver_build(args: argparse.Namespace, logger: logging.Logger) -> None:
     market_handlers: dict[str, Callable[[str], list[dict[str, object]]]] = {
         "funding": _run_funding,
         "oi": _run_oi,
-        "perp_trades": _run_trades,
+        "perps_trades": _run_trades,
         "option_trades": _run_option_trades,
         "volatility_index_data": _run_volatility_index_data,
     }
