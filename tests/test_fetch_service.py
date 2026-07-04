@@ -44,7 +44,7 @@ def _sleep_then_empty(**kwargs: object) -> list[SpotCandle]:
     return []
 
 
-def _sleep_then_empty_oi(**kwargs: object) -> list[OpenInterestPoint]:
+def _sleep_then_empty_open_interest(**kwargs: object) -> list[OpenInterestPoint]:
     del kwargs
     import time
 
@@ -1191,7 +1191,7 @@ def test_fetch_open_interest_tasks_parallel_times_out_when_configured(monkeypatc
         lake_root="lake/bronze",
         concurrency=1,
         logger=logging.getLogger("test"),
-        symbol_fetcher=_sleep_then_empty_oi,
+        symbol_fetcher=_sleep_then_empty_open_interest,
     )
 
     key = (task.exchange, task.symbol, task.timeframe)
@@ -1516,7 +1516,7 @@ def test_fetch_open_interest_tasks_parallel_mixed_results_and_on_task_complete()
     def _fetcher(**kwargs: object) -> list[OpenInterestPoint]:
         symbol = cast(str, kwargs["symbol"])
         if symbol == "ETHUSDT":
-            raise RuntimeError("oi boom")
+            raise RuntimeError("open_interest boom")
         return [point]
 
     def _on_complete(task: OpenInterestFetchTaskDTO, rows: list[OpenInterestPoint]) -> None:

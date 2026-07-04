@@ -23,12 +23,12 @@ def trade_error_breakdown(trade_errors: dict[tuple[str, str, str], str]) -> dict
 def symbol_progress_rows(
     *,
     candle_tasks: list[tuple[str, str, str, str]],
-    oi_tasks: list[tuple[str, str, str]],
+    open_interest_tasks: list[tuple[str, str, str]],
     funding_tasks: list[tuple[str, str, str]],
     volatility_index_data_tasks: list[tuple[str, str, str]],
     trade_tasks: list[tuple[str, str, str]],
     candle_results: dict[tuple[str, str, str, str], object],
-    oi_results: dict[tuple[str, str, str], object],
+    open_interest_results: dict[tuple[str, str, str], object],
     funding_results: dict[tuple[str, str, str], object],
     volatility_index_data_results: dict[tuple[str, str, str], object],
     trade_results: dict[tuple[str, str, str], object],
@@ -39,7 +39,7 @@ def symbol_progress_rows(
     symbol_success: dict[str, int] = {}
     for _exchange, _market, symbol, _timeframe in candle_tasks:
         symbol_totals[symbol] = symbol_totals.get(symbol, 0) + 1
-    for _exchange, symbol, _timeframe in oi_tasks:
+    for _exchange, symbol, _timeframe in open_interest_tasks:
         symbol_totals[symbol] = symbol_totals.get(symbol, 0) + 1
     for _exchange, symbol, _timeframe in funding_tasks:
         symbol_totals[symbol] = symbol_totals.get(symbol, 0) + 1
@@ -49,7 +49,7 @@ def symbol_progress_rows(
         symbol_totals[symbol] = symbol_totals.get(symbol, 0) + 1
     for _exchange, _market, symbol, _timeframe in candle_results:
         symbol_success[symbol] = symbol_success.get(symbol, 0) + 1
-    for _exchange, symbol, _timeframe in oi_results:
+    for _exchange, symbol, _timeframe in open_interest_results:
         symbol_success[symbol] = symbol_success.get(symbol, 0) + 1
     for _exchange, symbol, _timeframe in funding_results:
         symbol_success[symbol] = symbol_success.get(symbol, 0) + 1

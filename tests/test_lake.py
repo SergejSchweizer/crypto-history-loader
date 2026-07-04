@@ -365,9 +365,9 @@ def test_bronze_open_interest_writes_no_engineered_feature_columns(tmp_path: Pat
     columns = set(parquet_file.schema_arrow.names)
     assert "open_interest" in columns
     assert "open_interest_value" in columns
-    assert "oi_ffill" not in columns
-    assert "oi_is_observed" not in columns
-    assert "minutes_since_oi_observation" not in columns
+    assert "open_interest_ffill" not in columns
+    assert "open_interest_is_observed" not in columns
+    assert "minutes_since_open_interest_observation" not in columns
 
 
 def test_bronze_all_symbols_use_same_daily_partition_format(tmp_path: Path) -> None:
@@ -506,7 +506,7 @@ def test_load_combined_dataframe_applies_filters_and_open_interest(tmp_path: Pat
     )
     save_spot_ohlcv_candles_parquet_lake({"deribit": {"BTCUSDT": [btc_perp]}}, "perp", str(tmp_path))
     save_spot_ohlcv_candles_parquet_lake({"deribit": {"ETHUSDT": [eth]}}, "spot_ohlcv", str(tmp_path))
-    oi = OpenInterestPoint(
+    open_interest = OpenInterestPoint(
         exchange="deribit",
         symbol="BTCUSDT",
         interval="1m",
@@ -515,7 +515,7 @@ def test_load_combined_dataframe_applies_filters_and_open_interest(tmp_path: Pat
         open_interest=123.0,
         open_interest_value=456.0,
     )
-    save_open_interest_parquet_lake({"deribit": {"BTCUSDT": [oi]}}, "perp", str(tmp_path))
+    save_open_interest_parquet_lake({"deribit": {"BTCUSDT": [open_interest]}}, "perp", str(tmp_path))
 
     frame = load_combined_dataframe_from_lake(
         lake_root=str(tmp_path),

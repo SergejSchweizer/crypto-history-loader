@@ -44,7 +44,7 @@ def test_bronze_spot_ohlcv_schema_contract_order(tmp_path: Path) -> None:
     assert schema.names[-1] == "origin_payload"
 
 
-def test_bronze_oi_schema_contract_fields(tmp_path: Path) -> None:
+def test_bronze_open_interest_schema_contract_fields(tmp_path: Path) -> None:
     point = OpenInterestPoint(
         exchange="deribit",
         symbol="BTC-PERPETUAL",

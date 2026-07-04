@@ -9,7 +9,7 @@ The codebase is already split into `api`, `application`, and `ingestion`, but se
 | Area | Current signal | Refactoring risk |
 |---|---:|---|
 | `application/services/fetch_service.py` | 449 lines | Compatibility facade remains after task execution, symbol-level fetch planning, and shared helper extraction. |
-| `application/services/silver_service.py` | 695 lines | Dataset-specific build orchestration remains shared after sidecar, trade-frame, volatility observed, OI, and funding extraction. |
+| `application/services/silver_service.py` | 695 lines | Dataset-specific build orchestration remains shared after sidecar, trade-frame, volatility observed, Open Interest, and funding extraction. |
 | `ingestion/lake.py` | 52 lines | Compatibility facade remains after partition layout, read-helper, sidecar, metadata query, dataframe reader, record-helper, and Bronze write extraction. |
 | `api/commands/loader.py` | 555 lines | Command entry-point wiring remains after checkpoint key, parser, symbol-fetch adapter, output-helper, private compatibility-wrapper, and Bronze workflow extraction. |
 | `application/services/gold_service.py` | 482 lines | Gold artifact build orchestration and output writing remain after feature profiling, versioning, audit, and frame-helper extraction. |
@@ -66,7 +66,7 @@ End state:
 - Checkpointing is separate from output/report formatting.
 - Runtime policy, including concurrency, timeout, heartbeat, page size, and trade window sizing, has one validated configuration path.
 - Every long-running fetch logs start, progress, retry/failure classification, persisted partition, and completion.
-- Trade, OHLCV, OI, and funding flows share common execution contracts where behavior is genuinely common.
+- Trade, OHLCV, Open Interest, and funding flows share common execution contracts where behavior is genuinely common.
 
 Evidence:
 
@@ -266,7 +266,7 @@ Exit criteria:
 - Bound-filtered history row callbacks, open-time key extraction, bounded daily fetch dedupe, and bootstrap row
   filtering live in `application/services/fetch_history_rows.py`; `fetch_service.py` keeps compatibility aliases.
 - Fetch task chunk callback binding lives in `application/services/fetch_task_callbacks.py`; `fetch_service.py`
-  reuses the same adapter for OHLCV, OI, funding, volatility, and trade task execution.
+  reuses the same adapter for OHLCV, Open Interest, funding, volatility, and trade task execution.
 - Standard sequential task execution for OHLCV, open-interest, funding, and volatility now lives in
   `application/services/fetch_task_execution.py`; `fetch_service.py` keeps compatibility entry points and still owns
   symbol-level fetch planning.
@@ -337,7 +337,7 @@ Progress:
   side effects separate from Silver transformation functions.
 - Silver trade observed-frame cleaning and 1m trade-flow aggregation now live in
   `application/services/silver_trades.py`, with `application/services/silver_service.py` retaining compatibility aliases.
-- Silver open-interest observed and 1m feature transformations now live in `application/services/silver_oi.py`, with
+- Silver open-interest observed and 1m feature transformations now live in `application/services/silver_open_interest.py`, with
   `application/services/silver_service.py` retaining compatibility entry points.
 - Silver funding observed and 1m feature transformations now live in `application/services/silver_funding.py`, with
   `application/services/silver_service.py` retaining compatibility entry points.

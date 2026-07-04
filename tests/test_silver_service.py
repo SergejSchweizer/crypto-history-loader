@@ -14,8 +14,8 @@ from application.services.silver_service import (
     _build_trade_observed_frame,
     build_funding_1m_feature_for_symbol,
     build_funding_observed_for_symbol,
-    build_oi_1m_feature_for_symbol,
-    build_oi_observed_for_symbol,
+    build_open_interest_1m_feature_for_symbol,
+    build_open_interest_observed_for_symbol,
     build_perps_trades_1m_feature_for_symbol,
     build_perps_trades_observed_for_symbol,
     build_silver_for_symbol,
@@ -331,14 +331,14 @@ def test_build_funding_observed_and_1m_feature(tmp_path: Path) -> None:
     assert feature.select(pl.col("timestamp").max()).item() == observed.select(pl.col("funding_time").max()).item()
 
 
-def test_build_oi_observed_and_1m_feature(tmp_path: Path) -> None:
+def test_build_open_interest_observed_and_1m_feature(tmp_path: Path) -> None:
     bronze = tmp_path / "bronze"
     silver = tmp_path / "silver"
     symbol = "btc_perpetual"
     rows = [
         {
             "schema_version": "v1",
-            "dataset_type": "oi",
+            "dataset_type": "open_interest",
             "exchange": "Deribit",
             "symbol": symbol,
             "instrument_type": "perp",
@@ -354,7 +354,7 @@ def test_build_oi_observed_and_1m_feature(tmp_path: Path) -> None:
         },
         {
             "schema_version": "v1",
-            "dataset_type": "oi",
+            "dataset_type": "open_interest",
             "exchange": "Deribit",
             "symbol": symbol,
             "instrument_type": "perp",
@@ -370,7 +370,7 @@ def test_build_oi_observed_and_1m_feature(tmp_path: Path) -> None:
         },
         {
             "schema_version": "v1",
-            "dataset_type": "oi",
+            "dataset_type": "open_interest",
             "exchange": "Deribit",
             "symbol": symbol,
             "instrument_type": "perp",
@@ -386,7 +386,7 @@ def test_build_oi_observed_and_1m_feature(tmp_path: Path) -> None:
         },
         {
             "schema_version": "v1",
-            "dataset_type": "oi",
+            "dataset_type": "open_interest",
             "exchange": "Deribit",
             "symbol": None,
             "instrument_type": "perp",
@@ -402,7 +402,7 @@ def test_build_oi_observed_and_1m_feature(tmp_path: Path) -> None:
         },
         {
             "schema_version": "v1",
-            "dataset_type": "oi",
+            "dataset_type": "open_interest",
             "exchange": "Deribit",
             "symbol": symbol,
             "instrument_type": "perp",
@@ -418,7 +418,7 @@ def test_build_oi_observed_and_1m_feature(tmp_path: Path) -> None:
         },
         {
             "schema_version": "v1",
-            "dataset_type": "oi",
+            "dataset_type": "open_interest",
             "exchange": "Deribit",
             "symbol": symbol,
             "instrument_type": "perp",
@@ -435,18 +435,18 @@ def test_build_oi_observed_and_1m_feature(tmp_path: Path) -> None:
     ]
     _write_bronze_day_file(
         bronze,
-        market="oi",
+        market="open_interest",
         exchange="deribit",
         symbol="BTC-PERPETUAL",
         timeframe="1m",
         month="2026-05",
         day="2026-05-01",
         rows=rows,
-        dataset_type="oi",
+        dataset_type="open_interest",
         instrument_type="perp",
     )
 
-    observed_report = build_oi_observed_for_symbol(
+    observed_report = build_open_interest_observed_for_symbol(
         bronze_root=str(bronze),
         silver_root=str(silver),
         exchange="deribit",
@@ -457,21 +457,21 @@ def test_build_oi_observed_and_1m_feature(tmp_path: Path) -> None:
     assert observed_report.rows_out == 2
     assert observed_report.duplicates_removed == 1
     assert observed_report.invalid_ohlc_rows == 3
-    assert "oi_source_timestamp" in observed_report.columns
+    assert "open_interest_source_timestamp" in observed_report.columns
 
-    feature_report = build_oi_1m_feature_for_symbol(
+    feature_report = build_open_interest_1m_feature_for_symbol(
         silver_root=str(silver),
         exchange="deribit",
         symbol="BTC-PERPETUAL",
         observed_timeframe="1m",
     )
     assert feature_report.rows_out > 0
-    assert "oi_is_observed" in feature_report.columns
-    assert "minutes_since_oi_observation" in feature_report.columns
+    assert "open_interest_is_observed" in feature_report.columns
+    assert "minutes_since_open_interest_observation" in feature_report.columns
 
     observed_file = (
         silver
-        / "dataset_type=oi_observed"
+        / "dataset_type=open_interest_observed"
         / "exchange=deribit"
         / "symbol=BTC-PERPETUAL"
         / "timeframe=1m"
@@ -484,7 +484,7 @@ def test_build_oi_observed_and_1m_feature(tmp_path: Path) -> None:
 
     feature_file = (
         silver
-        / "dataset_type=oi_1m_feature"
+        / "dataset_type=open_interest_1m_feature"
         / "exchange=deribit"
         / "symbol=BTC-PERPETUAL"
         / "timeframe=1m"
@@ -496,12 +496,12 @@ def test_build_oi_observed_and_1m_feature(tmp_path: Path) -> None:
     minute_0 = feature.filter(pl.col("timestamp_m1") == datetime(2026, 5, 1, 0, 0, tzinfo=UTC))
     minute_1 = feature.filter(pl.col("timestamp_m1") == datetime(2026, 5, 1, 0, 1, tzinfo=UTC))
     minute_2 = feature.filter(pl.col("timestamp_m1") == datetime(2026, 5, 1, 0, 2, tzinfo=UTC))
-    assert minute_0.select("oi_is_observed").item() is True
-    assert minute_0.select("oi_is_ffill").item() is False
-    assert minute_1.select("oi_is_observed").item() is False
-    assert minute_1.select("oi_is_ffill").item() is True
-    assert minute_1.select("minutes_since_oi_observation").item() == 1
-    assert minute_2.select("oi_is_observed").item() is True
+    assert minute_0.select("open_interest_is_observed").item() is True
+    assert minute_0.select("open_interest_is_ffill").item() is False
+    assert minute_1.select("open_interest_is_observed").item() is False
+    assert minute_1.select("open_interest_is_ffill").item() is True
+    assert minute_1.select("minutes_since_open_interest_observation").item() == 1
+    assert minute_2.select("open_interest_is_observed").item() is True
 
 
 def test_build_perps_trades_1m_feature_for_symbol(tmp_path: Path) -> None:

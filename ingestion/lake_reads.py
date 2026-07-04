@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 
 from ingestion.funding import FundingPoint
-from ingestion.lake_datasets import OI_DATASET_TYPE, ohlcv_dataset_type_for_market
+from ingestion.lake_datasets import OPEN_INTEREST_DATASET_TYPE, ohlcv_dataset_type_for_market
 from ingestion.lake_layout import partition_data_files
 from ingestion.open_interest import OpenInterestPoint
 from ingestion.spot_ohlcv import SpotCandle
@@ -110,7 +110,7 @@ def load_open_interest_from_lake(
 
     partition_root = (
         Path(lake_root)
-        / f"dataset_type={OI_DATASET_TYPE}"
+        / f"dataset_type={OPEN_INTEREST_DATASET_TYPE}"
         / f"exchange={exchange}"
         / f"instrument_type={market}"
         / f"symbol={symbol}"

@@ -13,8 +13,8 @@ from application.services.silver_service import (
     SilverBuildReport,
     build_funding_1m_feature_for_symbol,
     build_funding_observed_for_symbol,
-    build_oi_1m_feature_for_symbol,
-    build_oi_observed_for_symbol,
+    build_open_interest_1m_feature_for_symbol,
+    build_open_interest_observed_for_symbol,
     build_perps_trades_1m_feature_for_symbol,
     build_perps_trades_observed_for_symbol,
     build_silver_for_symbol,
@@ -27,7 +27,7 @@ from ingestion.funding import DERIBIT_FUNDING_NATIVE_INTERVAL
 _MARKET_DISCOVERY_CONFIG: dict[str, tuple[str, str, str]] = {
     "perps_ohlcv": ("perps_ohlcv", "perp", "1m"),
     "funding": ("funding", "perp", DERIBIT_FUNDING_NATIVE_INTERVAL),
-    "oi": ("oi", "perp", "1m"),
+    "open_interest": ("open_interest", "perp", "1m"),
     "perps_trades": ("perps_trades", "perp", "tick"),
     "options_trades": ("options_trades", "option", "tick"),
     "volatility_index_data": ("volatility_index_data", "perp", "1m"),
@@ -47,7 +47,7 @@ def add_silver_build_parser(subparsers: Any) -> None:
         choices=[
             "spot_ohlcv",
             "perps_ohlcv",
-            "oi",
+            "open_interest",
             "funding",
             "perps_trades",
             "options_trades",
@@ -56,7 +56,7 @@ def add_silver_build_parser(subparsers: Any) -> None:
         default=[
             "spot_ohlcv",
             "perps_ohlcv",
-            "oi",
+            "open_interest",
             "funding",
             "perps_trades",
             "options_trades",
@@ -134,25 +134,25 @@ def run_silver_build(args: argparse.Namespace, logger: logging.Logger) -> None:
         )
         return [observed_payload, feature_payload]
 
-    def _run_oi(symbol: str) -> list[dict[str, object]]:
-        observed = build_oi_observed_for_symbol(
+    def _run_open_interest(symbol: str) -> list[dict[str, object]]:
+        observed = build_open_interest_observed_for_symbol(
             bronze_root=bronze_root,
             silver_root=silver_root,
             exchange=exchange,
             symbol=symbol,
             timeframe=timeframe,
         )
-        observed_payload = _report_payload("oi_observed", symbol, observed)
+        observed_payload = _report_payload("open_interest_observed", symbol, observed)
 
-        feature = build_oi_1m_feature_for_symbol(
+        feature = build_open_interest_1m_feature_for_symbol(
             silver_root=silver_root,
             exchange=exchange,
             symbol=symbol,
             observed_timeframe=timeframe,
         )
-        feature_payload = _report_payload("oi_1m_feature", symbol, feature)
+        feature_payload = _report_payload("open_interest_1m_feature", symbol, feature)
         logger.info(
-            "Silver OI reports written symbol=%s observed_rows=%s feature_rows=%s",
+            "Silver Open Interest reports written symbol=%s observed_rows=%s feature_rows=%s",
             symbol,
             observed.rows_out,
             feature.rows_out,
@@ -252,7 +252,7 @@ def run_silver_build(args: argparse.Namespace, logger: logging.Logger) -> None:
 
     market_handlers: dict[str, Callable[[str], list[dict[str, object]]]] = {
         "funding": _run_funding,
-        "oi": _run_oi,
+        "open_interest": _run_open_interest,
         "perps_trades": _run_trades,
         "options_trades": _run_options_trades,
         "volatility_index_data": _run_volatility_index_data,

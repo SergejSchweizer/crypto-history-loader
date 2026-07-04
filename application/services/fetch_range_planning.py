@@ -179,7 +179,7 @@ def build_missing_ranges_with_optional_head_gap(
         The injected range builder owns internal and tail gap detection. This
         helper only adds the missing leading range caused by a later first
         persisted timestamp, keeping start-bound behavior consistent across
-        OHLCV, OI, funding, and volatility fetchers.
+        OHLCV, Open Interest, funding, and volatility fetchers.
     """
 
     missing_ranges = ranges_builder(

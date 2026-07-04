@@ -100,25 +100,25 @@ SILVER_FUNDING_FEATURE_COLUMNS = [
     "is_funding_observation_minute",
     "funding_data_available",
 ]
-SILVER_OI_OBSERVED_COLUMNS = [
+SILVER_OPEN_INTEREST_OBSERVED_COLUMNS = [
     "timestamp",
     "exchange",
     "symbol",
     "open_interest",
-    "oi_source_timestamp",
+    "open_interest_source_timestamp",
     "ingested_at",
     "source_endpoint",
 ]
-SILVER_OI_M1_FEATURE_COLUMNS = [
+SILVER_OPEN_INTEREST_M1_FEATURE_COLUMNS = [
     "timestamp_m1",
     "exchange",
     "symbol",
     "open_interest",
-    "oi_is_observed",
-    "oi_is_ffill",
-    "minutes_since_oi_observation",
-    "oi_observation_lag_sec",
-    "oi_source_timestamp",
+    "open_interest_is_observed",
+    "open_interest_is_ffill",
+    "minutes_since_open_interest_observation",
+    "open_interest_observation_lag_sec",
+    "open_interest_source_timestamp",
 ]
 SILVER_TRADES_M1_FEATURE_COLUMNS = [
     "timestamp_m1",
@@ -194,21 +194,21 @@ SILVER_DATASET_CONTRACTS: dict[str, SilverDatasetContract] = {
         missing_data_policy="forward_fill",
         output_columns=tuple(SILVER_FUNDING_FEATURE_COLUMNS),
     ),
-    "oi_observed": SilverDatasetContract(
-        dataset_type="oi_observed",
+    "open_interest_observed": SilverDatasetContract(
+        dataset_type="open_interest_observed",
         timeframe="1m",
         timestamp_column="timestamp",
         timestamp_semantics="observed_timestamp",
         missing_data_policy="observed_only",
-        output_columns=tuple(SILVER_OI_OBSERVED_COLUMNS),
+        output_columns=tuple(SILVER_OPEN_INTEREST_OBSERVED_COLUMNS),
     ),
-    "oi_1m_feature": SilverDatasetContract(
-        dataset_type="oi_1m_feature",
+    "open_interest_1m_feature": SilverDatasetContract(
+        dataset_type="open_interest_1m_feature",
         timeframe="1m",
         timestamp_column="timestamp_m1",
         timestamp_semantics="minute_grid",
         missing_data_policy="forward_fill",
-        output_columns=tuple(SILVER_OI_M1_FEATURE_COLUMNS),
+        output_columns=tuple(SILVER_OPEN_INTEREST_M1_FEATURE_COLUMNS),
     ),
     "perps_trades_observed": SilverDatasetContract(
         dataset_type="perps_trades_observed",
@@ -256,7 +256,7 @@ SILVER_DATASET_CONTRACTS: dict[str, SilverDatasetContract] = {
 FULL_MARKET_GOLD_REQUIREMENTS = (
     GoldSourceRequirement("spot_ohlcv", "1m"),
     GoldSourceRequirement("perps_ohlcv", "1m"),
-    GoldSourceRequirement("oi_1m_feature", "1m"),
+    GoldSourceRequirement("open_interest_1m_feature", "1m"),
     GoldSourceRequirement("funding_1m_feature", "1m"),
     GoldSourceRequirement("perps_trades_1m_feature", "1m"),
     GoldSourceRequirement("options_trades_1m_feature", "1m"),

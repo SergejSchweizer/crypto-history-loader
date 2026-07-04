@@ -15,12 +15,12 @@ from application.dataset_contracts import (
 from application.dataset_contracts import (
     SILVER_VOLATILITY_OBSERVED_COLUMNS as SILVER_VOLATILITY_OBSERVED_COLUMNS,
 )
-from application.services import silver_funding, silver_oi, silver_trades, silver_volatility
+from application.services import silver_funding, silver_open_interest, silver_trades, silver_volatility
 
 SILVER_FUNDING_FEATURE_COLUMNS = silver_funding.SILVER_FUNDING_FEATURE_COLUMNS
 SILVER_FUNDING_OBSERVED_COLUMNS = silver_funding.SILVER_FUNDING_OBSERVED_COLUMNS
-SILVER_OI_M1_FEATURE_COLUMNS = silver_oi.SILVER_OI_M1_FEATURE_COLUMNS
-SILVER_OI_OBSERVED_COLUMNS = silver_oi.SILVER_OI_OBSERVED_COLUMNS
+SILVER_OPEN_INTEREST_M1_FEATURE_COLUMNS = silver_open_interest.SILVER_OPEN_INTEREST_M1_FEATURE_COLUMNS
+SILVER_OPEN_INTEREST_OBSERVED_COLUMNS = silver_open_interest.SILVER_OPEN_INTEREST_OBSERVED_COLUMNS
 _build_trade_feature_frame = silver_trades.build_trade_feature_frame
 _build_trade_observed_frame = silver_trades.build_trade_observed_frame
 
@@ -37,13 +37,13 @@ def _funding_dependencies() -> silver_funding.FundingDependencies:
     )
 
 
-def _oi_dependencies() -> silver_oi.OiDependencies:
-    return silver_oi.OiDependencies(
+def _open_interest_dependencies() -> silver_open_interest.OpenInterestDependencies:
+    return silver_open_interest.OpenInterestDependencies(
         require_polars=_require_polars,
         discover_months=discover_months,
         bronze_month_files=_bronze_month_files,
         silver_month_path=_silver_month_path,
-        silver_oi_feature_month_path=_silver_oi_feature_month_path,
+        silver_open_interest_feature_month_path=_silver_open_interest_feature_month_path,
         normalize_symbol_expr=_normalize_symbol_expr,
         iso_utc=_iso_utc,
         report_factory=SilverBuildReport,
@@ -142,7 +142,7 @@ def _silver_funding_feature_month_path(
     )
 
 
-def _silver_oi_feature_month_path(
+def _silver_open_interest_feature_month_path(
     silver_root: str,
     exchange: str,
     symbol: str,
@@ -152,7 +152,7 @@ def _silver_oi_feature_month_path(
     stem = f"{symbol}-{month}"
     return (
         Path(silver_root)
-        / "dataset_type=oi_1m_feature"
+        / "dataset_type=open_interest_1m_feature"
         / f"exchange={exchange}"
         / f"symbol={symbol}"
         / "timeframe=1m"
@@ -432,7 +432,7 @@ def build_funding_1m_feature_for_symbol(
     return report
 
 
-def build_oi_observed_for_symbol(
+def build_open_interest_observed_for_symbol(
     *,
     bronze_root: str,
     silver_root: str,
@@ -440,22 +440,22 @@ def build_oi_observed_for_symbol(
     symbol: str,
     timeframe: str = "1m",
 ) -> SilverBuildReport:
-    """Build monthly ``oi_observed`` silver outputs from bronze OI observations."""
+    """Build monthly ``open_interest_observed`` silver outputs from bronze Open Interest observations."""
 
-    report = silver_oi.build_oi_observed_for_symbol(
+    report = silver_open_interest.build_open_interest_observed_for_symbol(
         bronze_root=bronze_root,
         silver_root=silver_root,
         exchange=exchange,
         symbol=symbol,
         timeframe=timeframe,
-        dependencies=_oi_dependencies(),
+        dependencies=_open_interest_dependencies(),
     )
     if not isinstance(report, SilverBuildReport):
-        raise TypeError("OI observed builder returned an unexpected report type")
+        raise TypeError("Open Interest observed builder returned an unexpected report type")
     return report
 
 
-def build_oi_1m_feature_for_symbol(
+def build_open_interest_1m_feature_for_symbol(
     *,
     silver_root: str,
     exchange: str,
@@ -463,7 +463,7 @@ def build_oi_1m_feature_for_symbol(
     observed_timeframe: str = "1m",
     cutoff_time: datetime | None = None,
 ) -> SilverBuildReport:
-    """Build monthly ``oi_1m_feature`` from ``oi_observed`` using backward asof join.
+    """Build monthly ``open_interest_1m_feature`` from ``open_interest_observed`` using backward asof join.
 
     Args:
         silver_root: Root path for silver datasets.
@@ -473,16 +473,16 @@ def build_oi_1m_feature_for_symbol(
         cutoff_time: Latest timestamp to include in generated feature output.
             Defaults to now (UTC)."""
 
-    report = silver_oi.build_oi_1m_feature_for_symbol(
+    report = silver_open_interest.build_open_interest_1m_feature_for_symbol(
         silver_root=silver_root,
         exchange=exchange,
         symbol=symbol,
         observed_timeframe=observed_timeframe,
         cutoff_time=cutoff_time,
-        dependencies=_oi_dependencies(),
+        dependencies=_open_interest_dependencies(),
     )
     if not isinstance(report, SilverBuildReport):
-        raise TypeError("OI 1m feature builder returned an unexpected report type")
+        raise TypeError("Open Interest 1m feature builder returned an unexpected report type")
     return report
 
 

@@ -324,7 +324,7 @@ def test_main_loader_uses_deterministic_dataset_group_order(monkeypatch: pytest.
     def fake_fetch_open_interest_tasks_parallel(
         **kwargs: object,
     ) -> tuple[dict[tuple[object, ...], list[object]], dict[tuple[object, ...], str]]:
-        scheduled_groups.append("oi")
+        scheduled_groups.append("open_interest")
         return {}, {}
 
     def fake_fetch_funding_tasks_parallel(
@@ -347,7 +347,7 @@ def test_main_loader_uses_deterministic_dataset_group_order(monkeypatch: pytest.
             "--dataset",
             "spot_ohlcv",
             "perps_ohlcv",
-            "oi",
+            "open_interest",
             "funding",
             "--symbols",
             "BTCUSDT",
@@ -357,7 +357,7 @@ def test_main_loader_uses_deterministic_dataset_group_order(monkeypatch: pytest.
 
     cli.main()
 
-    assert scheduled_groups == ["perp", "spot_ohlcv", "oi", "funding"]
+    assert scheduled_groups == ["perp", "spot_ohlcv", "open_interest", "funding"]
 
 
 def test_export_descriptive_stats_writes_csv(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

@@ -130,7 +130,7 @@ def fetch_open_interest_tasks_sequential(
     task_errors: dict[tuple[Exchange, str, str], str] = {}
     for idx, task in enumerate(tasks, start=1):
         logger.info(
-            "Fetch start [%s/%s] type=oi exchange=%s market=perp symbol=%s timeframe=%s mode=%s",
+            "Fetch start [%s/%s] type=open_interest exchange=%s market=perp symbol=%s timeframe=%s mode=%s",
             idx,
             total_tasks,
             task.exchange,
@@ -175,7 +175,7 @@ def fetch_open_interest_tasks_sequential(
                 logger=logger,
                 idx=idx,
                 total_tasks=total_tasks,
-                dataset_label="oi",
+                dataset_label="open_interest",
                 task=task,
                 row_count=len(rows),
                 elapsed_s=elapsed_seconds(task_started_at),
@@ -183,7 +183,7 @@ def fetch_open_interest_tasks_sequential(
         except Exception as exc:  # noqa: BLE001
             _record_standard_error(
                 logger=logger,
-                dataset_label="oi",
+                dataset_label="open_interest",
                 task=task,
                 elapsed_s=elapsed_seconds(task_started_at),
                 key=key,

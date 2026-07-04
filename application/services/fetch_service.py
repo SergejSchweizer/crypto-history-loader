@@ -23,7 +23,7 @@ from application.services import fetch_executors as _fetch_executors
 from application.services import fetch_funding_symbol as _funding_symbol
 from application.services import fetch_history_rows as _history_rows
 from application.services import fetch_ohlcv_symbol as _ohlcv_symbol
-from application.services import fetch_open_interest_symbol as _oi_symbol
+from application.services import fetch_open_interest_symbol as _open_interest_symbol
 from application.services import fetch_range_planning as _range_planning
 from application.services import fetch_task_execution as _task_execution
 from application.services import fetch_trade_symbol as _trade_symbol
@@ -167,7 +167,7 @@ def fetch_symbol_open_interest(
 ) -> list[OpenInterestPoint]:
     """Fetch open-interest for one symbol with auto bootstrap/gap-fill behavior."""
 
-    return _oi_symbol.fetch_symbol_open_interest(
+    return _open_interest_symbol.fetch_symbol_open_interest(
         exchange=exchange,
         market=market,
         symbol=symbol,

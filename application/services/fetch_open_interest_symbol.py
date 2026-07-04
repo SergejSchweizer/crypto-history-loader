@@ -23,7 +23,7 @@ from ingestion.open_interest import (
 )
 from ingestion.spot_ohlcv import Exchange, Market, normalize_storage_symbol
 
-OI_DATASET_TYPE = dataset_contract("oi").dataset_type
+OPEN_INTEREST_DATASET_TYPE = dataset_contract("open_interest").dataset_type
 
 
 def fetch_symbol_open_interest(
@@ -63,7 +63,7 @@ def fetch_symbol_open_interest(
             raise ValueError("latest_open_time_reader is required when tail_delta_only is enabled")
         latest_open_time = latest_reader(
             lake_root=lake_root,
-            dataset_type=OI_DATASET_TYPE,
+            dataset_type=OPEN_INTEREST_DATASET_TYPE,
             market=market,
             exchange=exchange,
             symbol=storage_symbol,
@@ -116,7 +116,7 @@ def fetch_symbol_open_interest(
 
     stored_open_times = open_times_reader(
         lake_root=lake_root,
-        dataset_type=OI_DATASET_TYPE,
+        dataset_type=OPEN_INTEREST_DATASET_TYPE,
         market=market,
         exchange=exchange,
         symbol=storage_symbol,

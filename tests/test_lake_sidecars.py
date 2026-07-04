@@ -11,7 +11,7 @@ def test_default_bronze_sidecar_dataset_types_are_stable() -> None:
     assert DEFAULT_BRONZE_SIDECAR_DATASET_TYPES == (
         "spot_ohlcv",
         "perps_ohlcv",
-        "oi",
+        "open_interest",
         "funding",
         "perps_trades",
         "options_trades",

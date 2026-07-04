@@ -129,7 +129,7 @@ def populate_ohlcv_output(
         by_exchange[symbol_key] = candles
 
 
-def populate_oi_output(
+def populate_open_interest_output(
     *,
     output: dict[str, object],
     tasks: Iterable[tuple[Exchange, str, str]],
@@ -138,20 +138,20 @@ def populate_oi_output(
     multi_market: bool,
     storage: dict[Market, dict[str, dict[str, list[OpenInterestPoint]]]],
 ) -> None:
-    """Populate JSON output and storage bucket for OI tasks."""
+    """Populate JSON output and storage bucket for Open Interest tasks."""
 
     for exchange, symbol, timeframe in tasks:
         symbol_key = symbol.upper()
-        oi_key = (exchange, symbol, timeframe)
+        open_interest_key = (exchange, symbol, timeframe)
         exchange_output = cast(dict[str, object], output[exchange])
         if multi_market:
-            market_bucket = cast(dict[str, object], exchange_output.setdefault("oi", {}))
+            market_bucket = cast(dict[str, object], exchange_output.setdefault("open_interest", {}))
         else:
             market_bucket = exchange_output
-        if oi_key in errors:
-            market_bucket[symbol_key] = {"error": errors[oi_key]}
+        if open_interest_key in errors:
+            market_bucket[symbol_key] = {"error": errors[open_interest_key]}
             continue
-        rows = results.get(oi_key, [])
+        rows = results.get(open_interest_key, [])
         market_bucket[symbol_key] = [
             {
                 "exchange": item.exchange,

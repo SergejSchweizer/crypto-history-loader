@@ -221,7 +221,7 @@ class BronzeFetchPlanDTO:
     perp_trade_symbols: list[str]
     option_trade_symbols: list[str]
     candle_tasks: list[tuple[Exchange, Market, str, str]]
-    oi_tasks: list[tuple[Exchange, str, str]]
+    open_interest_tasks: list[tuple[Exchange, str, str]]
     funding_tasks: list[tuple[Exchange, str, str]]
     volatility_index_data_tasks: list[tuple[Exchange, str, str]]
     trade_tasks: list[tuple[Exchange, TradeMarket, str]]
@@ -235,7 +235,7 @@ class BronzeExecutionPolicyDTO:
     configured_concurrency: int
     effective_concurrency: int
     candle_concurrency: int
-    oi_concurrency: int
+    open_interest_concurrency: int
     funding_concurrency: int
     trade_concurrency: int
 
@@ -272,14 +272,14 @@ class PersistOptionsDTO:
         options = PersistOptionsDTO(
             save_parquet_lake=True,
             lake_root="lake/bronze",
-            oi_requested=True,
+            open_interest_requested=True,
         )
         ```
     """
 
     save_parquet_lake: bool
     lake_root: str
-    oi_requested: bool
+    open_interest_requested: bool
     funding_requested: bool = False
     volatility_index_data_requested: bool = False
     trades_requested: bool = False

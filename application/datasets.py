@@ -9,12 +9,12 @@ from ingestion.spot_ohlcv import Exchange, Market
 from ingestion.trades import TradeMarket
 
 CliDataType = Literal[
-    "spot_ohlcv", "perps_ohlcv", "oi", "funding", "perps_trades", "options_trades", "volatility_index_data"
+    "spot_ohlcv", "perps_ohlcv", "open_interest", "funding", "perps_trades", "options_trades", "volatility_index_data"
 ]
 DatasetType = Literal[
     "spot_ohlcv",
     "perps_ohlcv",
-    "oi",
+    "open_interest",
     "funding",
     "perps_trades",
     "options_trades",
@@ -114,9 +114,9 @@ DATASET_REGISTRY: dict[CliDataType, DatasetSpec] = {
         symbol_group="symbols",
         market="perp",
     ),
-    "oi": DatasetSpec(
-        cli_data_type="oi",
-        dataset_type="oi",
+    "open_interest": DatasetSpec(
+        cli_data_type="open_interest",
+        dataset_type="open_interest",
         instrument_type="perp",
         bronze_task_kind="open_interest",
         symbol_group="symbols",

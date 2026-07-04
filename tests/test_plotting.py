@@ -76,7 +76,7 @@ def test_save_candle_plots_skips_empty_and_writes_png(tmp_path: Path) -> None:
 
 
 def test_save_open_interest_plot_empty_input_returns_path(tmp_path: Path) -> None:
-    out_path = str(tmp_path / "oi.png")
+    out_path = str(tmp_path / "open_interest.png")
     assert save_open_interest_plot("deribit", "BTC", "1m", [], [], out_path) == out_path
 
 
@@ -88,13 +88,13 @@ def test_save_funding_plot_empty_input_returns_path(tmp_path: Path) -> None:
 def test_save_open_interest_and_funding_plots_write_png(tmp_path: Path) -> None:
     pytest.importorskip("matplotlib")
     times = [datetime(2026, 1, 1, 0, 0, tzinfo=UTC), datetime(2026, 1, 1, 0, 1, tzinfo=UTC)]
-    oi_path = save_open_interest_plot(
+    open_interest_path = save_open_interest_plot(
         "deribit",
         "BTC",
         "1m",
         times,
         [100.0, 101.0],
-        str(tmp_path / "oi" / "plot.png"),
+        str(tmp_path / "open_interest" / "plot.png"),
     )
     funding_path = save_funding_plot(
         "deribit",
@@ -104,7 +104,7 @@ def test_save_open_interest_and_funding_plots_write_png(tmp_path: Path) -> None:
         [0.001, -0.002],
         str(tmp_path / "funding" / "plot.png"),
     )
-    assert Path(oi_path).exists()
+    assert Path(open_interest_path).exists()
     assert Path(funding_path).exists()
 
 
@@ -135,7 +135,7 @@ def test_plot_functions_raise_runtime_error_when_matplotlib_missing(
             "1m",
             [datetime(2026, 1, 1, 0, 0, tzinfo=UTC)],
             [1.0],
-            str(tmp_path / "oi.png"),
+            str(tmp_path / "open_interest.png"),
         )
     with pytest.raises(RuntimeError, match="matplotlib is required"):
         save_funding_plot(

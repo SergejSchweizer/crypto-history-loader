@@ -8,15 +8,15 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Protocol
 
-from application.dataset_contracts import SILVER_OI_M1_FEATURE_COLUMNS, SILVER_OI_OBSERVED_COLUMNS
+from application.dataset_contracts import SILVER_OPEN_INTEREST_M1_FEATURE_COLUMNS, SILVER_OPEN_INTEREST_OBSERVED_COLUMNS
 
 __all__ = [
-    "OiDependencies",
-    "SILVER_OI_M1_FEATURE_COLUMNS",
-    "SILVER_OI_OBSERVED_COLUMNS",
+    "OpenInterestDependencies",
+    "SILVER_OPEN_INTEREST_M1_FEATURE_COLUMNS",
+    "SILVER_OPEN_INTEREST_OBSERVED_COLUMNS",
     "SilverReportFactory",
-    "build_oi_1m_feature_for_symbol",
-    "build_oi_observed_for_symbol",
+    "build_open_interest_1m_feature_for_symbol",
+    "build_open_interest_observed_for_symbol",
 ]
 
 
@@ -46,34 +46,34 @@ class SilverReportFactory(Protocol):
 
 
 @dataclass(frozen=True)
-class OiDependencies:
+class OpenInterestDependencies:
     """Shared Silver helpers required by open-interest transformations."""
 
     require_polars: Callable[[], Any]
     discover_months: Callable[..., list[str]]
     bronze_month_files: Callable[..., list[str]]
     silver_month_path: Callable[..., Path]
-    silver_oi_feature_month_path: Callable[..., Path]
+    silver_open_interest_feature_month_path: Callable[..., Path]
     normalize_symbol_expr: Callable[..., Any]
     iso_utc: Callable[[datetime | None], str | None]
     report_factory: SilverReportFactory
 
 
-def build_oi_observed_for_symbol(
+def build_open_interest_observed_for_symbol(
     *,
     bronze_root: str,
     silver_root: str,
     exchange: str,
     symbol: str,
     timeframe: str = "1m",
-    dependencies: OiDependencies,
+    dependencies: OpenInterestDependencies,
 ) -> object:
-    """Build monthly ``oi_observed`` Silver outputs from Bronze OI observations."""
+    """Build monthly ``open_interest_observed`` Silver outputs from Bronze Open Interest observations."""
 
     pl = dependencies.require_polars()
     months = dependencies.discover_months(
         bronze_root=bronze_root,
-        market="oi",
+        market="open_interest",
         exchange=exchange,
         symbol=symbol,
         timeframe=timeframe,
@@ -89,7 +89,7 @@ def build_oi_observed_for_symbol(
     for month in months:
         files = dependencies.bronze_month_files(
             bronze_root=bronze_root,
-            market="oi",
+            market="open_interest",
             exchange=exchange,
             symbol=symbol,
             timeframe=timeframe,
@@ -113,8 +113,8 @@ def build_oi_observed_for_symbol(
                 pl.col("source_endpoint").cast(pl.Utf8).alias("source_endpoint"),
             ]
         )
-        if "oi_is_observed" in frame.columns:
-            frame = frame.filter(pl.col("oi_is_observed").fill_null(False))
+        if "open_interest_is_observed" in frame.columns:
+            frame = frame.filter(pl.col("open_interest_is_observed").fill_null(False))
 
         invalid_expr = (
             pl.col("timestamp").is_null()
@@ -133,14 +133,14 @@ def build_oi_observed_for_symbol(
                 maintain_order=True,
             )
             .sort(["exchange", "symbol", "timestamp"])
-            .with_columns(pl.col("timestamp").alias("oi_source_timestamp"))
-            .select(SILVER_OI_OBSERVED_COLUMNS)
+            .with_columns(pl.col("timestamp").alias("open_interest_source_timestamp"))
+            .select(SILVER_OPEN_INTEREST_OBSERVED_COLUMNS)
         )
         duplicates_removed = cleaned.height - observed.height
 
         target = dependencies.silver_month_path(
             silver_root=silver_root,
-            market="oi_observed",
+            market="open_interest_observed",
             exchange=exchange,
             symbol=symbol,
             timeframe=timeframe,
@@ -162,7 +162,7 @@ def build_oi_observed_for_symbol(
         agg_invalid_rows += int(invalid_rows)
 
     return dependencies.report_factory(
-        dataset="oi_observed",
+        dataset="open_interest_observed",
         exchange=exchange,
         symbol=symbol,
         timeframe=timeframe,
@@ -177,20 +177,20 @@ def build_oi_observed_for_symbol(
         min_timestamp=dependencies.iso_utc(min_timestamp),
         max_timestamp=dependencies.iso_utc(max_timestamp),
         symbols=[symbol],
-        columns=SILVER_OI_OBSERVED_COLUMNS,
+        columns=SILVER_OPEN_INTEREST_OBSERVED_COLUMNS,
     )
 
 
-def build_oi_1m_feature_for_symbol(
+def build_open_interest_1m_feature_for_symbol(
     *,
     silver_root: str,
     exchange: str,
     symbol: str,
     observed_timeframe: str = "1m",
     cutoff_time: datetime | None = None,
-    dependencies: OiDependencies,
+    dependencies: OpenInterestDependencies,
 ) -> object:
-    """Build monthly ``oi_1m_feature`` from ``oi_observed`` using backward asof join."""
+    """Build monthly ``open_interest_1m_feature`` from ``open_interest_observed`` using backward asof join."""
 
     if cutoff_time is None:
         cutoff_time = datetime.now(UTC)
@@ -198,7 +198,7 @@ def build_oi_1m_feature_for_symbol(
     pl = dependencies.require_polars()
     observed_root = (
         Path(silver_root)
-        / "dataset_type=oi_observed"
+        / "dataset_type=open_interest_observed"
         / f"exchange={exchange}"
         / f"symbol={symbol}"
         / f"timeframe={observed_timeframe}"
@@ -245,14 +245,14 @@ def build_oi_1m_feature_for_symbol(
         )
         right = observed.select(
             [
-                pl.col("timestamp").alias("oi_source_timestamp"),
+                pl.col("timestamp").alias("open_interest_source_timestamp"),
                 pl.col("open_interest").alias("open_interest_observed"),
             ]
         )
         joined = calendar.join_asof(
-            right.sort("oi_source_timestamp"),
+            right.sort("open_interest_source_timestamp"),
             left_on="timestamp_m1",
-            right_on="oi_source_timestamp",
+            right_on="open_interest_source_timestamp",
             strategy="backward",
         )
         feature = (
@@ -261,27 +261,36 @@ def build_oi_1m_feature_for_symbol(
                     pl.lit(exchange).alias("exchange"),
                     pl.lit(symbol).alias("symbol"),
                     pl.col("open_interest_observed").alias("open_interest"),
-                    (pl.col("timestamp_m1") == pl.col("oi_source_timestamp")).fill_null(False).alias("oi_is_observed"),
-                    (pl.col("timestamp_m1") != pl.col("oi_source_timestamp")).fill_null(True).alias("oi_is_ffill"),
-                    ((pl.col("timestamp_m1") - pl.col("oi_source_timestamp")).dt.total_minutes().cast(pl.Int64)).alias(
-                        "minutes_since_oi_observation"
-                    ),
-                    ((pl.col("timestamp_m1") - pl.col("oi_source_timestamp")).dt.total_seconds().cast(pl.Int64)).alias(
-                        "oi_observation_lag_sec"
-                    ),
+                    (pl.col("timestamp_m1") == pl.col("open_interest_source_timestamp"))
+                    .fill_null(False)
+                    .alias("open_interest_is_observed"),
+                    (pl.col("timestamp_m1") != pl.col("open_interest_source_timestamp"))
+                    .fill_null(True)
+                    .alias("open_interest_is_ffill"),
+                    (
+                        (pl.col("timestamp_m1") - pl.col("open_interest_source_timestamp"))
+                        .dt.total_minutes()
+                        .cast(pl.Int64)
+                    ).alias("minutes_since_open_interest_observation"),
+                    (
+                        (pl.col("timestamp_m1") - pl.col("open_interest_source_timestamp"))
+                        .dt.total_seconds()
+                        .cast(pl.Int64)
+                    ).alias("open_interest_observation_lag_sec"),
                 ]
             )
-            .select(SILVER_OI_M1_FEATURE_COLUMNS)
+            .select(SILVER_OPEN_INTEREST_M1_FEATURE_COLUMNS)
             .sort("timestamp_m1")
         )
 
         leakage_count = feature.filter(
-            pl.col("oi_source_timestamp").is_not_null() & (pl.col("oi_source_timestamp") > pl.col("timestamp_m1"))
+            pl.col("open_interest_source_timestamp").is_not_null()
+            & (pl.col("open_interest_source_timestamp") > pl.col("timestamp_m1"))
         ).height
         if leakage_count > 0:
-            raise ValueError(f"OI leakage detected for {exchange}/{symbol}/{month}: {leakage_count} rows")
+            raise ValueError(f"Open Interest leakage detected for {exchange}/{symbol}/{month}: {leakage_count} rows")
 
-        target = dependencies.silver_oi_feature_month_path(
+        target = dependencies.silver_open_interest_feature_month_path(
             silver_root=silver_root,
             exchange=exchange,
             symbol=symbol,
@@ -301,7 +310,7 @@ def build_oi_1m_feature_for_symbol(
         agg_rows_out += feature.height
 
     return dependencies.report_factory(
-        dataset="oi_1m_feature",
+        dataset="open_interest_1m_feature",
         exchange=exchange,
         symbol=symbol,
         timeframe="1m",
@@ -316,5 +325,5 @@ def build_oi_1m_feature_for_symbol(
         min_timestamp=dependencies.iso_utc(min_timestamp),
         max_timestamp=dependencies.iso_utc(max_timestamp),
         symbols=[symbol],
-        columns=SILVER_OI_M1_FEATURE_COLUMNS,
+        columns=SILVER_OPEN_INTEREST_M1_FEATURE_COLUMNS,
     )

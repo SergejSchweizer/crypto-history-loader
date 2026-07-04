@@ -11,13 +11,13 @@ def _serialize(parts: tuple[object, ...]) -> str:
 
 def test_apply_checkpoint_filter_drops_completed_tasks() -> None:
     candle_tasks = [("deribit", "spot_ohlcv", "BTC", "1m"), ("deribit", "perp", "ETH", "1m")]
-    oi_tasks = [("deribit", "BTC", "1m")]
+    open_interest_tasks = [("deribit", "BTC", "1m")]
     funding_tasks = [("deribit", "ETH", "1m")]
     volatility_index_data_tasks = [("deribit", "ETH", "1m")]
     trade_tasks = [("deribit", "perp", "BTC"), ("deribit", "option", "ETH")]
     completed = {
         "candle": {_serialize(("deribit", "spot_ohlcv", "BTC", "1m"))},
-        "oi": set(),
+        "open_interest": set(),
         "funding": {_serialize(("deribit", "ETH", "1m"))},
         "volatility_index_data": {_serialize(("deribit", "BTC", "1m"))},
         "trade": {_serialize(("deribit", "option", "ETH"))},
@@ -25,19 +25,19 @@ def test_apply_checkpoint_filter_drops_completed_tasks() -> None:
 
     pending = apply_checkpoint_filter(
         candle_tasks=candle_tasks,
-        oi_tasks=oi_tasks,
+        open_interest_tasks=open_interest_tasks,
         funding_tasks=funding_tasks,
         volatility_index_data_tasks=volatility_index_data_tasks,
         trade_tasks=trade_tasks,
         completed=completed,
         candle_key_serializer=_serialize,
-        oi_key_serializer=_serialize,
+        open_interest_key_serializer=_serialize,
         funding_key_serializer=_serialize,
         volatility_key_serializer=_serialize,
         trade_key_serializer=_serialize,
     )
     assert pending.candle_tasks == [("deribit", "perp", "ETH", "1m")]
-    assert pending.oi_tasks == [("deribit", "BTC", "1m")]
+    assert pending.open_interest_tasks == [("deribit", "BTC", "1m")]
     assert pending.funding_tasks == []
     assert pending.volatility_index_data_tasks == [("deribit", "ETH", "1m")]
     assert pending.trade_tasks == [("deribit", "perp", "BTC")]
@@ -46,7 +46,7 @@ def test_apply_checkpoint_filter_drops_completed_tasks() -> None:
 def test_has_checkpoint_state_detects_any_completed_bucket() -> None:
     empty = {
         "candle": set(),
-        "oi": set(),
+        "open_interest": set(),
         "funding": set(),
         "volatility_index_data": set(),
         "trade": set(),
@@ -54,7 +54,7 @@ def test_has_checkpoint_state_detects_any_completed_bucket() -> None:
     assert not has_checkpoint_state(empty)
     non_empty = {
         "candle": {"x"},
-        "oi": set(),
+        "open_interest": set(),
         "funding": set(),
         "volatility_index_data": set(),
         "trade": set(),

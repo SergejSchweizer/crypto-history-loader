@@ -26,7 +26,7 @@ def _sample_candle() -> SpotCandle:
     )
 
 
-def _sample_oi() -> OpenInterestPoint:
+def _sample_open_interest() -> OpenInterestPoint:
     return OpenInterestPoint(
         exchange="deribit",
         symbol="BTCUSDT",
@@ -42,28 +42,30 @@ def test_persist_loader_outputs_writes_parquet_outputs() -> None:
     candles: dict[Market, dict[str, dict[str, list[SpotCandle]]]] = {
         "spot_ohlcv": {"deribit": {"BTCUSDT": [_sample_candle()]}}
     }
-    oi: dict[Market, dict[str, dict[str, list[OpenInterestPoint]]]] = {"perp": {"deribit": {"BTCUSDT": [_sample_oi()]}}}
-    calls: dict[str, int] = {"spot_ohlcv": 0, "oi": 0}
+    open_interest: dict[Market, dict[str, dict[str, list[OpenInterestPoint]]]] = {
+        "perp": {"deribit": {"BTCUSDT": [_sample_open_interest()]}}
+    }
+    calls: dict[str, int] = {"spot_ohlcv": 0, "open_interest": 0}
 
     def fake_save_spot_ohlcv_lake_fn(**kwargs: object) -> list[str]:
         del kwargs
         calls["spot_ohlcv"] += 1
         return ["spot_ohlcv.parquet"]
 
-    def fake_save_oi_lake_fn(**kwargs: object) -> list[str]:
+    def fake_save_open_interest_lake_fn(**kwargs: object) -> list[str]:
         del kwargs
-        calls["oi"] += 1
-        return ["oi.parquet"]
+        calls["open_interest"] += 1
+        return ["open_interest.parquet"]
 
     result = persist_loader_outputs(
         candles_for_storage=candles,
-        open_interest_for_storage=oi,
+        open_interest_for_storage=open_interest,
         save_parquet_lake=True,
         lake_root="lake/bronze",
-        oi_requested=True,
+        open_interest_requested=True,
         save_spot_ohlcv_lake_fn=fake_save_spot_ohlcv_lake_fn,
-        save_oi_lake_fn=fake_save_oi_lake_fn,
+        save_open_interest_lake_fn=fake_save_open_interest_lake_fn,
     )
 
-    assert result["_parquet_files"] == ["spot_ohlcv.parquet", "oi.parquet"]
-    assert calls == {"spot_ohlcv": 1, "oi": 1}
+    assert result["_parquet_files"] == ["spot_ohlcv.parquet", "open_interest.parquet"]
+    assert calls == {"spot_ohlcv": 1, "open_interest": 1}
