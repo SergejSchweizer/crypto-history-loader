@@ -53,6 +53,10 @@ normalized, append-oriented raw records, then transformed in Silver into canonic
 feature datasets, and finally published in Gold as versioned, model-ready joins with deterministic
 processing, explicit contracts, and restart-safe execution guarantees.
 
+The durable package-boundary, data-flow, side-effect, and update rules live in
+[`ARCHITECTURE.md`](ARCHITECTURE.md). Update that document in the same change set whenever dataset
+contracts, layer ownership, medallion paths, runtime configuration, or quality gates change.
+
 ## 1.3 Supported Data Domains
 
 Supported ingest domains are defined by `DATASET_REGISTRY` in `application/datasets.py`.
@@ -120,6 +124,7 @@ config.yaml
 pyproject.toml
 main.py
 README.md
+ARCHITECTURE.md
 AGENTS.md
 ```
 
@@ -136,6 +141,7 @@ AGENTS.md
 | `config.yaml` | Canonical runtime configuration |
 | `pyproject.toml` | Project metadata and Python tooling configuration |
 | `main.py` | Python entrypoint wrapper for CLI execution |
+| `ARCHITECTURE.md` | Durable architecture contract for package boundaries, medallion flow, side effects, and update rules |
 | `AGENTS.md` | Generated repository operating policy (do not edit directly) |
 
 Dataset metadata is centralized in `application/datasets.py`. New Bronze datasets should start with a
