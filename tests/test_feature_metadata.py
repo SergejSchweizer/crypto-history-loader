@@ -15,11 +15,11 @@ def test_feature_source_dataset_maps_known_prefixes() -> None:
     """Feature source inference should stay stable for manifest metadata."""
 
     assert feature_source_dataset("spot_ohlcv_close_price") == "spot_ohlcv_1m"
-    assert feature_source_dataset("perp_close_price") == "peprs_ohlcv_1m"
+    assert feature_source_dataset("perp_close_price") == "perps_ohlcv_1m"
     assert feature_source_dataset("oi_observation_lag_sec") == "oi_1m_feature"
     assert feature_source_dataset("funding_rate_last_known") == "funding_1m_feature"
     assert feature_source_dataset("trades_open_price") == "perps_trades_1m_feature"
-    assert feature_source_dataset("option_trades_open_price") == "option_trades_1m_feature"
+    assert feature_source_dataset("options_trades_open_price") == "options_trades_1m_feature"
     assert feature_source_dataset("volatility_index_data_value") == "volatility_index_data_observed"
     assert feature_source_dataset("custom_col") == "gold_merged"
 

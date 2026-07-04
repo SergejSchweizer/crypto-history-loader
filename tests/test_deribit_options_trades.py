@@ -6,11 +6,11 @@ from typing import Any, cast
 
 import pytest
 
-from ingestion.exchanges import deribit_option_trades
+from ingestion.exchanges import deribit_options_trades
 from ingestion.http_client import HttpClientError
 
 
-def test_fetch_option_trades_range_defaults_to_500_row_pages(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+def test_fetch_options_trades_range_defaults_to_500_row_pages(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     counts: list[int] = []
 
     def _fake_get_json(url: str, params: dict[str, object]) -> dict[str, object]:
@@ -29,8 +29,8 @@ def test_fetch_option_trades_range_defaults_to_500_row_pages(monkeypatch) -> Non
             }
         }
 
-    monkeypatch.setattr(deribit_option_trades, "get_json", _fake_get_json)
-    rows = deribit_option_trades.fetch_option_trades_range(
+    monkeypatch.setattr(deribit_options_trades, "get_json", _fake_get_json)
+    rows = deribit_options_trades.fetch_options_trades_range(
         currency="BTC",
         start_open_ms=1_700_000_000_000,
         end_open_ms=1_700_000_100_000,
@@ -40,7 +40,7 @@ def test_fetch_option_trades_range_defaults_to_500_row_pages(monkeypatch) -> Non
     assert counts == [500]
 
 
-def test_fetch_option_trades_range_page_size_env_override(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+def test_fetch_options_trades_range_page_size_env_override(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     counts: list[int] = []
 
     def _fake_get_json(url: str, params: dict[str, object]) -> dict[str, object]:
@@ -60,8 +60,8 @@ def test_fetch_option_trades_range_page_size_env_override(monkeypatch) -> None: 
         }
 
     monkeypatch.setenv("DEPTH_DERIBIT_OPTION_TRADES_PAGE_SIZE", "9")
-    monkeypatch.setattr(deribit_option_trades, "get_json", _fake_get_json)
-    rows = deribit_option_trades.fetch_option_trades_range(
+    monkeypatch.setattr(deribit_options_trades, "get_json", _fake_get_json)
+    rows = deribit_options_trades.fetch_options_trades_range(
         currency="BTC",
         start_open_ms=1_700_000_000_000,
         end_open_ms=1_700_000_100_000,
@@ -71,7 +71,7 @@ def test_fetch_option_trades_range_page_size_env_override(monkeypatch) -> None: 
     assert counts == [9]
 
 
-def test_fetch_option_trades_range_stops_when_has_more_false(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+def test_fetch_options_trades_range_stops_when_has_more_false(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     calls: list[int] = []
 
     def _fake_get_json(url: str, params: dict[str, object]) -> dict[str, object]:
@@ -90,8 +90,8 @@ def test_fetch_option_trades_range_stops_when_has_more_false(monkeypatch) -> Non
             }
         }
 
-    monkeypatch.setattr(deribit_option_trades, "get_json", _fake_get_json)
-    rows = deribit_option_trades.fetch_option_trades_range(
+    monkeypatch.setattr(deribit_options_trades, "get_json", _fake_get_json)
+    rows = deribit_options_trades.fetch_options_trades_range(
         currency="BTC",
         start_open_ms=1_700_000_000_000,
         end_open_ms=1_700_000_100_000,
@@ -101,7 +101,7 @@ def test_fetch_option_trades_range_stops_when_has_more_false(monkeypatch) -> Non
     assert len(calls) == 1
 
 
-def test_fetch_option_trades_range_respects_max_pages_env(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+def test_fetch_options_trades_range_respects_max_pages_env(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     calls: list[int] = []
 
     def _fake_get_json(url: str, params: dict[str, object]) -> dict[str, object]:
@@ -122,8 +122,8 @@ def test_fetch_option_trades_range_respects_max_pages_env(monkeypatch) -> None: 
         }
 
     monkeypatch.setenv("DEPTH_DERIBIT_OPTION_TRADES_MAX_PAGES_PER_RANGE", "3")
-    monkeypatch.setattr(deribit_option_trades, "get_json", _fake_get_json)
-    rows = deribit_option_trades.fetch_option_trades_range(
+    monkeypatch.setattr(deribit_options_trades, "get_json", _fake_get_json)
+    rows = deribit_options_trades.fetch_options_trades_range(
         currency="BTC",
         start_open_ms=1_700_000_000_000,
         end_open_ms=1_700_000_100_000,
@@ -133,7 +133,7 @@ def test_fetch_option_trades_range_respects_max_pages_env(monkeypatch) -> None: 
     assert len(rows) == 3
 
 
-def test_fetch_option_trades_range_paginates_from_max_page_timestamp(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+def test_fetch_options_trades_range_paginates_from_max_page_timestamp(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     calls: list[int] = []
 
     def _fake_get_json(url: str, params: dict[str, object]) -> dict[str, object]:
@@ -157,8 +157,8 @@ def test_fetch_option_trades_range_paginates_from_max_page_timestamp(monkeypatch
             }
         }
 
-    monkeypatch.setattr(deribit_option_trades, "get_json", _fake_get_json)
-    rows = deribit_option_trades.fetch_option_trades_range(
+    monkeypatch.setattr(deribit_options_trades, "get_json", _fake_get_json)
+    rows = deribit_options_trades.fetch_options_trades_range(
         currency="BTC",
         start_open_ms=100,
         end_open_ms=105,
@@ -173,12 +173,12 @@ def test_fetch_option_trades_range_paginates_from_max_page_timestamp(monkeypatch
     ]
 
 
-def test_option_trades_base_url_env_override(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+def test_options_trades_base_url_env_override(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     monkeypatch.setenv("DEPTH_DERIBIT_OPTION_TRADES_BASE_URL", "https://example.org///")
-    assert deribit_option_trades._trades_base_url() == "https://example.org"
+    assert deribit_options_trades._trades_base_url() == "https://example.org"
 
 
-def test_fetch_option_trades_range_falls_back_on_route_failure(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+def test_fetch_options_trades_range_falls_back_on_route_failure(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     calls: list[str] = []
 
     def _fake_get_json(url: str, params: dict[str, object]) -> dict[str, object]:
@@ -198,8 +198,8 @@ def test_fetch_option_trades_range_falls_back_on_route_failure(monkeypatch) -> N
             }
         }
 
-    monkeypatch.setattr(deribit_option_trades, "get_json", _fake_get_json)
-    rows = deribit_option_trades.fetch_option_trades_range(
+    monkeypatch.setattr(deribit_options_trades, "get_json", _fake_get_json)
+    rows = deribit_options_trades.fetch_options_trades_range(
         currency="BTC",
         start_open_ms=1_700_000_000_000,
         end_open_ms=1_700_000_100_000,
@@ -210,7 +210,7 @@ def test_fetch_option_trades_range_falls_back_on_route_failure(monkeypatch) -> N
     assert any("www.deribit.com" in url for url in calls)
 
 
-def test_fetch_option_trades_range_falls_back_on_timeout(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+def test_fetch_options_trades_range_falls_back_on_timeout(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     calls: list[str] = []
 
     def _fake_get_json(url: str, params: dict[str, object]) -> dict[str, object]:
@@ -231,8 +231,8 @@ def test_fetch_option_trades_range_falls_back_on_timeout(monkeypatch) -> None:  
         }
 
     monkeypatch.setenv("DEPTH_DERIBIT_OPTION_TRADES_ROUTE_RETRY_ATTEMPTS", "1")
-    monkeypatch.setattr(deribit_option_trades, "get_json", _fake_get_json)
-    rows = deribit_option_trades.fetch_option_trades_range(
+    monkeypatch.setattr(deribit_options_trades, "get_json", _fake_get_json)
+    rows = deribit_options_trades.fetch_options_trades_range(
         currency="BTC",
         start_open_ms=1_700_000_000_000,
         end_open_ms=1_700_000_100_000,
@@ -242,7 +242,7 @@ def test_fetch_option_trades_range_falls_back_on_timeout(monkeypatch) -> None:  
     assert any("www.deribit.com" in url for url in calls)
 
 
-def test_fetch_option_trades_range_retries_route_failure_before_success(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+def test_fetch_options_trades_range_retries_route_failure_before_success(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     calls = {"n": 0}
 
     def _fake_get_json(url: str, params: dict[str, object]) -> dict[str, object]:
@@ -265,8 +265,8 @@ def test_fetch_option_trades_range_retries_route_failure_before_success(monkeypa
 
     monkeypatch.setenv("DEPTH_DERIBIT_OPTION_TRADES_ROUTE_RETRY_ATTEMPTS", "3")
     monkeypatch.setenv("DEPTH_DERIBIT_OPTION_TRADES_ROUTE_RETRY_BACKOFF_BASE_S", "0")
-    monkeypatch.setattr(deribit_option_trades, "get_json", _fake_get_json)
-    rows = deribit_option_trades.fetch_option_trades_range(
+    monkeypatch.setattr(deribit_options_trades, "get_json", _fake_get_json)
+    rows = deribit_options_trades.fetch_options_trades_range(
         currency="BTC",
         start_open_ms=1_700_000_000_000,
         end_open_ms=1_700_000_100_000,
@@ -278,19 +278,19 @@ def test_fetch_option_trades_range_retries_route_failure_before_success(monkeypa
 
 def test_option_extract_rows_and_has_more_helpers() -> None:
     payload = {"result": {"trades": [{"timestamp": 1, "trade_id": "a", "instrument_name": "X"}, 1], "has_more": True}}
-    assert deribit_option_trades._extract_result_rows(payload) == [
+    assert deribit_options_trades._extract_result_rows(payload) == [
         {"timestamp": 1, "trade_id": "a", "instrument_name": "X"}
     ]
-    assert deribit_option_trades._has_more(payload) is True
-    assert deribit_option_trades._has_more({"result": {}}) is False
-    assert deribit_option_trades._extract_result_rows({"result": {"trades": "bad"}}) == []
-    with pytest.raises(ValueError, match="Unexpected Deribit option_trades response payload"):
-        deribit_option_trades._extract_result_rows({})
+    assert deribit_options_trades._has_more(payload) is True
+    assert deribit_options_trades._has_more({"result": {}}) is False
+    assert deribit_options_trades._extract_result_rows({"result": {"trades": "bad"}}) == []
+    with pytest.raises(ValueError, match="Unexpected Deribit options_trades response payload"):
+        deribit_options_trades._extract_result_rows({})
 
 
-def test_fetch_option_trades_range_validations() -> None:
+def test_fetch_options_trades_range_validations() -> None:
     assert (
-        deribit_option_trades.fetch_option_trades_range(
+        deribit_options_trades.fetch_options_trades_range(
             currency="BTC",
             start_open_ms=2,
             end_open_ms=1,
@@ -298,18 +298,18 @@ def test_fetch_option_trades_range_validations() -> None:
         == []
     )
     with pytest.raises(ValueError, match="count must be positive"):
-        deribit_option_trades.fetch_option_trades_range(currency="BTC", start_open_ms=1, end_open_ms=2, count=0)
+        deribit_options_trades.fetch_options_trades_range(currency="BTC", start_open_ms=1, end_open_ms=2, count=0)
     with pytest.raises(ValueError, match="currency cannot be empty"):
-        deribit_option_trades.fetch_option_trades_range(currency=" ", start_open_ms=1, end_open_ms=2, count=1)
+        deribit_options_trades.fetch_options_trades_range(currency=" ", start_open_ms=1, end_open_ms=2, count=1)
 
 
-def test_fetch_option_trades_range_rejects_non_dict_payload(monkeypatch) -> None:  # type: ignore[no-untyped-def]
-    monkeypatch.setattr(deribit_option_trades, "get_json", lambda *args, **kwargs: [])  # type: ignore[return-value]
-    with pytest.raises(ValueError, match="Unexpected Deribit option_trades response format"):
-        deribit_option_trades.fetch_option_trades_range(currency="BTC", start_open_ms=1, end_open_ms=2, count=1)
+def test_fetch_options_trades_range_rejects_non_dict_payload(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setattr(deribit_options_trades, "get_json", lambda *args, **kwargs: [])  # type: ignore[return-value]
+    with pytest.raises(ValueError, match="Unexpected Deribit options_trades response format"):
+        deribit_options_trades.fetch_options_trades_range(currency="BTC", start_open_ms=1, end_open_ms=2, count=1)
 
 
-def test_fetch_option_trades_range_deduplicates_and_filters_range(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+def test_fetch_options_trades_range_deduplicates_and_filters_range(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     def _fake_get_json(url: str, params: dict[str, object]) -> dict[str, object]:
         del url, params
         return {
@@ -325,8 +325,10 @@ def test_fetch_option_trades_range_deduplicates_and_filters_range(monkeypatch) -
             }
         }
 
-    monkeypatch.setattr(deribit_option_trades, "get_json", _fake_get_json)
-    rows = deribit_option_trades.fetch_option_trades_range(currency="BTC", start_open_ms=100, end_open_ms=101, count=10)
+    monkeypatch.setattr(deribit_options_trades, "get_json", _fake_get_json)
+    rows = deribit_options_trades.fetch_options_trades_range(
+        currency="BTC", start_open_ms=100, end_open_ms=101, count=10
+    )
     assert rows == [
         {"timestamp": 100, "trade_id": "a", "instrument_name": "I1"},
         {"timestamp": 100, "trade_id": "a", "instrument_name": "I2"},
@@ -334,8 +336,8 @@ def test_fetch_option_trades_range_deduplicates_and_filters_range(monkeypatch) -
     ]
 
 
-def test_fetch_option_trades_all_deduplicates(monkeypatch) -> None:  # type: ignore[no-untyped-def]
-    monkeypatch.setattr(deribit_option_trades, "_utc_now_ms", lambda: 2_000)
+def test_fetch_options_trades_all_deduplicates(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setattr(deribit_options_trades, "_utc_now_ms", lambda: 2_000)
     calls = {"n": 0}
 
     def _fake_range(**kwargs: object) -> list[dict[str, object]]:
@@ -346,6 +348,6 @@ def test_fetch_option_trades_all_deduplicates(monkeypatch) -> None:  # type: ign
             return [{"timestamp": 1_500, "trade_id": "x", "instrument_name": "I1"}]
         return []
 
-    monkeypatch.setattr(deribit_option_trades, "fetch_option_trades_range", _fake_range)
-    rows = deribit_option_trades.fetch_option_trades_all(currency="BTC")
+    monkeypatch.setattr(deribit_options_trades, "fetch_options_trades_range", _fake_range)
+    rows = deribit_options_trades.fetch_options_trades_all(currency="BTC")
     assert rows == [{"timestamp": 1_500, "trade_id": "x", "instrument_name": "I1"}]

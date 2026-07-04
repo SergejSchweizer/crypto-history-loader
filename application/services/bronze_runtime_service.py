@@ -269,13 +269,13 @@ def dataset_task_key_maps(
     trade_map: dict[TradeTaskKey, str] = {}
     for task in plan.dataset_tasks:
         key = task.checkpoint_key()
-        if task.dataset_type in {"spot_ohlcv", "peprs_ohlcv"}:
+        if task.dataset_type in {"spot_ohlcv", "perps_ohlcv"}:
             candle_map[task.candle_tuple()] = key
         elif task.dataset_type == "oi":
             oi_map[task.interval_tuple()] = key
         elif task.dataset_type == "funding":
             funding_map[task.interval_tuple()] = key
-        elif task.dataset_type in {"perps_trades", "option_trades"}:
+        elif task.dataset_type in {"perps_trades", "options_trades"}:
             trade_map[task.trade_tuple()] = key
     return candle_map, oi_map, funding_map, trade_map
 

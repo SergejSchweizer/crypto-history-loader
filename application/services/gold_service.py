@@ -233,8 +233,8 @@ def _prepare_trades(pl: Any, frame: Any, symbol: str) -> Any:
     return gold_frames.prepare_trades(pl, frame, symbol)
 
 
-def _prepare_option_trades(pl: Any, frame: Any, symbol: str) -> Any:
-    return gold_frames.prepare_option_trades(pl, frame, symbol)
+def _prepare_options_trades(pl: Any, frame: Any, symbol: str) -> Any:
+    return gold_frames.prepare_options_trades(pl, frame, symbol)
 
 
 def _prepare_volatility_index_data(pl: Any, frame: Any, symbol: str) -> Any:

@@ -8,18 +8,18 @@ from application.schema import dataset_contract
 
 def test_dataset_contract_maps_spot_ohlcv_perp_oi() -> None:
     spot_ohlcv = dataset_contract("spot_ohlcv")
-    peprs_ohlcv = dataset_contract("peprs_ohlcv")
+    perps_ohlcv = dataset_contract("perps_ohlcv")
     oi = dataset_contract("oi")
     funding = dataset_contract("funding")
     trades = dataset_contract("perps_trades")
-    option_trades = dataset_contract("option_trades")
+    options_trades = dataset_contract("options_trades")
     volatility_index_data = dataset_contract("volatility_index_data")
 
     assert spot_ohlcv.dataset_type == "spot_ohlcv"
     assert spot_ohlcv.instrument_type == "spot_ohlcv"
 
-    assert peprs_ohlcv.dataset_type == "peprs_ohlcv"
-    assert peprs_ohlcv.instrument_type == "perp"
+    assert perps_ohlcv.dataset_type == "perps_ohlcv"
+    assert perps_ohlcv.instrument_type == "perp"
 
     assert oi.dataset_type == "oi"
     assert oi.instrument_type == "perp"
@@ -28,8 +28,8 @@ def test_dataset_contract_maps_spot_ohlcv_perp_oi() -> None:
     assert funding.instrument_type == "perp"
     assert trades.dataset_type == "perps_trades"
     assert trades.instrument_type == "perp"
-    assert option_trades.dataset_type == "option_trades"
-    assert option_trades.instrument_type == "option"
+    assert options_trades.dataset_type == "options_trades"
+    assert options_trades.instrument_type == "option"
     assert volatility_index_data.dataset_type == "volatility_index_data"
     assert volatility_index_data.instrument_type == "perp"
 
@@ -37,14 +37,14 @@ def test_dataset_contract_maps_spot_ohlcv_perp_oi() -> None:
 def test_dataset_registry_covers_contract_names() -> None:
     assert set(DATASET_REGISTRY) == {
         "spot_ohlcv",
-        "peprs_ohlcv",
+        "perps_ohlcv",
         "oi",
         "funding",
         "perps_trades",
-        "option_trades",
+        "options_trades",
         "volatility_index_data",
     }
     assert dataset_spec("perps_trades").bronze_task_kind == "trade"
-    assert dataset_spec("option_trades").symbol_group == "option_trade_symbols"
-    assert dataset_names_for_task_kind("trade") == {"perps_trades", "option_trades"}
+    assert dataset_spec("options_trades").symbol_group == "option_trade_symbols"
+    assert dataset_names_for_task_kind("trade") == {"perps_trades", "options_trades"}
     assert dataset_names_for_task_kind("volatility") == {"volatility_index_data"}

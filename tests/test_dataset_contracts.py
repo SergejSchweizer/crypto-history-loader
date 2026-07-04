@@ -18,15 +18,15 @@ def test_silver_contracts_cover_service_output_columns() -> None:
 
     expected_columns = {
         "spot_ohlcv": silver_service.SILVER_OHLCV_COLUMNS,
-        "peprs_ohlcv": silver_service.SILVER_OHLCV_COLUMNS,
+        "perps_ohlcv": silver_service.SILVER_OHLCV_COLUMNS,
         "funding_observed": silver_service.SILVER_FUNDING_OBSERVED_COLUMNS,
         "funding_1m_feature": silver_service.SILVER_FUNDING_FEATURE_COLUMNS,
         "oi_observed": silver_service.SILVER_OI_OBSERVED_COLUMNS,
         "oi_1m_feature": silver_service.SILVER_OI_M1_FEATURE_COLUMNS,
         "perps_trades_observed": silver_service.SILVER_TRADES_OBSERVED_COLUMNS,
-        "option_trades_observed": silver_service.SILVER_TRADES_OBSERVED_COLUMNS,
+        "options_trades_observed": silver_service.SILVER_TRADES_OBSERVED_COLUMNS,
         "perps_trades_1m_feature": silver_service.SILVER_TRADES_M1_FEATURE_COLUMNS,
-        "option_trades_1m_feature": silver_service.SILVER_TRADES_M1_FEATURE_COLUMNS,
+        "options_trades_1m_feature": silver_service.SILVER_TRADES_M1_FEATURE_COLUMNS,
         "volatility_index_data_observed": silver_service.SILVER_VOLATILITY_OBSERVED_COLUMNS,
     }
 

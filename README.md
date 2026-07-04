@@ -18,11 +18,11 @@ Author: Sergej Schweizer
   - [3.2 Python environment setup](#32-python-environment-setup)
 - [4. Raw Datasets](#4-raw-datasets)
   - [4.1 Spot (`dataset_type=spot_ohlcv`)](#41-spot_ohlcv-dataset_typespot_ohlcv)
-  - [4.2 Perpetual (`dataset_type=peprs_ohlcv`)](#42-perpetual-dataset_typepeprs_ohlcv)
+  - [4.2 Perpetual (`dataset_type=perps_ohlcv`)](#42-perpetual-dataset_typeperps_ohlcv)
   - [4.3 Open Interest (`dataset_type=oi`)](#43-open-interest-dataset_typeoi)
   - [4.4 Funding (`dataset_type=funding`)](#44-funding-dataset_typefunding)
   - [4.5 `perps_trades` (`dataset_type=perps_trades`)](#45-perps_trades-dataset_typeperps_trades)
-  - [4.6 `option_trades` (`dataset_type=option_trades`)](#46-option_trades-dataset_typeoption_trades)
+  - [4.6 `options_trades` (`dataset_type=options_trades`)](#46-options_trades-dataset_typeoptions_trades)
 - [5. Example Commands](#5-example-commands)
   - [5.1 End-to-End Pipeline](#51-end-to-end-pipeline)
   - [5.2 Layer Commands](#52-layer-commands)
@@ -64,7 +64,7 @@ OHLCV:
 | CLI Domain | Bronze `dataset_type` | Instrument Type | Task Kind | Default Timeframe | Symbol Source | Description |
 |---|---|---|---|---|---|---|
 | `spot_ohlcv` | `spot_ohlcv` | `spot_ohlcv` | `ohlcv` | `1m` | `--symbols` | Physical spot_ohlcv OHLCV candles |
-| `peprs_ohlcv` | `peprs_ohlcv` | `perp` | `ohlcv` | `1m` | `--symbols` | Perpetual futures OHLCV candles |
+| `perps_ohlcv` | `perps_ohlcv` | `perp` | `ohlcv` | `1m` | `--symbols` | Perpetual futures OHLCV candles |
 
 Interval State:
 
@@ -78,7 +78,7 @@ Trade Ticks:
 | CLI Domain | Bronze `dataset_type` | Instrument Type | Task Kind | Default Timeframe | Symbol Source | Description |
 |---|---|---|---|---|---|---|
 | `perps_trades` | `perps_trades` | `perp` | `trade` | `tick` | `--symbols` | Historical perpetual trade ticks |
-| `option_trades` | `option_trades` | `option` | `trade` | `tick` | `--symbols` | Historical option trade ticks |
+| `options_trades` | `options_trades` | `option` | `trade` | `tick` | `--symbols` | Historical option trade ticks |
 
 Volatility:
 
@@ -90,8 +90,8 @@ Volatility:
 
 ### CLI Contract
 
-- `bronze-build --dataset` choices: `spot_ohlcv peprs_ohlcv oi funding perps_trades option_trades volatility_index_data`
-- `--symbols` applies to all selected datasets (`spot_ohlcv`, `peprs_ohlcv`, `oi`, `funding`, `perps_trades`, `option_trades`, `volatility_index_data`)
+- `bronze-build --dataset` choices: `spot_ohlcv perps_ohlcv oi funding perps_trades options_trades volatility_index_data`
+- `--symbols` applies to all selected datasets (`spot_ohlcv`, `perps_ohlcv`, `oi`, `funding`, `perps_trades`, `options_trades`, `volatility_index_data`)
 
 Current exchange support:
 
@@ -194,7 +194,7 @@ Recommended permissions:
 ```bash
 uv run python main.py --debug bronze-build \
  --exchange deribit \
- --market spot_ohlcv peprs_ohlcv oi funding perps_trades option_trades volatility_index_data \
+ --market spot_ohlcv perps_ohlcv oi funding perps_trades options_trades volatility_index_data \
  --symbols BTC ETH SOL \
  --full-gap-fill \
  --save-parquet-lake \
@@ -207,7 +207,7 @@ Trade symbol inheritance:
 
 Raw ingests are defined by `application/datasets.py` and persisted by Bronze writers in
 `ingestion/lake.py`. The repository currently defines seven registry-backed raw dataset types:
-`spot_ohlcv`, `peprs_ohlcv`, `oi`, `funding`, `perps_trades`, `option_trades`, and `volatility_index_data`.
+`spot_ohlcv`, `perps_ohlcv`, `oi`, `funding`, `perps_trades`, `options_trades`, and `volatility_index_data`.
 
 All datasets share structural metadata columns:
 `schema_version`, `dataset_type`, `exchange`, `symbol`, `instrument_type`, `event_time`,
@@ -226,8 +226,8 @@ Current Bronze missing-day snapshot generated from `lake/bronze` on 2026-07-01 0
 | `funding` | 3 | 2019-04-30 | 2026-06-30 | 6,806 | 6,806 | 0 | 0.00% |
 | `historical_volatility` | 3 | 2026-05-08 | 2026-05-24 | 51 | 51 | 0 | 0.00% |
 | `oi` | 3 | 2018-08-15 | 2026-06-30 | 7,110 | 7,110 | 0 | 0.00% |
-| `option_trades` | 3 | 2018-08-14 | 2026-07-01 | 5,780 | 5,780 | 0 | 0.00% |
-| `peprs_ohlcv` | 3 | 2018-08-14 | 2026-07-01 | 7,071 | 7,071 | 0 | 0.00% |
+| `options_trades` | 3 | 2018-08-14 | 2026-07-01 | 5,780 | 5,780 | 0 | 0.00% |
+| `perps_ohlcv` | 3 | 2018-08-14 | 2026-07-01 | 7,071 | 7,071 | 0 | 0.00% |
 | `perps_trades` | 3 | 2018-08-14 | 2026-06-11 | 5,739 | 2,565 | 3,174 | 55.31% |
 | `spot_ohlcv` | 3 | 2023-04-24 | 2026-07-01 | 3,186 | 3,186 | 0 | 0.00% |
 | `volatility_index_data` | 3 | 2022-11-07 | 2026-05-25 | 83 | 83 | 0 | 0.00% |
@@ -243,12 +243,12 @@ Current Bronze missing-day snapshot generated from `lake/bronze` on 2026-07-01 0
 | `oi` | deribit | perp | `BTC-PERPETUAL` | 1m | 2018-08-15 | 2026-06-30 | 2,877 | 2,877 | 0 | 0.00% |
 | `oi` | deribit | perp | `ETH-PERPETUAL` | 1m | 2019-03-15 | 2026-06-30 | 2,665 | 2,665 | 0 | 0.00% |
 | `oi` | deribit | perp | `SOL-PERPETUAL` | 1m | 2022-03-16 | 2026-06-30 | 1,568 | 1,568 | 0 | 0.00% |
-| `option_trades` | deribit | option | `BTC` | tick | 2018-08-14 | 2026-07-01 | 2,879 | 2,879 | 0 | 0.00% |
-| `option_trades` | deribit | option | `ETH` | tick | 2019-03-21 | 2026-07-01 | 2,660 | 2,660 | 0 | 0.00% |
-| `option_trades` | deribit | option | `SOL` | tick | 2022-05-04 | 2022-12-30 | 241 | 241 | 0 | 0.00% |
-| `peprs_ohlcv` | deribit | perp | `BTC-PERPETUAL` | 1m | 2018-08-14 | 2026-07-01 | 2,879 | 2,879 | 0 | 0.00% |
-| `peprs_ohlcv` | deribit | perp | `ETH-PERPETUAL` | 1m | 2019-03-14 | 2026-07-01 | 2,667 | 2,667 | 0 | 0.00% |
-| `peprs_ohlcv` | deribit | perp | `SOL-PERPETUAL` | 1m | 2022-04-29 | 2026-07-01 | 1,525 | 1,525 | 0 | 0.00% |
+| `options_trades` | deribit | option | `BTC` | tick | 2018-08-14 | 2026-07-01 | 2,879 | 2,879 | 0 | 0.00% |
+| `options_trades` | deribit | option | `ETH` | tick | 2019-03-21 | 2026-07-01 | 2,660 | 2,660 | 0 | 0.00% |
+| `options_trades` | deribit | option | `SOL` | tick | 2022-05-04 | 2022-12-30 | 241 | 241 | 0 | 0.00% |
+| `perps_ohlcv` | deribit | perp | `BTC-PERPETUAL` | 1m | 2018-08-14 | 2026-07-01 | 2,879 | 2,879 | 0 | 0.00% |
+| `perps_ohlcv` | deribit | perp | `ETH-PERPETUAL` | 1m | 2019-03-14 | 2026-07-01 | 2,667 | 2,667 | 0 | 0.00% |
+| `perps_ohlcv` | deribit | perp | `SOL-PERPETUAL` | 1m | 2022-04-29 | 2026-07-01 | 1,525 | 1,525 | 0 | 0.00% |
 | `perps_trades` | deribit | perp | `BTC-PERPETUAL` | tick | 2018-08-14 | 2026-06-11 | 2,859 | 1,396 | 1,463 | 51.17% |
 | `perps_trades` | deribit | perp | `ETH-PERPETUAL` | tick | 2019-03-14 | 2026-05-29 | 2,634 | 923 | 1,711 | 64.96% |
 | `perps_trades` | deribit | perp | `SOL-PERPETUAL` | tick | 2022-04-29 | 2022-12-30 | 246 | 246 | 0 | 0.00% |
@@ -309,7 +309,7 @@ Coverage:
 | `deribit` | `ETH_USDC` | `1m` | `2023-04-24` | `2026-07-01` | 0 | 0.00% |
 | `deribit` | `SOL_USDC` | `1m` | `2024-02-27` | `2026-07-01` | 0 | 0.00% |
 
-## 4.2 Perpetual (`dataset_type=peprs_ohlcv`)
+## 4.2 Perpetual (`dataset_type=perps_ohlcv`)
 
 ### 1. Bronze layer
 
@@ -508,7 +508,7 @@ Coverage:
 | `deribit` | `ETH-PERPETUAL` | `tick` | `2019-03-14` | `2026-05-29` | 1,711 | 64.96% |
 | `deribit` | `SOL-PERPETUAL` | `tick` | `2022-04-29` | `2022-12-30` | 0 | 0.00% |
 
-## 4.6 `option_trades` (`dataset_type=option_trades`)
+## 4.6 `options_trades` (`dataset_type=options_trades`)
 
 ### 1. Bronze layer
 
@@ -528,9 +528,9 @@ Runtime override: set `DEPTH_DERIBIT_OPTION_TRADES_PAGE_SIZE` to tune request pa
 
 ### 2. Silver layer
 
-- Builders: same trade builders with `bronze_dataset_type=option_trades`.
+- Builders: same trade builders with `bronze_dataset_type=options_trades`.
 - Missing values: rows with null/non-finite `price` or `quantity` are dropped; missing/unknown `side` is normalized to `unknown`; contract metadata nulls (`expiry`, `strike`, `option_type`) may exist in Bronze but are currently not retained in Silver outputs.
-- Output datasets: `option_trades_observed` and `option_trades_1m_feature`.
+- Output datasets: `options_trades_observed` and `options_trades_1m_feature`.
 - Observed schema (post-validation/dedup): `trade_time`, `trade_id`, `price`, `quantity`, `side`, `exchange`, `symbol`, `instrument_type`.
 - Feature aggregation (`tick -> 1m`) OHLC columns: `open_price`, `high_price`, `low_price`, `close_price`.
 - Feature flow columns: `volume`, `quote_volume`, `trade_count`, `buy_volume`, `sell_volume`, `buy_trade_count`, `sell_trade_count`, `buy_volume_share`.
@@ -587,7 +587,7 @@ Bronze:
 ```bash
 uv run python main.py bronze-build \
   --exchange deribit \
-  --dataset spot_ohlcv peprs_ohlcv oi funding perps_trades option_trades \
+  --dataset spot_ohlcv perps_ohlcv oi funding perps_trades options_trades \
   --symbols BTC ETH SOL
 ```
 
@@ -598,7 +598,7 @@ uv run python main.py silver-build \
   --bronze-root lake/bronze \
   --silver-root lake/silver \
   --exchange deribit \
-  --dataset spot_ohlcv peprs_ohlcv oi funding perps_trades option_trades \
+  --dataset spot_ohlcv perps_ohlcv oi funding perps_trades options_trades \
   --timeframe 1m \
   --maxprocesses 4
 ```
@@ -618,7 +618,7 @@ uv run python main.py gold-build \
 
 Symbol-group controls for Bronze:
 
-- `--symbols` applies to all selected datasets (`spot_ohlcv`, `peprs_ohlcv`, `oi`, `funding`, `perps_trades`, `option_trades`)
+- `--symbols` applies to all selected datasets (`spot_ohlcv`, `perps_ohlcv`, `oi`, `funding`, `perps_trades`, `options_trades`)
 - default symbols are `BTC ETH SOL`
 
 Bronze checkpoint path:
@@ -656,7 +656,7 @@ Gold retention policy:
 Available Gold dataset IDs:
 
 - `gold.market.perps_trades.m1` (`perps_trades` flow only)
-- `gold.market.option_trades.m1` (`option_trades` flow only)
+- `gold.market.options_trades.m1` (`options_trades` flow only)
 - `gold.market.core.m1`
 - `gold.market.core_funding.m1`
 - `gold.hybrid.full_l2.m1`

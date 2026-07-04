@@ -112,7 +112,7 @@ def test_run_silver_build_uses_tick_timeframe_for_trades_discovery(
     assert built == [("BTC-PERPETUAL", "tick"), ("BTC-PERPETUAL", "tick")]
 
 
-def test_run_silver_build_uses_tick_timeframe_for_option_trades_discovery(
+def test_run_silver_build_uses_tick_timeframe_for_options_trades_discovery(
     monkeypatch,
 ) -> None:  # type: ignore[no-untyped-def]
     captured: list[tuple[str, str, str | None]] = []
@@ -127,17 +127,17 @@ def test_run_silver_build_uses_tick_timeframe_for_option_trades_discovery(
     ) -> list[str]:
         del bronze_root, exchange
         captured.append((market, timeframe, instrument_type))
-        if market == "option_trades":
+        if market == "options_trades":
             return ["BTC"]
         return []
 
     def fake_build_perps_trades_observed(**kwargs: object) -> silver_cmd.SilverBuildReport:
         built.append(str(kwargs.get("output_dataset_type", "missing")))
-        return _report("option_trades_observed")
+        return _report("options_trades_observed")
 
     def fake_build_trades_feature(**kwargs: object) -> silver_cmd.SilverBuildReport:
         built.append(str(kwargs.get("output_dataset_type", "missing")))
-        return _report("option_trades_1m_feature")
+        return _report("options_trades_1m_feature")
 
     monkeypatch.setattr(silver_cmd, "discover_symbols", fake_discover_symbols)
     monkeypatch.setattr(silver_cmd, "build_perps_trades_observed_for_symbol", fake_build_perps_trades_observed)
@@ -148,7 +148,7 @@ def test_run_silver_build_uses_tick_timeframe_for_option_trades_discovery(
         bronze_root="lake/bronze",
         silver_root="lake/silver",
         exchange="deribit",
-        market=["option_trades"],
+        market=["options_trades"],
         symbols=None,
         timeframe="1m",
         manifest=False,
@@ -157,8 +157,8 @@ def test_run_silver_build_uses_tick_timeframe_for_option_trades_discovery(
     )
     silver_cmd.run_silver_build(args=args, logger=logging.getLogger("test"))
 
-    assert captured == [("option_trades", "tick", "option")]
-    assert built == ["option_trades_observed", "option_trades_1m_feature"]
+    assert captured == [("options_trades", "tick", "option")]
+    assert built == ["options_trades_observed", "options_trades_1m_feature"]
 
 
 def test_run_silver_build_rejects_invalid_maxprocesses() -> None:

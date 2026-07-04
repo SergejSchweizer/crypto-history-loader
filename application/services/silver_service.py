@@ -171,7 +171,7 @@ def _bronze_month_files(
     month: str,
     instrument_type: str | None = None,
 ) -> list[str]:
-    instrument = instrument_type or ("perp" if market == "peprs_ohlcv" else market)
+    instrument = instrument_type or ("perp" if market == "perps_ohlcv" else market)
     year = month.split("-", 1)[0]
     root = (
         Path(bronze_root)
@@ -197,7 +197,7 @@ def discover_symbols(
 ) -> list[str]:
     """Discover symbols available in bronze for selected market/exchange/timeframe."""
 
-    instrument = instrument_type or ("perp" if market == "peprs_ohlcv" else market)
+    instrument = instrument_type or ("perp" if market == "perps_ohlcv" else market)
     root = Path(bronze_root) / f"dataset_type={market}" / f"exchange={exchange}" / f"instrument_type={instrument}"
     if not root.exists():
         return []
@@ -223,7 +223,7 @@ def discover_months(
 ) -> list[str]:
     """Discover available bronze months for one symbol."""
 
-    instrument = instrument_type or ("perp" if market == "peprs_ohlcv" else market)
+    instrument = instrument_type or ("perp" if market == "perps_ohlcv" else market)
     root = (
         Path(bronze_root)
         / f"dataset_type={market}"
