@@ -147,7 +147,7 @@ def test_run_bronze_build_persists_trade_chunks_incrementally(
         quantity=2.0,
         side="sell",
         is_maker=True,
-        source_endpoint="public_option_trades",
+        source_endpoint="public_options_trades",
     )
     persisted_markets: list[str] = []
 
@@ -181,7 +181,7 @@ def test_run_bronze_build_persists_trade_chunks_incrementally(
     args = argparse.Namespace(
         exchange="deribit",
         exchanges=None,
-        market=["perps_trades", "option_trades"],
+        market=["perps_trades", "options_trades"],
         symbols=["BTC"],
         perp_trade_symbols=["BTC"],
         option_trade_symbols=["BTC"],
@@ -298,7 +298,7 @@ def test_run_bronze_build_drops_invalid_symbols_before_scheduling(monkeypatch) -
     args = argparse.Namespace(
         exchange="deribit",
         exchanges=None,
-        market=["spot_ohlcv", "peprs_ohlcv", "oi", "funding"],
+        market=["spot_ohlcv", "perps_ohlcv", "oi", "funding"],
         symbols=["BTC", None, " ", "\t", "ETH"],
         perp_trade_symbols=["BTC", None, " ", "\t", "ETH"],
         option_trade_symbols=["BTC", None, " ", "\t", "ETH"],
@@ -369,7 +369,7 @@ def test_run_bronze_build_uses_symbols_for_trade_tasks(monkeypatch) -> None:  # 
     args = argparse.Namespace(
         exchange="deribit",
         exchanges=None,
-        market=["perps_trades", "option_trades"],
+        market=["perps_trades", "options_trades"],
         symbols=["BTCUSDT", "ETHUSDT"],
         save_parquet_lake=False,
         lake_root="lake/bronze",
@@ -409,7 +409,7 @@ def test_build_bronze_fetch_plan_is_deterministic_and_sorted() -> None:
     args = argparse.Namespace(
         exchange="deribit",
         exchanges=["deribit"],
-        market=["funding", "spot_ohlcv", "oi", "peprs_ohlcv"],
+        market=["funding", "spot_ohlcv", "oi", "perps_ohlcv"],
         symbols=["ETH", "BTC"],
         perp_trade_symbols=["ETH", "BTC"],
         option_trade_symbols=["SOL", "BTC"],
@@ -417,7 +417,7 @@ def test_build_bronze_fetch_plan_is_deterministic_and_sorted() -> None:
 
     plan = loader_cmd._build_bronze_fetch_plan(args=args, logger=logging.getLogger("test"))
 
-    assert plan.data_types == ["funding", "oi", "peprs_ohlcv", "spot_ohlcv"]
+    assert plan.data_types == ["funding", "oi", "perps_ohlcv", "spot_ohlcv"]
     assert plan.symbols == ["BTC", "ETH"]
     assert plan.candle_tasks == [
         ("deribit", "perp", "BTC", "1m"),
@@ -428,9 +428,9 @@ def test_build_bronze_fetch_plan_is_deterministic_and_sorted() -> None:
     assert plan.oi_tasks == [("deribit", "BTC", "1m"), ("deribit", "ETH", "1m")]
     assert plan.funding_tasks == [("deribit", "BTC", "1m"), ("deribit", "ETH", "1m")]
     assert [(task.dataset_type, task.instrument_type) for task in plan.dataset_tasks] == [
-        ("peprs_ohlcv", "perp"),
+        ("perps_ohlcv", "perp"),
         ("spot_ohlcv", "spot_ohlcv"),
-        ("peprs_ohlcv", "perp"),
+        ("perps_ohlcv", "perp"),
         ("spot_ohlcv", "spot_ohlcv"),
         ("funding", "perp"),
         ("funding", "perp"),

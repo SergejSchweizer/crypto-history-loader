@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Literal, cast
 
-from ingestion.exchanges import deribit_option_trades, deribit_perps_trades
+from ingestion.exchanges import deribit_options_trades, deribit_perps_trades
 from ingestion.spot_ohlcv import Exchange, normalize_storage_symbol
 
 TradeMarket = Literal["spot_ohlcv", "perp", "option"]
@@ -115,7 +115,7 @@ def _parse_option_trade_row(exchange: Exchange, symbol: str, row: dict[str, obje
         quantity=float(cast(Any, row).get("amount", 0.0)),
         side=side,
         is_maker=is_maker,
-        source_endpoint="public_option_trades",
+        source_endpoint="public_options_trades",
     )
 
 
@@ -170,7 +170,7 @@ def fetch_trades_all_history(
         raise ValueError(f"Unsupported exchange '{exchange}'")
     normalized_symbol = _normalize_trade_symbol(exchange=exchange, symbol=symbol, market=market)
     if market == "option":
-        rows = deribit_option_trades.fetch_option_trades_all(currency=normalized_symbol)
+        rows = deribit_options_trades.fetch_options_trades_all(currency=normalized_symbol)
         parsed: list[TradeTick | OptionTradeTick] = [
             _parse_option_trade_row(exchange, normalized_symbol, row) for row in rows
         ]
@@ -209,7 +209,7 @@ def fetch_trades_range(
         raise ValueError(f"Unsupported exchange '{exchange}'")
     normalized_symbol = _normalize_trade_symbol(exchange=exchange, symbol=symbol, market=market)
     if market == "option":
-        rows = deribit_option_trades.fetch_option_trades_range(
+        rows = deribit_options_trades.fetch_options_trades_range(
             currency=normalized_symbol,
             start_open_ms=start_open_ms,
             end_open_ms=end_open_ms,

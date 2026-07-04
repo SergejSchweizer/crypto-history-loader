@@ -25,11 +25,11 @@ from application.services.silver_sidecars import write_monthly_sidecars
 from ingestion.funding import DERIBIT_FUNDING_NATIVE_INTERVAL
 
 _MARKET_DISCOVERY_CONFIG: dict[str, tuple[str, str, str]] = {
-    "peprs_ohlcv": ("peprs_ohlcv", "perp", "1m"),
+    "perps_ohlcv": ("perps_ohlcv", "perp", "1m"),
     "funding": ("funding", "perp", DERIBIT_FUNDING_NATIVE_INTERVAL),
     "oi": ("oi", "perp", "1m"),
     "perps_trades": ("perps_trades", "perp", "tick"),
-    "option_trades": ("option_trades", "option", "tick"),
+    "options_trades": ("options_trades", "option", "tick"),
     "volatility_index_data": ("volatility_index_data", "perp", "1m"),
 }
 
@@ -46,20 +46,20 @@ def add_silver_build_parser(subparsers: Any) -> None:
         nargs="+",
         choices=[
             "spot_ohlcv",
-            "peprs_ohlcv",
+            "perps_ohlcv",
             "oi",
             "funding",
             "perps_trades",
-            "option_trades",
+            "options_trades",
             "volatility_index_data",
         ],
         default=[
             "spot_ohlcv",
-            "peprs_ohlcv",
+            "perps_ohlcv",
             "oi",
             "funding",
             "perps_trades",
-            "option_trades",
+            "options_trades",
             "volatility_index_data",
         ],
     )
@@ -184,7 +184,7 @@ def run_silver_build(args: argparse.Namespace, logger: logging.Logger) -> None:
         )
         return [observed_payload, feature_payload]
 
-    def _run_option_trades(symbol: str) -> list[dict[str, object]]:
+    def _run_options_trades(symbol: str) -> list[dict[str, object]]:
         observed = build_perps_trades_observed_for_symbol(
             bronze_root=bronze_root,
             silver_root=silver_root,
@@ -192,21 +192,21 @@ def run_silver_build(args: argparse.Namespace, logger: logging.Logger) -> None:
             symbol=symbol,
             instrument_type="option",
             timeframe="tick",
-            bronze_dataset_type="option_trades",
-            output_dataset_type="option_trades_observed",
+            bronze_dataset_type="options_trades",
+            output_dataset_type="options_trades_observed",
         )
-        observed_payload = _report_payload("option_trades_observed", symbol, observed)
+        observed_payload = _report_payload("options_trades_observed", symbol, observed)
         feature = build_perps_trades_1m_feature_for_symbol(
             silver_root=silver_root,
             exchange=exchange,
             symbol=symbol,
             observed_timeframe="tick",
-            observed_dataset_type="option_trades_observed",
-            output_dataset_type="option_trades_1m_feature",
+            observed_dataset_type="options_trades_observed",
+            output_dataset_type="options_trades_1m_feature",
         )
-        feature_payload = _report_payload("option_trades_1m_feature", symbol, feature)
+        feature_payload = _report_payload("options_trades_1m_feature", symbol, feature)
         logger.info(
-            "Silver option_trades reports written symbol=%s observed_rows=%s feature_rows=%s",
+            "Silver options_trades reports written symbol=%s observed_rows=%s feature_rows=%s",
             symbol,
             observed.rows_out,
             feature.rows_out,
@@ -254,7 +254,7 @@ def run_silver_build(args: argparse.Namespace, logger: logging.Logger) -> None:
         "funding": _run_funding,
         "oi": _run_oi,
         "perps_trades": _run_trades,
-        "option_trades": _run_option_trades,
+        "options_trades": _run_options_trades,
         "volatility_index_data": _run_volatility_index_data,
     }
 

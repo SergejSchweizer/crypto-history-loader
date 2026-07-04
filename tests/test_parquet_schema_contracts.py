@@ -101,7 +101,7 @@ def test_bronze_trades_schema_contract_fields(tmp_path: Path) -> None:
     assert "is_maker" in schema.names
 
 
-def test_bronze_option_trades_schema_contract_fields(tmp_path: Path) -> None:
+def test_bronze_options_trades_schema_contract_fields(tmp_path: Path) -> None:
     tick = OptionTradeTick(
         exchange="deribit",
         symbol="BTC",
@@ -116,7 +116,7 @@ def test_bronze_option_trades_schema_contract_fields(tmp_path: Path) -> None:
         quantity=1.0,
         side="buy",
         is_maker=True,
-        source_endpoint="public_option_trades",
+        source_endpoint="public_options_trades",
     )
     files = save_trades_parquet_lake({"deribit": {"BTC": [tick]}}, market="option", lake_root=str(tmp_path))
     schema = pq.ParquetFile(files[0]).schema_arrow

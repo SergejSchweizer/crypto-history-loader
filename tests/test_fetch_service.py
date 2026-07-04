@@ -486,7 +486,7 @@ def test_fetch_symbol_trades_bootstrap_covers_complete_84_hour_window(
                     quantity=1.0,
                     side="buy",
                     is_maker=False,
-                    source_endpoint="public_option_trades",
+                    source_endpoint="public_options_trades",
                 )
             ]
         return [

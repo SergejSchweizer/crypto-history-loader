@@ -17,12 +17,12 @@ def feature_hash(columns: list[str]) -> str:
 def feature_source_dataset(column_name: str) -> str:
     """Infer the source dataset label from a derived feature column name."""
 
-    if column_name.startswith("option_trades_"):
-        return "option_trades_1m_feature"
+    if column_name.startswith("options_trades_"):
+        return "options_trades_1m_feature"
     if column_name.startswith("spot_ohlcv_"):
         return "spot_ohlcv_1m"
     if column_name.startswith("perp_"):
-        return "peprs_ohlcv_1m"
+        return "perps_ohlcv_1m"
     if column_name.startswith("oi_"):
         return "oi_1m_feature"
     if column_name.startswith("funding_"):

@@ -156,7 +156,7 @@ def trade_record(
 ) -> dict[str, object]:
     """Convert trade tick to bronze parquet row format."""
 
-    dataset_type = "option_trades" if market == "option" else "perps_trades"
+    dataset_type = "options_trades" if market == "option" else "perps_trades"
     record: dict[str, object] = {
         "schema_version": "v1",
         "dataset_type": dataset_type,

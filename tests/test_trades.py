@@ -87,7 +87,7 @@ def test_fetch_trades_all_history_streams_option_rows(monkeypatch) -> None:  # t
         ]
 
     chunks: list[list[TradeTick | OptionTradeTick]] = []
-    monkeypatch.setattr("ingestion.exchanges.deribit_option_trades.fetch_option_trades_all", _fake_fetch_all)
+    monkeypatch.setattr("ingestion.exchanges.deribit_options_trades.fetch_options_trades_all", _fake_fetch_all)
     rows = fetch_trades_all_history(
         exchange="deribit",
         symbol="BTC",
@@ -166,7 +166,7 @@ def test_save_trades_parquet_lake_preserves_same_timestamp_distinct_trade_ids(tm
     assert sorted(str(row["trade_id"]) for row in rows) == ["t-a", "t-b"]
 
 
-def test_fetch_option_trades_range_parses_deribit_rows(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+def test_fetch_options_trades_range_parses_deribit_rows(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     def _fake_fetch(**kwargs: object) -> list[dict[str, object]]:
         del kwargs
         return [
@@ -181,7 +181,7 @@ def test_fetch_option_trades_range_parses_deribit_rows(monkeypatch) -> None:  # 
             }
         ]
 
-    monkeypatch.setattr("ingestion.exchanges.deribit_option_trades.fetch_option_trades_range", _fake_fetch)
+    monkeypatch.setattr("ingestion.exchanges.deribit_options_trades.fetch_options_trades_range", _fake_fetch)
     rows = fetch_trades_range(
         exchange="deribit",
         symbol="BTC",
@@ -197,7 +197,7 @@ def test_fetch_option_trades_range_parses_deribit_rows(monkeypatch) -> None:  # 
     assert row.instrument_name == "BTC-31DEC26-100000-C"
 
 
-def test_save_option_trades_parquet_lake_writes_option_dataset(tmp_path: Path) -> None:
+def test_save_options_trades_parquet_lake_writes_option_dataset(tmp_path: Path) -> None:
     tick = OptionTradeTick(
         exchange="deribit",
         symbol="BTC",
@@ -212,7 +212,7 @@ def test_save_option_trades_parquet_lake_writes_option_dataset(tmp_path: Path) -
         quantity=2.0,
         side="buy",
         is_maker=False,
-        source_endpoint="public_option_trades",
+        source_endpoint="public_options_trades",
     )
     files = save_trades_parquet_lake(
         trades_by_exchange={"deribit": {"BTC": [tick]}},
@@ -220,7 +220,7 @@ def test_save_option_trades_parquet_lake_writes_option_dataset(tmp_path: Path) -
         lake_root=str(tmp_path),
     )
     assert len(files) == 1
-    assert "dataset_type=option_trades" in files[0]
+    assert "dataset_type=options_trades" in files[0]
     table = pq.ParquetFile(files[0]).read()
     row = table.to_pylist()[0]
     assert row["instrument_name"] == "BTC-31DEC26-100000-C"

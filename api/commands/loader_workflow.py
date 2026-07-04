@@ -81,7 +81,7 @@ def run_bronze_build(
             funding_requested = "funding" in data_types
             volatility_index_data_requested = "volatility_index_data" in data_types
             perps_trades_requested = "perps_trades" in data_types
-            option_trades_requested = "option_trades" in data_types
+            options_trades_requested = "options_trades" in data_types
             multi_market = len(data_types) > 1
             state = BronzeRunState.from_plan(plan)
             logger.info(
@@ -328,7 +328,7 @@ def run_bronze_build(
                 funding_requested=funding_requested,
                 volatility_index_data_requested=volatility_index_data_requested,
                 perps_trades_requested=perps_trades_requested,
-                option_trades_requested=option_trades_requested,
+                options_trades_requested=options_trades_requested,
                 candles_for_storage=state.candles_for_storage,
                 open_interest_for_storage=state.open_interest_for_storage,
                 funding_for_storage=state.funding_for_storage,

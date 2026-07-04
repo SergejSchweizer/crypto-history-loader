@@ -41,12 +41,12 @@ Mitigation: Rename work must update registry specs, lake paths, contracts, CLI c
 
 Evidence:
 
+- 2026-07-03 `c9d39e1` Rename spot_ohlcv OHLCV dataset
 - 2026-07-03 `4393c40` Rename perpetual trades dataset
 - 2026-07-03 `91d7475` Rename perpetual OHLCV dataset
 - 2026-06-27 `a44abc8` Extract dataset transformation contracts (#19)
 - 2026-05-25 `b8b5b82` Refine raw dataset docs and Deribit endpoint sections (#7)
 - 2026-05-25 `3e96121` Refactor README and align dataset/CLI/runtime updates (#5)
-- 2026-05-17 `32c3d28` Remove option instruments dataset, suppress heartbeat logs, and stabilize coverage
 
 ## R003. Large refactors can blur architecture boundaries
 

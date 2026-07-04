@@ -159,3 +159,4 @@ uv run python scripts/update_project_history_docs.py
 - 2026-07-01 `4e203fb` [codex] Complete Bronze refactor stack (#51) (SSC)
 - 2026-07-03 `91d7475` Rename perpetual OHLCV dataset (SSC)
 - 2026-07-03 `4393c40` Rename perpetual trades dataset (SSC)
+- 2026-07-03 `c9d39e1` Rename spot_ohlcv OHLCV dataset (SSC)

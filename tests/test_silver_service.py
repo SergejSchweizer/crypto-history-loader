@@ -42,7 +42,7 @@ def _write_bronze_day_file(
     instrument_type: str | None = None,
 ) -> None:
     ds = dataset_type or market
-    instrument = instrument_type or ("perp" if market == "peprs_ohlcv" else market)
+    instrument = instrument_type or ("perp" if market == "perps_ohlcv" else market)
     target = (
         root
         / f"dataset_type={ds}"
@@ -65,7 +65,7 @@ def test_build_silver_for_symbol_writes_monthly_parquet_and_aggregated_report(tm
     symbol = "BTC-PERPETUAL"
     base = {
         "schema_version": "v1",
-        "dataset_type": "peprs_ohlcv",
+        "dataset_type": "perps_ohlcv",
         "exchange": "deribit",
         "symbol": symbol,
         "instrument_type": "perp",
@@ -133,7 +133,7 @@ def test_build_silver_for_symbol_writes_monthly_parquet_and_aggregated_report(tm
     ]
     _write_bronze_day_file(
         bronze,
-        market="peprs_ohlcv",
+        market="perps_ohlcv",
         exchange="deribit",
         symbol=symbol,
         timeframe="1m",
@@ -143,7 +143,7 @@ def test_build_silver_for_symbol_writes_monthly_parquet_and_aggregated_report(tm
     )
     _write_bronze_day_file(
         bronze,
-        market="peprs_ohlcv",
+        market="perps_ohlcv",
         exchange="deribit",
         symbol=symbol,
         timeframe="1m",
@@ -152,13 +152,13 @@ def test_build_silver_for_symbol_writes_monthly_parquet_and_aggregated_report(tm
         rows=rows_day2,
     )
 
-    assert discover_symbols(str(bronze), "peprs_ohlcv", "deribit") == [symbol]
-    assert discover_months(str(bronze), "peprs_ohlcv", "deribit", symbol) == ["2026-05"]
+    assert discover_symbols(str(bronze), "perps_ohlcv", "deribit") == [symbol]
+    assert discover_months(str(bronze), "perps_ohlcv", "deribit", symbol) == ["2026-05"]
 
     report = build_silver_for_symbol(
         bronze_root=str(bronze),
         silver_root=str(silver),
-        market="peprs_ohlcv",
+        market="perps_ohlcv",
         exchange="deribit",
         symbol=symbol,
         timeframe="1m",
@@ -175,7 +175,7 @@ def test_build_silver_for_symbol_writes_monthly_parquet_and_aggregated_report(tm
 
     silver_file = (
         silver
-        / "dataset_type=peprs_ohlcv"
+        / "dataset_type=perps_ohlcv"
         / "exchange=deribit"
         / f"symbol={symbol}"
         / "timeframe=1m"
@@ -189,7 +189,7 @@ def test_build_silver_for_symbol_writes_monthly_parquet_and_aggregated_report(tm
 
     manifest_paths, plot_paths = write_monthly_sidecars(
         silver_root=str(silver),
-        market="peprs_ohlcv",
+        market="perps_ohlcv",
         exchange="deribit",
         symbol=symbol,
         report=report,
@@ -202,7 +202,7 @@ def test_build_silver_for_symbol_writes_monthly_parquet_and_aggregated_report(tm
     assert monthly_manifest_path.exists()
     assert monthly_manifest_path.name == f"{symbol}-2026-05.json"
     monthly_payload = json.loads(monthly_manifest_path.read_text(encoding="utf-8"))
-    assert monthly_payload["dataset"] == "peprs_ohlcv_1m"
+    assert monthly_payload["dataset"] == "perps_ohlcv_1m"
     assert "column_hash" in monthly_payload
     assert "source_silver_datasets" in monthly_payload
     assert "feature_metadata" in monthly_payload
@@ -787,21 +787,21 @@ def test_build_perps_trades_1m_feature_filters_invalid_and_deduplicates(tmp_path
     assert report.rows_out == 1
 
 
-def test_build_option_trades_1m_feature_for_symbol(tmp_path: Path) -> None:
+def test_build_options_trades_1m_feature_for_symbol(tmp_path: Path) -> None:
     bronze = tmp_path / "bronze"
     silver = tmp_path / "silver"
     symbol = "BTC"
     rows = [
         {
             "schema_version": "v1",
-            "dataset_type": "option_trades",
+            "dataset_type": "options_trades",
             "exchange": "deribit",
             "symbol": symbol,
             "instrument_type": "option",
             "event_time": datetime(2026, 5, 1, 0, 0, 10, tzinfo=UTC),
             "ingested_at": datetime(2026, 5, 1, 0, 0, 11, tzinfo=UTC),
             "run_id": "r1",
-            "source_endpoint": "public_option_trades",
+            "source_endpoint": "public_options_trades",
             "open_time": datetime(2026, 5, 1, 0, 0, 10, tzinfo=UTC),
             "close_time": datetime(2026, 5, 1, 0, 0, 10, tzinfo=UTC),
             "timeframe": "tick",
@@ -817,14 +817,14 @@ def test_build_option_trades_1m_feature_for_symbol(tmp_path: Path) -> None:
         },
         {
             "schema_version": "v1",
-            "dataset_type": "option_trades",
+            "dataset_type": "options_trades",
             "exchange": "deribit",
             "symbol": symbol,
             "instrument_type": "option",
             "event_time": datetime(2026, 5, 1, 0, 0, 20, tzinfo=UTC),
             "ingested_at": datetime(2026, 5, 1, 0, 0, 21, tzinfo=UTC),
             "run_id": "r1",
-            "source_endpoint": "public_option_trades",
+            "source_endpoint": "public_options_trades",
             "open_time": datetime(2026, 5, 1, 0, 0, 20, tzinfo=UTC),
             "close_time": datetime(2026, 5, 1, 0, 0, 20, tzinfo=UTC),
             "timeframe": "tick",
@@ -841,14 +841,14 @@ def test_build_option_trades_1m_feature_for_symbol(tmp_path: Path) -> None:
     ]
     _write_bronze_day_file(
         bronze,
-        market="option_trades",
+        market="options_trades",
         exchange="deribit",
         symbol=symbol,
         timeframe="tick",
         month="2026-05",
         day="2026-05-01",
         rows=rows,
-        dataset_type="option_trades",
+        dataset_type="options_trades",
         instrument_type="option",
     )
 
@@ -859,26 +859,26 @@ def test_build_option_trades_1m_feature_for_symbol(tmp_path: Path) -> None:
         symbol=symbol,
         instrument_type="option",
         timeframe="tick",
-        bronze_dataset_type="option_trades",
-        output_dataset_type="option_trades_observed",
+        bronze_dataset_type="options_trades",
+        output_dataset_type="options_trades_observed",
     )
-    assert observed_report.dataset == "option_trades_observed"
+    assert observed_report.dataset == "options_trades_observed"
 
     feature_report = build_perps_trades_1m_feature_for_symbol(
         silver_root=str(silver),
         exchange="deribit",
         symbol=symbol,
         observed_timeframe="tick",
-        observed_dataset_type="option_trades_observed",
-        output_dataset_type="option_trades_1m_feature",
+        observed_dataset_type="options_trades_observed",
+        output_dataset_type="options_trades_1m_feature",
     )
-    assert feature_report.dataset == "option_trades_1m_feature"
+    assert feature_report.dataset == "options_trades_1m_feature"
     assert feature_report.rows_in == 2
     assert feature_report.rows_out == 1
 
     out_file = (
         silver
-        / "dataset_type=option_trades_1m_feature"
+        / "dataset_type=options_trades_1m_feature"
         / "exchange=deribit"
         / f"symbol={symbol}"
         / "timeframe=1m"

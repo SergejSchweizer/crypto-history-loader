@@ -12,6 +12,8 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 FIELD_SEPARATOR = "\x1f"
 TERM_REPLACEMENTS = (
     (re.compile(r"perp_trades"), "perps_trades"),
+    (re.compile(r"option" + r"_trades"), "options_trades"),
+    (re.compile(r"peprs" + r"_ohlcv"), "perps_ohlcv"),
     (re.compile(r"\b" + "sp" + r"ot\b(?!_ohlcv)"), "spot_ohlcv"),
 )
 
@@ -40,7 +42,7 @@ class Topic:
 DECISION_TOPICS = (
     Topic(
         title="Use explicit medallion dataset contracts",
-        keywords=("contract", "schema", "dataset", "registry", "medallion", "peprs_ohlcv"),
+        keywords=("contract", "schema", "dataset", "registry", "medallion", "perps_ohlcv"),
         summary=(
             "Dataset identity, schema expectations, and medallion source requirements are treated "
             "as explicit contracts instead of implicit path or CLI conventions."
@@ -123,7 +125,7 @@ RISK_TOPICS = (
     ),
     Topic(
         title="Dataset naming drift can break Bronze, Silver, and Gold joins",
-        keywords=("dataset", "contract", "schema", "registry", "peprs_ohlcv", "historical_volatility"),
+        keywords=("dataset", "contract", "schema", "registry", "perps_ohlcv", "historical_volatility"),
         summary=(
             "Dataset names have changed over time, including volatility cleanup and explicit OHLCV dataset naming."
         ),
