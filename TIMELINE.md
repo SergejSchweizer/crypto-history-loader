@@ -161,3 +161,4 @@ uv run python scripts/update_project_history_docs.py
 - 2026-07-03 `4393c40` Rename perpetual trades dataset (SSC)
 - 2026-07-03 `c9d39e1` Rename spot_ohlcv OHLCV dataset (SSC)
 - 2026-07-04 `11da15c` Rename options trades and perps OHLCV datasets (SSC)
+- 2026-07-04 `ab5543d` Rename open_interest dataset to open interest (SSC)
