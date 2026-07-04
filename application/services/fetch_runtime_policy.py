@@ -7,7 +7,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 
 PERP_TRADES_WINDOW_MS = 15 * 60 * 1000
-OPTION_TRADES_WINDOW_MS = 60 * 60 * 1000
+OPTIONS_TRADES_WINDOW_MS = 60 * 60 * 1000
 MIN_TRADE_WINDOW_MS = 60 * 1000
 MAX_TRADE_WINDOW_MS = 24 * 60 * 60 * 1000
 DEFAULT_FETCH_HEARTBEAT_S = 30.0
@@ -25,14 +25,14 @@ class FetchRuntimePolicy:
         heartbeat_s: Interval for long-running task progress messages.
         concurrency: Bounded task concurrency shared by Bronze fetch groups.
         perp_trade_window_ms: Bounded inclusive window size for perp trade fetches.
-        option_trade_window_ms: Bounded inclusive window size for option trade fetches.
+        options_trade_window_ms: Bounded inclusive window size for option trade fetches.
     """
 
     task_timeout_s: float | None
     heartbeat_s: float
     concurrency: int
     perp_trade_window_ms: int
-    option_trade_window_ms: int
+    options_trade_window_ms: int
 
 
 def load_fetch_runtime_policy(env: Mapping[str, str] | None = None) -> FetchRuntimePolicy:
@@ -63,10 +63,10 @@ def load_fetch_runtime_policy(env: Mapping[str, str] | None = None) -> FetchRunt
             env_name="DEPTH_PERP_TRADES_WINDOW_MINUTES",
             default_ms=PERP_TRADES_WINDOW_MS,
         ),
-        option_trade_window_ms=_env_window_ms(
+        options_trade_window_ms=_env_window_ms(
             source,
-            env_name="DEPTH_OPTION_TRADES_WINDOW_MINUTES",
-            default_ms=OPTION_TRADES_WINDOW_MS,
+            env_name="DEPTH_OPTIONS_TRADES_WINDOW_MINUTES",
+            default_ms=OPTIONS_TRADES_WINDOW_MS,
         ),
     )
 
@@ -94,7 +94,7 @@ def trade_window_ms(market: str) -> int:
 
     policy = load_fetch_runtime_policy()
     if market == "option":
-        return policy.option_trade_window_ms
+        return policy.options_trade_window_ms
     return policy.perp_trade_window_ms
 
 

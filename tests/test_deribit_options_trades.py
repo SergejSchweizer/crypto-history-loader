@@ -59,7 +59,7 @@ def test_fetch_options_trades_range_page_size_env_override(monkeypatch) -> None:
             }
         }
 
-    monkeypatch.setenv("DEPTH_DERIBIT_OPTION_TRADES_PAGE_SIZE", "9")
+    monkeypatch.setenv("DEPTH_DERIBIT_OPTIONS_TRADES_PAGE_SIZE", "9")
     monkeypatch.setattr(deribit_options_trades, "get_json", _fake_get_json)
     rows = deribit_options_trades.fetch_options_trades_range(
         currency="BTC",
@@ -121,7 +121,7 @@ def test_fetch_options_trades_range_respects_max_pages_env(monkeypatch) -> None:
             }
         }
 
-    monkeypatch.setenv("DEPTH_DERIBIT_OPTION_TRADES_MAX_PAGES_PER_RANGE", "3")
+    monkeypatch.setenv("DEPTH_DERIBIT_OPTIONS_TRADES_MAX_PAGES_PER_RANGE", "3")
     monkeypatch.setattr(deribit_options_trades, "get_json", _fake_get_json)
     rows = deribit_options_trades.fetch_options_trades_range(
         currency="BTC",
@@ -174,7 +174,7 @@ def test_fetch_options_trades_range_paginates_from_max_page_timestamp(monkeypatc
 
 
 def test_options_trades_base_url_env_override(monkeypatch) -> None:  # type: ignore[no-untyped-def]
-    monkeypatch.setenv("DEPTH_DERIBIT_OPTION_TRADES_BASE_URL", "https://example.org///")
+    monkeypatch.setenv("DEPTH_DERIBIT_OPTIONS_TRADES_BASE_URL", "https://example.org///")
     assert deribit_options_trades._trades_base_url() == "https://example.org"
 
 
@@ -230,7 +230,7 @@ def test_fetch_options_trades_range_falls_back_on_timeout(monkeypatch) -> None: 
             }
         }
 
-    monkeypatch.setenv("DEPTH_DERIBIT_OPTION_TRADES_ROUTE_RETRY_ATTEMPTS", "1")
+    monkeypatch.setenv("DEPTH_DERIBIT_OPTIONS_TRADES_ROUTE_RETRY_ATTEMPTS", "1")
     monkeypatch.setattr(deribit_options_trades, "get_json", _fake_get_json)
     rows = deribit_options_trades.fetch_options_trades_range(
         currency="BTC",
@@ -263,8 +263,8 @@ def test_fetch_options_trades_range_retries_route_failure_before_success(monkeyp
             }
         }
 
-    monkeypatch.setenv("DEPTH_DERIBIT_OPTION_TRADES_ROUTE_RETRY_ATTEMPTS", "3")
-    monkeypatch.setenv("DEPTH_DERIBIT_OPTION_TRADES_ROUTE_RETRY_BACKOFF_BASE_S", "0")
+    monkeypatch.setenv("DEPTH_DERIBIT_OPTIONS_TRADES_ROUTE_RETRY_ATTEMPTS", "3")
+    monkeypatch.setenv("DEPTH_DERIBIT_OPTIONS_TRADES_ROUTE_RETRY_BACKOFF_BASE_S", "0")
     monkeypatch.setattr(deribit_options_trades, "get_json", _fake_get_json)
     rows = deribit_options_trades.fetch_options_trades_range(
         currency="BTC",

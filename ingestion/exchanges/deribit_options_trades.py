@@ -15,10 +15,10 @@ from ingestion.exchanges.deribit_trade_common import (
 )
 from ingestion.http_client import HttpClientError, get_json
 
-DERIBIT_OPTION_TRADES_MAX_PAGE_SIZE = 1000
-DERIBIT_OPTION_TRADES_DEFAULT_PAGE_SIZE = 500
-DERIBIT_OPTION_TRADES_BASE_URL_DEFAULT = "https://history.deribit.com"
-DERIBIT_OPTION_TRADES_FALLBACK_BASE_URL = "https://www.deribit.com"
+DERIBIT_OPTIONS_TRADES_MAX_PAGE_SIZE = 1000
+DERIBIT_OPTIONS_TRADES_DEFAULT_PAGE_SIZE = 500
+DERIBIT_OPTIONS_TRADES_BASE_URL_DEFAULT = "https://history.deribit.com"
+DERIBIT_OPTIONS_TRADES_FALLBACK_BASE_URL = "https://www.deribit.com"
 logger = logging.getLogger(__name__)
 
 
@@ -31,8 +31,8 @@ def _trades_base_url() -> str:
 
     return deribit_trade_policy.normalized_base_url(
         "DEPTH_DERIBIT_TRADES_BASE_URL",
-        "DEPTH_DERIBIT_OPTION_TRADES_BASE_URL",
-        default=DERIBIT_OPTION_TRADES_BASE_URL_DEFAULT,
+        "DEPTH_DERIBIT_OPTIONS_TRADES_BASE_URL",
+        default=DERIBIT_OPTIONS_TRADES_BASE_URL_DEFAULT,
     )
 
 
@@ -40,8 +40,8 @@ def _trades_base_urls() -> list[str]:
     """Return ordered base URL candidates for options_trades API."""
 
     primary = _trades_base_url()
-    if primary != DERIBIT_OPTION_TRADES_FALLBACK_BASE_URL:
-        return [primary, DERIBIT_OPTION_TRADES_FALLBACK_BASE_URL]
+    if primary != DERIBIT_OPTIONS_TRADES_FALLBACK_BASE_URL:
+        return [primary, DERIBIT_OPTIONS_TRADES_FALLBACK_BASE_URL]
     return [primary]
 
 
@@ -60,7 +60,7 @@ def _utc_now_ms() -> int:
 def _inter_request_sleep_seconds() -> float:
     return deribit_trade_policy.non_negative_float(
         "DEPTH_DERIBIT_TRADES_INTER_REQUEST_SLEEP_S",
-        "DEPTH_DERIBIT_OPTION_TRADES_INTER_REQUEST_SLEEP_S",
+        "DEPTH_DERIBIT_OPTIONS_TRADES_INTER_REQUEST_SLEEP_S",
         default=deribit_trade_policy.DEFAULT_INTER_REQUEST_SLEEP_S,
     )
 
@@ -68,7 +68,7 @@ def _inter_request_sleep_seconds() -> float:
 def _route_retry_attempts() -> int:
     return deribit_trade_policy.int_at_least(
         "DEPTH_DERIBIT_TRADES_ROUTE_RETRY_ATTEMPTS",
-        "DEPTH_DERIBIT_OPTION_TRADES_ROUTE_RETRY_ATTEMPTS",
+        "DEPTH_DERIBIT_OPTIONS_TRADES_ROUTE_RETRY_ATTEMPTS",
         default=deribit_trade_policy.DEFAULT_ROUTE_RETRY_ATTEMPTS,
         minimum=1,
     )
@@ -77,16 +77,16 @@ def _route_retry_attempts() -> int:
 def _route_retry_backoff_base_seconds() -> float:
     return deribit_trade_policy.non_negative_float(
         "DEPTH_DERIBIT_TRADES_ROUTE_RETRY_BACKOFF_BASE_S",
-        "DEPTH_DERIBIT_OPTION_TRADES_ROUTE_RETRY_BACKOFF_BASE_S",
+        "DEPTH_DERIBIT_OPTIONS_TRADES_ROUTE_RETRY_BACKOFF_BASE_S",
         default=deribit_trade_policy.DEFAULT_ROUTE_RETRY_BACKOFF_BASE_S,
     )
 
 
 def _default_page_size() -> int:
     return deribit_trade_policy.page_size(
-        "DEPTH_DERIBIT_OPTION_TRADES_PAGE_SIZE",
-        default=DERIBIT_OPTION_TRADES_DEFAULT_PAGE_SIZE,
-        maximum=DERIBIT_OPTION_TRADES_MAX_PAGE_SIZE,
+        "DEPTH_DERIBIT_OPTIONS_TRADES_PAGE_SIZE",
+        default=DERIBIT_OPTIONS_TRADES_DEFAULT_PAGE_SIZE,
+        maximum=DERIBIT_OPTIONS_TRADES_MAX_PAGE_SIZE,
     )
 
 
@@ -109,8 +109,8 @@ def fetch_options_trades_range(
         raise ValueError("currency cannot be empty")
     cursor = start_open_ms
     collected: list[dict[str, object]] = []
-    page_size = min(count if count is not None else _default_page_size(), DERIBIT_OPTION_TRADES_MAX_PAGE_SIZE)
-    max_pages = deribit_trade_policy.max_pages_per_range("DEPTH_DERIBIT_OPTION_TRADES_MAX_PAGES_PER_RANGE")
+    page_size = min(count if count is not None else _default_page_size(), DERIBIT_OPTIONS_TRADES_MAX_PAGE_SIZE)
+    max_pages = deribit_trade_policy.max_pages_per_range("DEPTH_DERIBIT_OPTIONS_TRADES_MAX_PAGES_PER_RANGE")
     inter_request_sleep_s = _inter_request_sleep_seconds()
     route_retry_attempts = _route_retry_attempts()
     route_retry_backoff_base_s = _route_retry_backoff_base_seconds()

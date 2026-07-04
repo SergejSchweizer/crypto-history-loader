@@ -90,7 +90,7 @@ def test_run_bronze_build_emits_manifest_and_plot_file_lists(tmp_path: Path, mon
         market=["spot_ohlcv"],
         symbols=["BTCUSDT"],
         perp_trade_symbols=["BTC"],
-        option_trade_symbols=["BTC"],
+        options_trade_symbols=["BTC"],
         save_parquet_lake=True,
         lake_root=str(tmp_path),
         no_json_output=False,
@@ -184,7 +184,7 @@ def test_run_bronze_build_persists_trade_chunks_incrementally(
         market=["perps_trades", "options_trades"],
         symbols=["BTC"],
         perp_trade_symbols=["BTC"],
-        option_trade_symbols=["BTC"],
+        options_trade_symbols=["BTC"],
         save_parquet_lake=True,
         lake_root=str(tmp_path),
         no_json_output=True,
@@ -301,7 +301,7 @@ def test_run_bronze_build_drops_invalid_symbols_before_scheduling(monkeypatch) -
         market=["spot_ohlcv", "perps_ohlcv", "open_interest", "funding"],
         symbols=["BTC", None, " ", "\t", "ETH"],
         perp_trade_symbols=["BTC", None, " ", "\t", "ETH"],
-        option_trade_symbols=["BTC", None, " ", "\t", "ETH"],
+        options_trade_symbols=["BTC", None, " ", "\t", "ETH"],
         save_parquet_lake=False,
         lake_root="lake/bronze",
         no_json_output=True,
@@ -334,7 +334,7 @@ def test_run_bronze_build_raises_when_no_valid_symbols(monkeypatch) -> None:  # 
         market=["spot_ohlcv"],
         symbols=[None, "", "  "],
         perp_trade_symbols=["BTC"],
-        option_trade_symbols=["BTC"],
+        options_trade_symbols=["BTC"],
         save_parquet_lake=False,
         lake_root="lake/bronze",
         no_json_output=True,
@@ -395,14 +395,14 @@ def test_resolved_symbol_groups_sanitizes_and_sorts() -> None:
         symbols=["BTC", " ", None, "ETH"],
     )
 
-    ohlcv_symbols, perp_trade_symbols, option_trade_symbols = loader_cmd._resolved_symbol_groups(
+    ohlcv_symbols, perp_trade_symbols, options_trade_symbols = loader_cmd._resolved_symbol_groups(
         args=args,
         logger=logging.getLogger("test"),
     )
 
     assert ohlcv_symbols == ["BTC", "ETH"]
     assert perp_trade_symbols == ["BTC", "ETH"]
-    assert option_trade_symbols == ["BTC", "ETH"]
+    assert options_trade_symbols == ["BTC", "ETH"]
 
 
 def test_build_bronze_fetch_plan_is_deterministic_and_sorted() -> None:
@@ -412,7 +412,7 @@ def test_build_bronze_fetch_plan_is_deterministic_and_sorted() -> None:
         market=["funding", "spot_ohlcv", "open_interest", "perps_ohlcv"],
         symbols=["ETH", "BTC"],
         perp_trade_symbols=["ETH", "BTC"],
-        option_trade_symbols=["SOL", "BTC"],
+        options_trade_symbols=["SOL", "BTC"],
     )
 
     plan = loader_cmd._build_bronze_fetch_plan(args=args, logger=logging.getLogger("test"))
@@ -446,7 +446,7 @@ def test_dataset_task_key_maps_use_registry_checkpoint_keys() -> None:
         market=["spot_ohlcv", "open_interest", "perps_trades"],
         symbols=["BTC"],
         perp_trade_symbols=["BTC"],
-        option_trade_symbols=["BTC"],
+        options_trade_symbols=["BTC"],
     )
     plan = loader_cmd._build_bronze_fetch_plan(args=args, logger=logging.getLogger("test"))
     candle_map, open_interest_map, funding_map, trade_map = loader_cmd._dataset_task_key_maps(plan)
@@ -490,7 +490,7 @@ def test_run_bronze_build_resumes_from_checkpoint_and_clears_on_success(
         market=["spot_ohlcv"],
         symbols=["BTC", "ETH"],
         perp_trade_symbols=["BTC"],
-        option_trade_symbols=["BTC"],
+        options_trade_symbols=["BTC"],
         save_parquet_lake=False,
         lake_root="lake/bronze",
         no_json_output=True,

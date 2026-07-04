@@ -8,7 +8,7 @@ from application.services.fetch_runtime_policy import (
     DEFAULT_FETCH_CONCURRENCY,
     MAX_TRADE_WINDOW_MS,
     MIN_TRADE_WINDOW_MS,
-    OPTION_TRADES_WINDOW_MS,
+    OPTIONS_TRADES_WINDOW_MS,
     PERP_TRADES_WINDOW_MS,
     fetch_concurrency,
     heartbeat_seconds,
@@ -48,7 +48,7 @@ def test_load_fetch_runtime_policy_accepts_explicit_env_mapping() -> None:
             "DEPTH_FETCH_HEARTBEAT_S": "4",
             "DEPTH_FETCH_CONCURRENCY": "6",
             "DEPTH_PERP_TRADES_WINDOW_MINUTES": "30",
-            "DEPTH_OPTION_TRADES_WINDOW_MINUTES": "120",
+            "DEPTH_OPTIONS_TRADES_WINDOW_MINUTES": "120",
         }
     )
 
@@ -56,19 +56,19 @@ def test_load_fetch_runtime_policy_accepts_explicit_env_mapping() -> None:
     assert policy.heartbeat_s == 4.0
     assert policy.concurrency == 6
     assert policy.perp_trade_window_ms == 30 * 60 * 1000
-    assert policy.option_trade_window_ms == 120 * 60 * 1000
+    assert policy.options_trade_window_ms == 120 * 60 * 1000
 
 
 def test_load_fetch_runtime_policy_bounds_trade_windows() -> None:
     policy = load_fetch_runtime_policy(
         {
             "DEPTH_PERP_TRADES_WINDOW_MINUTES": "0",
-            "DEPTH_OPTION_TRADES_WINDOW_MINUTES": str(48 * 60),
+            "DEPTH_OPTIONS_TRADES_WINDOW_MINUTES": str(48 * 60),
         }
     )
 
     assert policy.perp_trade_window_ms == MIN_TRADE_WINDOW_MS
-    assert policy.option_trade_window_ms == MAX_TRADE_WINDOW_MS
+    assert policy.options_trade_window_ms == MAX_TRADE_WINDOW_MS
 
 
 def test_load_fetch_runtime_policy_falls_back_for_invalid_values() -> None:
@@ -78,7 +78,7 @@ def test_load_fetch_runtime_policy_falls_back_for_invalid_values() -> None:
             "DEPTH_FETCH_HEARTBEAT_S": "bad",
             "DEPTH_FETCH_CONCURRENCY": "bad",
             "DEPTH_PERP_TRADES_WINDOW_MINUTES": "bad",
-            "DEPTH_OPTION_TRADES_WINDOW_MINUTES": "bad",
+            "DEPTH_OPTIONS_TRADES_WINDOW_MINUTES": "bad",
         }
     )
 
@@ -86,7 +86,7 @@ def test_load_fetch_runtime_policy_falls_back_for_invalid_values() -> None:
     assert policy.heartbeat_s == 30.0
     assert policy.concurrency == DEFAULT_FETCH_CONCURRENCY
     assert policy.perp_trade_window_ms == PERP_TRADES_WINDOW_MS
-    assert policy.option_trade_window_ms == OPTION_TRADES_WINDOW_MS
+    assert policy.options_trade_window_ms == OPTIONS_TRADES_WINDOW_MS
 
 
 def test_fetch_concurrency_is_bounded() -> None:
@@ -98,7 +98,7 @@ def test_fetch_concurrency_is_bounded() -> None:
 
 def test_trade_window_ms_uses_market_specific_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DEPTH_PERP_TRADES_WINDOW_MINUTES", "20")
-    monkeypatch.setenv("DEPTH_OPTION_TRADES_WINDOW_MINUTES", "90")
+    monkeypatch.setenv("DEPTH_OPTIONS_TRADES_WINDOW_MINUTES", "90")
 
     assert trade_window_ms("perp") == 20 * 60 * 1000
     assert trade_window_ms("option") == 90 * 60 * 1000

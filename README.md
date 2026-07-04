@@ -529,7 +529,7 @@ Description: paginated option tick-trade retrieval by currency; includes contrac
 Reliability behavior: requests use 500-row pages by default, stay capped by Deribit's 1000-row page
 limit, split bounded Bronze fetches into 60-minute trade windows, and retry/fall back across
 configured base URLs for transient route, timeout, and connection-reset failures.
-Runtime override: set `DEPTH_DERIBIT_OPTION_TRADES_PAGE_SIZE` to tune request page size within the
+Runtime override: set `DEPTH_DERIBIT_OPTIONS_TRADES_PAGE_SIZE` to tune request page size within the
 `1..1000` bound.
 
 ### 2. Silver layer

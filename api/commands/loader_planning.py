@@ -57,11 +57,11 @@ def resolved_symbol_groups(args: argparse.Namespace, logger: logging.Logger) -> 
 
     validated_symbols = sorted(sanitize_symbols(cast(object, args.symbols), logger=logger))
     validated_perp_trade_symbols = list(validated_symbols)
-    validated_option_trade_symbols = list(validated_symbols)
+    validated_options_trade_symbols = list(validated_symbols)
     return (
         validated_symbols,
         validated_perp_trade_symbols,
-        validated_option_trade_symbols,
+        validated_options_trade_symbols,
     )
 
 
@@ -75,7 +75,7 @@ def build_bronze_fetch_plan(args: argparse.Namespace, logger: logging.Logger) ->
     data_types = sorted(cast(list[CliDataType], selected))
     specs = dataset_specs(data_types)
     ohlcv_markets = cast(list[Market], [spec.market for spec in specs if spec.bronze_task_kind == "ohlcv"])
-    symbols, perp_trade_symbols, option_trade_symbols = resolved_symbol_groups(args=args, logger=logger)
+    symbols, perp_trade_symbols, options_trade_symbols = resolved_symbol_groups(args=args, logger=logger)
 
     dataset_tasks: list[DatasetTask] = []
     candle_tasks: list[tuple[Exchange, Market, str, str]] = []
@@ -98,7 +98,7 @@ def build_bronze_fetch_plan(args: argparse.Namespace, logger: logging.Logger) ->
                 spec=spec,
                 symbols=symbols,
                 perp_trade_symbols=perp_trade_symbols,
-                option_trade_symbols=option_trade_symbols,
+                options_trade_symbols=options_trade_symbols,
             ):
                 task = spec.build_task(exchange=exchange, symbol=symbol, timeframe=normalized_timeframe)
                 dataset_tasks.append(task)
@@ -113,7 +113,7 @@ def build_bronze_fetch_plan(args: argparse.Namespace, logger: logging.Logger) ->
         specs=trade_specs,
         symbols_by_group={
             "perp_trade_symbols": perp_trade_symbols,
-            "option_trade_symbols": option_trade_symbols,
+            "options_trade_symbols": options_trade_symbols,
         },
     )
     for exchange, market, symbol in trade_tasks:
@@ -126,7 +126,7 @@ def build_bronze_fetch_plan(args: argparse.Namespace, logger: logging.Logger) ->
         ohlcv_markets=ohlcv_markets,
         symbols=symbols,
         perp_trade_symbols=perp_trade_symbols,
-        option_trade_symbols=option_trade_symbols,
+        options_trade_symbols=options_trade_symbols,
         candle_tasks=candle_tasks,
         open_interest_tasks=open_interest_tasks,
         funding_tasks=funding_tasks,
@@ -141,7 +141,7 @@ def _symbols_for_spec(
     spec: DatasetSpec,
     symbols: list[str],
     perp_trade_symbols: list[str],
-    option_trade_symbols: list[str],
+    options_trade_symbols: list[str],
 ) -> list[str]:
     """Return the configured symbol group for one registered dataset."""
 
@@ -149,8 +149,8 @@ def _symbols_for_spec(
         return symbols
     if spec.symbol_group == "perp_trade_symbols":
         return perp_trade_symbols
-    if spec.symbol_group == "option_trade_symbols":
-        return option_trade_symbols
+    if spec.symbol_group == "options_trade_symbols":
+        return options_trade_symbols
     raise ValueError(f"Unsupported symbol group '{spec.symbol_group}'")
 
 

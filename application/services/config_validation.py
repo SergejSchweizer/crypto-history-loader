@@ -39,11 +39,11 @@ class _EnvConfigModel(BaseModel):
     DEPTH_FETCH_TASK_TIMEOUT_S: float | None = Field(default=None, ge=0)
     DEPTH_FETCH_HEARTBEAT_S: float | None = Field(default=None, gt=0)
     DEPTH_PERP_TRADES_WINDOW_MINUTES: int | None = Field(default=None, ge=1, le=1440)
-    DEPTH_OPTION_TRADES_WINDOW_MINUTES: int | None = Field(default=None, ge=1, le=1440)
+    DEPTH_OPTIONS_TRADES_WINDOW_MINUTES: int | None = Field(default=None, ge=1, le=1440)
     DEPTH_DERIBIT_PERP_TRADES_PAGE_SIZE: int | None = Field(default=None, ge=1, le=1000)
-    DEPTH_DERIBIT_OPTION_TRADES_PAGE_SIZE: int | None = Field(default=None, ge=1, le=1000)
+    DEPTH_DERIBIT_OPTIONS_TRADES_PAGE_SIZE: int | None = Field(default=None, ge=1, le=1000)
     DEPTH_DERIBIT_PERP_TRADES_INTER_REQUEST_SLEEP_S: float | None = Field(default=None, ge=0)
-    DEPTH_DERIBIT_OPTION_TRADES_INTER_REQUEST_SLEEP_S: float | None = Field(default=None, ge=0)
+    DEPTH_DERIBIT_OPTIONS_TRADES_INTER_REQUEST_SLEEP_S: float | None = Field(default=None, ge=0)
 
 
 class _RuntimeConfigModel(BaseModel):

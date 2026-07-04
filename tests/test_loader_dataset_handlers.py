@@ -19,7 +19,7 @@ def test_build_trade_tasks_uses_only_perp_market() -> None:
     tasks = build_trade_tasks(
         exchanges=["deribit"],
         perp_trade_symbols=["BTC", "ETH"],
-        option_trade_symbols=["BTC", "ETH"],
+        options_trade_symbols=["BTC", "ETH"],
         perps_trades_requested=True,
         options_trades_requested=False,
     )
@@ -34,7 +34,7 @@ def test_build_trade_tasks_returns_empty_when_not_requested() -> None:
     tasks = build_trade_tasks(
         exchanges=["deribit"],
         perp_trade_symbols=["BTC"],
-        option_trade_symbols=["BTC"],
+        options_trade_symbols=["BTC"],
         perps_trades_requested=False,
         options_trades_requested=False,
     )
@@ -46,7 +46,7 @@ def test_build_trade_tasks_includes_option_market_when_requested() -> None:
     tasks = build_trade_tasks(
         exchanges=["deribit"],
         perp_trade_symbols=["BTC"],
-        option_trade_symbols=["ETH"],
+        options_trade_symbols=["ETH"],
         perps_trades_requested=True,
         options_trades_requested=True,
     )
@@ -59,7 +59,7 @@ def test_build_trade_tasks_from_specs_keeps_symbol_first_ordering() -> None:
         specs=[dataset_spec("perps_trades"), dataset_spec("options_trades")],
         symbols_by_group={
             "perp_trade_symbols": ["BTC", "ETH"],
-            "option_trade_symbols": ["BTC"],
+            "options_trade_symbols": ["BTC"],
         },
     )
 

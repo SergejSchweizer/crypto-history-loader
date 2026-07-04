@@ -23,7 +23,7 @@ DatasetType = Literal[
 ]
 InstrumentType = Literal["spot_ohlcv", "perp", "option"]
 BronzeTaskKind = Literal["ohlcv", "open_interest", "funding", "trade", "volatility"]
-SymbolGroup = Literal["symbols", "perp_trade_symbols", "option_trade_symbols"]
+SymbolGroup = Literal["symbols", "perp_trade_symbols", "options_trade_symbols"]
 
 
 @dataclass(frozen=True)
@@ -144,7 +144,7 @@ DATASET_REGISTRY: dict[CliDataType, DatasetSpec] = {
         dataset_type="options_trades",
         instrument_type="option",
         bronze_task_kind="trade",
-        symbol_group="option_trade_symbols",
+        symbol_group="options_trade_symbols",
         default_timeframe="tick",
         market="option",
     ),

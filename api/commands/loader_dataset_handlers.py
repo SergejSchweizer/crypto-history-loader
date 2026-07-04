@@ -17,7 +17,7 @@ def build_trade_tasks(
     *,
     exchanges: list[Exchange],
     perp_trade_symbols: list[str],
-    option_trade_symbols: list[str],
+    options_trade_symbols: list[str],
     perps_trades_requested: bool,
     options_trades_requested: bool,
 ) -> list[tuple[Exchange, TradeMarket, str]]:
@@ -33,7 +33,7 @@ def build_trade_tasks(
         specs=requested_specs,
         symbols_by_group={
             "perp_trade_symbols": perp_trade_symbols,
-            "option_trade_symbols": option_trade_symbols,
+            "options_trade_symbols": options_trade_symbols,
         },
     )
 

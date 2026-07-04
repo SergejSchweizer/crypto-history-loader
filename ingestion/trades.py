@@ -94,7 +94,7 @@ def _parse_trade_row(
     )
 
 
-def _parse_option_trade_row(exchange: Exchange, symbol: str, row: dict[str, object]) -> OptionTradeTick:
+def _parse_options_trade_row(exchange: Exchange, symbol: str, row: dict[str, object]) -> OptionTradeTick:
     ts_ms = int(cast(Any, row).get("timestamp", 0))
     trade_id = str(cast(Any, row).get("trade_id", ""))
     side = _parse_side(row)
@@ -172,7 +172,7 @@ def fetch_trades_all_history(
     if market == "option":
         rows = deribit_options_trades.fetch_options_trades_all(currency=normalized_symbol)
         parsed: list[TradeTick | OptionTradeTick] = [
-            _parse_option_trade_row(exchange, normalized_symbol, row) for row in rows
+            _parse_options_trade_row(exchange, normalized_symbol, row) for row in rows
         ]
         if on_history_chunk is not None and parsed:
             on_history_chunk(parsed)
@@ -215,7 +215,7 @@ def fetch_trades_range(
             end_open_ms=end_open_ms,
             count=page_size,
         )
-        return [_parse_option_trade_row(exchange, normalized_symbol, row) for row in rows]
+        return [_parse_options_trade_row(exchange, normalized_symbol, row) for row in rows]
     market_non_option: Literal["spot_ohlcv", "perp"] = market
     rows = deribit_perps_trades.fetch_perps_trades_range(
         symbol=normalized_symbol,

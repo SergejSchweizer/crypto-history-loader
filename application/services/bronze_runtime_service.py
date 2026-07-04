@@ -494,7 +494,7 @@ def bronze_checkpoint_fingerprint(args: argparse.Namespace, plan: BronzeFetchPla
         "market": plan.data_types,
         "symbols": plan.symbols,
         "perp_trade_symbols": plan.perp_trade_symbols,
-        "option_trade_symbols": plan.option_trade_symbols,
+        "options_trade_symbols": plan.options_trade_symbols,
         "lake_root": cast(str, args.lake_root),
         "tail_delta_only": bool(args.tail_delta_only),
         "start_date": cast(str | None, getattr(args, "start_date", None)),

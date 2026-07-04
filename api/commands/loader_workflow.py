@@ -85,11 +85,11 @@ def run_bronze_build(
             multi_market = len(data_types) > 1
             state = BronzeRunState.from_plan(plan)
             logger.info(
-                "Deterministic schedule markets=%s symbols=%s perp_trade_symbols=%s option_trade_symbols=%s",
+                "Deterministic schedule markets=%s symbols=%s perp_trade_symbols=%s options_trade_symbols=%s",
                 data_types,
                 plan.symbols,
                 plan.perp_trade_symbols,
-                plan.option_trade_symbols,
+                plan.options_trade_symbols,
             )
             key_maps = bronze_checkpoint_key_maps(plan)
             candle_key_map = key_maps.candle

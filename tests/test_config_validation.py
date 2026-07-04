@@ -53,11 +53,11 @@ def test_validate_runtime_config_accepts_fetch_runtime_env_policy() -> None:
             "DEPTH_FETCH_TASK_TIMEOUT_S": 900,
             "DEPTH_FETCH_HEARTBEAT_S": 30,
             "DEPTH_PERP_TRADES_WINDOW_MINUTES": 60,
-            "DEPTH_OPTION_TRADES_WINDOW_MINUTES": 120,
+            "DEPTH_OPTIONS_TRADES_WINDOW_MINUTES": 120,
             "DEPTH_DERIBIT_PERP_TRADES_PAGE_SIZE": 1000,
-            "DEPTH_DERIBIT_OPTION_TRADES_PAGE_SIZE": 1000,
+            "DEPTH_DERIBIT_OPTIONS_TRADES_PAGE_SIZE": 1000,
             "DEPTH_DERIBIT_PERP_TRADES_INTER_REQUEST_SLEEP_S": 0.02,
-            "DEPTH_DERIBIT_OPTION_TRADES_INTER_REQUEST_SLEEP_S": 0.02,
+            "DEPTH_DERIBIT_OPTIONS_TRADES_INTER_REQUEST_SLEEP_S": 0.02,
         },
         "export-descriptive-stats": {
             "lake_root": "lake/bronze",
@@ -80,9 +80,9 @@ def test_validate_runtime_config_rejects_out_of_bounds_fetch_runtime_env_policy(
         "env": {
             "DEPTH_FETCH_CONCURRENCY": 0,
             "DEPTH_PERP_TRADES_WINDOW_MINUTES": 0,
-            "DEPTH_OPTION_TRADES_WINDOW_MINUTES": 1441,
+            "DEPTH_OPTIONS_TRADES_WINDOW_MINUTES": 1441,
             "DEPTH_DERIBIT_PERP_TRADES_PAGE_SIZE": 1001,
-            "DEPTH_DERIBIT_OPTION_TRADES_INTER_REQUEST_SLEEP_S": -0.1,
+            "DEPTH_DERIBIT_OPTIONS_TRADES_INTER_REQUEST_SLEEP_S": -0.1,
         },
         "export-descriptive-stats": {
             "lake_root": "lake/bronze",

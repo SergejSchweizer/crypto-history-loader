@@ -45,6 +45,6 @@ def test_dataset_registry_covers_contract_names() -> None:
         "volatility_index_data",
     }
     assert dataset_spec("perps_trades").bronze_task_kind == "trade"
-    assert dataset_spec("options_trades").symbol_group == "option_trade_symbols"
+    assert dataset_spec("options_trades").symbol_group == "options_trade_symbols"
     assert dataset_names_for_task_kind("trade") == {"perps_trades", "options_trades"}
     assert dataset_names_for_task_kind("volatility") == {"volatility_index_data"}

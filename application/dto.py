@@ -219,7 +219,7 @@ class BronzeFetchPlanDTO:
     ohlcv_markets: list[Market]
     symbols: list[str]
     perp_trade_symbols: list[str]
-    option_trade_symbols: list[str]
+    options_trade_symbols: list[str]
     candle_tasks: list[tuple[Exchange, Market, str, str]]
     open_interest_tasks: list[tuple[Exchange, str, str]]
     funding_tasks: list[tuple[Exchange, str, str]]
