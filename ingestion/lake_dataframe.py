@@ -7,7 +7,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from ingestion.lake_datasets import OI_DATASET_TYPE
+from ingestion.lake_datasets import OPEN_INTEREST_DATASET_TYPE
 from ingestion.lake_layout import dataset_data_files
 
 OHLCV_COLUMNS = [
@@ -228,26 +228,26 @@ def _join_open_interest(
     start_time: datetime | None,
     end_time: datetime | None,
 ) -> Any:
-    oi_frames = _load_filtered_frames(
+    open_interest_frames = _load_filtered_frames(
         pl=pl,
-        data_files=dataset_data_files(lake_root, OI_DATASET_TYPE),
+        data_files=dataset_data_files(lake_root, OPEN_INTEREST_DATASET_TYPE),
         filters=filters,
         start_time=start_time,
         end_time=end_time,
         normalize_price_columns=False,
     )
-    if not oi_frames:
+    if not open_interest_frames:
         return dataframe.with_columns([pl.lit(None).alias("open_interest"), pl.lit(None).alias("open_interest_value")])
 
-    oi_frame = (
-        pl.concat(oi_frames, how="diagonal_relaxed")
+    open_interest_frame = (
+        pl.concat(open_interest_frames, how="diagonal_relaxed")
         .sort(by=["open_time"])
         .unique(
             subset=["exchange", "instrument_type", "symbol", "timeframe", "open_time"],
             keep="last",
         )
     )
-    oi_frame = oi_frame.select(
+    open_interest_frame = open_interest_frame.select(
         [
             "exchange",
             "instrument_type",
@@ -259,7 +259,7 @@ def _join_open_interest(
         ]
     )
     return dataframe.join(
-        oi_frame,
+        open_interest_frame,
         on=["exchange", "instrument_type", "symbol", "timeframe", "open_time"],
         how="left",
     )

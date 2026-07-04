@@ -21,7 +21,7 @@ def _plan() -> BronzeFetchPlanDTO:
         perp_trade_symbols=["BTC"],
         option_trade_symbols=["BTC"],
         candle_tasks=[("deribit", "spot_ohlcv", "BTC", "1m")],
-        oi_tasks=[],
+        open_interest_tasks=[],
         funding_tasks=[],
         volatility_index_data_tasks=[],
         trade_tasks=[],
@@ -31,19 +31,19 @@ def _plan() -> BronzeFetchPlanDTO:
 def _registry_plan() -> BronzeFetchPlanDTO:
     return BronzeFetchPlanDTO(
         exchanges=["deribit"],
-        data_types=["funding", "oi", "perps_trades", "spot_ohlcv", "volatility_index_data"],
+        data_types=["funding", "open_interest", "perps_trades", "spot_ohlcv", "volatility_index_data"],
         ohlcv_markets=["spot_ohlcv"],
         symbols=["BTC"],
         perp_trade_symbols=["BTC"],
         option_trade_symbols=["BTC"],
         candle_tasks=[("deribit", "spot_ohlcv", "BTC", "1m")],
-        oi_tasks=[("deribit", "BTC", "1m")],
+        open_interest_tasks=[("deribit", "BTC", "1m")],
         funding_tasks=[("deribit", "BTC", "1m")],
         volatility_index_data_tasks=[("deribit", "BTC", "1m")],
         trade_tasks=[("deribit", "perp", "BTC")],
         dataset_tasks=[
             DatasetTask("deribit", "spot_ohlcv", "spot_ohlcv", "BTC", "1m", "spot_ohlcv"),
-            DatasetTask("deribit", "oi", "perp", "BTC", "1m", "perp"),
+            DatasetTask("deribit", "open_interest", "perp", "BTC", "1m", "perp"),
             DatasetTask("deribit", "funding", "perp", "BTC", "1m", "perp"),
             DatasetTask("deribit", "volatility_index_data", "perp", "BTC", "1m", "perp"),
             DatasetTask("deribit", "perps_trades", "perp", "BTC", "tick", "perp"),
@@ -63,7 +63,7 @@ def test_load_checkpoint_handles_unreadable_stale_and_missing_completed(tmp_path
     unreadable = runtime.load_bronze_checkpoint(path, "fp", logger)
     assert unreadable == {
         "candle": set(),
-        "oi": set(),
+        "open_interest": set(),
         "funding": set(),
         "volatility_index_data": set(),
         "trade": set(),
@@ -74,7 +74,7 @@ def test_load_checkpoint_handles_unreadable_stale_and_missing_completed(tmp_path
     path.write_text(json.dumps({"fingerprint": "other", "completed": {}}), encoding="utf-8")
     assert runtime.load_bronze_checkpoint(path, "fp", logger) == {
         "candle": set(),
-        "oi": set(),
+        "open_interest": set(),
         "funding": set(),
         "volatility_index_data": set(),
         "trade": set(),
@@ -83,7 +83,7 @@ def test_load_checkpoint_handles_unreadable_stale_and_missing_completed(tmp_path
     path.write_text(json.dumps({"fingerprint": "fp", "completed": []}), encoding="utf-8")
     assert runtime.load_bronze_checkpoint(path, "fp", logger) == {
         "candle": set(),
-        "oi": set(),
+        "open_interest": set(),
         "funding": set(),
         "volatility_index_data": set(),
         "trade": set(),
@@ -95,7 +95,7 @@ def test_build_bronze_execution_policy_preserves_bounded_concurrency() -> None:
 
     assert policy.effective_concurrency == 3
     assert policy.candle_concurrency == 3
-    assert policy.oi_concurrency == 3
+    assert policy.open_interest_concurrency == 3
     assert policy.funding_concurrency == 3
     assert policy.trade_concurrency == 3
 
@@ -152,7 +152,7 @@ def test_fingerprint_and_write_checkpoint_roundtrip(tmp_path: Path) -> None:
     path = tmp_path / "x" / "chk.json"
     completed = {
         "candle": {"a"},
-        "oi": set(),
+        "open_interest": set(),
         "funding": set(),
         "volatility_index_data": set(),
         "trade": {"b"},
@@ -164,10 +164,10 @@ def test_fingerprint_and_write_checkpoint_roundtrip(tmp_path: Path) -> None:
 
 
 def test_dataset_task_key_maps_use_registry_checkpoint_keys() -> None:
-    candle_map, oi_map, funding_map, trade_map = runtime.dataset_task_key_maps(_registry_plan())
+    candle_map, open_interest_map, funding_map, trade_map = runtime.dataset_task_key_maps(_registry_plan())
 
     assert candle_map[("deribit", "spot_ohlcv", "BTC", "1m")] == "deribit|spot_ohlcv|spot_ohlcv|BTC|1m|spot_ohlcv"
-    assert oi_map[("deribit", "BTC", "1m")] == "deribit|oi|perp|BTC|1m|perp"
+    assert open_interest_map[("deribit", "BTC", "1m")] == "deribit|open_interest|perp|BTC|1m|perp"
     assert funding_map[("deribit", "BTC", "1m")] == "deribit|funding|perp|BTC|1m|perp"
     assert trade_map[("deribit", "perp", "BTC")] == "deribit|perps_trades|perp|BTC|tick|perp"
 
@@ -186,7 +186,7 @@ def test_checkpoint_key_for_task_falls_back_to_legacy_tuple_keys() -> None:
         runtime.checkpoint_key_for_task("candle", ("deribit", "spot_ohlcv", "BTC", "1m"), key_maps)
         == "deribit|spot_ohlcv|spot_ohlcv|BTC|1m|spot_ohlcv"
     )
-    assert runtime.checkpoint_key_for_task("oi", ("deribit", "ETH", "1m"), key_maps) == "deribit|ETH|1m"
+    assert runtime.checkpoint_key_for_task("open_interest", ("deribit", "ETH", "1m"), key_maps) == "deribit|ETH|1m"
 
 
 def test_checkpoint_task_keys_and_completion_use_dataset_maps() -> None:
@@ -201,7 +201,7 @@ def test_checkpoint_task_keys_and_completion_use_dataset_maps() -> None:
     )
     task_keys = runtime.checkpoint_task_keys(
         candle_tasks=[("deribit", "spot_ohlcv", "BTC", "1m")],
-        oi_tasks=[],
+        open_interest_tasks=[],
         funding_tasks=[],
         volatility_index_data_tasks=[],
         trade_tasks=[("deribit", "perp", "BTC")],
@@ -222,7 +222,7 @@ def test_apply_checkpoint_filter_with_key_maps_drops_registry_completed_tasks() 
 
     pending = runtime.apply_checkpoint_filter_with_key_maps(
         candle_tasks=plan.candle_tasks,
-        oi_tasks=plan.oi_tasks,
+        open_interest_tasks=plan.open_interest_tasks,
         funding_tasks=plan.funding_tasks,
         volatility_index_data_tasks=plan.volatility_index_data_tasks,
         trade_tasks=plan.trade_tasks,
@@ -231,17 +231,17 @@ def test_apply_checkpoint_filter_with_key_maps_drops_registry_completed_tasks() 
     )
 
     assert pending.candle_tasks == []
-    assert pending.oi_tasks == [("deribit", "BTC", "1m")]
+    assert pending.open_interest_tasks == [("deribit", "BTC", "1m")]
     assert pending.funding_tasks == [("deribit", "BTC", "1m")]
     assert pending.trade_tasks == []
 
 
 def test_hydrate_checkpoint_aliases_adds_registry_keys_for_legacy_completed_keys() -> None:
     plan = _registry_plan()
-    candle_map, oi_map, funding_map, trade_map = runtime.dataset_task_key_maps(plan)
+    candle_map, open_interest_map, funding_map, trade_map = runtime.dataset_task_key_maps(plan)
     completed = {
         "candle": {"deribit|spot_ohlcv|BTC|1m"},
-        "oi": {"deribit|BTC|1m"},
+        "open_interest": {"deribit|BTC|1m"},
         "funding": {"deribit|BTC|1m"},
         "volatility_index_data": {"deribit|BTC|1m"},
         "trade": {"deribit|perp|BTC"},
@@ -250,32 +250,32 @@ def test_hydrate_checkpoint_aliases_adds_registry_keys_for_legacy_completed_keys
     runtime.hydrate_checkpoint_aliases(
         completed=completed,
         candle_tasks=plan.candle_tasks,
-        oi_tasks=plan.oi_tasks,
+        open_interest_tasks=plan.open_interest_tasks,
         funding_tasks=plan.funding_tasks,
         volatility_index_data_tasks=plan.volatility_index_data_tasks,
         trade_tasks=plan.trade_tasks,
         candle_key_map=candle_map,
-        oi_key_map=oi_map,
+        open_interest_key_map=open_interest_map,
         funding_key_map=funding_map,
         volatility_key_map={("deribit", "BTC", "1m"): "deribit|volatility_index_data|perp|BTC|1m|perp"},
         trade_key_map=trade_map,
     )
 
     assert "deribit|spot_ohlcv|spot_ohlcv|BTC|1m|spot_ohlcv" in completed["candle"]
-    assert "deribit|oi|perp|BTC|1m|perp" in completed["oi"]
+    assert "deribit|open_interest|perp|BTC|1m|perp" in completed["open_interest"]
     assert "deribit|funding|perp|BTC|1m|perp" in completed["funding"]
     assert "deribit|perps_trades|perp|BTC|tick|perp" in completed["trade"]
 
 
 def test_apply_checkpoint_filter_drops_completed_tasks() -> None:
     candle_tasks = [("deribit", "spot_ohlcv", "BTC", "1m"), ("deribit", "perp", "ETH", "1m")]
-    oi_tasks = [("deribit", "BTC", "1m")]
+    open_interest_tasks = [("deribit", "BTC", "1m")]
     funding_tasks = [("deribit", "ETH", "1m")]
     volatility_index_data_tasks = [("deribit", "SOL", "1m")]
     trade_tasks = [("deribit", "perp", "BTC"), ("deribit", "option", "ETH")]
     completed = {
         "candle": {_serialize(("deribit", "spot_ohlcv", "BTC", "1m"))},
-        "oi": set(),
+        "open_interest": set(),
         "funding": {_serialize(("deribit", "ETH", "1m"))},
         "volatility_index_data": set(),
         "trade": {_serialize(("deribit", "option", "ETH"))},
@@ -283,27 +283,33 @@ def test_apply_checkpoint_filter_drops_completed_tasks() -> None:
 
     pending = runtime.apply_checkpoint_filter(
         candle_tasks=candle_tasks,
-        oi_tasks=oi_tasks,
+        open_interest_tasks=open_interest_tasks,
         funding_tasks=funding_tasks,
         volatility_index_data_tasks=volatility_index_data_tasks,
         trade_tasks=trade_tasks,
         completed=completed,
         candle_key_serializer=_serialize,
-        oi_key_serializer=_serialize,
+        open_interest_key_serializer=_serialize,
         funding_key_serializer=_serialize,
         volatility_key_serializer=_serialize,
         trade_key_serializer=_serialize,
     )
 
     assert pending.candle_tasks == [("deribit", "perp", "ETH", "1m")]
-    assert pending.oi_tasks == [("deribit", "BTC", "1m")]
+    assert pending.open_interest_tasks == [("deribit", "BTC", "1m")]
     assert pending.funding_tasks == []
     assert pending.volatility_index_data_tasks == [("deribit", "SOL", "1m")]
     assert pending.trade_tasks == [("deribit", "perp", "BTC")]
 
 
 def test_has_checkpoint_state_detects_any_completed_bucket() -> None:
-    empty = {"candle": set(), "oi": set(), "funding": set(), "volatility_index_data": set(), "trade": set()}
+    empty = {"candle": set(), "open_interest": set(), "funding": set(), "volatility_index_data": set(), "trade": set()}
     assert not runtime.has_checkpoint_state(empty)
-    non_empty = {"candle": {"x"}, "oi": set(), "funding": set(), "volatility_index_data": set(), "trade": set()}
+    non_empty = {
+        "candle": {"x"},
+        "open_interest": set(),
+        "funding": set(),
+        "volatility_index_data": set(),
+        "trade": set(),
+    }
     assert runtime.has_checkpoint_state(non_empty)

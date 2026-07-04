@@ -20,7 +20,7 @@ from ingestion.trades import TradeMarket
 CandleTaskKey = tuple[Exchange, Market, str, str]
 IntervalTaskKey = tuple[Exchange, str, str]
 TradeTaskKey = tuple[Exchange, TradeMarket, str]
-CheckpointDataset = Literal["candle", "oi", "funding", "volatility_index_data", "trade"]
+CheckpointDataset = Literal["candle", "open_interest", "funding", "volatility_index_data", "trade"]
 
 
 @dataclass(frozen=True)
@@ -28,7 +28,7 @@ class PendingTaskGroups:
     """Pending task groups after applying completed-checkpoint filtering."""
 
     candle_tasks: list[CandleTaskKey]
-    oi_tasks: list[IntervalTaskKey]
+    open_interest_tasks: list[IntervalTaskKey]
     funding_tasks: list[IntervalTaskKey]
     volatility_index_data_tasks: list[IntervalTaskKey]
     trade_tasks: list[TradeTaskKey]
@@ -39,7 +39,7 @@ class BronzeCheckpointKeyMaps:
     """Checkpoint key maps for every Bronze task family."""
 
     candle: dict[CandleTaskKey, str]
-    oi: dict[IntervalTaskKey, str]
+    open_interest: dict[IntervalTaskKey, str]
     funding: dict[IntervalTaskKey, str]
     volatility_index_data: dict[IntervalTaskKey, str]
     trade: dict[TradeTaskKey, str]
@@ -57,7 +57,7 @@ class BronzeRuntimeBoundsContext:
 
 _EMPTY_CHECKPOINT: dict[str, set[str]] = {
     "candle": set(),
-    "oi": set(),
+    "open_interest": set(),
     "funding": set(),
     "volatility_index_data": set(),
     "trade": set(),
@@ -78,7 +78,7 @@ def build_bronze_execution_policy(configured_concurrency: int) -> BronzeExecutio
         configured_concurrency=configured_concurrency,
         effective_concurrency=effective_concurrency,
         candle_concurrency=effective_concurrency,
-        oi_concurrency=effective_concurrency,
+        open_interest_concurrency=effective_concurrency,
         funding_concurrency=effective_concurrency,
         trade_concurrency=effective_concurrency,
     )
@@ -264,20 +264,20 @@ def dataset_task_key_maps(
     """Return tuple-to-checkpoint-key mappings derived from registered dataset tasks."""
 
     candle_map: dict[CandleTaskKey, str] = {}
-    oi_map: dict[IntervalTaskKey, str] = {}
+    open_interest_map: dict[IntervalTaskKey, str] = {}
     funding_map: dict[IntervalTaskKey, str] = {}
     trade_map: dict[TradeTaskKey, str] = {}
     for task in plan.dataset_tasks:
         key = task.checkpoint_key()
         if task.dataset_type in {"spot_ohlcv", "perps_ohlcv"}:
             candle_map[task.candle_tuple()] = key
-        elif task.dataset_type == "oi":
-            oi_map[task.interval_tuple()] = key
+        elif task.dataset_type == "open_interest":
+            open_interest_map[task.interval_tuple()] = key
         elif task.dataset_type == "funding":
             funding_map[task.interval_tuple()] = key
         elif task.dataset_type in {"perps_trades", "options_trades"}:
             trade_map[task.trade_tuple()] = key
-    return candle_map, oi_map, funding_map, trade_map
+    return candle_map, open_interest_map, funding_map, trade_map
 
 
 def volatility_task_key_map(plan: BronzeFetchPlanDTO) -> dict[IntervalTaskKey, str]:
@@ -301,10 +301,10 @@ def bronze_checkpoint_key_maps(plan: BronzeFetchPlanDTO) -> BronzeCheckpointKeyM
         falling back to legacy tuple serialization for compatibility.
     """
 
-    candle_map, oi_map, funding_map, trade_map = dataset_task_key_maps(plan)
+    candle_map, open_interest_map, funding_map, trade_map = dataset_task_key_maps(plan)
     return BronzeCheckpointKeyMaps(
         candle=candle_map,
-        oi=oi_map,
+        open_interest=open_interest_map,
         funding=funding_map,
         volatility_index_data=volatility_task_key_map(plan),
         trade=trade_map,
@@ -330,8 +330,8 @@ def checkpoint_key_for_task(
     fallback = task_key_tuple_to_string(key)
     if dataset == "candle":
         return key_maps.candle.get(cast(CandleTaskKey, key), fallback)
-    if dataset == "oi":
-        return key_maps.oi.get(cast(IntervalTaskKey, key), fallback)
+    if dataset == "open_interest":
+        return key_maps.open_interest.get(cast(IntervalTaskKey, key), fallback)
     if dataset == "funding":
         return key_maps.funding.get(cast(IntervalTaskKey, key), fallback)
     if dataset == "volatility_index_data":
@@ -342,7 +342,7 @@ def checkpoint_key_for_task(
 def apply_checkpoint_filter_with_key_maps(
     *,
     candle_tasks: list[CandleTaskKey],
-    oi_tasks: list[IntervalTaskKey],
+    open_interest_tasks: list[IntervalTaskKey],
     funding_tasks: list[IntervalTaskKey],
     volatility_index_data_tasks: list[IntervalTaskKey],
     trade_tasks: list[TradeTaskKey],
@@ -353,13 +353,13 @@ def apply_checkpoint_filter_with_key_maps(
 
     return apply_checkpoint_filter(
         candle_tasks=candle_tasks,
-        oi_tasks=oi_tasks,
+        open_interest_tasks=open_interest_tasks,
         funding_tasks=funding_tasks,
         volatility_index_data_tasks=volatility_index_data_tasks,
         trade_tasks=trade_tasks,
         completed=completed,
         candle_key_serializer=lambda task: checkpoint_key_for_task("candle", task, key_maps),
-        oi_key_serializer=lambda task: checkpoint_key_for_task("oi", task, key_maps),
+        open_interest_key_serializer=lambda task: checkpoint_key_for_task("open_interest", task, key_maps),
         funding_key_serializer=lambda task: checkpoint_key_for_task("funding", task, key_maps),
         volatility_key_serializer=lambda task: checkpoint_key_for_task("volatility_index_data", task, key_maps),
         trade_key_serializer=lambda task: checkpoint_key_for_task("trade", task, key_maps),
@@ -383,7 +383,7 @@ def add_completed_checkpoint_key(
 def checkpoint_task_keys(
     *,
     candle_tasks: Iterable[CandleTaskKey],
-    oi_tasks: Iterable[IntervalTaskKey],
+    open_interest_tasks: Iterable[IntervalTaskKey],
     funding_tasks: Iterable[IntervalTaskKey],
     volatility_index_data_tasks: Iterable[IntervalTaskKey],
     trade_tasks: Iterable[TradeTaskKey],
@@ -394,8 +394,8 @@ def checkpoint_task_keys(
     keys: set[str] = set()
     for candle_task in candle_tasks:
         keys.add(checkpoint_key_for_task("candle", candle_task, key_maps))
-    for oi_task in oi_tasks:
-        keys.add(checkpoint_key_for_task("oi", oi_task, key_maps))
+    for open_interest_task in open_interest_tasks:
+        keys.add(checkpoint_key_for_task("open_interest", open_interest_task, key_maps))
     for funding_task in funding_tasks:
         keys.add(checkpoint_key_for_task("funding", funding_task, key_maps))
     for volatility_task in volatility_index_data_tasks:
@@ -409,12 +409,12 @@ def hydrate_checkpoint_aliases(
     *,
     completed: dict[str, set[str]],
     candle_tasks: list[CandleTaskKey],
-    oi_tasks: list[IntervalTaskKey],
+    open_interest_tasks: list[IntervalTaskKey],
     funding_tasks: list[IntervalTaskKey],
     volatility_index_data_tasks: list[IntervalTaskKey],
     trade_tasks: list[TradeTaskKey],
     candle_key_map: dict[CandleTaskKey, str],
-    oi_key_map: dict[IntervalTaskKey, str],
+    open_interest_key_map: dict[IntervalTaskKey, str],
     funding_key_map: dict[IntervalTaskKey, str],
     volatility_key_map: dict[IntervalTaskKey, str],
     trade_key_map: dict[TradeTaskKey, str],
@@ -425,10 +425,10 @@ def hydrate_checkpoint_aliases(
         prior_key = task_key_tuple_to_string((candle_task[0], candle_task[1], candle_task[2], candle_task[3]))
         if prior_key in completed["candle"]:
             completed["candle"].add(candle_key_map.get(candle_task, prior_key))
-    for oi_task in oi_tasks:
-        prior_key = task_key_tuple_to_string((oi_task[0], oi_task[1], oi_task[2]))
-        if prior_key in completed["oi"]:
-            completed["oi"].add(oi_key_map.get(oi_task, prior_key))
+    for open_interest_task in open_interest_tasks:
+        prior_key = task_key_tuple_to_string((open_interest_task[0], open_interest_task[1], open_interest_task[2]))
+        if prior_key in completed["open_interest"]:
+            completed["open_interest"].add(open_interest_key_map.get(open_interest_task, prior_key))
     for funding_task in funding_tasks:
         prior_key = task_key_tuple_to_string((funding_task[0], funding_task[1], funding_task[2]))
         if prior_key in completed["funding"]:
@@ -446,13 +446,13 @@ def hydrate_checkpoint_aliases(
 def apply_checkpoint_filter(
     *,
     candle_tasks: list[CandleTaskKey],
-    oi_tasks: list[IntervalTaskKey],
+    open_interest_tasks: list[IntervalTaskKey],
     funding_tasks: list[IntervalTaskKey],
     volatility_index_data_tasks: list[IntervalTaskKey],
     trade_tasks: list[TradeTaskKey],
     completed: dict[str, set[str]],
     candle_key_serializer: Callable[[CandleTaskKey], str],
-    oi_key_serializer: Callable[[IntervalTaskKey], str],
+    open_interest_key_serializer: Callable[[IntervalTaskKey], str],
     funding_key_serializer: Callable[[IntervalTaskKey], str],
     volatility_key_serializer: Callable[[IntervalTaskKey], str],
     trade_key_serializer: Callable[[TradeTaskKey], str],
@@ -460,7 +460,9 @@ def apply_checkpoint_filter(
     """Filter task groups against completed checkpoint sets."""
 
     pending_candles = [task for task in candle_tasks if candle_key_serializer(task) not in completed["candle"]]
-    pending_oi = [task for task in oi_tasks if oi_key_serializer(task) not in completed["oi"]]
+    pending_open_interest = [
+        task for task in open_interest_tasks if open_interest_key_serializer(task) not in completed["open_interest"]
+    ]
     pending_funding = [task for task in funding_tasks if funding_key_serializer(task) not in completed["funding"]]
     pending_volatility_index_data = [
         task
@@ -470,7 +472,7 @@ def apply_checkpoint_filter(
     pending_trades = [task for task in trade_tasks if trade_key_serializer(task) not in completed["trade"]]
     return PendingTaskGroups(
         candle_tasks=pending_candles,
-        oi_tasks=pending_oi,
+        open_interest_tasks=pending_open_interest,
         funding_tasks=pending_funding,
         volatility_index_data_tasks=pending_volatility_index_data,
         trade_tasks=pending_trades,
@@ -480,7 +482,7 @@ def apply_checkpoint_filter(
 def has_checkpoint_state(completed: dict[str, set[str]]) -> bool:
     """Return whether any checkpoint category has completed entries."""
 
-    return any(completed[name] for name in ("candle", "oi", "funding", "volatility_index_data", "trade"))
+    return any(completed[name] for name in ("candle", "open_interest", "funding", "volatility_index_data", "trade"))
 
 
 def bronze_checkpoint_fingerprint(args: argparse.Namespace, plan: BronzeFetchPlanDTO) -> str:
@@ -531,7 +533,7 @@ def load_bronze_checkpoint(path: Path, fingerprint: str, logger: logging.Logger)
     completed = cast(dict[str, object], raw_completed)
     return {
         "candle": set(str(value) for value in cast(list[object], completed.get("candle", []))),
-        "oi": set(str(value) for value in cast(list[object], completed.get("oi", []))),
+        "open_interest": set(str(value) for value in cast(list[object], completed.get("open_interest", []))),
         "funding": set(str(value) for value in cast(list[object], completed.get("funding", []))),
         "volatility_index_data": set(
             str(value) for value in cast(list[object], completed.get("volatility_index_data", []))

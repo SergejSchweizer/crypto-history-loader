@@ -221,8 +221,8 @@ def _prepare_spot_ohlcv_or_perp(pl: Any, frame: Any, prefix: str, symbol: str) -
     return gold_frames.prepare_spot_ohlcv_or_perp(pl, frame, prefix, symbol)
 
 
-def _prepare_oi(pl: Any, frame: Any, symbol: str) -> Any:
-    return gold_frames.prepare_oi(pl, frame, symbol)
+def _prepare_open_interest(pl: Any, frame: Any, symbol: str) -> Any:
+    return gold_frames.prepare_open_interest(pl, frame, symbol)
 
 
 def _prepare_funding(pl: Any, frame: Any, symbol: str) -> Any:

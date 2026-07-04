@@ -6,17 +6,17 @@ from datetime import UTC, datetime
 
 import pytest
 
-from ingestion import open_interest as oi
+from ingestion import open_interest as open_interest
 from ingestion.exchanges import deribit_open_interest
 from ingestion.http_client import HttpClientError, HttpClientHttpError
 
 
 def test_normalize_open_interest_timeframe_deribit() -> None:
-    assert oi.normalize_open_interest_timeframe("deribit", "M1") == "1m"
+    assert open_interest.normalize_open_interest_timeframe("deribit", "M1") == "1m"
 
 
 def test_fetch_open_interest_all_history_returns_empty_for_spot_ohlcv() -> None:
-    rows = oi.fetch_open_interest_all_history(
+    rows = open_interest.fetch_open_interest_all_history(
         exchange="deribit",
         symbol="BTC",
         interval="1m",
@@ -46,7 +46,7 @@ def test_fetch_open_interest_range_deribit_historical(monkeypatch: pytest.Monkey
     start = int(datetime(2026, 4, 28, 9, 0, tzinfo=UTC).timestamp() * 1000)
     end = int(datetime(2026, 4, 28, 9, 5, tzinfo=UTC).timestamp() * 1000)
 
-    rows = oi.fetch_open_interest_range(
+    rows = open_interest.fetch_open_interest_range(
         exchange="deribit",
         symbol="BTC",
         interval="1m",
@@ -66,7 +66,7 @@ def test_fetch_open_interest_all_returns_empty_on_http_400(monkeypatch: pytest.M
 
     monkeypatch.setattr(deribit_open_interest, "get_json", _raise_http_400)
 
-    rows = oi.fetch_open_interest_all_history(
+    rows = open_interest.fetch_open_interest_all_history(
         exchange="deribit",
         symbol="SOL",
         interval="1m",
@@ -81,7 +81,7 @@ def test_fetch_open_interest_range_returns_empty_on_connection_error(monkeypatch
         raise HttpClientError("Connection error")
 
     monkeypatch.setattr(deribit_open_interest, "fetch_open_interest_range", _raise_connection_error)
-    rows = oi.fetch_open_interest_range(
+    rows = open_interest.fetch_open_interest_range(
         exchange="deribit",
         symbol="BTC",
         interval="1m",
@@ -115,7 +115,7 @@ def test_fetch_open_interest_all_maps_symbols_to_expected_deribit_instrument(
 
     monkeypatch.setattr(deribit_open_interest, "get_json", _fake_get_json)
 
-    rows = oi.fetch_open_interest_all_history(
+    rows = open_interest.fetch_open_interest_all_history(
         exchange="deribit",
         symbol=symbol_input,
         interval="1m",

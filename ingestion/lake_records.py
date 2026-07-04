@@ -6,7 +6,7 @@ from dataclasses import asdict
 from datetime import UTC, datetime
 
 from ingestion.funding import FundingPoint
-from ingestion.lake_datasets import OI_DATASET_TYPE, ohlcv_dataset_type_for_market
+from ingestion.lake_datasets import OPEN_INTEREST_DATASET_TYPE, ohlcv_dataset_type_for_market
 from ingestion.lake_layout import PartitionKey
 from ingestion.open_interest import OpenInterestPoint
 from ingestion.spot_ohlcv import SpotCandle
@@ -81,7 +81,7 @@ def open_interest_record(
 
     return {
         "schema_version": "v1",
-        "dataset_type": OI_DATASET_TYPE,
+        "dataset_type": OPEN_INTEREST_DATASET_TYPE,
         "exchange": item.exchange,
         "symbol": item.symbol,
         "instrument_type": market,

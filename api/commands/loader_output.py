@@ -66,7 +66,7 @@ class BronzeRunState:
         default_factory=dict
     )
     candle_tasks: list[tuple[Exchange, Market, str, str]] = field(default_factory=list)
-    oi_tasks: list[tuple[Exchange, str, str]] = field(default_factory=list)
+    open_interest_tasks: list[tuple[Exchange, str, str]] = field(default_factory=list)
     funding_tasks: list[tuple[Exchange, str, str]] = field(default_factory=list)
     volatility_index_data_tasks: list[tuple[Exchange, str, str]] = field(default_factory=list)
     trade_tasks: list[tuple[Exchange, TradeMarket, str]] = field(default_factory=list)
@@ -77,7 +77,7 @@ class BronzeRunState:
 
         state = cls(output={exchange: {} for exchange in plan.exchanges})
         state.candle_tasks.extend(plan.candle_tasks)
-        state.oi_tasks.extend(plan.oi_tasks)
+        state.open_interest_tasks.extend(plan.open_interest_tasks)
         state.funding_tasks.extend(plan.funding_tasks)
         state.volatility_index_data_tasks.extend(plan.volatility_index_data_tasks)
         state.trade_tasks.extend(plan.trade_tasks)
@@ -108,7 +108,7 @@ class IncrementalPersistor:
         self.incremental_parquet_files: list[str] = []
         self.logged_daily_partitions: set[tuple[str, str, str, str, str, str]] = set()
         self.streamed_candle_tasks: set[tuple[Exchange, Market, str, str]] = set()
-        self.streamed_oi_tasks: set[tuple[Exchange, str, str]] = set()
+        self.streamed_open_interest_tasks: set[tuple[Exchange, str, str]] = set()
         self.streamed_funding_tasks: set[tuple[Exchange, str, str]] = set()
         self.streamed_volatility_index_data_tasks: set[tuple[Exchange, str, str]] = set()
         self.streamed_trade_tasks: set[tuple[Exchange, TradeMarket, str]] = set()
@@ -159,7 +159,7 @@ class IncrementalPersistor:
                 options=PersistOptionsDTO(
                     save_parquet_lake=True,
                     lake_root=self.lake_root,
-                    oi_requested=False,
+                    open_interest_requested=False,
                     funding_requested=False,
                     trades_requested=False,
                 ),
@@ -176,7 +176,7 @@ class IncrementalPersistor:
             parquet_files=storage_result.parquet_files,
         )
 
-    def _persist_oi_task(
+    def _persist_open_interest_task(
         self,
         task: OpenInterestFetchTaskDTO,
         rows: list[OpenInterestPoint],
@@ -191,7 +191,7 @@ class IncrementalPersistor:
                 options=PersistOptionsDTO(
                     save_parquet_lake=True,
                     lake_root=self.lake_root,
-                    oi_requested=True,
+                    open_interest_requested=True,
                     funding_requested=False,
                     trades_requested=False,
                 ),
@@ -200,7 +200,7 @@ class IncrementalPersistor:
         self.incremental_parquet_files.extend(storage_result.parquet_files)
         self._log_new_daily_partitions(
             logger=logger,
-            data_type="oi",
+            data_type="open_interest",
             exchange=task.exchange,
             market="perp",
             symbol=task.symbol,
@@ -223,7 +223,7 @@ class IncrementalPersistor:
                 options=PersistOptionsDTO(
                     save_parquet_lake=True,
                     lake_root=self.lake_root,
-                    oi_requested=False,
+                    open_interest_requested=False,
                     funding_requested=True,
                     trades_requested=False,
                 ),
@@ -255,7 +255,7 @@ class IncrementalPersistor:
                 options=PersistOptionsDTO(
                     save_parquet_lake=True,
                     lake_root=self.lake_root,
-                    oi_requested=False,
+                    open_interest_requested=False,
                     funding_requested=False,
                     volatility_index_data_requested=True,
                     trades_requested=False,
@@ -288,7 +288,7 @@ class IncrementalPersistor:
                 options=PersistOptionsDTO(
                     save_parquet_lake=True,
                     lake_root=self.lake_root,
-                    oi_requested=False,
+                    open_interest_requested=False,
                     funding_requested=False,
                     trades_requested=True,
                 ),
@@ -310,15 +310,15 @@ class IncrementalPersistor:
             return
         self._persist_candle_task(task, rows, logger)
 
-    def on_oi_task_complete(
+    def on_open_interest_task_complete(
         self,
         task: OpenInterestFetchTaskDTO,
         rows: list[OpenInterestPoint],
         logger: logging.Logger,
     ) -> None:
-        if (task.exchange, task.symbol, task.timeframe) in self.streamed_oi_tasks:
+        if (task.exchange, task.symbol, task.timeframe) in self.streamed_open_interest_tasks:
             return
-        self._persist_oi_task(task, rows, logger)
+        self._persist_open_interest_task(task, rows, logger)
 
     def on_funding_task_complete(
         self,
@@ -347,7 +347,7 @@ class IncrementalPersistor:
         self._persist_candle_task(task, rows, logger)
         self.mark_checkpoint_complete("candle", (task.exchange, task.market, task.symbol, task.timeframe))
 
-    def on_oi_task_chunk(
+    def on_open_interest_task_chunk(
         self,
         task: OpenInterestFetchTaskDTO,
         rows: list[OpenInterestPoint],
@@ -355,9 +355,9 @@ class IncrementalPersistor:
     ) -> None:
         if not rows:
             return
-        self.streamed_oi_tasks.add((task.exchange, task.symbol, task.timeframe))
-        self._persist_oi_task(task, rows, logger)
-        self.mark_checkpoint_complete("oi", (task.exchange, task.symbol, task.timeframe))
+        self.streamed_open_interest_tasks.add((task.exchange, task.symbol, task.timeframe))
+        self._persist_open_interest_task(task, rows, logger)
+        self.mark_checkpoint_complete("open_interest", (task.exchange, task.symbol, task.timeframe))
 
     def on_funding_task_chunk(
         self,
@@ -401,14 +401,14 @@ def finalize_bronze_output(
     logger: logging.Logger,
     output: dict[str, object],
     tasks: list[tuple[Exchange, Market, str, str]],
-    oi_tasks: list[tuple[Exchange, str, str]],
+    open_interest_tasks: list[tuple[Exchange, str, str]],
     funding_tasks: list[tuple[Exchange, str, str]],
     volatility_index_data_tasks: list[tuple[Exchange, str, str]],
     trade_tasks: list[tuple[Exchange, TradeMarket, str]],
     task_results: dict[tuple[Exchange, Market, str, str], list[SpotCandle]],
     task_errors: dict[tuple[Exchange, Market, str, str], str],
-    oi_results: dict[tuple[Exchange, str, str], list[OpenInterestPoint]],
-    oi_errors: dict[tuple[Exchange, str, str], str],
+    open_interest_results: dict[tuple[Exchange, str, str], list[OpenInterestPoint]],
+    open_interest_errors: dict[tuple[Exchange, str, str], str],
     funding_results: dict[tuple[Exchange, str, str], list[FundingPoint]],
     funding_errors: dict[tuple[Exchange, str, str], str],
     volatility_index_data_results: dict[tuple[Exchange, str, str], list[VolatilityPoint]],
@@ -416,7 +416,7 @@ def finalize_bronze_output(
     trade_results: dict[tuple[Exchange, TradeMarket, str], list[TradeTick | OptionTradeTick]],
     trade_errors: dict[tuple[Exchange, TradeMarket, str], str],
     multi_market: bool,
-    oi_requested: bool,
+    open_interest_requested: bool,
     funding_requested: bool,
     volatility_index_data_requested: bool,
     perps_trades_requested: bool,
@@ -430,11 +430,11 @@ def finalize_bronze_output(
     args: _LakeArgs,
     incremental_parquet_on_fetch: bool,
     incremental_parquet_files: list[str],
-    oi_dataset_type: str,
+    open_interest_dataset_type: str,
     sidecar_path_list_fn: Callable[[list[str], str], list[str]],
     ensure_bronze_sidecars_fn: Callable[..., list[str]],
     populate_ohlcv_output_fn: Callable[..., None],
-    populate_oi_output_fn: Callable[..., None],
+    populate_open_interest_output_fn: Callable[..., None],
     populate_funding_output_fn: Callable[..., None],
     populate_volatility_output_fn: Callable[..., None],
     populate_trades_output_fn: Callable[..., None],
@@ -445,13 +445,13 @@ def finalize_bronze_output(
     persist_fn: Callable[..., object] = persist_loader_outputs_dto,
 ) -> None:
     logger.info(
-        "Fetch summary spot_ohlcv/perp: success=%s failed=%s | oi: success=%s failed=%s | "
+        "Fetch summary spot_ohlcv/perp: success=%s failed=%s | open_interest: success=%s failed=%s | "
         "funding: success=%s failed=%s | volatility_index_data: success=%s failed=%s | "
         "trades: success=%s failed=%s",
         len(task_results),
         len(task_errors),
-        len(oi_results),
-        len(oi_errors),
+        len(open_interest_results),
+        len(open_interest_errors),
         len(funding_results),
         len(funding_errors),
         len(volatility_index_data_results),
@@ -463,11 +463,11 @@ def finalize_bronze_output(
     if fairness is None:
         fairness = symbol_progress_rows_fn(
             candle_tasks=cast(list[tuple[str, str, str, str]], tasks),
-            oi_tasks=cast(list[tuple[str, str, str]], oi_tasks),
+            open_interest_tasks=cast(list[tuple[str, str, str]], open_interest_tasks),
             funding_tasks=cast(list[tuple[str, str, str]], funding_tasks),
             trade_tasks=cast(list[tuple[str, str, str]], trade_tasks),
             candle_results=cast(dict[tuple[str, str, str, str], object], task_results),
-            oi_results=cast(dict[tuple[str, str, str], object], oi_results),
+            open_interest_results=cast(dict[tuple[str, str, str], object], open_interest_results),
             funding_results=cast(dict[tuple[str, str, str], object], funding_results),
             trade_results=cast(dict[tuple[str, str, str], object], trade_results),
         )
@@ -483,12 +483,12 @@ def finalize_bronze_output(
         candle_serializer=candle_serializer,
         candles_for_storage=candles_for_storage,
     )
-    if oi_requested:
-        populate_oi_output_fn(
+    if open_interest_requested:
+        populate_open_interest_output_fn(
             output=output,
-            tasks=oi_tasks,
-            results=oi_results,
-            errors=oi_errors,
+            tasks=open_interest_tasks,
+            results=open_interest_results,
+            errors=open_interest_errors,
             multi_market=multi_market,
             storage=open_interest_for_storage,
         )
@@ -525,7 +525,7 @@ def finalize_bronze_output(
                     options=PersistOptionsDTO(
                         save_parquet_lake=True,
                         lake_root=args.lake_root,
-                        oi_requested=oi_requested,
+                        open_interest_requested=open_interest_requested,
                         funding_requested=funding_requested,
                         trades_requested=perps_trades_requested or options_trades_requested,
                     ),
@@ -545,8 +545,8 @@ def finalize_bronze_output(
             selected_dataset_types.add("spot_ohlcv")
         if any(market == "perp" for market in ohlcv_markets):
             selected_dataset_types.add("perps_ohlcv")
-        if oi_requested:
-            selected_dataset_types.add(oi_dataset_type)
+        if open_interest_requested:
+            selected_dataset_types.add(open_interest_dataset_type)
         if funding_requested:
             selected_dataset_types.add("funding")
         if volatility_index_data_requested:

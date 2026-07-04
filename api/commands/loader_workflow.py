@@ -45,7 +45,7 @@ class BronzeWorkflowDependencies:
     sidecar_path_list: Callable[..., list[str]]
     ensure_bronze_sidecars: Callable[..., list[str]]
     populate_ohlcv_output: Callable[..., None]
-    populate_oi_output: Callable[..., None]
+    populate_open_interest_output: Callable[..., None]
     populate_funding_output: Callable[..., None]
     populate_volatility_output: Callable[..., None]
     populate_trades_output: Callable[..., None]
@@ -53,7 +53,7 @@ class BronzeWorkflowDependencies:
     symbol_progress_rows_from_dataset_tasks: Callable[..., list[dict[str, object]]]
     trade_error_breakdown: Callable[..., dict[str, int]]
     candle_serializer: Callable[..., dict[str, object]]
-    oi_dataset_type: str
+    open_interest_dataset_type: str
 
 
 def run_bronze_build(
@@ -77,7 +77,7 @@ def run_bronze_build(
             plan = dependencies.build_bronze_fetch_plan(args=args, logger=logger)
             ohlcv_markets = plan.ohlcv_markets
             data_types = plan.data_types
-            oi_requested = "oi" in data_types
+            open_interest_requested = "open_interest" in data_types
             funding_requested = "funding" in data_types
             volatility_index_data_requested = "volatility_index_data" in data_types
             perps_trades_requested = "perps_trades" in data_types
@@ -93,7 +93,7 @@ def run_bronze_build(
             )
             key_maps = bronze_checkpoint_key_maps(plan)
             candle_key_map = key_maps.candle
-            oi_key_map = key_maps.oi
+            open_interest_key_map = key_maps.open_interest
             funding_key_map = key_maps.funding
             volatility_key_map = key_maps.volatility_index_data
             trade_key_map = key_maps.trade
@@ -107,17 +107,23 @@ def run_bronze_build(
                     logger=logger,
                 )
                 if checkpoint_enabled
-                else {"candle": set(), "oi": set(), "funding": set(), "volatility_index_data": set(), "trade": set()}
+                else {
+                    "candle": set(),
+                    "open_interest": set(),
+                    "funding": set(),
+                    "volatility_index_data": set(),
+                    "trade": set(),
+                }
             )
             dependencies.hydrate_checkpoint_aliases(
                 completed=checkpoint_completed,
                 candle_tasks=state.candle_tasks,
-                oi_tasks=state.oi_tasks,
+                open_interest_tasks=state.open_interest_tasks,
                 funding_tasks=state.funding_tasks,
                 volatility_index_data_tasks=state.volatility_index_data_tasks,
                 trade_tasks=state.trade_tasks,
                 candle_key_map=candle_key_map,
-                oi_key_map=oi_key_map,
+                open_interest_key_map=open_interest_key_map,
                 funding_key_map=funding_key_map,
                 volatility_key_map=volatility_key_map,
                 trade_key_map=trade_key_map,
@@ -125,7 +131,7 @@ def run_bronze_build(
 
             pending_tasks = apply_checkpoint_filter_with_key_maps(
                 candle_tasks=state.candle_tasks,
-                oi_tasks=state.oi_tasks,
+                open_interest_tasks=state.open_interest_tasks,
                 funding_tasks=state.funding_tasks,
                 volatility_index_data_tasks=state.volatility_index_data_tasks,
                 trade_tasks=state.trade_tasks,
@@ -133,7 +139,7 @@ def run_bronze_build(
                 key_maps=key_maps,
             )
             state.candle_tasks = pending_tasks.candle_tasks
-            state.oi_tasks = pending_tasks.oi_tasks
+            state.open_interest_tasks = pending_tasks.open_interest_tasks
             state.funding_tasks = pending_tasks.funding_tasks
             state.volatility_index_data_tasks = pending_tasks.volatility_index_data_tasks
             state.trade_tasks = pending_tasks.trade_tasks
@@ -141,11 +147,11 @@ def run_bronze_build(
                 logger.info(
                     (
                         "Resuming from Bronze checkpoint '%s' pending_tasks "
-                        "candle=%s oi=%s funding=%s volatility_index_data=%s trade=%s"
+                        "candle=%s open_interest=%s funding=%s volatility_index_data=%s trade=%s"
                     ),
                     checkpoint_path,
                     len(state.candle_tasks),
-                    len(state.oi_tasks),
+                    len(state.open_interest_tasks),
                     len(state.funding_tasks),
                     len(state.volatility_index_data_tasks),
                     len(state.trade_tasks),
@@ -153,14 +159,14 @@ def run_bronze_build(
 
             policy = dependencies.build_bronze_execution_policy()
             candle_concurrency = policy.candle_concurrency
-            oi_concurrency = policy.oi_concurrency
+            open_interest_concurrency = policy.open_interest_concurrency
             funding_concurrency = policy.funding_concurrency
             volatility_concurrency = policy.funding_concurrency
             trade_concurrency = policy.trade_concurrency
             incremental_parquet_on_fetch = bool(args.save_parquet_lake)
             logger.info(
                 (
-                    "Fetch mode enabled for spot_ohlcv/perp, oi, funding, volatility_index_data, and trades "
+                    "Fetch mode enabled for spot_ohlcv/perp, open_interest, funding, volatility_index_data, and trades "
                     "with concurrency=%s (configured=%s)"
                 ),
                 policy.effective_concurrency,
@@ -193,13 +199,13 @@ def run_bronze_build(
                 Any,
                 dependencies.fetch_all_task_groups(
                     candle_tasks=state.candle_tasks,
-                    oi_tasks=state.oi_tasks,
+                    open_interest_tasks=state.open_interest_tasks,
                     funding_tasks=state.funding_tasks,
                     volatility_index_data_tasks=state.volatility_index_data_tasks,
                     trade_tasks=state.trade_tasks,
                     lake_root=cast(str, args.lake_root),
                     candle_concurrency=candle_concurrency,
-                    oi_concurrency=oi_concurrency,
+                    open_interest_concurrency=open_interest_concurrency,
                     funding_concurrency=funding_concurrency,
                     volatility_concurrency=volatility_concurrency,
                     trade_concurrency=trade_concurrency,
@@ -209,8 +215,8 @@ def run_bronze_build(
                     )
                     if incremental_parquet_on_fetch
                     else None,
-                    on_oi_task_complete=(
-                        lambda task, rows: incremental_persistor.on_oi_task_complete(task, rows, logger)
+                    on_open_interest_task_complete=(
+                        lambda task, rows: incremental_persistor.on_open_interest_task_complete(task, rows, logger)
                     )
                     if incremental_parquet_on_fetch
                     else None,
@@ -224,7 +230,9 @@ def run_bronze_build(
                     )
                     if incremental_parquet_on_fetch
                     else None,
-                    on_oi_task_chunk=(lambda task, rows: incremental_persistor.on_oi_task_chunk(task, rows, logger))
+                    on_open_interest_task_chunk=(
+                        lambda task, rows: incremental_persistor.on_open_interest_task_chunk(task, rows, logger)
+                    )
                     if incremental_parquet_on_fetch
                     else None,
                     on_funding_task_chunk=(
@@ -253,8 +261,8 @@ def run_bronze_build(
                 (
                     task_results,
                     task_errors,
-                    oi_results,
-                    oi_errors,
+                    open_interest_results,
+                    open_interest_errors,
                     funding_results,
                     funding_errors,
                     trade_results,
@@ -266,8 +274,8 @@ def run_bronze_build(
                 (
                     task_results,
                     task_errors,
-                    oi_results,
-                    oi_errors,
+                    open_interest_results,
+                    open_interest_errors,
                     funding_results,
                     funding_errors,
                     volatility_index_data_results,
@@ -277,8 +285,8 @@ def run_bronze_build(
                 ) = fetch_results
             for key in task_results:
                 _mark_checkpoint_complete("candle", key)
-            for oi_key in oi_results:
-                _mark_checkpoint_complete("oi", oi_key)
+            for open_interest_key in open_interest_results:
+                _mark_checkpoint_complete("open_interest", open_interest_key)
             for funding_key in funding_results:
                 _mark_checkpoint_complete("funding", funding_key)
             for volatility_key in volatility_index_data_results:
@@ -287,7 +295,7 @@ def run_bronze_build(
                 _mark_checkpoint_complete("trade", trade_key)
             pending_task_keys = checkpoint_task_keys(
                 candle_tasks=state.candle_tasks,
-                oi_tasks=state.oi_tasks,
+                open_interest_tasks=state.open_interest_tasks,
                 funding_tasks=state.funding_tasks,
                 volatility_index_data_tasks=state.volatility_index_data_tasks,
                 trade_tasks=state.trade_tasks,
@@ -295,7 +303,7 @@ def run_bronze_build(
             )
             success_task_keys = checkpoint_task_keys(
                 candle_tasks=task_results,
-                oi_tasks=oi_results,
+                open_interest_tasks=open_interest_results,
                 funding_tasks=funding_results,
                 volatility_index_data_tasks=volatility_index_data_results,
                 trade_tasks=trade_results,
@@ -309,14 +317,14 @@ def run_bronze_build(
                 logger=logger,
                 output=state.output,
                 tasks=state.candle_tasks,
-                oi_tasks=state.oi_tasks,
+                open_interest_tasks=state.open_interest_tasks,
                 funding_tasks=state.funding_tasks,
                 volatility_index_data_tasks=state.volatility_index_data_tasks,
                 trade_tasks=state.trade_tasks,
                 task_results=task_results,
                 task_errors=task_errors,
-                oi_results=oi_results,
-                oi_errors=oi_errors,
+                open_interest_results=open_interest_results,
+                open_interest_errors=open_interest_errors,
                 funding_results=funding_results,
                 funding_errors=funding_errors,
                 volatility_index_data_results=volatility_index_data_results,
@@ -324,7 +332,7 @@ def run_bronze_build(
                 trade_results=trade_results,
                 trade_errors=trade_errors,
                 multi_market=multi_market,
-                oi_requested=oi_requested,
+                open_interest_requested=open_interest_requested,
                 funding_requested=funding_requested,
                 volatility_index_data_requested=volatility_index_data_requested,
                 perps_trades_requested=perps_trades_requested,
@@ -338,11 +346,11 @@ def run_bronze_build(
                 args=cast(Any, args),
                 incremental_parquet_on_fetch=incremental_parquet_on_fetch,
                 incremental_parquet_files=incremental_persistor.incremental_parquet_files,
-                oi_dataset_type=dependencies.oi_dataset_type,
+                open_interest_dataset_type=dependencies.open_interest_dataset_type,
                 sidecar_path_list_fn=dependencies.sidecar_path_list,
                 ensure_bronze_sidecars_fn=dependencies.ensure_bronze_sidecars,
                 populate_ohlcv_output_fn=dependencies.populate_ohlcv_output,
-                populate_oi_output_fn=dependencies.populate_oi_output,
+                populate_open_interest_output_fn=dependencies.populate_open_interest_output,
                 populate_funding_output_fn=dependencies.populate_funding_output,
                 populate_volatility_output_fn=dependencies.populate_volatility_output,
                 populate_trades_output_fn=dependencies.populate_trades_output,
@@ -356,7 +364,7 @@ def run_bronze_build(
             if not args.no_json_output:
                 print(json.dumps(state.output, indent=2))
             if checkpoint_enabled and not (
-                task_errors or oi_errors or funding_errors or volatility_index_data_errors or trade_errors
+                task_errors or open_interest_errors or funding_errors or volatility_index_data_errors or trade_errors
             ):
                 checkpoint_path.unlink(missing_ok=True)
                 logger.info("Cleared Bronze checkpoint '%s' after successful run", checkpoint_path)

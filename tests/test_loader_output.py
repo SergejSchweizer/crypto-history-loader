@@ -26,13 +26,13 @@ class _PersistResult:
 def test_bronze_run_state_initializes_output_and_tasks_from_plan() -> None:
     plan = BronzeFetchPlanDTO(
         exchanges=["deribit"],
-        data_types=["spot_ohlcv", "oi", "funding", "volatility_index_data", "perps_trades"],
+        data_types=["spot_ohlcv", "open_interest", "funding", "volatility_index_data", "perps_trades"],
         ohlcv_markets=["spot_ohlcv"],
         symbols=["BTC"],
         perp_trade_symbols=["BTC"],
         option_trade_symbols=[],
         candle_tasks=[("deribit", "spot_ohlcv", "BTC", "1m")],
-        oi_tasks=[("deribit", "BTC", "1m")],
+        open_interest_tasks=[("deribit", "BTC", "1m")],
         funding_tasks=[("deribit", "BTC", "1m")],
         volatility_index_data_tasks=[("deribit", "BTC", "1m")],
         trade_tasks=[("deribit", "perp", "BTC")],
@@ -42,7 +42,7 @@ def test_bronze_run_state_initializes_output_and_tasks_from_plan() -> None:
 
     assert state.output == {"deribit": {}}
     assert state.candle_tasks == [("deribit", "spot_ohlcv", "BTC", "1m")]
-    assert state.oi_tasks == [("deribit", "BTC", "1m")]
+    assert state.open_interest_tasks == [("deribit", "BTC", "1m")]
     assert state.funding_tasks == [("deribit", "BTC", "1m")]
     assert state.volatility_index_data_tasks == [("deribit", "BTC", "1m")]
     assert state.trade_tasks == [("deribit", "perp", "BTC")]

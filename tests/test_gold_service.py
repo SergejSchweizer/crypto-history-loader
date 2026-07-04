@@ -126,7 +126,7 @@ def test_dataset_specs_symbol_normalization_and_hash_helpers() -> None:
     assert normalize_symbol("eth-perpetual") == "ETH"
     assert _feature_source_dataset("spot_ohlcv_close_price") == "spot_ohlcv_1m"
     assert _feature_source_dataset("perp_close_price") == "perps_ohlcv_1m"
-    assert _feature_source_dataset("oi_observation_lag_sec") == "oi_1m_feature"
+    assert _feature_source_dataset("open_interest_observation_lag_sec") == "open_interest_1m_feature"
     assert _feature_source_dataset("funding_rate_last_known") == "funding_1m_feature"
     assert _feature_source_dataset("trades_open_price") == "perps_trades_1m_feature"
     assert _feature_source_dataset("options_trades_open_price") == "options_trades_1m_feature"
@@ -369,7 +369,7 @@ def test_build_gold_for_symbol_writes_hashed_parquet_and_manifest(tmp_path: Path
     )
     _write_silver_month(
         silver,
-        dataset_type="oi_1m_feature",
+        dataset_type="open_interest_1m_feature",
         exchange=exchange,
         symbol="BTC-PERPETUAL",
         timeframe="1m",
@@ -380,20 +380,20 @@ def test_build_gold_for_symbol_writes_hashed_parquet_and_manifest(tmp_path: Path
                 "exchange": exchange,
                 "symbol": symbol,
                 "open_interest": 1000.0,
-                "oi_is_observed": True,
-                "oi_is_ffill": False,
-                "minutes_since_oi_observation": 0,
-                "oi_observation_lag_sec": 0,
+                "open_interest_is_observed": True,
+                "open_interest_is_ffill": False,
+                "minutes_since_open_interest_observation": 0,
+                "open_interest_observation_lag_sec": 0,
             },
             {
                 "timestamp_m1": t1,
                 "exchange": exchange,
                 "symbol": symbol,
                 "open_interest": 1001.0,
-                "oi_is_observed": False,
-                "oi_is_ffill": True,
-                "minutes_since_oi_observation": 1,
-                "oi_observation_lag_sec": 60,
+                "open_interest_is_observed": False,
+                "open_interest_is_ffill": True,
+                "minutes_since_open_interest_observation": 1,
+                "open_interest_observation_lag_sec": 60,
             },
         ],
     )
@@ -490,7 +490,7 @@ def test_build_gold_for_symbol_writes_hashed_parquet_and_manifest(tmp_path: Path
     assert "columns" in payload["source_silver_datasets"]["spot_ohlcv_1m"]
     assert "open_time" in payload["source_silver_datasets"]["spot_ohlcv_1m"]["columns"]
     assert "perps_ohlcv_1m" in payload["source_silver_datasets"]
-    assert "oi_1m_feature" in payload["source_silver_datasets"]
+    assert "open_interest_1m_feature" in payload["source_silver_datasets"]
     assert "funding_1m_feature" in payload["source_silver_datasets"]
     assert "perps_trades_1m_feature" in payload["source_silver_datasets"]
     assert "options_trades_1m_feature" in payload["source_silver_datasets"]
@@ -638,17 +638,17 @@ def test_build_gold_for_symbol_normalizes_input_symbol(tmp_path: Path) -> None:
             ],
         ),
         (
-            "oi_1m_feature",
+            "open_interest_1m_feature",
             [
                 {
                     "timestamp_m1": t0,
                     "exchange": exchange,
                     "symbol": "BTC-PERPETUAL",
                     "open_interest": 1.0,
-                    "oi_is_observed": True,
-                    "oi_is_ffill": False,
-                    "minutes_since_oi_observation": 0,
-                    "oi_observation_lag_sec": 0,
+                    "open_interest_is_observed": True,
+                    "open_interest_is_ffill": False,
+                    "minutes_since_open_interest_observation": 0,
+                    "open_interest_observation_lag_sec": 0,
                 }
             ],
         ),
@@ -899,7 +899,7 @@ def test_discover_gold_symbols_requires_trades_dataset(tmp_path: Path) -> None:
     )
     _write_silver_month(
         silver,
-        dataset_type="oi_1m_feature",
+        dataset_type="open_interest_1m_feature",
         exchange=exchange,
         symbol="BTC-PERPETUAL",
         timeframe="1m",
@@ -910,10 +910,10 @@ def test_discover_gold_symbols_requires_trades_dataset(tmp_path: Path) -> None:
                 "exchange": exchange,
                 "symbol": "BTC",
                 "open_interest": 1.0,
-                "oi_is_observed": True,
-                "oi_is_ffill": False,
-                "minutes_since_oi_observation": 0,
-                "oi_observation_lag_sec": 0,
+                "open_interest_is_observed": True,
+                "open_interest_is_ffill": False,
+                "minutes_since_open_interest_observation": 0,
+                "open_interest_observation_lag_sec": 0,
             }
         ],
     )
@@ -1009,7 +1009,7 @@ def test_build_gold_hybrid_full_l2_contains_l2_features(tmp_path: Path) -> None:
     )
     _write_silver_month(
         silver,
-        dataset_type="oi_1m_feature",
+        dataset_type="open_interest_1m_feature",
         exchange=exchange,
         symbol="BTC-PERPETUAL",
         timeframe="1m",
@@ -1020,20 +1020,20 @@ def test_build_gold_hybrid_full_l2_contains_l2_features(tmp_path: Path) -> None:
                 "exchange": exchange,
                 "symbol": symbol,
                 "open_interest": 1000.0,
-                "oi_is_observed": True,
-                "oi_is_ffill": False,
-                "minutes_since_oi_observation": 0,
-                "oi_observation_lag_sec": 0,
+                "open_interest_is_observed": True,
+                "open_interest_is_ffill": False,
+                "minutes_since_open_interest_observation": 0,
+                "open_interest_observation_lag_sec": 0,
             },
             {
                 "timestamp_m1": t1,
                 "exchange": exchange,
                 "symbol": symbol,
                 "open_interest": 1001.0,
-                "oi_is_observed": False,
-                "oi_is_ffill": True,
-                "minutes_since_oi_observation": 1,
-                "oi_observation_lag_sec": 60,
+                "open_interest_is_observed": False,
+                "open_interest_is_ffill": True,
+                "minutes_since_open_interest_observation": 1,
+                "open_interest_observation_lag_sec": 60,
             },
         ],
     )
@@ -1192,7 +1192,7 @@ def test_build_gold_hybrid_full_l2_uses_requested_exchange_l2(tmp_path: Path) ->
     )
     _write_silver_month(
         silver,
-        dataset_type="oi_1m_feature",
+        dataset_type="open_interest_1m_feature",
         exchange=exchange,
         symbol="BTC-PERPETUAL",
         timeframe="1m",
@@ -1203,20 +1203,20 @@ def test_build_gold_hybrid_full_l2_uses_requested_exchange_l2(tmp_path: Path) ->
                 "exchange": exchange,
                 "symbol": symbol,
                 "open_interest": 1000.0,
-                "oi_is_observed": True,
-                "oi_is_ffill": False,
-                "minutes_since_oi_observation": 0,
-                "oi_observation_lag_sec": 0,
+                "open_interest_is_observed": True,
+                "open_interest_is_ffill": False,
+                "minutes_since_open_interest_observation": 0,
+                "open_interest_observation_lag_sec": 0,
             },
             {
                 "timestamp_m1": t1,
                 "exchange": exchange,
                 "symbol": symbol,
                 "open_interest": 1001.0,
-                "oi_is_observed": False,
-                "oi_is_ffill": True,
-                "minutes_since_oi_observation": 1,
-                "oi_observation_lag_sec": 60,
+                "open_interest_is_observed": False,
+                "open_interest_is_ffill": True,
+                "minutes_since_open_interest_observation": 1,
+                "open_interest_observation_lag_sec": 60,
             },
         ],
     )
@@ -1385,7 +1385,7 @@ def test_build_gold_hybrid_full_l2_rejects_invalid_l2_coverage_ratio(tmp_path: P
     )
     _write_silver_month(
         silver,
-        dataset_type="oi_1m_feature",
+        dataset_type="open_interest_1m_feature",
         exchange=exchange,
         symbol="BTC-PERPETUAL",
         timeframe="1m",
@@ -1396,20 +1396,20 @@ def test_build_gold_hybrid_full_l2_rejects_invalid_l2_coverage_ratio(tmp_path: P
                 "exchange": exchange,
                 "symbol": symbol,
                 "open_interest": 1000.0,
-                "oi_is_observed": True,
-                "oi_is_ffill": False,
-                "minutes_since_oi_observation": 0,
-                "oi_observation_lag_sec": 0,
+                "open_interest_is_observed": True,
+                "open_interest_is_ffill": False,
+                "minutes_since_open_interest_observation": 0,
+                "open_interest_observation_lag_sec": 0,
             },
             {
                 "timestamp_m1": t1,
                 "exchange": exchange,
                 "symbol": symbol,
                 "open_interest": 1001.0,
-                "oi_is_observed": False,
-                "oi_is_ffill": True,
-                "minutes_since_oi_observation": 1,
-                "oi_observation_lag_sec": 60,
+                "open_interest_is_observed": False,
+                "open_interest_is_ffill": True,
+                "minutes_since_open_interest_observation": 1,
+                "open_interest_observation_lag_sec": 60,
             },
         ],
     )
@@ -1561,7 +1561,7 @@ def test_build_gold_hybrid_full_l2_lenient_drops_invalid_rows(tmp_path: Path) ->
     )
     _write_silver_month(
         silver,
-        dataset_type="oi_1m_feature",
+        dataset_type="open_interest_1m_feature",
         exchange=exchange,
         symbol="BTC-PERPETUAL",
         timeframe="1m",
@@ -1572,20 +1572,20 @@ def test_build_gold_hybrid_full_l2_lenient_drops_invalid_rows(tmp_path: Path) ->
                 "exchange": exchange,
                 "symbol": symbol,
                 "open_interest": 1000.0,
-                "oi_is_observed": True,
-                "oi_is_ffill": False,
-                "minutes_since_oi_observation": 0,
-                "oi_observation_lag_sec": 0,
+                "open_interest_is_observed": True,
+                "open_interest_is_ffill": False,
+                "minutes_since_open_interest_observation": 0,
+                "open_interest_observation_lag_sec": 0,
             },
             {
                 "timestamp_m1": t1,
                 "exchange": exchange,
                 "symbol": symbol,
                 "open_interest": 1001.0,
-                "oi_is_observed": False,
-                "oi_is_ffill": True,
-                "minutes_since_oi_observation": 1,
-                "oi_observation_lag_sec": 60,
+                "open_interest_is_observed": False,
+                "open_interest_is_ffill": True,
+                "minutes_since_open_interest_observation": 1,
+                "open_interest_observation_lag_sec": 60,
             },
         ],
     )
@@ -1744,7 +1744,7 @@ def test_build_gold_full_keeps_minute_grid_and_reports_missing_values(tmp_path: 
     )
     _write_silver_month(
         silver,
-        dataset_type="oi_1m_feature",
+        dataset_type="open_interest_1m_feature",
         exchange=exchange,
         symbol="BTC-PERPETUAL",
         timeframe="1m",
@@ -1755,20 +1755,20 @@ def test_build_gold_full_keeps_minute_grid_and_reports_missing_values(tmp_path: 
                 "exchange": exchange,
                 "symbol": symbol,
                 "open_interest": 1000.0,
-                "oi_is_observed": True,
-                "oi_is_ffill": False,
-                "minutes_since_oi_observation": 0,
-                "oi_observation_lag_sec": 0,
+                "open_interest_is_observed": True,
+                "open_interest_is_ffill": False,
+                "minutes_since_open_interest_observation": 0,
+                "open_interest_observation_lag_sec": 0,
             },
             {
                 "timestamp_m1": t2,
                 "exchange": exchange,
                 "symbol": symbol,
                 "open_interest": 1002.0,
-                "oi_is_observed": False,
-                "oi_is_ffill": True,
-                "minutes_since_oi_observation": 2,
-                "oi_observation_lag_sec": 120,
+                "open_interest_is_observed": False,
+                "open_interest_is_ffill": True,
+                "minutes_since_open_interest_observation": 2,
+                "open_interest_observation_lag_sec": 120,
             },
         ],
     )

@@ -19,7 +19,7 @@ Author: Sergej Schweizer
 - [4. Raw Datasets](#4-raw-datasets)
   - [4.1 Spot (`dataset_type=spot_ohlcv`)](#41-spot_ohlcv-dataset_typespot_ohlcv)
   - [4.2 Perpetual (`dataset_type=perps_ohlcv`)](#42-perpetual-dataset_typeperps_ohlcv)
-  - [4.3 Open Interest (`dataset_type=oi`)](#43-open-interest-dataset_typeoi)
+  - [4.3 Open Interest (`dataset_type=open_interest`)](#43-open-interest-dataset_typeoi)
   - [4.4 Funding (`dataset_type=funding`)](#44-funding-dataset_typefunding)
   - [4.5 `perps_trades` (`dataset_type=perps_trades`)](#45-perps_trades-dataset_typeperps_trades)
   - [4.6 `options_trades` (`dataset_type=options_trades`)](#46-options_trades-dataset_typeoptions_trades)
@@ -70,7 +70,7 @@ Interval State:
 
 | CLI Domain | Bronze `dataset_type` | Instrument Type | Task Kind | Default Timeframe | Symbol Source | Description |
 |---|---|---|---|---|---|---|
-| `oi` | `oi` | `perp` | `open_interest` | `1m` | `--symbols` | Open-interest observations |
+| `open_interest` | `open_interest` | `perp` | `open_interest` | `1m` | `--symbols` | Open-interest observations |
 | `funding` | `funding` | `perp` | `funding` | `1m`* | `--symbols` | Funding-rate observations (stored at native cadence) |
 
 Trade Ticks:
@@ -90,8 +90,8 @@ Volatility:
 
 ### CLI Contract
 
-- `bronze-build --dataset` choices: `spot_ohlcv perps_ohlcv oi funding perps_trades options_trades volatility_index_data`
-- `--symbols` applies to all selected datasets (`spot_ohlcv`, `perps_ohlcv`, `oi`, `funding`, `perps_trades`, `options_trades`, `volatility_index_data`)
+- `bronze-build --dataset` choices: `spot_ohlcv perps_ohlcv open_interest funding perps_trades options_trades volatility_index_data`
+- `--symbols` applies to all selected datasets (`spot_ohlcv`, `perps_ohlcv`, `open_interest`, `funding`, `perps_trades`, `options_trades`, `volatility_index_data`)
 
 Current exchange support:
 
@@ -194,7 +194,7 @@ Recommended permissions:
 ```bash
 uv run python main.py --debug bronze-build \
  --exchange deribit \
- --market spot_ohlcv perps_ohlcv oi funding perps_trades options_trades volatility_index_data \
+ --market spot_ohlcv perps_ohlcv open_interest funding perps_trades options_trades volatility_index_data \
  --symbols BTC ETH SOL \
  --full-gap-fill \
  --save-parquet-lake \
@@ -207,7 +207,7 @@ Trade symbol inheritance:
 
 Raw ingests are defined by `application/datasets.py` and persisted by Bronze writers in
 `ingestion/lake.py`. The repository currently defines seven registry-backed raw dataset types:
-`spot_ohlcv`, `perps_ohlcv`, `oi`, `funding`, `perps_trades`, `options_trades`, and `volatility_index_data`.
+`spot_ohlcv`, `perps_ohlcv`, `open_interest`, `funding`, `perps_trades`, `options_trades`, and `volatility_index_data`.
 
 All datasets share structural metadata columns:
 `schema_version`, `dataset_type`, `exchange`, `symbol`, `instrument_type`, `event_time`,
@@ -225,7 +225,7 @@ Current Bronze missing-day snapshot generated from `lake/bronze` on 2026-07-01 0
 |---|---:|---|---|---:|---:|---:|---:|
 | `funding` | 3 | 2019-04-30 | 2026-06-30 | 6,806 | 6,806 | 0 | 0.00% |
 | `historical_volatility` | 3 | 2026-05-08 | 2026-05-24 | 51 | 51 | 0 | 0.00% |
-| `oi` | 3 | 2018-08-15 | 2026-06-30 | 7,110 | 7,110 | 0 | 0.00% |
+| `open_interest` | 3 | 2018-08-15 | 2026-06-30 | 7,110 | 7,110 | 0 | 0.00% |
 | `options_trades` | 3 | 2018-08-14 | 2026-07-01 | 5,780 | 5,780 | 0 | 0.00% |
 | `perps_ohlcv` | 3 | 2018-08-14 | 2026-07-01 | 7,071 | 7,071 | 0 | 0.00% |
 | `perps_trades` | 3 | 2018-08-14 | 2026-06-11 | 5,739 | 2,565 | 3,174 | 55.31% |
@@ -240,9 +240,9 @@ Current Bronze missing-day snapshot generated from `lake/bronze` on 2026-07-01 0
 | `historical_volatility` | deribit | perp | `BTC` | 1m | 2026-05-08 | 2026-05-24 | 17 | 17 | 0 | 0.00% |
 | `historical_volatility` | deribit | perp | `ETH` | 1m | 2026-05-08 | 2026-05-24 | 17 | 17 | 0 | 0.00% |
 | `historical_volatility` | deribit | perp | `SOL` | 1m | 2026-05-08 | 2026-05-24 | 17 | 17 | 0 | 0.00% |
-| `oi` | deribit | perp | `BTC-PERPETUAL` | 1m | 2018-08-15 | 2026-06-30 | 2,877 | 2,877 | 0 | 0.00% |
-| `oi` | deribit | perp | `ETH-PERPETUAL` | 1m | 2019-03-15 | 2026-06-30 | 2,665 | 2,665 | 0 | 0.00% |
-| `oi` | deribit | perp | `SOL-PERPETUAL` | 1m | 2022-03-16 | 2026-06-30 | 1,568 | 1,568 | 0 | 0.00% |
+| `open_interest` | deribit | perp | `BTC-PERPETUAL` | 1m | 2018-08-15 | 2026-06-30 | 2,877 | 2,877 | 0 | 0.00% |
+| `open_interest` | deribit | perp | `ETH-PERPETUAL` | 1m | 2019-03-15 | 2026-06-30 | 2,665 | 2,665 | 0 | 0.00% |
+| `open_interest` | deribit | perp | `SOL-PERPETUAL` | 1m | 2022-03-16 | 2026-06-30 | 1,568 | 1,568 | 0 | 0.00% |
 | `options_trades` | deribit | option | `BTC` | tick | 2018-08-14 | 2026-07-01 | 2,879 | 2,879 | 0 | 0.00% |
 | `options_trades` | deribit | option | `ETH` | tick | 2019-03-21 | 2026-07-01 | 2,660 | 2,660 | 0 | 0.00% |
 | `options_trades` | deribit | option | `SOL` | tick | 2022-05-04 | 2022-12-30 | 241 | 241 | 0 | 0.00% |
@@ -314,7 +314,7 @@ Coverage:
 ### 1. Bronze layer
 
 Market role: leveraged perpetual state for faster risk transfer and price discovery.
-Relationship: consumed jointly with `spot_ohlcv`, `funding`, and `oi` for carry/crowding context.
+Relationship: consumed jointly with `spot_ohlcv`, `funding`, and `open_interest` for carry/crowding context.
 Time aggregation: native `1m` OHLCV ingestion.
 
 ### 1.1 Deribit endpoint
@@ -343,9 +343,9 @@ Description: returns perpetual OHLCV candle arrays (open/high/low/close/volume) 
 | Column | Unit | Market meaning | Relationship to other datasets/columns |
 |---|---|---|---|
 | `open_price` | USD (or quote/base) | Opening perpetual mark for interval. | Used against spot_ohlcv prices to infer carry and dislocation. |
-| `high_price` | USD (or quote/base) | Intrabar maximum price. | Coupled with OI/funding shifts to detect squeeze conditions. |
-| `low_price` | USD (or quote/base) | Intrabar minimum price. | Combined with OI drawdowns for liquidation diagnostics. |
-| `close_price` | USD (or quote/base) | End-of-interval perpetual mark. | Canonical join key with funding/OI minute features. |
+| `high_price` | USD (or quote/base) | Intrabar maximum price. | Coupled with Open Interest/funding shifts to detect squeeze conditions. |
+| `low_price` | USD (or quote/base) | Intrabar minimum price. | Combined with Open Interest drawdowns for liquidation diagnostics. |
+| `close_price` | USD (or quote/base) | End-of-interval perpetual mark. | Canonical join key with funding/Open Interest minute features. |
 | `volume` | contracts/base units | Leveraged venue traded size. | Compared with spot_ohlcv volume and tick-flow aggregates for speculation intensity. |
 | `quote_volume` | quote-currency units | Perpetual notional turnover. | Used for cross-market notional participation diagnostics. |
 | `trade_count` | count | Number of perp executions. | Coarse complement to `perps_trades` microstructure rows. |
@@ -359,43 +359,43 @@ Coverage:
 | `deribit` | `ETH-PERPETUAL` | `1m` | `2019-03-14` | `2026-07-01` | 0 | 0.00% |
 | `deribit` | `SOL-PERPETUAL` | `1m` | `2022-04-29` | `2026-07-01` | 0 | 0.00% |
 
-## 4.3 Open Interest (`dataset_type=oi`)
+## 4.3 Open Interest (`dataset_type=open_interest`)
 
 ### 1. Bronze layer
 
 Market role: outstanding leveraged exposure stock for each perp symbol.
 Relationship: used with `perp` returns and `funding` to label build-up, unwind, and squeeze regimes.
-Time aggregation: native `1m` OI snapshots.
+Time aggregation: native `1m` Open Interest snapshots.
 
 ### 1.1 Deribit endpoint
 
 Endpoint: `GET https://www.deribit.com/api/v2/public/get_last_settlements_by_instrument`.
-Description: returns settlement/event records per instrument; this loader extracts open-interest observations and normalizes them to the OI stream.
+Description: returns settlement/event records per instrument; this loader extracts open-interest observations and normalizes them to the Open Interest stream.
 
 ### 2. Silver layer
 
-- Builder 1: `build_oi_observed_for_symbol`.
+- Builder 1: `build_open_interest_observed_for_symbol`.
 - Normalize/cast columns: `timestamp`, `exchange`, `symbol`, `open_interest`.
-- Missing values: rows with null/non-finite `open_interest` are excluded from `oi_observed`; `oi_1m_feature` uses backward as-of fill and exposes freshness/nullability state via `oi_is_observed`, `oi_is_ffill`, and `minutes_since_oi_observation`.
+- Missing values: rows with null/non-finite `open_interest` are excluded from `open_interest_observed`; `open_interest_1m_feature` uses backward as-of fill and exposes freshness/nullability state via `open_interest_is_observed`, `open_interest_is_ffill`, and `minutes_since_open_interest_observation`.
 - Validate `open_interest` is finite and non-negative.
-- Deduplicate observed rows by `exchange/symbol/timestamp/open_interest` into `oi_observed`.
-- Builder 2: `build_oi_1m_feature_for_symbol`.
+- Deduplicate observed rows by `exchange/symbol/timestamp/open_interest` into `open_interest_observed`.
+- Builder 2: `build_open_interest_1m_feature_for_symbol`.
 - Generate full `1m` calendar and backward `asof`-join observed rows.
-- Output columns: `open_interest`, `oi_is_observed`, `oi_is_ffill`, `minutes_since_oi_observation`, `oi_observation_lag_sec`, `oi_source_timestamp`.
+- Output columns: `open_interest`, `open_interest_is_observed`, `open_interest_is_ffill`, `minutes_since_open_interest_observation`, `open_interest_observation_lag_sec`, `open_interest_source_timestamp`.
 - Time aggregation: observed `1m ->` feature `1m`.
 
 ### 3. High-value features
 
-- OI change: `delta_oi_t = open_interest_t - open_interest_{t-1}`.
-- OI return proxy: `g^{oi}_t = ln(open_interest_t / open_interest_{t-1})`.
-- Crowding regime score: `crowd_t = zscore(delta_oi_t) * sign(perp_return_t)`.
-- Freshness penalty: `w_t = exp(-k * minutes_since_oi_observation_t)`.
-- FFill guard flag: `stale_t = 1[oi_is_ffill = 1 and minutes_since_oi_observation_t > tau]`.
+- Open Interest change: `delta_open_interest_t = open_interest_t - open_interest_{t-1}`.
+- Open Interest return proxy: `g^{open_interest}_t = ln(open_interest_t / open_interest_{t-1})`.
+- Crowding regime score: `crowd_t = zscore(delta_open_interest_t) * sign(perp_return_t)`.
+- Freshness penalty: `w_t = exp(-k * minutes_since_open_interest_observation_t)`.
+- FFill guard flag: `stale_t = 1[open_interest_is_ffill = 1 and minutes_since_open_interest_observation_t > tau]`.
 
 | Column | Unit | Market meaning | Relationship to other datasets/columns |
 |---|---|---|---|
 | `open_interest` | contracts | Total open positions at timestamp. | Combined with price direction from `perp` to classify position flow regime. |
-| `open_interest_value` | quote-currency notional | Monetary exposure form of OI. | Scales raw OI for cross-period comparability and risk sizing. |
+| `open_interest_value` | quote-currency notional | Monetary exposure form of Open Interest. | Scales raw Open Interest for cross-period comparability and risk sizing. |
 
 Coverage:
 
@@ -410,7 +410,7 @@ Coverage:
 ### 1. Bronze layer
 
 Market role: periodic long-short transfer (carry) state for perps.
-Relationship: joined with perp and OI state to identify crowding and carry pressure.
+Relationship: joined with perp and Open Interest state to identify crowding and carry pressure.
 Time aggregation: native `8h` funding observations.
 
 ### 1.1 Deribit endpoint
@@ -441,7 +441,7 @@ Description: returns historical funding events (`interest_8h` and related mark/i
 
 | Column | Unit | Market meaning | Relationship to other datasets/columns |
 |---|---|---|---|
-| `funding_rate` | fraction per `8h` event | Funding transfer rate between longs and shorts. | Combined with OI/perp moves for crowding and squeeze diagnostics. |
+| `funding_rate` | fraction per `8h` event | Funding transfer rate between longs and shorts. | Combined with Open Interest/perp moves for crowding and squeeze diagnostics. |
 | `index_price` | USD | External fair-value index around funding event. | Baseline for mark/index dislocation and premium state. |
 | `mark_price` | USD | Exchange mark reference around funding timestamp. | Compared with index/perp close for premium and stress features. |
 
@@ -587,7 +587,7 @@ Bronze:
 ```bash
 uv run python main.py bronze-build \
   --exchange deribit \
-  --dataset spot_ohlcv perps_ohlcv oi funding perps_trades options_trades \
+  --dataset spot_ohlcv perps_ohlcv open_interest funding perps_trades options_trades \
   --symbols BTC ETH SOL
 ```
 
@@ -598,7 +598,7 @@ uv run python main.py silver-build \
   --bronze-root lake/bronze \
   --silver-root lake/silver \
   --exchange deribit \
-  --dataset spot_ohlcv perps_ohlcv oi funding perps_trades options_trades \
+  --dataset spot_ohlcv perps_ohlcv open_interest funding perps_trades options_trades \
   --timeframe 1m \
   --maxprocesses 4
 ```
@@ -618,7 +618,7 @@ uv run python main.py gold-build \
 
 Symbol-group controls for Bronze:
 
-- `--symbols` applies to all selected datasets (`spot_ohlcv`, `perps_ohlcv`, `oi`, `funding`, `perps_trades`, `options_trades`)
+- `--symbols` applies to all selected datasets (`spot_ohlcv`, `perps_ohlcv`, `open_interest`, `funding`, `perps_trades`, `options_trades`)
 - default symbols are `BTC ETH SOL`
 
 Bronze checkpoint path:

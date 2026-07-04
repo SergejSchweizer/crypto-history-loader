@@ -26,7 +26,7 @@ def _normalize_continuation_token(value: object) -> str | None:
 
 
 def _normalize_open_interest_instrument(symbol: str) -> str:
-    """Map normalized perp symbols to Deribit OI endpoint instrument names."""
+    """Map normalized perp symbols to Deribit Open Interest endpoint instrument names."""
 
     if symbol == "SOL-PERPETUAL":
         return "SOL_USDC-PERPETUAL"

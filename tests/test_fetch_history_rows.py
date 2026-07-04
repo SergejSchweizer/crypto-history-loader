@@ -32,7 +32,7 @@ def _spot_ohlcv(open_time: datetime, close: float) -> SpotCandle:
     )
 
 
-def _oi(open_time: datetime, value: float) -> OpenInterestPoint:
+def _open_interest(open_time: datetime, value: float) -> OpenInterestPoint:
     return OpenInterestPoint(
         exchange="deribit",
         symbol="BTCUSDT",
@@ -46,8 +46,8 @@ def _oi(open_time: datetime, value: float) -> OpenInterestPoint:
 
 def test_filter_rows_and_chunk_callback_by_start_bound() -> None:
     start_bound_ms = int(datetime(2026, 4, 27, 10, 1, tzinfo=UTC).timestamp() * 1000)
-    row_old = _oi(datetime(2026, 4, 27, 10, 0, tzinfo=UTC), 1.0)
-    row_new = _oi(datetime(2026, 4, 27, 10, 1, tzinfo=UTC), 2.0)
+    row_old = _open_interest(datetime(2026, 4, 27, 10, 0, tzinfo=UTC), 1.0)
+    row_new = _open_interest(datetime(2026, 4, 27, 10, 1, tzinfo=UTC), 2.0)
 
     assert row_open_time_ms(row_new) == start_bound_ms
     assert filter_rows_by_start_bound([row_old, row_new], start_bound_ms) == [row_new]

@@ -258,8 +258,8 @@ def save_open_interest_plot(
     delta_axis.xaxis.set_major_formatter(mdates.DateFormatter("%m.%Y"))  # type: ignore[no-untyped-call]
     delta_axis.legend(
         handles=[
-            mpatches.Patch(color="#22c55e", label="OI up"),
-            mpatches.Patch(color="#ef4444", label="OI down"),
+            mpatches.Patch(color="#22c55e", label="Open Interest up"),
+            mpatches.Patch(color="#ef4444", label="Open Interest down"),
         ],
         loc="upper left",
         frameon=True,

@@ -79,7 +79,7 @@ def build_bronze_fetch_plan(args: argparse.Namespace, logger: logging.Logger) ->
 
     dataset_tasks: list[DatasetTask] = []
     candle_tasks: list[tuple[Exchange, Market, str, str]] = []
-    oi_tasks: list[tuple[Exchange, str, str]] = []
+    open_interest_tasks: list[tuple[Exchange, str, str]] = []
     funding_tasks: list[tuple[Exchange, str, str]] = []
     volatility_index_data_tasks: list[tuple[Exchange, str, str]] = []
     for exchange in sorted(exchanges):
@@ -103,7 +103,7 @@ def build_bronze_fetch_plan(args: argparse.Namespace, logger: logging.Logger) ->
                 task = spec.build_task(exchange=exchange, symbol=symbol, timeframe=normalized_timeframe)
                 dataset_tasks.append(task)
                 if spec.bronze_task_kind == "open_interest":
-                    oi_tasks.append(task.interval_tuple())
+                    open_interest_tasks.append(task.interval_tuple())
                 elif spec.bronze_task_kind == "funding":
                     funding_tasks.append(task.interval_tuple())
 
@@ -128,7 +128,7 @@ def build_bronze_fetch_plan(args: argparse.Namespace, logger: logging.Logger) ->
         perp_trade_symbols=perp_trade_symbols,
         option_trade_symbols=option_trade_symbols,
         candle_tasks=candle_tasks,
-        oi_tasks=oi_tasks,
+        open_interest_tasks=open_interest_tasks,
         funding_tasks=funding_tasks,
         volatility_index_data_tasks=volatility_index_data_tasks,
         trade_tasks=trade_tasks,

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-OI_DATASET_TYPE = "oi"
+OPEN_INTEREST_DATASET_TYPE = "open_interest"
 
 
 def ohlcv_dataset_type_for_market(market: str) -> str:

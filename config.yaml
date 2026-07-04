@@ -27,7 +27,7 @@ export-descriptive-stats:
 
 bronze-build:
   exchange: deribit
-  dataset: [spot_ohlcv, perps_ohlcv, oi, funding, perps_trades, options_trades]
+  dataset: [spot_ohlcv, perps_ohlcv, open_interest, funding, perps_trades, options_trades]
   start_date: "2018-08-14"
   symbol_start_dates:
     - BTC=2018-08-14
@@ -48,7 +48,7 @@ medallion-pipeline:
       - --dataset
       - spot_ohlcv
       - perps_ohlcv
-      - oi
+      - open_interest
       - funding
       - perps_trades
       - options_trades
@@ -66,7 +66,7 @@ medallion-pipeline:
       - spot_ohlcv
       - perps_ohlcv
       - funding
-      - oi
+      - open_interest
       - perps_trades
       - options_trades
       - --manifest

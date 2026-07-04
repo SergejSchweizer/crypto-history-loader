@@ -23,12 +23,12 @@ def test_trade_error_breakdown_counts_classes() -> None:
 def test_symbol_progress_rows_calculates_ratios() -> None:
     rows = symbol_progress_rows(
         candle_tasks=[("deribit", "spot_ohlcv", "BTC", "1m"), ("deribit", "spot_ohlcv", "ETH", "1m")],
-        oi_tasks=[],
+        open_interest_tasks=[],
         funding_tasks=[],
         volatility_index_data_tasks=[],
         trade_tasks=[("deribit", "perp", "BTC")],
         candle_results={("deribit", "spot_ohlcv", "BTC", "1m"): object()},
-        oi_results={},
+        open_interest_results={},
         funding_results={},
         volatility_index_data_results={},
         trade_results={("deribit", "perp", "BTC"): object()},
@@ -39,15 +39,15 @@ def test_symbol_progress_rows_calculates_ratios() -> None:
     ]
 
 
-def test_symbol_progress_rows_counts_oi_and_funding_success() -> None:
+def test_symbol_progress_rows_counts_open_interest_and_funding_success() -> None:
     rows = symbol_progress_rows(
         candle_tasks=[],
-        oi_tasks=[("deribit", "BTC", "1m")],
+        open_interest_tasks=[("deribit", "BTC", "1m")],
         funding_tasks=[("deribit", "BTC", "8h")],
         volatility_index_data_tasks=[],
         trade_tasks=[],
         candle_results={},
-        oi_results={("deribit", "BTC", "1m"): object()},
+        open_interest_results={("deribit", "BTC", "1m"): object()},
         funding_results={("deribit", "BTC", "8h"): object()},
         volatility_index_data_results={},
         trade_results={},
@@ -67,7 +67,7 @@ def test_symbol_progress_rows_from_dataset_tasks_uses_checkpoint_keys() -> None:
         ),
         DatasetTask(
             exchange="deribit",
-            dataset_type="oi",
+            dataset_type="open_interest",
             instrument_type="perp",
             symbol="BTC",
             timeframe="1m",

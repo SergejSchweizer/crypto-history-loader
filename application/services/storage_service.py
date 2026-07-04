@@ -23,7 +23,7 @@ def persist_loader_outputs_dto(
     storage: LoaderStorageDTO,
     options: PersistOptionsDTO,
     save_spot_ohlcv_lake_fn: Callable[..., list[str]] = save_spot_ohlcv_candles_parquet_lake,
-    save_oi_lake_fn: Callable[..., list[str]] = save_open_interest_parquet_lake,
+    save_open_interest_lake_fn: Callable[..., list[str]] = save_open_interest_parquet_lake,
     save_funding_lake_fn: Callable[..., list[str]] = save_funding_parquet_lake,
     save_trades_lake_fn: Callable[..., list[str]] = save_trades_parquet_lake,
     save_volatility_lake_fn: Callable[..., list[str]] = save_volatility_parquet_lake,
@@ -40,11 +40,11 @@ def persist_loader_outputs_dto(
                     lake_root=options.lake_root,
                 )
             )
-        if options.oi_requested:
-            for market_key, oi_by_exchange in storage.open_interest.items():
+        if options.open_interest_requested:
+            for market_key, open_interest_by_exchange in storage.open_interest.items():
                 result.parquet_files.extend(
-                    save_oi_lake_fn(
-                        open_interest_by_exchange=oi_by_exchange,
+                    save_open_interest_lake_fn(
+                        open_interest_by_exchange=open_interest_by_exchange,
                         market=market_key,
                         lake_root=options.lake_root,
                     )
@@ -86,11 +86,11 @@ def persist_loader_outputs(
     open_interest_for_storage: dict[Market, dict[str, dict[str, list[OpenInterestPoint]]]],
     save_parquet_lake: bool,
     lake_root: str,
-    oi_requested: bool,
+    open_interest_requested: bool,
     funding_for_storage: dict[Market, dict[str, dict[str, list[FundingPoint]]]] | None = None,
     volatility_index_data_for_storage: dict[Market, dict[str, dict[str, list[VolatilityPoint]]]] | None = None,
     save_spot_ohlcv_lake_fn: Callable[..., list[str]] = save_spot_ohlcv_candles_parquet_lake,
-    save_oi_lake_fn: Callable[..., list[str]] = save_open_interest_parquet_lake,
+    save_open_interest_lake_fn: Callable[..., list[str]] = save_open_interest_parquet_lake,
     save_funding_lake_fn: Callable[..., list[str]] = save_funding_parquet_lake,
     trades_for_storage: dict[TradeMarket, dict[str, dict[str, list[TradeTick | OptionTradeTick]]]] | None = None,
     trades_requested: bool = False,
@@ -109,13 +109,13 @@ def persist_loader_outputs(
         options=PersistOptionsDTO(
             save_parquet_lake=save_parquet_lake,
             lake_root=lake_root,
-            oi_requested=oi_requested,
+            open_interest_requested=open_interest_requested,
             funding_requested=bool(funding_for_storage),
             volatility_index_data_requested=bool(volatility_index_data_for_storage),
             trades_requested=trades_requested,
         ),
         save_spot_ohlcv_lake_fn=save_spot_ohlcv_lake_fn,
-        save_oi_lake_fn=save_oi_lake_fn,
+        save_open_interest_lake_fn=save_open_interest_lake_fn,
         save_funding_lake_fn=save_funding_lake_fn,
         save_trades_lake_fn=save_trades_lake_fn,
     )

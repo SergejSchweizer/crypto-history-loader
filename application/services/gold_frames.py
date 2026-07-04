@@ -223,7 +223,7 @@ def prepare_spot_ohlcv_or_perp(pl: Any, frame: Any, prefix: str, symbol: str) ->
     )
 
 
-def prepare_oi(pl: Any, frame: Any, symbol: str) -> Any:
+def prepare_open_interest(pl: Any, frame: Any, symbol: str) -> Any:
     """Prepare open-interest features for the Gold join contract."""
 
     return (
@@ -238,11 +238,11 @@ def prepare_oi(pl: Any, frame: Any, symbol: str) -> Any:
                 "timestamp_m1",
                 "exchange",
                 "symbol",
-                pl.col("open_interest").cast(pl.Float64).alias("oi_open_interest"),
-                pl.col("oi_is_observed").cast(pl.Boolean),
-                pl.col("oi_is_ffill").cast(pl.Boolean),
-                pl.col("minutes_since_oi_observation").cast(pl.Int64),
-                pl.col("oi_observation_lag_sec").cast(pl.Int64),
+                pl.col("open_interest").cast(pl.Float64).alias("open_interest_open_interest"),
+                pl.col("open_interest_is_observed").cast(pl.Boolean),
+                pl.col("open_interest_is_ffill").cast(pl.Boolean),
+                pl.col("minutes_since_open_interest_observation").cast(pl.Int64),
+                pl.col("open_interest_observation_lag_sec").cast(pl.Int64),
             ]
         )
         .sort("timestamp_m1")
@@ -372,7 +372,7 @@ def prepare_dataset_frame(pl: Any, dataset_type: str, frame: Any, symbol: str) -
     dataset_preparers: dict[str, Any] = {
         "spot_ohlcv": lambda: prepare_spot_ohlcv_or_perp(pl, frame, "spot_ohlcv", symbol),
         "perps_ohlcv": lambda: prepare_spot_ohlcv_or_perp(pl, frame, "perp", symbol),
-        "oi_1m_feature": lambda: prepare_oi(pl, frame, symbol),
+        "open_interest_1m_feature": lambda: prepare_open_interest(pl, frame, symbol),
         "funding_1m_feature": lambda: prepare_funding(pl, frame, symbol),
         "perps_trades_1m_feature": lambda: prepare_trades(pl, frame, symbol),
         "options_trades_1m_feature": lambda: prepare_options_trades(pl, frame, symbol),

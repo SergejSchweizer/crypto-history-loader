@@ -169,7 +169,7 @@ def fetch_open_interest_range(
         )
     except HttpClientError:
         logger.warning(
-            "OI day fetch failed exchange=%s symbol=%s interval=%s start_ms=%s end_ms=%s elapsed_s=%.2f",
+            "Open Interest day fetch failed exchange=%s symbol=%s interval=%s start_ms=%s end_ms=%s elapsed_s=%.2f",
             exchange,
             normalized_symbol,
             normalized_interval,
@@ -194,7 +194,7 @@ def fetch_open_interest_range(
         for item in parsed
     ]
     logger.info(
-        "OI day fetch done exchange=%s symbol=%s interval=%s start_ms=%s end_ms=%s rows=%s elapsed_s=%.2f",
+        "Open Interest day fetch done exchange=%s symbol=%s interval=%s start_ms=%s end_ms=%s rows=%s elapsed_s=%.2f",
         exchange,
         normalized_symbol,
         normalized_interval,

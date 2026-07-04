@@ -282,12 +282,12 @@ def test_run_bronze_build_drops_invalid_symbols_before_scheduling(monkeypatch) -
             del exc_type, exc, tb
 
     scheduled_candle_tasks: list[tuple[str, str, str, str]] = []
-    scheduled_oi_tasks: list[tuple[str, str, str]] = []
+    scheduled_open_interest_tasks: list[tuple[str, str, str]] = []
     scheduled_funding_tasks: list[tuple[str, str, str]] = []
 
     def _fake_fetch_all_task_groups(**kwargs: object):  # type: ignore[no-untyped-def]
         scheduled_candle_tasks.extend(cast(Any, kwargs["candle_tasks"]))
-        scheduled_oi_tasks.extend(cast(Any, kwargs["oi_tasks"]))
+        scheduled_open_interest_tasks.extend(cast(Any, kwargs["open_interest_tasks"]))
         scheduled_funding_tasks.extend(cast(Any, kwargs["funding_tasks"]))
         return ({}, {}, {}, {}, {}, {}, {}, {}, {}, {})
 
@@ -298,7 +298,7 @@ def test_run_bronze_build_drops_invalid_symbols_before_scheduling(monkeypatch) -
     args = argparse.Namespace(
         exchange="deribit",
         exchanges=None,
-        market=["spot_ohlcv", "perps_ohlcv", "oi", "funding"],
+        market=["spot_ohlcv", "perps_ohlcv", "open_interest", "funding"],
         symbols=["BTC", None, " ", "\t", "ETH"],
         perp_trade_symbols=["BTC", None, " ", "\t", "ETH"],
         option_trade_symbols=["BTC", None, " ", "\t", "ETH"],
@@ -311,7 +311,7 @@ def test_run_bronze_build_drops_invalid_symbols_before_scheduling(monkeypatch) -
     loader_cmd.run_bronze_build(args=args, logger=logger)
 
     assert all(task[2] in {"BTC", "ETH"} for task in scheduled_candle_tasks)
-    assert all(task[1] in {"BTC", "ETH"} for task in scheduled_oi_tasks)
+    assert all(task[1] in {"BTC", "ETH"} for task in scheduled_open_interest_tasks)
     assert all(task[1] in {"BTC", "ETH"} for task in scheduled_funding_tasks)
 
 
@@ -409,7 +409,7 @@ def test_build_bronze_fetch_plan_is_deterministic_and_sorted() -> None:
     args = argparse.Namespace(
         exchange="deribit",
         exchanges=["deribit"],
-        market=["funding", "spot_ohlcv", "oi", "perps_ohlcv"],
+        market=["funding", "spot_ohlcv", "open_interest", "perps_ohlcv"],
         symbols=["ETH", "BTC"],
         perp_trade_symbols=["ETH", "BTC"],
         option_trade_symbols=["SOL", "BTC"],
@@ -417,7 +417,7 @@ def test_build_bronze_fetch_plan_is_deterministic_and_sorted() -> None:
 
     plan = loader_cmd._build_bronze_fetch_plan(args=args, logger=logging.getLogger("test"))
 
-    assert plan.data_types == ["funding", "oi", "perps_ohlcv", "spot_ohlcv"]
+    assert plan.data_types == ["funding", "open_interest", "perps_ohlcv", "spot_ohlcv"]
     assert plan.symbols == ["BTC", "ETH"]
     assert plan.candle_tasks == [
         ("deribit", "perp", "BTC", "1m"),
@@ -425,7 +425,7 @@ def test_build_bronze_fetch_plan_is_deterministic_and_sorted() -> None:
         ("deribit", "perp", "ETH", "1m"),
         ("deribit", "spot_ohlcv", "ETH", "1m"),
     ]
-    assert plan.oi_tasks == [("deribit", "BTC", "1m"), ("deribit", "ETH", "1m")]
+    assert plan.open_interest_tasks == [("deribit", "BTC", "1m"), ("deribit", "ETH", "1m")]
     assert plan.funding_tasks == [("deribit", "BTC", "1m"), ("deribit", "ETH", "1m")]
     assert [(task.dataset_type, task.instrument_type) for task in plan.dataset_tasks] == [
         ("perps_ohlcv", "perp"),
@@ -434,8 +434,8 @@ def test_build_bronze_fetch_plan_is_deterministic_and_sorted() -> None:
         ("spot_ohlcv", "spot_ohlcv"),
         ("funding", "perp"),
         ("funding", "perp"),
-        ("oi", "perp"),
-        ("oi", "perp"),
+        ("open_interest", "perp"),
+        ("open_interest", "perp"),
     ]
 
 
@@ -443,16 +443,16 @@ def test_dataset_task_key_maps_use_registry_checkpoint_keys() -> None:
     args = argparse.Namespace(
         exchange="deribit",
         exchanges=["deribit"],
-        market=["spot_ohlcv", "oi", "perps_trades"],
+        market=["spot_ohlcv", "open_interest", "perps_trades"],
         symbols=["BTC"],
         perp_trade_symbols=["BTC"],
         option_trade_symbols=["BTC"],
     )
     plan = loader_cmd._build_bronze_fetch_plan(args=args, logger=logging.getLogger("test"))
-    candle_map, oi_map, funding_map, trade_map = loader_cmd._dataset_task_key_maps(plan)
+    candle_map, open_interest_map, funding_map, trade_map = loader_cmd._dataset_task_key_maps(plan)
 
     assert candle_map[("deribit", "spot_ohlcv", "BTC", "1m")] == "deribit|spot_ohlcv|spot_ohlcv|BTC|1m|spot_ohlcv"
-    assert oi_map[("deribit", "BTC", "1m")] == "deribit|oi|perp|BTC|1m|perp"
+    assert open_interest_map[("deribit", "BTC", "1m")] == "deribit|open_interest|perp|BTC|1m|perp"
     assert ("deribit", "BTC", "1m") not in funding_map
     assert trade_map[("deribit", "perp", "BTC")] == "deribit|perps_trades|perp|BTC|tick|perp"
 
@@ -504,7 +504,7 @@ def test_run_bronze_build_resumes_from_checkpoint_and_clears_on_success(
         fingerprint=fingerprint,
         completed={
             "candle": {"deribit|spot_ohlcv|BTC|1m"},
-            "oi": set(),
+            "open_interest": set(),
             "funding": set(),
             "volatility_index_data": set(),
             "trade": set(),

@@ -41,13 +41,13 @@ def test_run_silver_build_uses_native_funding_timeframe_for_symbol_discovery(
     )
     monkeypatch.setattr(
         silver_cmd,
-        "build_oi_observed_for_symbol",
-        lambda **kwargs: _report("oi_observed"),
+        "build_open_interest_observed_for_symbol",
+        lambda **kwargs: _report("open_interest_observed"),
     )
     monkeypatch.setattr(
         silver_cmd,
-        "build_oi_1m_feature_for_symbol",
-        lambda **kwargs: _report("oi_1m_feature"),
+        "build_open_interest_1m_feature_for_symbol",
+        lambda **kwargs: _report("open_interest_1m_feature"),
     )
     monkeypatch.setattr(silver_cmd, "write_monthly_sidecars", lambda **kwargs: ([], []))
 

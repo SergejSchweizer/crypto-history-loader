@@ -11,6 +11,8 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 FIELD_SEPARATOR = "\x1f"
 TERM_REPLACEMENTS = (
+    (re.compile(r"\b" + "o" + r"i\b", re.IGNORECASE), "open_interest"),
+    (re.compile("o" + r"i_"), "open_interest_"),
     (re.compile(r"perp_trades"), "perps_trades"),
     (re.compile(r"option" + r"_trades"), "options_trades"),
     (re.compile(r"peprs" + r"_ohlcv"), "perps_ohlcv"),

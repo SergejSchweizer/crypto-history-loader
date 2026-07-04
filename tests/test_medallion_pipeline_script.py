@@ -33,7 +33,7 @@ def test_build_steps_uses_configured_market_args_with_trades(tmp_path: Path) -> 
             "bronze": {
                 "enabled": True,
                 "command": "bronze-build",
-                "cli_args": ["--dataset", "spot_ohlcv", "perps_ohlcv", "oi", "funding", "perps_trades"],
+                "cli_args": ["--dataset", "spot_ohlcv", "perps_ohlcv", "open_interest", "funding", "perps_trades"],
             },
             "silver": {"enabled": False, "command": "silver-build", "cli_args": []},
             "gold": {"enabled": False, "command": "gold-build", "cli_args": []},
