@@ -176,3 +176,74 @@ def test_build_volatility_observed_for_symbol_uses_dataset_family_module(tmp_pat
     assert written["volatility_high"].to_list() == [57.0]
     assert written["volatility_low"].to_list() == [54.5]
     assert written["volatility_close"].to_list() == [56.0]
+
+
+def test_build_volatility_observed_for_symbol_reads_legacy_value_only_bronze(tmp_path: Path) -> None:
+    """Legacy Bronze volatility files without OHLC columns should remain readable."""
+
+    bronze = tmp_path / "bronze"
+    silver = tmp_path / "silver"
+    row = {
+        "schema_version": "v1",
+        "dataset_type": "volatility_index_data",
+        "exchange": "Deribit",
+        "symbol": "btc",
+        "instrument_type": "perp",
+        "event_time": datetime(2026, 5, 1, 0, 0, tzinfo=UTC),
+        "ingested_at": datetime(2026, 5, 1, 0, 0, 30, tzinfo=UTC),
+        "run_id": "r1",
+        "source_endpoint": "public_get_volatility_index_data",
+        "open_time": datetime(2026, 5, 1, 0, 0, tzinfo=UTC),
+        "close_time": datetime(2026, 5, 1, 0, 0, tzinfo=UTC),
+        "timeframe": "1m",
+        "value": 42.0,
+        "origin_payload": "{}",
+    }
+    _write_bronze_day_file(
+        bronze,
+        market="volatility_index_data",
+        exchange="deribit",
+        symbol="BTC",
+        timeframe="1m",
+        month="2026-05",
+        day="2026-05-01",
+        rows=[row],
+        instrument_type="perp",
+    )
+
+    report = silver_volatility.build_volatility_observed_for_symbol(
+        bronze_root=str(bronze),
+        silver_root=str(silver),
+        exchange="deribit",
+        symbol="BTC",
+        timeframe="1m",
+        bronze_dataset_type="volatility_index_data",
+        output_dataset_type="volatility_index_data_observed",
+        dependencies=silver_volatility.VolatilityObservedDependencies(
+            require_polars=_require_polars,
+            discover_months=discover_months,
+            bronze_month_files=_bronze_month_files,
+            silver_month_path=_silver_month_path,
+            normalize_symbol_expr=_normalize_symbol_expr,
+            iso_utc=_iso_utc,
+            report_factory=SilverBuildReport,
+        ),
+    )
+
+    assert report.rows_out == 1
+    output_path = (
+        silver
+        / "dataset_type=volatility_index_data_observed"
+        / "exchange=deribit"
+        / "symbol=BTC"
+        / "timeframe=1m"
+        / "year=2026"
+        / "month=2026-05"
+        / "BTC-2026-05.parquet"
+    )
+    written = pl.read_parquet(output_path)
+    assert written["volatility_value"].to_list() == [42.0]
+    assert written["volatility_open"].to_list() == [42.0]
+    assert written["volatility_high"].to_list() == [42.0]
+    assert written["volatility_low"].to_list() == [42.0]
+    assert written["volatility_close"].to_list() == [42.0]

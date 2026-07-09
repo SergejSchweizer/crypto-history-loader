@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from ingestion.volatility import (
+    deribit_volatility_resolution,
     fetch_volatility_index_range,
     normalize_volatility_timeframe,
 )
@@ -13,11 +14,13 @@ from ingestion.volatility import (
 def test_normalize_volatility_timeframe_accepts_aliases() -> None:
     assert normalize_volatility_timeframe("deribit", "M1") == "1m"
     assert normalize_volatility_timeframe("deribit", "1h") == "1h"
+    assert deribit_volatility_resolution("1m") == "60"
 
 
 def test_fetch_volatility_index_range_parses_points(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     def _fake_fetch_range(**kwargs: object):
         assert kwargs["currency"] == "BTC"
+        assert kwargs["resolution"] == "60"
         return [{"timestamp": 1_000, "open": 12.0, "high": 13.0, "low": 11.0, "close": 12.5, "index_value": 12.5}]
 
     monkeypatch.setattr("ingestion.volatility.deribit_volatility.fetch_volatility_index_data_range", _fake_fetch_range)
