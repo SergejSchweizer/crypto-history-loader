@@ -344,6 +344,8 @@ SILVER_IV_RV_FEATURE_COLUMNS = [
     "iv_rv_ratio_1d",
     "iv_rv_zscore_1d",
     "iv_rv_percentile_30d",
+    "minutes_since_iv_observation",
+    "minutes_since_rv_observation",
     "iv_available",
     "rv_available",
 ]
@@ -654,6 +656,11 @@ GOLD_DATASET_CONTRACTS: dict[str, GoldDatasetContract] = {
             GoldSourceRequirement("perps_ohlcv", "1m"),
             GoldSourceRequirement("funding_1m_feature", "1m"),
         ),
+        include_l2=False,
+    ),
+    "gold.market.iv_rv.m1": GoldDatasetContract(
+        dataset_id="gold.market.iv_rv.m1",
+        requirements=(GoldSourceRequirement("iv_rv_1m_feature", "1m"),),
         include_l2=False,
     ),
     "gold.market.full.m1": GoldDatasetContract(

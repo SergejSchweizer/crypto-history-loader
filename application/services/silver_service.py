@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from application.dataset_contracts import SILVER_IV_RV_FEATURE_COLUMNS as SILVER_IV_RV_FEATURE_COLUMNS
 from application.dataset_contracts import (
     SILVER_OHLCV_COLUMNS,
     SILVER_TRADES_M1_FEATURE_COLUMNS,
@@ -23,6 +24,7 @@ from application.dataset_contracts import (
 )
 from application.services import (
     silver_funding,
+    silver_iv_rv,
     silver_open_interest,
     silver_realized_volatility,
     silver_trades,
@@ -37,6 +39,7 @@ _build_trade_feature_frame = silver_trades.build_trade_feature_frame
 _build_trade_observed_frame = silver_trades.build_trade_observed_frame
 discover_volatility_snapshot_symbols = silver_volatility.discover_snapshot_symbols
 discover_realized_volatility_symbols = silver_realized_volatility.discover_realized_volatility_symbols
+discover_iv_rv_symbols = silver_iv_rv.discover_iv_rv_symbols
 
 
 def _funding_dependencies() -> silver_funding.FundingDependencies:
@@ -795,4 +798,30 @@ def build_realized_volatility_1m_feature_for_symbol(
     )
     if not isinstance(report, SilverBuildReport):
         raise TypeError("realized volatility 1m feature builder returned an unexpected report type")
+    return report
+
+
+def build_iv_rv_1m_feature_for_symbol(
+    *,
+    silver_root: str,
+    exchange: str,
+    symbol: str,
+    timeframe: str = "1m",
+) -> SilverBuildReport:
+    """Build direct IV/RV 1m state features for one symbol."""
+
+    report = silver_iv_rv.build_iv_rv_1m_feature_for_symbol(
+        silver_root=silver_root,
+        exchange=exchange,
+        symbol=symbol,
+        timeframe=timeframe,
+        dependencies=silver_iv_rv.IvRvDependencies(
+            require_polars=_require_polars,
+            silver_month_path=_silver_month_path,
+            iso_utc=_iso_utc,
+            report_factory=SilverBuildReport,
+        ),
+    )
+    if not isinstance(report, SilverBuildReport):
+        raise TypeError("IV/RV 1m feature builder returned an unexpected report type")
     return report
