@@ -284,7 +284,7 @@ Acceptance:
 
 ### PR-09: Futures Summary Snapshot Silver
 
-Status: Planned
+Status: Done
 
 Branch: `codex/pr09-futures-summary-silver`
 

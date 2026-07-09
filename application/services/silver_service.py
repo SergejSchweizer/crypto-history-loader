@@ -7,6 +7,12 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from application.dataset_contracts import (
+    SILVER_FUTURES_SUMMARY_FEATURE_COLUMNS as SILVER_FUTURES_SUMMARY_FEATURE_COLUMNS,
+)
+from application.dataset_contracts import (
+    SILVER_FUTURES_SUMMARY_OBSERVED_COLUMNS as SILVER_FUTURES_SUMMARY_OBSERVED_COLUMNS,
+)
 from application.dataset_contracts import SILVER_INDEX_PRICE_FEATURE_COLUMNS as SILVER_INDEX_PRICE_FEATURE_COLUMNS
 from application.dataset_contracts import SILVER_INDEX_PRICE_OBSERVED_COLUMNS as SILVER_INDEX_PRICE_OBSERVED_COLUMNS
 from application.dataset_contracts import SILVER_IV_RV_FEATURE_COLUMNS as SILVER_IV_RV_FEATURE_COLUMNS
@@ -26,6 +32,7 @@ from application.dataset_contracts import (
 )
 from application.services import (
     silver_funding,
+    silver_futures_summary,
     silver_index_price,
     silver_iv_rv,
     silver_open_interest,
@@ -44,6 +51,7 @@ discover_volatility_snapshot_symbols = silver_volatility.discover_snapshot_symbo
 discover_realized_volatility_symbols = silver_realized_volatility.discover_realized_volatility_symbols
 discover_iv_rv_symbols = silver_iv_rv.discover_iv_rv_symbols
 discover_index_price_symbols = silver_index_price.discover_index_price_symbols
+discover_futures_summary_symbols = silver_futures_summary.discover_futures_summary_symbols
 
 
 def _funding_dependencies() -> silver_funding.FundingDependencies:
@@ -881,4 +889,57 @@ def build_index_price_1m_feature_for_symbol(
     )
     if not isinstance(report, SilverBuildReport):
         raise TypeError("index-price 1m feature builder returned an unexpected report type")
+    return report
+
+
+def _futures_summary_dependencies() -> silver_futures_summary.FuturesSummaryDependencies:
+    return silver_futures_summary.FuturesSummaryDependencies(
+        require_polars=_require_polars,
+        silver_month_path=_silver_month_path,
+        iso_utc=_iso_utc,
+        report_factory=SilverBuildReport,
+    )
+
+
+def build_futures_summary_observed_for_symbol(
+    *,
+    bronze_root: str,
+    silver_root: str,
+    exchange: str,
+    symbol: str,
+    timeframe: str = "1m",
+) -> SilverBuildReport:
+    """Build observed futures-summary Silver snapshots for one currency."""
+
+    report = silver_futures_summary.build_futures_summary_observed_for_symbol(
+        bronze_root=bronze_root,
+        silver_root=silver_root,
+        exchange=exchange,
+        symbol=symbol,
+        timeframe=timeframe,
+        dependencies=_futures_summary_dependencies(),
+    )
+    if not isinstance(report, SilverBuildReport):
+        raise TypeError("futures-summary observed builder returned an unexpected report type")
+    return report
+
+
+def build_futures_summary_1m_feature_for_symbol(
+    *,
+    silver_root: str,
+    exchange: str,
+    symbol: str,
+    timeframe: str = "1m",
+) -> SilverBuildReport:
+    """Build freshness-aware futures-summary 1m features for one currency."""
+
+    report = silver_futures_summary.build_futures_summary_1m_feature_for_symbol(
+        silver_root=silver_root,
+        exchange=exchange,
+        symbol=symbol,
+        timeframe=timeframe,
+        dependencies=_futures_summary_dependencies(),
+    )
+    if not isinstance(report, SilverBuildReport):
+        raise TypeError("futures-summary 1m feature builder returned an unexpected report type")
     return report

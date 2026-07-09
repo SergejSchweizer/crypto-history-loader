@@ -217,6 +217,22 @@ SILVER_FUTURES_SUMMARY_OBSERVED_COLUMNS = [
     "ingested_at",
     "source_endpoint",
 ]
+SILVER_FUTURES_SUMMARY_FEATURE_COLUMNS = [
+    "timestamp_m1",
+    "exchange",
+    "symbol",
+    "instrument_type",
+    "mark_price",
+    "index_price",
+    "mark_index_spread",
+    "mark_index_ratio",
+    "open_interest",
+    "volume",
+    "turnover",
+    "funding_rate",
+    "summary_is_observed",
+    "minutes_since_summary_observation",
+]
 SILVER_OPTIONS_TICKER_OBSERVED_COLUMNS = [
     "timestamp",
     "exchange",
@@ -504,6 +520,14 @@ SILVER_DATASET_CONTRACTS: dict[str, SilverDatasetContract] = {
         missing_data_policy="observed_only",
         output_columns=tuple(SILVER_FUTURES_SUMMARY_OBSERVED_COLUMNS),
     ),
+    "futures_summary_1m_feature": SilverDatasetContract(
+        dataset_type="futures_summary_1m_feature",
+        timeframe="1m",
+        timestamp_column="timestamp_m1",
+        timestamp_semantics="minute_grid",
+        missing_data_policy="forward_fill",
+        output_columns=tuple(SILVER_FUTURES_SUMMARY_FEATURE_COLUMNS),
+    ),
     "options_ticker_snapshot_1m_observed": SilverDatasetContract(
         dataset_type="options_ticker_snapshot_1m_observed",
         timeframe="1m",
@@ -609,7 +633,7 @@ BRONZE_TO_SILVER_DATASETS: dict[str, tuple[str, ...]] = {
     "volatility_index_snapshot_1m": ("volatility_index_snapshot_1m_observed", "volatility_index_1m_feature"),
     "historical_volatility": ("historical_volatility_observed",),
     "index_price_snapshot_1m": ("index_price_snapshot_1m_observed", "index_price_1m_feature"),
-    "futures_summary_snapshot_1m": ("futures_summary_snapshot_1m_observed",),
+    "futures_summary_snapshot_1m": ("futures_summary_snapshot_1m_observed", "futures_summary_1m_feature"),
     "options_ticker_snapshot_1m": ("options_ticker_snapshot_1m_observed", "options_surface_1m_feature"),
     "options_instrument_ticker_snapshot_1m": (
         "options_instrument_ticker_snapshot_1m_observed",
@@ -666,6 +690,11 @@ GOLD_DATASET_CONTRACTS: dict[str, GoldDatasetContract] = {
     "gold.market.index_price.m1": GoldDatasetContract(
         dataset_id="gold.market.index_price.m1",
         requirements=(GoldSourceRequirement("index_price_1m_feature", "1m"),),
+        include_l2=False,
+    ),
+    "gold.market.futures_summary.m1": GoldDatasetContract(
+        dataset_id="gold.market.futures_summary.m1",
+        requirements=(GoldSourceRequirement("futures_summary_1m_feature", "1m"),),
         include_l2=False,
     ),
     "gold.market.full.m1": GoldDatasetContract(

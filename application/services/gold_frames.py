@@ -432,6 +432,38 @@ def prepare_index_price(pl: Any, frame: Any, symbol: str) -> Any:
     )
 
 
+def prepare_futures_summary(pl: Any, frame: Any, symbol: str) -> Any:
+    """Prepare futures-summary features for the Gold join contract."""
+
+    return (
+        frame.with_columns(
+            [
+                pl.col("timestamp_m1").cast(pl.Datetime(time_unit="us", time_zone="UTC")),
+                pl.lit(symbol).alias("symbol"),
+            ]
+        )
+        .select(
+            [
+                "timestamp_m1",
+                "exchange",
+                "symbol",
+                pl.col("instrument_type").cast(pl.Utf8).alias("futures_summary_instrument_type"),
+                pl.col("mark_price").cast(pl.Float64).alias("futures_summary_mark_price"),
+                pl.col("index_price").cast(pl.Float64).alias("futures_summary_index_price"),
+                pl.col("mark_index_spread").cast(pl.Float64).alias("futures_summary_mark_index_spread"),
+                pl.col("mark_index_ratio").cast(pl.Float64).alias("futures_summary_mark_index_ratio"),
+                pl.col("open_interest").cast(pl.Float64).alias("futures_summary_open_interest"),
+                pl.col("volume").cast(pl.Float64).alias("futures_summary_volume"),
+                pl.col("turnover").cast(pl.Float64).alias("futures_summary_turnover"),
+                pl.col("funding_rate").cast(pl.Float64).alias("futures_summary_funding_rate"),
+                pl.col("summary_is_observed").cast(pl.Boolean).alias("futures_summary_is_observed"),
+                pl.col("minutes_since_summary_observation").cast(pl.Int64),
+            ]
+        )
+        .sort("timestamp_m1")
+    )
+
+
 def prepare_dataset_frame(pl: Any, dataset_type: str, frame: Any, symbol: str) -> Any:
     """Dispatch preparation for a supported Gold source dataset.
 
@@ -449,6 +481,7 @@ def prepare_dataset_frame(pl: Any, dataset_type: str, frame: Any, symbol: str) -
         "volatility_index_data_observed": lambda: prepare_volatility_index_data(pl, frame, symbol),
         "iv_rv_1m_feature": lambda: prepare_iv_rv(pl, frame, symbol),
         "index_price_1m_feature": lambda: prepare_index_price(pl, frame, symbol),
+        "futures_summary_1m_feature": lambda: prepare_futures_summary(pl, frame, symbol),
         "gold_l2_m1": lambda: prepare_l2(pl, frame, symbol),
     }
     preparer = dataset_preparers.get(dataset_type)
