@@ -495,3 +495,70 @@ def test_build_volatility_index_1m_feature_prefers_snapshot_with_historical_fall
     assert written["iv_range"].to_list() == [3.0, 3.0, 3.0]
     assert written["minutes_since_iv_observation"].to_list() == [0, 0, 0]
     assert written["iv_data_available"].to_list() == [True, True, True]
+
+
+def test_build_volatility_index_1m_feature_uses_trailing_iv_windows(tmp_path: Path) -> None:
+    """IV rolling features should use current and past timestamps only."""
+
+    silver = tmp_path / "silver"
+    month = "2026-06"
+    timestamps = [
+        datetime(2026, 6, 12, 0, 0, tzinfo=UTC),
+        datetime(2026, 6, 12, 0, 5, tzinfo=UTC),
+        datetime(2026, 6, 12, 0, 15, tzinfo=UTC),
+        datetime(2026, 6, 12, 1, 0, tzinfo=UTC),
+        datetime(2026, 6, 12, 1, 1, tzinfo=UTC),
+    ]
+    closes = [50.0, 55.0, 70.0, 80.0, 1000.0]
+    rows = []
+    for index, timestamp in enumerate(timestamps):
+        close = closes[index]
+        rows.append(
+            {
+                "timestamp": timestamp,
+                "exchange": "deribit",
+                "symbol": "BTC",
+                "instrument_type": "perp",
+                "dataset_type": "volatility_index_snapshot_1m",
+                "volatility_value": close,
+                "volatility_open": close - 1.0,
+                "volatility_high": close + 1.0,
+                "volatility_low": close - 2.0,
+                "volatility_close": close,
+                "volatility_source_timestamp": timestamp,
+                "ingested_at": timestamp,
+                "source_endpoint": "rest_get_volatility_index_data",
+            }
+        )
+    _write_silver_observed_file(
+        silver,
+        dataset_type="volatility_index_snapshot_1m_observed",
+        exchange="deribit",
+        symbol="BTC",
+        month=month,
+        rows=rows,
+    )
+
+    build_volatility_index_1m_feature_for_symbol(
+        silver_root=str(silver),
+        exchange="deribit",
+        symbol="BTC",
+    )
+
+    output_path = (
+        silver
+        / "dataset_type=volatility_index_1m_feature"
+        / "exchange=deribit"
+        / "symbol=BTC"
+        / "timeframe=1m"
+        / "year=2026"
+        / "month=2026-06"
+        / "BTC-2026-06.parquet"
+    )
+    written = pl.read_parquet(output_path)
+    assert written["iv_change_5m"].to_list() == [None, 5.0, 15.0, 10.0, 930.0]
+    assert written["iv_change_15m"].to_list() == [None, None, 20.0, 10.0, 930.0]
+    assert written["iv_change_1h"].to_list() == [None, None, None, 30.0, 950.0]
+    assert written["iv_percentile_30d"].to_list() == [1.0, 1.0, 1.0, 1.0, 1.0]
+    assert written["iv_zscore_1d"].null_count() == 1
+    assert written["iv_zscore_7d"].null_count() == 1

@@ -181,7 +181,7 @@ Acceptance:
 
 ### PR-05: IV Feature Layer For Regime Research
 
-Status: Planned
+Status: Done
 
 Branch: `codex/pr05-iv-index-feature-layer`
 
