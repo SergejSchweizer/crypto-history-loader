@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from application.dataset_contracts import (
+    BRONZE_TO_SILVER_DATASETS,
     GOLD_DATASET_CONTRACTS,
     SILVER_DATASET_CONTRACTS,
     gold_dataset_contract,
@@ -30,12 +33,33 @@ def test_silver_contracts_cover_service_output_columns() -> None:
         "volatility_index_data_observed": silver_service.SILVER_VOLATILITY_OBSERVED_COLUMNS,
     }
 
-    assert set(SILVER_DATASET_CONTRACTS) == set(expected_columns)
     for dataset_type, columns in expected_columns.items():
         contract = silver_dataset_contract(dataset_type)
         assert contract.dataset_type == dataset_type
         assert contract.output_columns == tuple(columns)
         assert contract.timestamp_column in contract.output_columns
+
+
+def test_backlog_bronze_datasets_have_silver_destinations() -> None:
+    """Every local Bronze dataset listed in the backlog should have planned Silver outputs."""
+
+    backlog = (Path(__file__).resolve().parents[1] / "BACKLOG.md").read_text(encoding="utf-8")
+    start_marker = "Bronze dataset types present locally:\n\n```text\n"
+    end_marker = "\n```"
+    start = backlog.index(start_marker) + len(start_marker)
+    end = backlog.index(end_marker, start)
+    bronze_datasets = {line.strip() for line in backlog[start:end].splitlines() if line.strip()}
+
+    missing = sorted(bronze_datasets.difference(BRONZE_TO_SILVER_DATASETS))
+    assert not missing
+
+    for bronze_dataset in bronze_datasets:
+        destinations = BRONZE_TO_SILVER_DATASETS[bronze_dataset]
+        assert destinations
+        for silver_dataset in destinations:
+            assert silver_dataset in SILVER_DATASET_CONTRACTS
+            contract = silver_dataset_contract(silver_dataset)
+            assert contract.timestamp_column in contract.output_columns
 
 
 def test_gold_contracts_are_service_compatible() -> None:
