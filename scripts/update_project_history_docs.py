@@ -175,7 +175,7 @@ def main() -> int:
 
     commits = read_commits()
     outputs = {
-        "DECISONS.md": render_decisions(commits),
+        "DECISIONS.md": render_decisions(commits),
         "RISKS.md": render_risks(commits),
         "TIMELINE.md": render_timeline(commits),
     }
@@ -257,7 +257,7 @@ def render_decisions(commits: list[Commit]) -> str:
         "",
         "- Keep decisions tied to commits, not personal memory.",
         "- Update this file in the same change set as architecture, dataset, or operational contract changes.",
-        "- The filename `DECISONS.md` follows the repository request; treat it as the canonical decisions ledger.",
+        "- The filename `DECISIONS.md` is the canonical decisions ledger.",
         "",
     ]
     for index, topic in enumerate(DECISION_TOPICS, start=1):

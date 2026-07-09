@@ -12,7 +12,7 @@ Rules:
 
 - Keep decisions tied to commits, not personal memory.
 - Update this file in the same change set as architecture, dataset, or operational contract changes.
-- The filename `DECISONS.md` follows the repository request; treat it as the canonical decisions ledger.
+- The filename `DECISIONS.md` is the canonical decisions ledger.
 
 ## D001. Use explicit medallion dataset contracts
 
