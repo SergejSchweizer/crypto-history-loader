@@ -356,6 +356,10 @@ def prepare_volatility_index_data(pl: Any, frame: Any, symbol: str) -> Any:
                 "exchange",
                 "symbol",
                 pl.col("volatility_value").cast(pl.Float64).alias("volatility_index_value"),
+                pl.col("volatility_open").cast(pl.Float64).alias("volatility_index_open"),
+                pl.col("volatility_high").cast(pl.Float64).alias("volatility_index_high"),
+                pl.col("volatility_low").cast(pl.Float64).alias("volatility_index_low"),
+                pl.col("volatility_close").cast(pl.Float64).alias("volatility_index_close"),
             ]
         )
         .sort("timestamp_m1")

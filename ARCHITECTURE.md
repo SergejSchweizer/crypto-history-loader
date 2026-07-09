@@ -94,6 +94,12 @@ options_trades
 volatility_index_data
 ```
 
+`volatility_index_data` stores Deribit volatility-index OHLC observations in Bronze as
+`value`, `open`, `high`, `low`, and `close`. Silver exposes these as `volatility_value`,
+`volatility_open`, `volatility_high`, `volatility_low`, and `volatility_close`; Gold exposes
+them as `volatility_index_value`, `volatility_index_open`, `volatility_index_high`,
+`volatility_index_low`, and `volatility_index_close`.
+
 Silver and Gold contracts live in `application/dataset_contracts.py`. If a dataset is renamed,
 added, or removed, update all of the following in the same change set:
 

@@ -54,9 +54,22 @@ def fetch_volatility_index_data_range(
             if not isinstance(item, list) or len(item) < 2:
                 continue
             ts = int(cast(Any, item[0]))
-            value = float(cast(Any, item[1]))
+            if len(item) >= 5:
+                open_value = float(cast(Any, item[1]))
+                high_value = float(cast(Any, item[2]))
+                low_value = float(cast(Any, item[3]))
+                close_value = float(cast(Any, item[4]))
+            else:
+                open_value = high_value = low_value = close_value = float(cast(Any, item[1]))
             if start_open_ms <= ts <= end_open_ms:
-                rows[ts] = {"timestamp": ts, "index_value": value}
+                rows[ts] = {
+                    "timestamp": ts,
+                    "open": open_value,
+                    "high": high_value,
+                    "low": low_value,
+                    "close": close_value,
+                    "index_value": close_value,
+                }
             if ts > last_ts:
                 last_ts = ts
 

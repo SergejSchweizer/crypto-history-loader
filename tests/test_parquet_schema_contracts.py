@@ -134,6 +134,10 @@ def test_bronze_volatility_index_data_schema_contract_fields(tmp_path: Path) -> 
         open_time=datetime(2026, 5, 1, 0, 0, tzinfo=UTC),
         close_time=datetime(2026, 5, 1, 0, 0, tzinfo=UTC),
         value=55.2,
+        open_value=55.0,
+        high_value=56.0,
+        low_value=54.0,
+        close_value=55.2,
         source_endpoint="public_get_volatility_index_data",
         dataset_type="volatility_index_data",
     )
@@ -145,4 +149,8 @@ def test_bronze_volatility_index_data_schema_contract_fields(tmp_path: Path) -> 
     )
     schema = pq.ParquetFile(files[0]).schema_arrow
     assert "value" in schema.names
+    assert "open" in schema.names
+    assert "high" in schema.names
+    assert "low" in schema.names
+    assert "close" in schema.names
     assert "source_endpoint" in schema.names

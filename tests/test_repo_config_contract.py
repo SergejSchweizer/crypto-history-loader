@@ -39,9 +39,23 @@ def _load_pipeline_module():
 
 def test_repo_config_has_required_top_level_sections() -> None:
     config = _load_repo_config()
-    required = {"global", "env", "export-descriptive-stats", "bronze-build", "medallion-pipeline"}
+    required = {"env", "export-descriptive-stats", "bronze-build", "medallion-pipeline"}
     missing = sorted(required.difference(config))
     assert not missing, f"config.yaml missing required section(s): {', '.join(missing)}"
+
+
+def test_repo_config_uses_only_symbol_start_dates() -> None:
+    config = _load_repo_config()
+    assert "global" not in config
+
+    bronze_cfg = config["bronze-build"]
+    assert "start_date" not in bronze_cfg
+    assert "exchange_symbol_start_dates" not in bronze_cfg
+    assert bronze_cfg["symbol_start_dates"] == [
+        "BTC=2018-08-14",
+        "ETH=2019-03-14",
+        "SOL=2022-03-15",
+    ]
 
 
 def test_repo_config_medallion_pipeline_contract() -> None:
@@ -78,7 +92,7 @@ def test_repo_config_builds_pipeline_steps() -> None:
         assert step.args, f"Pipeline step '{step.name}' must include command args"
 
 
-def test_repo_config_medallion_bronze_inherits_full_history_start_bounds() -> None:
+def test_repo_config_medallion_bronze_inherits_symbol_start_bounds() -> None:
     module = _load_pipeline_module()
     config = _load_repo_config()
     main_path = _repo_root() / "main.py"
@@ -86,8 +100,8 @@ def test_repo_config_medallion_bronze_inherits_full_history_start_bounds() -> No
     steps = module._build_steps(main_path=main_path, config_path=config_path, config_data=config)
     bronze_step = next(step for step in steps if step.name == "bronze")
 
-    start_idx = bronze_step.args.index("--start-date")
-    assert bronze_step.args[start_idx + 1] == config["bronze-build"]["start_date"]
+    assert "--start-date" not in bronze_step.args
+    assert "--exchange-symbol-start-dates" not in bronze_step.args
 
     symbol_idx = bronze_step.args.index("--symbol-start-dates")
     expected_symbol_dates = config["bronze-build"]["symbol_start_dates"]

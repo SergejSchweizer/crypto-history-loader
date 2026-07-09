@@ -95,6 +95,8 @@ def _build_steps(*, main_path: Path, config_path: Path, config_data: dict[str, A
         if layer_name == "bronze" and command == "bronze-build":
             cli_args = _apply_bronze_start_defaults(cli_args=cli_args, config_data=config_data)
             cli_args = _ensure_volatility_dataset_arg(cli_args)
+        if layer_name == "silver" and command == "silver-build":
+            cli_args = _ensure_volatility_dataset_arg(cli_args)
 
         cmd = [str(main_path), "--config", str(config_path), command, *cli_args]
         steps.append(PipelineStep(name=layer_name, args=cmd))
@@ -130,10 +132,10 @@ def _string_list(value: object) -> list[str]:
 
 
 def _apply_bronze_start_defaults(*, cli_args: list[str], config_data: dict[str, Any]) -> list[str]:
-    """Append Bronze start-bound defaults from the ``bronze-build`` config section.
+    """Append Bronze symbol start-bound defaults from ``bronze-build``.
 
-    Medallion runs should use the same historical boundaries as direct
-    ``bronze-build`` runs unless the medallion step explicitly overrides them.
+    Medallion runs should use the same symbol-specific historical boundaries
+    as direct ``bronze-build`` runs unless the step explicitly overrides them.
     """
 
     bronze_cfg = config_data.get("bronze-build")
@@ -141,19 +143,10 @@ def _apply_bronze_start_defaults(*, cli_args: list[str], config_data: dict[str, 
         return cli_args
 
     rewritten = list(cli_args)
-    start_date = bronze_cfg.get("start_date")
-    if isinstance(start_date, str) and start_date.strip() and not _has_option(rewritten, "--start-date"):
-        rewritten.extend(["--start-date", start_date.strip()])
-
     symbol_start_dates = _string_list(bronze_cfg.get("symbol_start_dates"))
     if symbol_start_dates and not _has_option(rewritten, "--symbol-start-dates"):
         rewritten.append("--symbol-start-dates")
         rewritten.extend(symbol_start_dates)
-
-    exchange_symbol_start_dates = _string_list(bronze_cfg.get("exchange_symbol_start_dates"))
-    if exchange_symbol_start_dates and not _has_option(rewritten, "--exchange-symbol-start-dates"):
-        rewritten.append("--exchange-symbol-start-dates")
-        rewritten.extend(exchange_symbol_start_dates)
 
     return rewritten
 

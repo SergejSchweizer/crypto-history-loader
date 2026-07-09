@@ -6,7 +6,11 @@ from collections import defaultdict
 from datetime import UTC, datetime
 
 from ingestion.funding import FundingPoint
-from ingestion.lake_datasets import OPEN_INTEREST_DATASET_TYPE, ohlcv_dataset_type_for_market
+from ingestion.lake_datasets import (
+    OPEN_INTEREST_DATASET_TYPE,
+    bronze_trade_dataset_type_for_market,
+    ohlcv_dataset_type_for_market,
+)
 from ingestion.lake_layout import PartitionKey
 from ingestion.lake_records import (
     candle_partition_key,
@@ -163,7 +167,7 @@ def save_trades_parquet_lake(
 
     run_id = utc_run_id()
     ingested_at = datetime.now(UTC)
-    dataset_type = "options_trades" if market == "option" else "perps_trades"
+    dataset_type = bronze_trade_dataset_type_for_market(market)
 
     grouped: defaultdict[PartitionKey, list[dict[str, object]]] = defaultdict(list)
     for symbol_map in trades_by_exchange.values():

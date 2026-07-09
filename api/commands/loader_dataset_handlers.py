@@ -242,6 +242,10 @@ def populate_volatility_output(
                 "open_time": item.open_time.isoformat(),
                 "close_time": item.close_time.isoformat(),
                 "value": item.value,
+                "open": item.open_value,
+                "high": item.high_value,
+                "low": item.low_value,
+                "close": item.close_value,
                 "source_endpoint": item.source_endpoint,
                 "dataset_type": item.dataset_type,
             }

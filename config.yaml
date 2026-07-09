@@ -1,12 +1,3 @@
-global:
-  deribit_observed_start_dates:
-    spot_ohlcv:
-      BTC: "2023-04-24"
-      ETH: "2023-04-24"
-      SOL: "2024-02-27"
-    volatility_index_data:
-      BTC: "2021-04-01"
-      ETH: "2021-04-01"
 env:
   DEPTH_SYNC_LOG_DIR: .logs
   DEPTH_FETCH_CONCURRENCY: 6
@@ -27,8 +18,7 @@ export-descriptive-stats:
 
 bronze-build:
   exchange: deribit
-  dataset: [spot_ohlcv, perps_ohlcv, open_interest, funding, perps_trades, options_trades]
-  start_date: "2018-08-14"
+  dataset: [spot_ohlcv, perps_ohlcv, open_interest, funding, perps_trades, options_trades, volatility_index_data]
   symbol_start_dates:
     - BTC=2018-08-14
     - ETH=2019-03-14
@@ -52,6 +42,7 @@ medallion-pipeline:
       - funding
       - perps_trades
       - options_trades
+      - volatility_index_data
       - --symbols
       - BTC
       - ETH
@@ -69,6 +60,7 @@ medallion-pipeline:
       - open_interest
       - perps_trades
       - options_trades
+      - volatility_index_data
       - --manifest
       - --plot
       - --maxprocesses

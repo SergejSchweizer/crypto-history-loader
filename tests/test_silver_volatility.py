@@ -72,6 +72,10 @@ def test_build_volatility_observed_for_symbol_uses_dataset_family_module(tmp_pat
             "close_time": datetime(2026, 5, 1, 0, 0, tzinfo=UTC),
             "timeframe": "1m",
             "value": 55.0,
+            "open": 54.0,
+            "high": 56.0,
+            "low": 53.5,
+            "close": 55.0,
             "origin_payload": "{}",
         },
         {
@@ -88,6 +92,10 @@ def test_build_volatility_observed_for_symbol_uses_dataset_family_module(tmp_pat
             "close_time": datetime(2026, 5, 1, 0, 0, tzinfo=UTC),
             "timeframe": "1m",
             "value": 56.0,
+            "open": 55.0,
+            "high": 57.0,
+            "low": 54.5,
+            "close": 56.0,
             "origin_payload": "{}",
         },
         {
@@ -104,6 +112,10 @@ def test_build_volatility_observed_for_symbol_uses_dataset_family_module(tmp_pat
             "close_time": datetime(2026, 5, 1, 0, 1, tzinfo=UTC),
             "timeframe": "1m",
             "value": -1.0,
+            "open": -1.0,
+            "high": -1.0,
+            "low": -1.0,
+            "close": -1.0,
             "origin_payload": "{}",
         },
     ]
@@ -160,3 +172,7 @@ def test_build_volatility_observed_for_symbol_uses_dataset_family_module(tmp_pat
     assert written.height == 1
     assert written["symbol"].to_list() == ["BTC"]
     assert written["volatility_value"].to_list() == [56.0]
+    assert written["volatility_open"].to_list() == [55.0]
+    assert written["volatility_high"].to_list() == [57.0]
+    assert written["volatility_low"].to_list() == [54.5]
+    assert written["volatility_close"].to_list() == [56.0]

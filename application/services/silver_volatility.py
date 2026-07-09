@@ -113,6 +113,10 @@ def build_volatility_observed_for_symbol(
             [
                 pl.col("open_time").cast(pl.Datetime(time_unit="us", time_zone="UTC")).alias("timestamp"),
                 pl.col("value").cast(pl.Float64).alias("volatility_value"),
+                pl.col("open").cast(pl.Float64).alias("volatility_open"),
+                pl.col("high").cast(pl.Float64).alias("volatility_high"),
+                pl.col("low").cast(pl.Float64).alias("volatility_low"),
+                pl.col("close").cast(pl.Float64).alias("volatility_close"),
                 dependencies.normalize_symbol_expr(pl, "symbol").alias("symbol"),
                 pl.col("exchange").cast(pl.Utf8).str.strip_chars().str.to_lowercase().alias("exchange"),
                 pl.col("instrument_type").cast(pl.Utf8).str.strip_chars().str.to_lowercase().alias("instrument_type"),

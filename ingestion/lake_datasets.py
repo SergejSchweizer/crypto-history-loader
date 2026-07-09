@@ -23,3 +23,13 @@ def ohlcv_dataset_type_for_market(market: str) -> str:
     if market == "perp":
         return "perps_ohlcv"
     raise ValueError(f"Unsupported OHLCV market '{market}'")
+
+
+def bronze_trade_dataset_type_for_market(market: str) -> str:
+    """Return the bronze dataset_type label used for trade parquet storage by market."""
+
+    if market == "option":
+        return "options_trades"
+    if market == "perp":
+        return "perps_trades"
+    raise ValueError(f"Unsupported trade market '{market}'")

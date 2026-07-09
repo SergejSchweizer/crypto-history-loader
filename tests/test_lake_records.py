@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from ingestion.lake_datasets import bronze_trade_dataset_type_for_market
 from ingestion.lake_records import candle_partition_key, candle_record, trade_partition_key, trade_record
 from ingestion.spot_ohlcv import SpotCandle
 from ingestion.trades import OptionTradeTick, TradeTick
@@ -54,6 +55,13 @@ def test_candle_partition_and_record_mapping() -> None:
         "quote_volume": 1500.0,
         "trade_count": 42,
     }
+
+
+def test_bronze_trade_dataset_type_uses_plural_name_for_options() -> None:
+    """Bronze option trade datasets should use the plural bronze name."""
+
+    assert bronze_trade_dataset_type_for_market("option") == "options_trades"
+    assert bronze_trade_dataset_type_for_market("perp") == "perps_trades"
 
 
 def test_trade_record_mapping_includes_option_fields_only_for_options() -> None:

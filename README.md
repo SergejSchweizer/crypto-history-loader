@@ -88,7 +88,7 @@ Volatility:
 
 | CLI Domain | Bronze `dataset_type` | Instrument Type | Task Kind | Default Timeframe | Symbol Source | Description |
 |---|---|---|---|---|---|---|
-| `volatility_index_data` | `volatility_index_data` | `perp` | `volatility` | `1m` | `--symbols` | Historical Deribit volatility index observations |
+| `volatility_index_data` | `volatility_index_data` | `perp` | `volatility` | `1m` | `--symbols` | Historical Deribit volatility index OHLC observations |
 
 \* Funding input accepts `1m`/`m1` aliases but normalizes to Deribit-native `8h` events.
 
@@ -225,42 +225,42 @@ Coverage reference for missing statistics in this section:
 - Missing %: missing calendar days / expected calendar days
 - Missing Days: count of missing calendar days in the [Start Date, End Date] span
 
-Current Bronze missing-day snapshot generated from `lake/bronze` on 2026-07-01 08:30 CEST:
+Current Bronze missing-day snapshot generated from `lake/bronze` on 2026-07-09 15:55 CEST:
 
 | Dataset Type | Series | Start Date | End Date | Expected Days | Observed Days | Missing Days | Missing % |
 |---|---:|---|---|---:|---:|---:|---:|
-| `funding` | 3 | 2019-04-30 | 2026-06-30 | 6,806 | 6,806 | 0 | 0.00% |
+| `funding` | 3 | 2019-04-30 | 2026-07-04 | 6,818 | 6,818 | 0 | 0.00% |
 | `historical_volatility` | 3 | 2026-05-08 | 2026-05-24 | 51 | 51 | 0 | 0.00% |
-| `open_interest` | 3 | 2018-08-15 | 2026-06-30 | 7,110 | 7,110 | 0 | 0.00% |
-| `options_trades` | 3 | 2018-08-14 | 2026-07-01 | 5,780 | 5,780 | 0 | 0.00% |
-| `perps_ohlcv` | 3 | 2018-08-14 | 2026-07-01 | 7,071 | 7,071 | 0 | 0.00% |
-| `perps_trades` | 3 | 2018-08-14 | 2026-06-11 | 5,739 | 2,565 | 3,174 | 55.31% |
-| `spot_ohlcv` | 3 | 2023-04-24 | 2026-07-01 | 3,186 | 3,186 | 0 | 0.00% |
+| `open_interest` | 3 | 2018-08-15 | 2026-07-04 | 7,122 | 7,122 | 0 | 0.00% |
+| `options_trades` | 3 | 2018-08-14 | 2026-07-05 | 5,788 | 5,788 | 0 | 0.00% |
+| `perps_ohlcv` | 3 | 2018-08-14 | 2026-07-05 | 7,083 | 7,083 | 0 | 0.00% |
+| `perps_trades` | 3 | 2018-08-14 | 2026-06-11 | 5,739 | 4,038 | 1,701 | 29.64% |
+| `spot_ohlcv` | 3 | 2023-04-24 | 2026-07-05 | 3,198 | 3,198 | 0 | 0.00% |
 | `volatility_index_data` | 3 | 2022-11-07 | 2026-05-25 | 83 | 83 | 0 | 0.00% |
 
 | Dataset Type | Exchange | Instrument | Symbol | Timeframe | Start Date | End Date | Expected Days | Observed Days | Missing Days | Missing % |
 |---|---|---|---|---|---|---|---:|---:|---:|---:|
-| `funding` | deribit | perp | `BTC-PERPETUAL` | 8h | 2019-04-30 | 2026-06-30 | 2,619 | 2,619 | 0 | 0.00% |
-| `funding` | deribit | perp | `ETH-PERPETUAL` | 8h | 2019-04-30 | 2026-06-30 | 2,619 | 2,619 | 0 | 0.00% |
-| `funding` | deribit | perp | `SOL-PERPETUAL` | 8h | 2022-03-16 | 2026-06-30 | 1,568 | 1,568 | 0 | 0.00% |
+| `funding` | deribit | perp | `BTC-PERPETUAL` | 8h | 2019-04-30 | 2026-07-04 | 2,623 | 2,623 | 0 | 0.00% |
+| `funding` | deribit | perp | `ETH-PERPETUAL` | 8h | 2019-04-30 | 2026-07-04 | 2,623 | 2,623 | 0 | 0.00% |
+| `funding` | deribit | perp | `SOL-PERPETUAL` | 8h | 2022-03-16 | 2026-07-04 | 1,572 | 1,572 | 0 | 0.00% |
 | `historical_volatility` | deribit | perp | `BTC` | 1m | 2026-05-08 | 2026-05-24 | 17 | 17 | 0 | 0.00% |
 | `historical_volatility` | deribit | perp | `ETH` | 1m | 2026-05-08 | 2026-05-24 | 17 | 17 | 0 | 0.00% |
 | `historical_volatility` | deribit | perp | `SOL` | 1m | 2026-05-08 | 2026-05-24 | 17 | 17 | 0 | 0.00% |
-| `open_interest` | deribit | perp | `BTC-PERPETUAL` | 1m | 2018-08-15 | 2026-06-30 | 2,877 | 2,877 | 0 | 0.00% |
-| `open_interest` | deribit | perp | `ETH-PERPETUAL` | 1m | 2019-03-15 | 2026-06-30 | 2,665 | 2,665 | 0 | 0.00% |
-| `open_interest` | deribit | perp | `SOL-PERPETUAL` | 1m | 2022-03-16 | 2026-06-30 | 1,568 | 1,568 | 0 | 0.00% |
-| `options_trades` | deribit | option | `BTC` | tick | 2018-08-14 | 2026-07-01 | 2,879 | 2,879 | 0 | 0.00% |
-| `options_trades` | deribit | option | `ETH` | tick | 2019-03-21 | 2026-07-01 | 2,660 | 2,660 | 0 | 0.00% |
+| `open_interest` | deribit | perp | `BTC-PERPETUAL` | 1m | 2018-08-15 | 2026-07-04 | 2,881 | 2,881 | 0 | 0.00% |
+| `open_interest` | deribit | perp | `ETH-PERPETUAL` | 1m | 2019-03-15 | 2026-07-04 | 2,669 | 2,669 | 0 | 0.00% |
+| `open_interest` | deribit | perp | `SOL-PERPETUAL` | 1m | 2022-03-16 | 2026-07-04 | 1,572 | 1,572 | 0 | 0.00% |
+| `options_trades` | deribit | option | `BTC` | tick | 2018-08-14 | 2026-07-05 | 2,883 | 2,883 | 0 | 0.00% |
+| `options_trades` | deribit | option | `ETH` | tick | 2019-03-21 | 2026-07-05 | 2,664 | 2,664 | 0 | 0.00% |
 | `options_trades` | deribit | option | `SOL` | tick | 2022-05-04 | 2022-12-30 | 241 | 241 | 0 | 0.00% |
-| `perps_ohlcv` | deribit | perp | `BTC-PERPETUAL` | 1m | 2018-08-14 | 2026-07-01 | 2,879 | 2,879 | 0 | 0.00% |
-| `perps_ohlcv` | deribit | perp | `ETH-PERPETUAL` | 1m | 2019-03-14 | 2026-07-01 | 2,667 | 2,667 | 0 | 0.00% |
-| `perps_ohlcv` | deribit | perp | `SOL-PERPETUAL` | 1m | 2022-04-29 | 2026-07-01 | 1,525 | 1,525 | 0 | 0.00% |
-| `perps_trades` | deribit | perp | `BTC-PERPETUAL` | tick | 2018-08-14 | 2026-06-11 | 2,859 | 1,396 | 1,463 | 51.17% |
-| `perps_trades` | deribit | perp | `ETH-PERPETUAL` | tick | 2019-03-14 | 2026-05-29 | 2,634 | 923 | 1,711 | 64.96% |
+| `perps_ohlcv` | deribit | perp | `BTC-PERPETUAL` | 1m | 2018-08-14 | 2026-07-05 | 2,883 | 2,883 | 0 | 0.00% |
+| `perps_ohlcv` | deribit | perp | `ETH-PERPETUAL` | 1m | 2019-03-14 | 2026-07-05 | 2,671 | 2,671 | 0 | 0.00% |
+| `perps_ohlcv` | deribit | perp | `SOL-PERPETUAL` | 1m | 2022-04-29 | 2026-07-05 | 1,529 | 1,529 | 0 | 0.00% |
+| `perps_trades` | deribit | perp | `BTC-PERPETUAL` | tick | 2018-08-14 | 2026-06-11 | 2,859 | 2,136 | 723 | 25.29% |
+| `perps_trades` | deribit | perp | `ETH-PERPETUAL` | tick | 2019-03-14 | 2026-05-29 | 2,634 | 1,656 | 978 | 37.13% |
 | `perps_trades` | deribit | perp | `SOL-PERPETUAL` | tick | 2022-04-29 | 2022-12-30 | 246 | 246 | 0 | 0.00% |
-| `spot_ohlcv` | deribit | spot_ohlcv | `BTC_USDC` | 1m | 2023-04-24 | 2026-07-01 | 1,165 | 1,165 | 0 | 0.00% |
-| `spot_ohlcv` | deribit | spot_ohlcv | `ETH_USDC` | 1m | 2023-04-24 | 2026-07-01 | 1,165 | 1,165 | 0 | 0.00% |
-| `spot_ohlcv` | deribit | spot_ohlcv | `SOL_USDC` | 1m | 2024-02-27 | 2026-07-01 | 856 | 856 | 0 | 0.00% |
+| `spot_ohlcv` | deribit | spot_ohlcv | `BTC_USDC` | 1m | 2023-04-24 | 2026-07-05 | 1,169 | 1,169 | 0 | 0.00% |
+| `spot_ohlcv` | deribit | spot_ohlcv | `ETH_USDC` | 1m | 2023-04-24 | 2026-07-05 | 1,169 | 1,169 | 0 | 0.00% |
+| `spot_ohlcv` | deribit | spot_ohlcv | `SOL_USDC` | 1m | 2024-02-27 | 2026-07-05 | 860 | 860 | 0 | 0.00% |
 | `volatility_index_data` | deribit | perp | `BTC` | 1m | 2026-04-24 | 2026-05-25 | 32 | 32 | 0 | 0.00% |
 | `volatility_index_data` | deribit | perp | `ETH` | 1m | 2026-04-24 | 2026-05-25 | 32 | 32 | 0 | 0.00% |
 | `volatility_index_data` | deribit | perp | `SOL` | 1m | 2022-11-07 | 2022-11-25 | 19 | 19 | 0 | 0.00% |
@@ -311,9 +311,9 @@ Coverage:
 
 | Exchange | Symbol | Timeframe | Start Date | End Date | Missing Days | Missing % |
 |---|---|---|---|---|---:|---:|
-| `deribit` | `BTC_USDC` | `1m` | `2023-04-24` | `2026-07-01` | 0 | 0.00% |
-| `deribit` | `ETH_USDC` | `1m` | `2023-04-24` | `2026-07-01` | 0 | 0.00% |
-| `deribit` | `SOL_USDC` | `1m` | `2024-02-27` | `2026-07-01` | 0 | 0.00% |
+| `deribit` | `BTC_USDC` | `1m` | `2023-04-24` | `2026-07-05` | 0 | 0.00% |
+| `deribit` | `ETH_USDC` | `1m` | `2023-04-24` | `2026-07-05` | 0 | 0.00% |
+| `deribit` | `SOL_USDC` | `1m` | `2024-02-27` | `2026-07-05` | 0 | 0.00% |
 
 ## 4.2 Perpetual (`dataset_type=perps_ohlcv`)
 
@@ -361,9 +361,9 @@ Coverage:
 
 | Exchange | Symbol | Timeframe | Start Date | End Date | Missing Days | Missing % |
 |---|---|---|---|---|---:|---:|
-| `deribit` | `BTC-PERPETUAL` | `1m` | `2018-08-14` | `2026-07-01` | 0 | 0.00% |
-| `deribit` | `ETH-PERPETUAL` | `1m` | `2019-03-14` | `2026-07-01` | 0 | 0.00% |
-| `deribit` | `SOL-PERPETUAL` | `1m` | `2022-04-29` | `2026-07-01` | 0 | 0.00% |
+| `deribit` | `BTC-PERPETUAL` | `1m` | `2018-08-14` | `2026-07-05` | 0 | 0.00% |
+| `deribit` | `ETH-PERPETUAL` | `1m` | `2019-03-14` | `2026-07-05` | 0 | 0.00% |
+| `deribit` | `SOL-PERPETUAL` | `1m` | `2022-04-29` | `2026-07-05` | 0 | 0.00% |
 
 ## 4.3 Open Interest (`dataset_type=open_interest`)
 
@@ -407,9 +407,9 @@ Coverage:
 
 | Exchange | Symbol | Timeframe | Start Date | End Date | Missing Days | Missing % |
 |---|---|---|---|---|---:|---:|
-| `deribit` | `BTC-PERPETUAL` | `1m` | `2018-08-15` | `2026-06-30` | 0 | 0.00% |
-| `deribit` | `ETH-PERPETUAL` | `1m` | `2019-03-15` | `2026-06-30` | 0 | 0.00% |
-| `deribit` | `SOL-PERPETUAL` | `1m` | `2022-03-16` | `2026-06-30` | 0 | 0.00% |
+| `deribit` | `BTC-PERPETUAL` | `1m` | `2018-08-15` | `2026-07-04` | 0 | 0.00% |
+| `deribit` | `ETH-PERPETUAL` | `1m` | `2019-03-15` | `2026-07-04` | 0 | 0.00% |
+| `deribit` | `SOL-PERPETUAL` | `1m` | `2022-03-16` | `2026-07-04` | 0 | 0.00% |
 
 ## 4.4 Funding (`dataset_type=funding`)
 
@@ -455,9 +455,9 @@ Coverage:
 
 | Exchange | Symbol | Timeframe | Start Date | End Date | Missing Days | Missing % |
 |---|---|---|---|---|---:|---:|
-| `deribit` | `BTC-PERPETUAL` | `8h` | `2019-04-30` | `2026-06-30` | 0 | 0.00% |
-| `deribit` | `ETH-PERPETUAL` | `8h` | `2019-04-30` | `2026-06-30` | 0 | 0.00% |
-| `deribit` | `SOL-PERPETUAL` | `8h` | `2022-03-16` | `2026-06-30` | 0 | 0.00% |
+| `deribit` | `BTC-PERPETUAL` | `8h` | `2019-04-30` | `2026-07-04` | 0 | 0.00% |
+| `deribit` | `ETH-PERPETUAL` | `8h` | `2019-04-30` | `2026-07-04` | 0 | 0.00% |
+| `deribit` | `SOL-PERPETUAL` | `8h` | `2022-03-16` | `2026-07-04` | 0 | 0.00% |
 
 ## 4.5 `perps_trades` (`dataset_type=perps_trades`)
 
@@ -510,8 +510,8 @@ Coverage:
 
 | Exchange | Symbol | Timeframe | Start Date | End Date | Missing Days | Missing % |
 |---|---|---|---|---|---:|---:|
-| `deribit` | `BTC-PERPETUAL` | `tick` | `2018-08-14` | `2026-06-11` | 1,463 | 51.17% |
-| `deribit` | `ETH-PERPETUAL` | `tick` | `2019-03-14` | `2026-05-29` | 1,711 | 64.96% |
+| `deribit` | `BTC-PERPETUAL` | `tick` | `2018-08-14` | `2026-06-11` | 723 | 25.29% |
+| `deribit` | `ETH-PERPETUAL` | `tick` | `2019-03-14` | `2026-05-29` | 978 | 37.13% |
 | `deribit` | `SOL-PERPETUAL` | `tick` | `2022-04-29` | `2022-12-30` | 0 | 0.00% |
 
 ## 4.6 `options_trades` (`dataset_type=options_trades`)
@@ -568,8 +568,8 @@ Coverage:
 
 | Exchange | Symbol | Timeframe | Start Date | End Date | Missing Days | Missing % |
 |---|---|---|---|---|---:|---:|
-| `deribit` | `BTC` | `tick` | `2018-08-14` | `2026-07-01` | 0 | 0.00% |
-| `deribit` | `ETH` | `tick` | `2019-03-21` | `2026-07-01` | 0 | 0.00% |
+| `deribit` | `BTC` | `tick` | `2018-08-14` | `2026-07-05` | 0 | 0.00% |
+| `deribit` | `ETH` | `tick` | `2019-03-21` | `2026-07-05` | 0 | 0.00% |
 | `deribit` | `SOL` | `tick` | `2022-05-04` | `2022-12-30` | 0 | 0.00% |
 
 ---
@@ -584,7 +584,10 @@ uv run python scripts/run_medallion_pipeline.py --config config.yaml
 
 Runs `bronze-build -> silver-build -> gold-build` using `medallion-pipeline` settings from
 `config.yaml`, enforces single-run locking via `.run/full-pipeline.lock`, and writes a shared
-append-only pipeline log.
+append-only pipeline log. The configured Bronze and Silver steps include
+`volatility_index_data`, so Deribit volatility-index OHLC fields flow into Gold as
+`volatility_index_value`, `volatility_index_open`, `volatility_index_high`,
+`volatility_index_low`, and `volatility_index_close`.
 
 ## 5.2 Layer Commands
 

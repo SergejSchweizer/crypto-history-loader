@@ -26,6 +26,10 @@ class VolatilityPoint:
     value: float
     source_endpoint: str
     dataset_type: VolatilityDatasetType
+    open_value: float | None = None
+    high_value: float | None = None
+    low_value: float | None = None
+    close_value: float | None = None
 
 
 def normalize_volatility_timeframe(exchange: Exchange, value: str) -> str:
@@ -93,15 +97,20 @@ def _parse_volatility_index_row(
 ) -> VolatilityPoint:
     ts_ms = int(cast(Any, row.get("timestamp", 0)))
     open_time = datetime.fromtimestamp(ts_ms / 1000, tz=UTC)
+    close_value = float(cast(Any, row.get("close", row.get("index_value", 0.0))))
     return VolatilityPoint(
         exchange=exchange,
         symbol=_canonical_currency(symbol),
         interval=interval,
         open_time=open_time,
         close_time=open_time,
-        value=float(cast(Any, row.get("index_value", 0.0))),
+        value=close_value,
         source_endpoint="public_get_volatility_index_data",
         dataset_type="volatility_index",
+        open_value=float(cast(Any, row.get("open", close_value))),
+        high_value=float(cast(Any, row.get("high", close_value))),
+        low_value=float(cast(Any, row.get("low", close_value))),
+        close_value=close_value,
     )
 
 

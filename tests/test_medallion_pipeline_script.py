@@ -47,7 +47,28 @@ def test_build_steps_uses_configured_market_args_with_trades(tmp_path: Path) -> 
     assert "volatility_index_data" in args
 
 
-def test_build_steps_bronze_inherits_start_bounds_from_bronze_config(tmp_path: Path) -> None:
+def test_build_steps_adds_volatility_to_silver_dataset_args(tmp_path: Path) -> None:
+    module = _load_pipeline_module()
+    main_path = tmp_path / "main.py"
+    main_path.write_text("print('ok')\n", encoding="utf-8")
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text("x: 1\n", encoding="utf-8")
+    cfg = {
+        "medallion-pipeline": {
+            "execution_order": ["silver"],
+            "silver": {
+                "enabled": True,
+                "command": "silver-build",
+                "cli_args": ["--dataset", "spot_ohlcv", "perps_ohlcv", "open_interest", "funding"],
+            },
+        }
+    }
+    steps = module._build_steps(main_path=main_path, config_path=config_path, config_data=cfg)
+    assert len(steps) == 1
+    assert "volatility_index_data" in steps[0].args
+
+
+def test_build_steps_bronze_inherits_symbol_start_bounds_from_bronze_config(tmp_path: Path) -> None:
     module = _load_pipeline_module()
     main_path = tmp_path / "main.py"
     main_path.write_text("print('ok')\n", encoding="utf-8")
@@ -55,7 +76,6 @@ def test_build_steps_bronze_inherits_start_bounds_from_bronze_config(tmp_path: P
     config_path.write_text("x: 1\n", encoding="utf-8")
     cfg = {
         "bronze-build": {
-            "start_date": "2018-08-14",
             "symbol_start_dates": ["BTC=2018-08-14", "ETH=2019-03-14", "SOL=2022-03-15"],
         },
         "medallion-pipeline": {
@@ -69,9 +89,8 @@ def test_build_steps_bronze_inherits_start_bounds_from_bronze_config(tmp_path: P
     }
     steps = module._build_steps(main_path=main_path, config_path=config_path, config_data=cfg)
     assert len(steps) == 1
-    assert "--start-date" in steps[0].args
-    idx = steps[0].args.index("--start-date")
-    assert steps[0].args[idx + 1] == "2018-08-14"
+    assert "--start-date" not in steps[0].args
+    assert "--exchange-symbol-start-dates" not in steps[0].args
     sym_idx = steps[0].args.index("--symbol-start-dates")
     assert steps[0].args[sym_idx + 1 : sym_idx + 4] == [
         "BTC=2018-08-14",

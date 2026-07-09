@@ -6,7 +6,11 @@ from dataclasses import asdict
 from datetime import UTC, datetime
 
 from ingestion.funding import FundingPoint
-from ingestion.lake_datasets import OPEN_INTEREST_DATASET_TYPE, ohlcv_dataset_type_for_market
+from ingestion.lake_datasets import (
+    OPEN_INTEREST_DATASET_TYPE,
+    bronze_trade_dataset_type_for_market,
+    ohlcv_dataset_type_for_market,
+)
 from ingestion.lake_layout import PartitionKey
 from ingestion.open_interest import OpenInterestPoint
 from ingestion.spot_ohlcv import SpotCandle
@@ -156,7 +160,7 @@ def trade_record(
 ) -> dict[str, object]:
     """Convert trade tick to bronze parquet row format."""
 
-    dataset_type = "options_trades" if market == "option" else "perps_trades"
+    dataset_type = bronze_trade_dataset_type_for_market(market)
     record: dict[str, object] = {
         "schema_version": "v1",
         "dataset_type": dataset_type,
@@ -218,4 +222,8 @@ def volatility_record(
         "close_time": item.close_time,
         "timeframe": item.interval,
         "value": item.value,
+        "open": item.open_value if item.open_value is not None else item.value,
+        "high": item.high_value if item.high_value is not None else item.value,
+        "low": item.low_value if item.low_value is not None else item.value,
+        "close": item.close_value if item.close_value is not None else item.value,
     }

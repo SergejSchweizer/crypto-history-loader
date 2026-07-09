@@ -179,7 +179,7 @@ def _load_yaml_config(path: str) -> dict[str, object]:
         raise ValueError("config file must contain a top-level mapping")
     config = cast(dict[str, object], loaded)
 
-    required_sections = {"global", "env", "export-descriptive-stats"}
+    required_sections = {"env", "export-descriptive-stats"}
     missing = [section for section in required_sections if section not in config]
     if missing:
         raise ValueError(f"config.yaml missing required section(s): {', '.join(sorted(missing))}")

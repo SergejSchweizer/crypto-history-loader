@@ -98,6 +98,10 @@ def test_populate_volatility_output_writes_payload_and_storage() -> None:
         open_time=datetime(2026, 5, 1, tzinfo=UTC),
         close_time=datetime(2026, 5, 1, tzinfo=UTC),
         value=42.0,
+        open_value=41.0,
+        high_value=43.0,
+        low_value=40.5,
+        close_value=42.0,
         source_endpoint="public_get_volatility_index_data",
         dataset_type="volatility_index",
     )
@@ -124,6 +128,10 @@ def test_populate_volatility_output_writes_payload_and_storage() -> None:
                     "open_time": "2026-05-01T00:00:00+00:00",
                     "close_time": "2026-05-01T00:00:00+00:00",
                     "value": 42.0,
+                    "open": 41.0,
+                    "high": 43.0,
+                    "low": 40.5,
+                    "close": 42.0,
                     "source_endpoint": "public_get_volatility_index_data",
                     "dataset_type": "volatility_index",
                 }
