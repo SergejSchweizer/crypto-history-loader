@@ -35,6 +35,15 @@ def normalize_symbol(value: str) -> str:
     return raw
 
 
+def _silver_dataset_roots(*, silver_root: str, exchange: str, dataset_type: str) -> list[Path]:
+    """Return canonical Silver dataset root plus supported legacy fallback roots."""
+
+    dataset_types = [dataset_type]
+    if dataset_type == "perps_ohlcv":
+        dataset_types.append("perp")
+    return [Path(silver_root) / f"dataset_type={candidate}" / f"exchange={exchange}" for candidate in dataset_types]
+
+
 def discover_symbols_for_dataset(
     *,
     silver_root: str,
@@ -44,17 +53,17 @@ def discover_symbols_for_dataset(
 ) -> set[str]:
     """Discover normalized symbols available for one Silver dataset and timeframe."""
 
-    root = Path(silver_root) / f"dataset_type={dataset_type}" / f"exchange={exchange}"
     symbols: set[str] = set()
-    if not root.exists():
-        return symbols
-    for path in root.glob("symbol=*/timeframe=*"):
-        if path.name != f"timeframe={timeframe}":
+    for root in _silver_dataset_roots(silver_root=silver_root, exchange=exchange, dataset_type=dataset_type):
+        if not root.exists():
             continue
-        parent = path.parent.name
-        if not parent.startswith("symbol="):
-            continue
-        symbols.add(normalize_symbol(parent.split("=", 1)[1]))
+        for path in root.glob("symbol=*/timeframe=*"):
+            if path.name != f"timeframe={timeframe}":
+                continue
+            parent = path.parent.name
+            if not parent.startswith("symbol="):
+                continue
+            symbols.add(normalize_symbol(parent.split("=", 1)[1]))
     return symbols
 
 
@@ -180,17 +189,19 @@ def read_dataset_frame(
     """
 
     pl = require_polars()
-    dataset_root = Path(silver_root) / f"dataset_type={dataset_type}" / f"exchange={exchange}"
     candidate_files: list[Path] = []
-    symbol_dirs = sorted(dataset_root.glob(f"symbol=*/timeframe={timeframe}"))
-    for sym_dir in symbol_dirs:
-        sym_segment = sym_dir.parent.name
-        if not sym_segment.startswith("symbol="):
-            continue
-        raw_symbol = sym_segment.split("=", 1)[1]
-        if normalize_symbol(raw_symbol) != symbol:
-            continue
-        candidate_files.extend(path for path in sorted(sym_dir.glob("**/*.parquet")) if path.is_file())
+    for dataset_root in _silver_dataset_roots(silver_root=silver_root, exchange=exchange, dataset_type=dataset_type):
+        symbol_dirs = sorted(dataset_root.glob(f"symbol=*/timeframe={timeframe}"))
+        for sym_dir in symbol_dirs:
+            sym_segment = sym_dir.parent.name
+            if not sym_segment.startswith("symbol="):
+                continue
+            raw_symbol = sym_segment.split("=", 1)[1]
+            if normalize_symbol(raw_symbol) != symbol:
+                continue
+            candidate_files.extend(path for path in sorted(sym_dir.glob("**/*.parquet")) if path.is_file())
+        if candidate_files:
+            break
     if not candidate_files:
         raise ValueError(f"Missing silver dataset for symbol={symbol}: {dataset_type}")
     selected_file = max(candidate_files, key=lambda path: (path.stat().st_mtime, str(path)))

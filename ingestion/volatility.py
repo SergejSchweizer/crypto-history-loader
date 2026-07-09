@@ -75,6 +75,18 @@ def volatility_interval_to_milliseconds(exchange: Exchange, interval: str) -> in
     raise ValueError(f"Unsupported volatility interval '{interval}'")
 
 
+def deribit_volatility_resolution(interval: str) -> str:
+    """Convert a normalized volatility interval to Deribit API resolution seconds."""
+
+    if interval.endswith("m"):
+        return str(int(interval[:-1]) * 60)
+    if interval.endswith("h"):
+        return str(int(interval[:-1]) * 3_600)
+    if interval.endswith("d"):
+        return "1D" if interval == "1d" else str(int(interval[:-1]) * 86_400)
+    raise ValueError(f"Unsupported volatility interval '{interval}'")
+
+
 def _canonical_currency(symbol: str) -> str:
     upper = symbol.upper().strip()
     if not upper:
@@ -126,12 +138,13 @@ def fetch_volatility_index_all_history(
     if market != "perp":
         return []
     normalized_interval = normalize_volatility_timeframe(exchange=exchange, value=interval)
+    api_resolution = deribit_volatility_resolution(normalized_interval)
     if exchange != "deribit":
         return []
     try:
         rows = deribit_volatility.fetch_volatility_index_data_all(
             currency=_canonical_currency(symbol),
-            resolution=normalized_interval,
+            resolution=api_resolution,
         )
     except HttpClientError:
         return []
@@ -155,6 +168,7 @@ def fetch_volatility_index_range(
     if market != "perp":
         return []
     normalized_interval = normalize_volatility_timeframe(exchange=exchange, value=interval)
+    api_resolution = deribit_volatility_resolution(normalized_interval)
     if exchange != "deribit":
         return []
     try:
@@ -162,7 +176,7 @@ def fetch_volatility_index_range(
             currency=_canonical_currency(symbol),
             start_open_ms=start_open_ms,
             end_open_ms=end_open_ms,
-            resolution=normalized_interval,
+            resolution=api_resolution,
         )
     except HttpClientError:
         return []
