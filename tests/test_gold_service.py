@@ -514,6 +514,125 @@ def test_build_gold_for_symbol_writes_hashed_parquet_and_manifest(tmp_path: Path
     assert "build_id" in payload
 
 
+def test_build_gold_reads_legacy_perp_silver_dataset(tmp_path: Path) -> None:
+    silver = tmp_path / "silver"
+    gold = tmp_path / "gold"
+    exchange = "deribit"
+    t0 = datetime(2026, 5, 1, 0, 0, tzinfo=UTC)
+
+    _write_silver_month(
+        silver,
+        dataset_type="spot_ohlcv",
+        exchange=exchange,
+        symbol="BTC_USDC",
+        timeframe="1m",
+        month="2026-05",
+        rows=[
+            {
+                "open_time": t0,
+                "exchange": exchange,
+                "symbol": "BTC",
+                "open_price": 1.0,
+                "high_price": 1.1,
+                "low_price": 0.9,
+                "close_price": 1.0,
+                "volume": 1.0,
+            }
+        ],
+    )
+    _write_silver_month(
+        silver,
+        dataset_type="perp",
+        exchange=exchange,
+        symbol="BTC-PERPETUAL",
+        timeframe="1m",
+        month="2026-05",
+        rows=[
+            {
+                "open_time": t0,
+                "exchange": exchange,
+                "symbol": "BTC",
+                "open_price": 10.0,
+                "high_price": 10.1,
+                "low_price": 9.9,
+                "close_price": 10.0,
+                "volume": 10.0,
+            }
+        ],
+    )
+
+    report = build_gold_for_symbol(
+        silver_root=str(silver),
+        gold_root=str(gold),
+        exchange=exchange,
+        symbol="BTC",
+        dataset_id="gold.market.core.m1",
+    )
+
+    written = pl.read_parquet(report.parquet_path)
+    assert written["perp_close_price"].to_list() == [10.0]
+
+
+def test_build_gold_prefers_canonical_perps_ohlcv_over_legacy_perp(tmp_path: Path) -> None:
+    silver = tmp_path / "silver"
+    gold = tmp_path / "gold"
+    exchange = "deribit"
+    t0 = datetime(2026, 5, 1, 0, 0, tzinfo=UTC)
+
+    _write_silver_month(
+        silver,
+        dataset_type="spot_ohlcv",
+        exchange=exchange,
+        symbol="BTC_USDC",
+        timeframe="1m",
+        month="2026-05",
+        rows=[
+            {
+                "open_time": t0,
+                "exchange": exchange,
+                "symbol": "BTC",
+                "open_price": 1.0,
+                "high_price": 1.1,
+                "low_price": 0.9,
+                "close_price": 1.0,
+                "volume": 1.0,
+            }
+        ],
+    )
+    for dataset_type, close_price in [("perp", 10.0), ("perps_ohlcv", 20.0)]:
+        _write_silver_month(
+            silver,
+            dataset_type=dataset_type,
+            exchange=exchange,
+            symbol="BTC-PERPETUAL",
+            timeframe="1m",
+            month="2026-05",
+            rows=[
+                {
+                    "open_time": t0,
+                    "exchange": exchange,
+                    "symbol": "BTC",
+                    "open_price": close_price,
+                    "high_price": close_price + 0.1,
+                    "low_price": close_price - 0.1,
+                    "close_price": close_price,
+                    "volume": close_price,
+                }
+            ],
+        )
+
+    report = build_gold_for_symbol(
+        silver_root=str(silver),
+        gold_root=str(gold),
+        exchange=exchange,
+        symbol="BTC",
+        dataset_id="gold.market.core.m1",
+    )
+
+    written = pl.read_parquet(report.parquet_path)
+    assert written["perp_close_price"].to_list() == [20.0]
+
+
 def test_build_gold_uses_latest_silver_artifacts_only(tmp_path: Path) -> None:
     silver = tmp_path / "silver"
     gold = tmp_path / "gold"
