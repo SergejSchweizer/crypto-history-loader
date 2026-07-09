@@ -109,6 +109,16 @@ def build_volatility_observed_for_symbol(
         if rows_in == 0:
             continue
 
+        # Older Bronze volatility_index_data partitions only persisted `value`;
+        # use it as OHLC to keep historical files readable after schema expansion.
+        ohlc_exprs = []
+        for column_name in ("open", "high", "low", "close"):
+            if column_name in frame.columns:
+                ohlc_exprs.append(pl.col(column_name).fill_null(pl.col("value")).alias(column_name))
+            else:
+                ohlc_exprs.append(pl.col("value").alias(column_name))
+        frame = frame.with_columns(ohlc_exprs)
+
         frame = frame.with_columns(
             [
                 pl.col("open_time").cast(pl.Datetime(time_unit="us", time_zone="UTC")).alias("timestamp"),
