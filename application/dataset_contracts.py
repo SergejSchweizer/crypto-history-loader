@@ -452,8 +452,8 @@ SILVER_DATASET_CONTRACTS: dict[str, SilverDatasetContract] = {
         dataset_type="volatility_index_1m_feature",
         timeframe="1m",
         timestamp_column="timestamp_m1",
-        timestamp_semantics="minute_grid",
-        missing_data_policy="forward_fill",
+        timestamp_semantics="observed_timestamp",
+        missing_data_policy="observed_only",
         output_columns=tuple(SILVER_VOLATILITY_FEATURE_COLUMNS),
     ),
     "realized_volatility_1m_feature": SilverDatasetContract(

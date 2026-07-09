@@ -18,8 +18,11 @@ from application.services.silver_service import (
     build_perps_trades_1m_feature_for_symbol,
     build_perps_trades_observed_for_symbol,
     build_silver_for_symbol,
+    build_volatility_index_1m_feature_for_symbol,
     build_volatility_observed_for_symbol,
+    build_volatility_snapshot_observed_for_symbol,
     discover_symbols,
+    discover_volatility_snapshot_symbols,
 )
 from application.services.silver_sidecars import write_monthly_sidecars
 from ingestion.funding import DERIBIT_FUNDING_NATIVE_INTERVAL
@@ -52,6 +55,7 @@ def add_silver_build_parser(subparsers: Any) -> None:
             "perps_trades",
             "options_trades",
             "volatility_index_data",
+            "volatility_index_snapshot_1m",
         ],
         default=[
             "spot_ohlcv",
@@ -231,6 +235,31 @@ def run_silver_build(args: argparse.Namespace, logger: logging.Logger) -> None:
         )
         return [observed_payload]
 
+    def _run_volatility_index_snapshot(symbol: str) -> list[dict[str, object]]:
+        observed = build_volatility_snapshot_observed_for_symbol(
+            bronze_root=bronze_root,
+            silver_root=silver_root,
+            exchange=exchange,
+            symbol=symbol,
+            timeframe=timeframe,
+        )
+        observed_payload = _report_payload("volatility_index_snapshot_1m_observed", symbol, observed)
+
+        feature = build_volatility_index_1m_feature_for_symbol(
+            silver_root=silver_root,
+            exchange=exchange,
+            symbol=symbol,
+            timeframe=timeframe,
+        )
+        feature_payload = _report_payload("volatility_index_1m_feature", symbol, feature)
+        logger.info(
+            "Silver volatility_index_snapshot_1m reports written symbol=%s observed_rows=%s feature_rows=%s",
+            symbol,
+            observed.rows_out,
+            feature.rows_out,
+        )
+        return [observed_payload, feature_payload]
+
     def _run_ohlcv(market: str, symbol: str) -> list[dict[str, object]]:
         report = build_silver_for_symbol(
             bronze_root=bronze_root,
@@ -256,6 +285,7 @@ def run_silver_build(args: argparse.Namespace, logger: logging.Logger) -> None:
         "perps_trades": _run_trades,
         "options_trades": _run_options_trades,
         "volatility_index_data": _run_volatility_index_data,
+        "volatility_index_snapshot_1m": _run_volatility_index_snapshot,
     }
 
     def _discovery_params_for_market(market: str, default_timeframe: str) -> tuple[str, str, str]:
@@ -289,13 +319,22 @@ def run_silver_build(args: argparse.Namespace, logger: logging.Logger) -> None:
     for market in cast(list[str], selected):
         symbols = cast(list[str] | None, args.symbols)
         bronze_dataset, bronze_instrument, discovery_timeframe = _discovery_params_for_market(market, timeframe)
-        effective_symbols = symbols or discover_symbols(
-            bronze_root=bronze_root,
-            market=bronze_dataset,
-            exchange=exchange,
-            timeframe=discovery_timeframe,
-            instrument_type=bronze_instrument,
-        )
+        if symbols is not None:
+            effective_symbols = symbols
+        elif market == "volatility_index_snapshot_1m":
+            effective_symbols = discover_volatility_snapshot_symbols(
+                bronze_root=bronze_root,
+                dataset_type="volatility_index_snapshot_1m",
+                exchange=exchange,
+            )
+        else:
+            effective_symbols = discover_symbols(
+                bronze_root=bronze_root,
+                market=bronze_dataset,
+                exchange=exchange,
+                timeframe=discovery_timeframe,
+                instrument_type=bronze_instrument,
+            )
         logger.info("Silver build schedule market=%s symbols=%s timeframe=%s", market, effective_symbols, timeframe)
         handler = market_handlers.get(market)
         for symbol in effective_symbols:

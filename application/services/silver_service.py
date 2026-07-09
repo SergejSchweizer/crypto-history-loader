@@ -13,6 +13,9 @@ from application.dataset_contracts import (
     SILVER_TRADES_OBSERVED_COLUMNS,
 )
 from application.dataset_contracts import (
+    SILVER_VOLATILITY_FEATURE_COLUMNS as SILVER_VOLATILITY_FEATURE_COLUMNS,
+)
+from application.dataset_contracts import (
     SILVER_VOLATILITY_OBSERVED_COLUMNS as SILVER_VOLATILITY_OBSERVED_COLUMNS,
 )
 from application.services import silver_funding, silver_open_interest, silver_trades, silver_volatility
@@ -23,6 +26,7 @@ SILVER_OPEN_INTEREST_M1_FEATURE_COLUMNS = silver_open_interest.SILVER_OPEN_INTER
 SILVER_OPEN_INTEREST_OBSERVED_COLUMNS = silver_open_interest.SILVER_OPEN_INTEREST_OBSERVED_COLUMNS
 _build_trade_feature_frame = silver_trades.build_trade_feature_frame
 _build_trade_observed_frame = silver_trades.build_trade_observed_frame
+discover_volatility_snapshot_symbols = silver_volatility.discover_snapshot_symbols
 
 
 def _funding_dependencies() -> silver_funding.FundingDependencies:
@@ -692,4 +696,67 @@ def build_volatility_observed_for_symbol(
     )
     if not isinstance(report, SilverBuildReport):
         raise TypeError("volatility observed builder returned an unexpected report type")
+    return report
+
+
+def build_volatility_snapshot_observed_for_symbol(
+    *,
+    bronze_root: str,
+    silver_root: str,
+    exchange: str,
+    symbol: str,
+    timeframe: str = "1m",
+    bronze_dataset_type: str = "volatility_index_snapshot_1m",
+    output_dataset_type: str = "volatility_index_snapshot_1m_observed",
+    source: str = "rest_get_volatility_index_data",
+) -> SilverBuildReport:
+    """Build monthly snapshot volatility-observed silver outputs from live-loader bronze files."""
+
+    report = silver_volatility.build_volatility_snapshot_observed_for_symbol(
+        bronze_root=bronze_root,
+        silver_root=silver_root,
+        exchange=exchange,
+        symbol=symbol,
+        timeframe=timeframe,
+        bronze_dataset_type=bronze_dataset_type,
+        output_dataset_type=output_dataset_type,
+        source=source,
+        dependencies=silver_volatility.VolatilityObservedDependencies(
+            require_polars=_require_polars,
+            discover_months=discover_months,
+            bronze_month_files=_bronze_month_files,
+            silver_month_path=_silver_month_path,
+            normalize_symbol_expr=_normalize_symbol_expr,
+            iso_utc=_iso_utc,
+            report_factory=SilverBuildReport,
+        ),
+    )
+    if not isinstance(report, SilverBuildReport):
+        raise TypeError("volatility snapshot observed builder returned an unexpected report type")
+    return report
+
+
+def build_volatility_index_1m_feature_for_symbol(
+    *,
+    silver_root: str,
+    exchange: str,
+    symbol: str,
+    timeframe: str = "1m",
+) -> SilverBuildReport:
+    """Build canonical IV 1m features from snapshot observations and historical fallback."""
+
+    report = silver_volatility.build_volatility_index_1m_feature_for_symbol(
+        silver_root=silver_root,
+        exchange=exchange,
+        symbol=symbol,
+        timeframe=timeframe,
+        dependencies=silver_volatility.VolatilityFeatureDependencies(
+            require_polars=_require_polars,
+            silver_month_path=_silver_month_path,
+            iso_utc=_iso_utc,
+            report_factory=SilverBuildReport,
+        ),
+    )
+    if not isinstance(report, SilverBuildReport):
+        raise TypeError("volatility 1m feature builder returned an unexpected report type")
     return report
