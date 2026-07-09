@@ -13,6 +13,8 @@ from application.services.silver_service import (
     SilverBuildReport,
     build_funding_1m_feature_for_symbol,
     build_funding_observed_for_symbol,
+    build_index_price_1m_feature_for_symbol,
+    build_index_price_observed_for_symbol,
     build_iv_rv_1m_feature_for_symbol,
     build_open_interest_1m_feature_for_symbol,
     build_open_interest_observed_for_symbol,
@@ -23,6 +25,7 @@ from application.services.silver_service import (
     build_volatility_index_1m_feature_for_symbol,
     build_volatility_observed_for_symbol,
     build_volatility_snapshot_observed_for_symbol,
+    discover_index_price_symbols,
     discover_iv_rv_symbols,
     discover_realized_volatility_symbols,
     discover_symbols,
@@ -62,6 +65,7 @@ def add_silver_build_parser(subparsers: Any) -> None:
             "volatility_index_snapshot_1m",
             "realized_volatility",
             "iv_rv",
+            "index_price_snapshot_1m",
         ],
         default=[
             "spot_ohlcv",
@@ -292,6 +296,30 @@ def run_silver_build(args: argparse.Namespace, logger: logging.Logger) -> None:
         logger.info("Silver iv_rv report written symbol=%s feature_rows=%s", symbol, feature.rows_out)
         return [feature_payload]
 
+    def _run_index_price(symbol: str) -> list[dict[str, object]]:
+        observed = build_index_price_observed_for_symbol(
+            bronze_root=bronze_root,
+            silver_root=silver_root,
+            exchange=exchange,
+            symbol=symbol,
+            timeframe=timeframe,
+        )
+        observed_payload = _report_payload("index_price_snapshot_1m_observed", symbol, observed)
+        feature = build_index_price_1m_feature_for_symbol(
+            silver_root=silver_root,
+            exchange=exchange,
+            symbol=symbol,
+            timeframe=timeframe,
+        )
+        feature_payload = _report_payload("index_price_1m_feature", symbol, feature)
+        logger.info(
+            "Silver index_price_snapshot_1m reports written symbol=%s observed_rows=%s feature_rows=%s",
+            symbol,
+            observed.rows_out,
+            feature.rows_out,
+        )
+        return [observed_payload, feature_payload]
+
     def _run_ohlcv(market: str, symbol: str) -> list[dict[str, object]]:
         report = build_silver_for_symbol(
             bronze_root=bronze_root,
@@ -320,6 +348,7 @@ def run_silver_build(args: argparse.Namespace, logger: logging.Logger) -> None:
         "volatility_index_snapshot_1m": _run_volatility_index_snapshot,
         "realized_volatility": _run_realized_volatility,
         "iv_rv": _run_iv_rv,
+        "index_price_snapshot_1m": _run_index_price,
     }
 
     def _discovery_params_for_market(market: str, default_timeframe: str) -> tuple[str, str, str]:
@@ -372,6 +401,11 @@ def run_silver_build(args: argparse.Namespace, logger: logging.Logger) -> None:
                 silver_root=silver_root,
                 exchange=exchange,
                 timeframe=timeframe,
+            )
+        elif market == "index_price_snapshot_1m":
+            effective_symbols = discover_index_price_symbols(
+                bronze_root=bronze_root,
+                exchange=exchange,
             )
         else:
             effective_symbols = discover_symbols(

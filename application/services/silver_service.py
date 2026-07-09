@@ -7,6 +7,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from application.dataset_contracts import SILVER_INDEX_PRICE_FEATURE_COLUMNS as SILVER_INDEX_PRICE_FEATURE_COLUMNS
+from application.dataset_contracts import SILVER_INDEX_PRICE_OBSERVED_COLUMNS as SILVER_INDEX_PRICE_OBSERVED_COLUMNS
 from application.dataset_contracts import SILVER_IV_RV_FEATURE_COLUMNS as SILVER_IV_RV_FEATURE_COLUMNS
 from application.dataset_contracts import (
     SILVER_OHLCV_COLUMNS,
@@ -24,6 +26,7 @@ from application.dataset_contracts import (
 )
 from application.services import (
     silver_funding,
+    silver_index_price,
     silver_iv_rv,
     silver_open_interest,
     silver_realized_volatility,
@@ -40,6 +43,7 @@ _build_trade_observed_frame = silver_trades.build_trade_observed_frame
 discover_volatility_snapshot_symbols = silver_volatility.discover_snapshot_symbols
 discover_realized_volatility_symbols = silver_realized_volatility.discover_realized_volatility_symbols
 discover_iv_rv_symbols = silver_iv_rv.discover_iv_rv_symbols
+discover_index_price_symbols = silver_index_price.discover_index_price_symbols
 
 
 def _funding_dependencies() -> silver_funding.FundingDependencies:
@@ -824,4 +828,57 @@ def build_iv_rv_1m_feature_for_symbol(
     )
     if not isinstance(report, SilverBuildReport):
         raise TypeError("IV/RV 1m feature builder returned an unexpected report type")
+    return report
+
+
+def _index_price_dependencies() -> silver_index_price.IndexPriceDependencies:
+    return silver_index_price.IndexPriceDependencies(
+        require_polars=_require_polars,
+        silver_month_path=_silver_month_path,
+        iso_utc=_iso_utc,
+        report_factory=SilverBuildReport,
+    )
+
+
+def build_index_price_observed_for_symbol(
+    *,
+    bronze_root: str,
+    silver_root: str,
+    exchange: str,
+    symbol: str,
+    timeframe: str = "1m",
+) -> SilverBuildReport:
+    """Build observed index-price Silver snapshots for one symbol."""
+
+    report = silver_index_price.build_index_price_observed_for_symbol(
+        bronze_root=bronze_root,
+        silver_root=silver_root,
+        exchange=exchange,
+        symbol=symbol,
+        timeframe=timeframe,
+        dependencies=_index_price_dependencies(),
+    )
+    if not isinstance(report, SilverBuildReport):
+        raise TypeError("index-price observed builder returned an unexpected report type")
+    return report
+
+
+def build_index_price_1m_feature_for_symbol(
+    *,
+    silver_root: str,
+    exchange: str,
+    symbol: str,
+    timeframe: str = "1m",
+) -> SilverBuildReport:
+    """Build minute-grid index-price features for one symbol."""
+
+    report = silver_index_price.build_index_price_1m_feature_for_symbol(
+        silver_root=silver_root,
+        exchange=exchange,
+        symbol=symbol,
+        timeframe=timeframe,
+        dependencies=_index_price_dependencies(),
+    )
+    if not isinstance(report, SilverBuildReport):
+        raise TypeError("index-price 1m feature builder returned an unexpected report type")
     return report

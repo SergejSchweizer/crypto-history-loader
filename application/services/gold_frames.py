@@ -408,6 +408,30 @@ def prepare_iv_rv(pl: Any, frame: Any, symbol: str) -> Any:
     )
 
 
+def prepare_index_price(pl: Any, frame: Any, symbol: str) -> Any:
+    """Prepare index-price features for the Gold join contract."""
+
+    return (
+        frame.with_columns(
+            [
+                pl.col("timestamp_m1").cast(pl.Datetime(time_unit="us", time_zone="UTC")),
+                pl.lit(symbol).alias("symbol"),
+            ]
+        )
+        .select(
+            [
+                "timestamp_m1",
+                "exchange",
+                "symbol",
+                pl.col("index_price").cast(pl.Float64),
+                pl.col("index_price_is_observed").cast(pl.Boolean),
+                pl.col("minutes_since_index_price_observation").cast(pl.Int64),
+            ]
+        )
+        .sort("timestamp_m1")
+    )
+
+
 def prepare_dataset_frame(pl: Any, dataset_type: str, frame: Any, symbol: str) -> Any:
     """Dispatch preparation for a supported Gold source dataset.
 
@@ -424,6 +448,7 @@ def prepare_dataset_frame(pl: Any, dataset_type: str, frame: Any, symbol: str) -
         "options_trades_1m_feature": lambda: prepare_options_trades(pl, frame, symbol),
         "volatility_index_data_observed": lambda: prepare_volatility_index_data(pl, frame, symbol),
         "iv_rv_1m_feature": lambda: prepare_iv_rv(pl, frame, symbol),
+        "index_price_1m_feature": lambda: prepare_index_price(pl, frame, symbol),
         "gold_l2_m1": lambda: prepare_l2(pl, frame, symbol),
     }
     preparer = dataset_preparers.get(dataset_type)

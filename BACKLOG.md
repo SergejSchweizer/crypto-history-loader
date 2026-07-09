@@ -262,7 +262,7 @@ Acceptance:
 
 ### PR-08: Index Price Snapshot Silver
 
-Status: Planned
+Status: Done
 
 Branch: `codex/pr08-index-price-snapshot-silver`
 

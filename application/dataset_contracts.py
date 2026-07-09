@@ -663,6 +663,11 @@ GOLD_DATASET_CONTRACTS: dict[str, GoldDatasetContract] = {
         requirements=(GoldSourceRequirement("iv_rv_1m_feature", "1m"),),
         include_l2=False,
     ),
+    "gold.market.index_price.m1": GoldDatasetContract(
+        dataset_id="gold.market.index_price.m1",
+        requirements=(GoldSourceRequirement("index_price_1m_feature", "1m"),),
+        include_l2=False,
+    ),
     "gold.market.full.m1": GoldDatasetContract(
         dataset_id="gold.market.full.m1",
         requirements=FULL_MARKET_GOLD_REQUIREMENTS,
