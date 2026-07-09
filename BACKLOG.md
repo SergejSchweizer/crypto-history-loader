@@ -209,7 +209,7 @@ Acceptance:
 
 ### PR-06: RV Feature Layer From Spot And Perps OHLCV
 
-Status: Planned
+Status: Done
 
 Branch: `codex/pr06-rv-feature-layer`
 

@@ -33,6 +33,7 @@ def test_silver_contracts_cover_service_output_columns() -> None:
         "volatility_index_data_observed": silver_service.SILVER_VOLATILITY_OBSERVED_COLUMNS,
         "volatility_index_snapshot_1m_observed": silver_service.SILVER_VOLATILITY_OBSERVED_COLUMNS,
         "volatility_index_1m_feature": silver_service.SILVER_VOLATILITY_FEATURE_COLUMNS,
+        "realized_volatility_1m_feature": silver_service.SILVER_REALIZED_VOLATILITY_FEATURE_COLUMNS,
     }
 
     for dataset_type, columns in expected_columns.items():

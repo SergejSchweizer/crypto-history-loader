@@ -17,10 +17,12 @@ from application.services.silver_service import (
     build_open_interest_observed_for_symbol,
     build_perps_trades_1m_feature_for_symbol,
     build_perps_trades_observed_for_symbol,
+    build_realized_volatility_1m_feature_for_symbol,
     build_silver_for_symbol,
     build_volatility_index_1m_feature_for_symbol,
     build_volatility_observed_for_symbol,
     build_volatility_snapshot_observed_for_symbol,
+    discover_realized_volatility_symbols,
     discover_symbols,
     discover_volatility_snapshot_symbols,
 )
@@ -56,6 +58,7 @@ def add_silver_build_parser(subparsers: Any) -> None:
             "options_trades",
             "volatility_index_data",
             "volatility_index_snapshot_1m",
+            "realized_volatility",
         ],
         default=[
             "spot_ohlcv",
@@ -260,6 +263,21 @@ def run_silver_build(args: argparse.Namespace, logger: logging.Logger) -> None:
         )
         return [observed_payload, feature_payload]
 
+    def _run_realized_volatility(symbol: str) -> list[dict[str, object]]:
+        feature = build_realized_volatility_1m_feature_for_symbol(
+            silver_root=silver_root,
+            exchange=exchange,
+            symbol=symbol,
+            timeframe=timeframe,
+        )
+        feature_payload = _report_payload("realized_volatility_1m_feature", symbol, feature)
+        logger.info(
+            "Silver realized_volatility report written symbol=%s feature_rows=%s",
+            symbol,
+            feature.rows_out,
+        )
+        return [feature_payload]
+
     def _run_ohlcv(market: str, symbol: str) -> list[dict[str, object]]:
         report = build_silver_for_symbol(
             bronze_root=bronze_root,
@@ -286,6 +304,7 @@ def run_silver_build(args: argparse.Namespace, logger: logging.Logger) -> None:
         "options_trades": _run_options_trades,
         "volatility_index_data": _run_volatility_index_data,
         "volatility_index_snapshot_1m": _run_volatility_index_snapshot,
+        "realized_volatility": _run_realized_volatility,
     }
 
     def _discovery_params_for_market(market: str, default_timeframe: str) -> tuple[str, str, str]:
@@ -326,6 +345,12 @@ def run_silver_build(args: argparse.Namespace, logger: logging.Logger) -> None:
                 bronze_root=bronze_root,
                 dataset_type="volatility_index_snapshot_1m",
                 exchange=exchange,
+            )
+        elif market == "realized_volatility":
+            effective_symbols = discover_realized_volatility_symbols(
+                silver_root=silver_root,
+                exchange=exchange,
+                timeframe=timeframe,
             )
         else:
             effective_symbols = discover_symbols(
