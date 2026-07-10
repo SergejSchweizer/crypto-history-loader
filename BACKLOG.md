@@ -488,7 +488,7 @@ Acceptance:
 
 ### PR-17: Historical Volatility Silver
 
-Status: Planned
+Status: Done
 
 Branch: `codex/pr17-historical-volatility-silver`
 

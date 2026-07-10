@@ -13,6 +13,9 @@ from application.dataset_contracts import (
 from application.dataset_contracts import (
     SILVER_FUTURES_SUMMARY_OBSERVED_COLUMNS as SILVER_FUTURES_SUMMARY_OBSERVED_COLUMNS,
 )
+from application.dataset_contracts import (
+    SILVER_HISTORICAL_VOLATILITY_OBSERVED_COLUMNS as SILVER_HISTORICAL_VOLATILITY_OBSERVED_COLUMNS,
+)
 from application.dataset_contracts import SILVER_INDEX_PRICE_FEATURE_COLUMNS as SILVER_INDEX_PRICE_FEATURE_COLUMNS
 from application.dataset_contracts import SILVER_INDEX_PRICE_OBSERVED_COLUMNS as SILVER_INDEX_PRICE_OBSERVED_COLUMNS
 from application.dataset_contracts import (
@@ -47,6 +50,7 @@ from application.dataset_contracts import (
 from application.services import (
     silver_funding,
     silver_futures_summary,
+    silver_historical_volatility,
     silver_index_price,
     silver_instrument_metadata,
     silver_iv_rv,
@@ -1243,4 +1247,38 @@ def build_futures_instrument_metadata_observed_for_symbol(
     )
     if not isinstance(report, SilverBuildReport):
         raise TypeError("futures instrument metadata builder returned an unexpected report type")
+    return report
+
+
+def _historical_volatility_dependencies() -> silver_historical_volatility.HistoricalVolatilityDependencies:
+    return silver_historical_volatility.HistoricalVolatilityDependencies(
+        require_polars=_require_polars,
+        discover_months=discover_months,
+        bronze_month_files=_bronze_month_files,
+        silver_month_path=_silver_month_path,
+        iso_utc=_iso_utc,
+        report_factory=SilverBuildReport,
+    )
+
+
+def build_historical_volatility_observed_for_symbol(
+    *,
+    bronze_root: str,
+    silver_root: str,
+    exchange: str,
+    symbol: str,
+    timeframe: str = "1m",
+) -> SilverBuildReport:
+    """Build external historical-volatility reference rows for one symbol."""
+
+    report = silver_historical_volatility.build_historical_volatility_observed_for_symbol(
+        bronze_root=bronze_root,
+        silver_root=silver_root,
+        exchange=exchange,
+        symbol=symbol,
+        timeframe=timeframe,
+        dependencies=_historical_volatility_dependencies(),
+    )
+    if not isinstance(report, SilverBuildReport):
+        raise TypeError("historical-volatility builder returned an unexpected report type")
     return report

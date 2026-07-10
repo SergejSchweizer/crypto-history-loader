@@ -397,6 +397,47 @@ def test_run_silver_build_routes_both_metadata_families(monkeypatch) -> None:  #
     assert built == ["options", "futures"]
 
 
+def test_run_silver_build_routes_historical_volatility(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    discovered: list[tuple[str, str, str]] = []
+    built: list[str] = []
+
+    def fake_discover_symbols(
+        bronze_root: str,
+        market: str,
+        exchange: str,
+        timeframe: str = "1m",
+        instrument_type: str | None = None,
+    ) -> list[str]:
+        del bronze_root, exchange
+        discovered.append((market, str(instrument_type), timeframe))
+        return ["BTC"]
+
+    def fake_build(**kwargs: object) -> silver_cmd.SilverBuildReport:
+        built.append(str(kwargs["symbol"]))
+        return _report("historical_volatility_observed")
+
+    monkeypatch.setattr(silver_cmd, "discover_symbols", fake_discover_symbols)
+    monkeypatch.setattr(silver_cmd, "build_historical_volatility_observed_for_symbol", fake_build)
+    monkeypatch.setattr(silver_cmd, "write_monthly_sidecars", lambda **kwargs: ([], []))
+    args = argparse.Namespace(
+        bronze_root="lake/bronze",
+        silver_root="lake/silver",
+        exchange="deribit",
+        market=["historical_volatility"],
+        symbols=None,
+        timeframe="1m",
+        manifest=False,
+        plot=False,
+        maxprocesses=1,
+        no_json_output=True,
+    )
+
+    silver_cmd.run_silver_build(args=args, logger=logging.getLogger("test"))
+
+    assert discovered == [("historical_volatility", "perp", "1m")]
+    assert built == ["BTC"]
+
+
 def test_run_silver_build_rejects_invalid_maxprocesses() -> None:
     args = argparse.Namespace(
         bronze_root="lake/bronze",

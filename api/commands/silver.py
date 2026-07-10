@@ -16,6 +16,7 @@ from application.services.silver_service import (
     build_futures_instrument_metadata_observed_for_symbol,
     build_futures_summary_1m_feature_for_symbol,
     build_futures_summary_observed_for_symbol,
+    build_historical_volatility_observed_for_symbol,
     build_index_price_1m_feature_for_symbol,
     build_index_price_observed_for_symbol,
     build_instrument_metadata_observed_for_symbol,
@@ -60,6 +61,7 @@ _MARKET_DISCOVERY_CONFIG: dict[str, tuple[str, str, str]] = {
     "perps_trades": ("perps_trades", "perp", "tick"),
     "options_trades": ("options_trades", "option", "tick"),
     "volatility_index_data": ("volatility_index_data", "perp", "1m"),
+    "historical_volatility": ("historical_volatility", "perp", "1m"),
 }
 
 
@@ -94,6 +96,7 @@ def add_silver_build_parser(subparsers: Any) -> None:
             "recent_trade_snapshot_1m",
             "instrument_metadata_snapshot_daily",
             "futures_instrument_metadata_snapshot_daily",
+            "historical_volatility",
         ],
         default=[
             "spot_ohlcv",
@@ -512,6 +515,21 @@ def run_silver_build(args: argparse.Namespace, logger: logging.Logger) -> None:
         )
         return [_report_payload("futures_instrument_metadata_snapshot_daily_observed", symbol, observed)]
 
+    def _run_historical_volatility(symbol: str) -> list[dict[str, object]]:
+        observed = build_historical_volatility_observed_for_symbol(
+            bronze_root=bronze_root,
+            silver_root=silver_root,
+            exchange=exchange,
+            symbol=symbol,
+            timeframe=timeframe,
+        )
+        logger.info(
+            "Silver historical_volatility report written symbol=%s observed_rows=%s",
+            symbol,
+            observed.rows_out,
+        )
+        return [_report_payload("historical_volatility_observed", symbol, observed)]
+
     def _run_ohlcv(market: str, symbol: str) -> list[dict[str, object]]:
         report = build_silver_for_symbol(
             bronze_root=bronze_root,
@@ -550,6 +568,7 @@ def run_silver_build(args: argparse.Namespace, logger: logging.Logger) -> None:
         "recent_trade_snapshot_1m": _run_recent_trade_snapshot,
         "instrument_metadata_snapshot_daily": _run_instrument_metadata,
         "futures_instrument_metadata_snapshot_daily": _run_futures_instrument_metadata,
+        "historical_volatility": _run_historical_volatility,
     }
 
     def _discovery_params_for_market(market: str, default_timeframe: str) -> tuple[str, str, str]:

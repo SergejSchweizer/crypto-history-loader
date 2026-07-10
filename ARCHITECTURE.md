@@ -149,6 +149,11 @@ reconciliation sidecars compare source IDs with `perps_trades_observed` and
 valid ingest per day wins, while active state, listing interval, currencies, tick size, and
 contract size remain explicit for joins and universe filters.
 
+`historical_volatility_observed` preserves Deribit's external historical-volatility value and
+source timestamp as an auxiliary reference. It accepts only finite, non-negative values and does
+not resample or emit any internally computed `rv_*` field; `realized_volatility_1m_feature`
+remains the separately owned realized-volatility calculation.
+
 ## Runtime And Side Effects
 
 `config.yaml` is the canonical durable runtime configuration source. Runtime values should be

@@ -51,6 +51,7 @@ def test_silver_contracts_cover_service_output_columns() -> None:
         "futures_instrument_metadata_snapshot_daily_observed": (
             silver_service.SILVER_INSTRUMENT_METADATA_OBSERVED_COLUMNS
         ),
+        "historical_volatility_observed": silver_service.SILVER_HISTORICAL_VOLATILITY_OBSERVED_COLUMNS,
     }
 
     for dataset_type, columns in expected_columns.items():
