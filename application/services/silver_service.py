@@ -22,6 +22,9 @@ from application.dataset_contracts import (
     SILVER_TRADES_OBSERVED_COLUMNS,
 )
 from application.dataset_contracts import (
+    SILVER_OPTIONS_TICKER_OBSERVED_COLUMNS as SILVER_OPTIONS_TICKER_OBSERVED_COLUMNS,
+)
+from application.dataset_contracts import (
     SILVER_REALIZED_VOLATILITY_FEATURE_COLUMNS as SILVER_REALIZED_VOLATILITY_FEATURE_COLUMNS,
 )
 from application.dataset_contracts import (
@@ -36,6 +39,7 @@ from application.services import (
     silver_index_price,
     silver_iv_rv,
     silver_open_interest,
+    silver_options_ticker,
     silver_realized_volatility,
     silver_trades,
     silver_volatility,
@@ -52,6 +56,7 @@ discover_realized_volatility_symbols = silver_realized_volatility.discover_reali
 discover_iv_rv_symbols = silver_iv_rv.discover_iv_rv_symbols
 discover_index_price_symbols = silver_index_price.discover_index_price_symbols
 discover_futures_summary_symbols = silver_futures_summary.discover_futures_summary_symbols
+discover_options_ticker_symbols = silver_options_ticker.discover_options_ticker_symbols
 
 
 def _funding_dependencies() -> silver_funding.FundingDependencies:
@@ -942,4 +947,36 @@ def build_futures_summary_1m_feature_for_symbol(
     )
     if not isinstance(report, SilverBuildReport):
         raise TypeError("futures-summary 1m feature builder returned an unexpected report type")
+    return report
+
+
+def _options_ticker_dependencies() -> silver_options_ticker.OptionsTickerDependencies:
+    return silver_options_ticker.OptionsTickerDependencies(
+        require_polars=_require_polars,
+        silver_month_path=_silver_month_path,
+        iso_utc=_iso_utc,
+        report_factory=SilverBuildReport,
+    )
+
+
+def build_options_ticker_observed_for_symbol(
+    *,
+    bronze_root: str,
+    silver_root: str,
+    exchange: str,
+    symbol: str,
+    timeframe: str = "1m",
+) -> SilverBuildReport:
+    """Build observed options-ticker Silver snapshots for one currency."""
+
+    report = silver_options_ticker.build_options_ticker_observed_for_symbol(
+        bronze_root=bronze_root,
+        silver_root=silver_root,
+        exchange=exchange,
+        symbol=symbol,
+        timeframe=timeframe,
+        dependencies=_options_ticker_dependencies(),
+    )
+    if not isinstance(report, SilverBuildReport):
+        raise TypeError("options-ticker observed builder returned an unexpected report type")
     return report

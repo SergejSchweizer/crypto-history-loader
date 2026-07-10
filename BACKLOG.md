@@ -310,7 +310,7 @@ Acceptance:
 
 ### PR-10: Options Ticker Snapshot Silver
 
-Status: Planned
+Status: Done
 
 Branch: `codex/pr10-options-ticker-silver`
 
