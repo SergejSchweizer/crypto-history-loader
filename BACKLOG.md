@@ -621,7 +621,7 @@ Acceptance:
 
 ### PR-20: Volatility Index Silver Materialization
 
-Status: In progress
+Status: In review - draft PR #80: https://github.com/SergejSchweizer/crypto-history-loader/pull/80
 
 Branch: `codex/pr20-volatility-silver-materialization`
 
