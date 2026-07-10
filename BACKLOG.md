@@ -730,7 +730,7 @@ Acceptance:
 
 ### PR-25: Perpetual L2 Silver Materialization
 
-Status: In review - draft PR #86: https://github.com/SergejSchweizer/crypto-history-loader/pull/86
+Status: Merge-ready - PR #86: https://github.com/SergejSchweizer/crypto-history-loader/pull/86
 
 Branch: `codex/pr25-perps-l2-silver-materialization`
 
