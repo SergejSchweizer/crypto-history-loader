@@ -610,6 +610,7 @@ uv run python main.py silver-build \
   --dataset spot_ohlcv perps_ohlcv open_interest funding perps_trades options_trades \
     options_instrument_ticker_snapshot_1m options_surface_1m_feature \
     perps_l2_snapshot_1m options_l2_snapshot_1m recent_trade_snapshot_1m \
+    instrument_metadata_snapshot_daily futures_instrument_metadata_snapshot_daily \
   --timeframe 1m \
   --maxprocesses 4
 ```

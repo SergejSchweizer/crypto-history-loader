@@ -142,6 +142,13 @@ deterministic composite of exchange, instrument, event time, price, quantity, an
 reconciliation sidecars compare source IDs with `perps_trades_observed` and
 `options_trades_observed`, while contract metadata and snapshot lineage remain in every row.
 
+`instrument_metadata_snapshot_daily_observed` and
+`futures_instrument_metadata_snapshot_daily_observed` share one daily contract keyed by
+`snapshot_date`, `exchange`, and `instrument_name`. Source `kind` becomes the market-facing
+`option`, `future`, or `perp` instrument type; option type is normalized to `C/P`. The latest
+valid ingest per day wins, while active state, listing interval, currencies, tick size, and
+contract size remain explicit for joins and universe filters.
+
 ## Runtime And Side Effects
 
 `config.yaml` is the canonical durable runtime configuration source. Runtime values should be

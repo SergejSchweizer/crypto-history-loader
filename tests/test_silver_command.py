@@ -352,6 +352,51 @@ def test_run_silver_build_routes_recent_trade_snapshot(monkeypatch) -> None:  # 
     assert built == [("BTC", "tick")]
 
 
+def test_run_silver_build_routes_both_metadata_families(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    discovered: list[str] = []
+    built: list[str] = []
+
+    def fake_discover_metadata(**kwargs: object) -> list[str]:
+        discovered.append(str(kwargs["dataset_type"]))
+        return ["BTC"]
+
+    def fake_build_options(**kwargs: object) -> silver_cmd.SilverBuildReport:
+        built.append("options")
+        return _report("instrument_metadata_snapshot_daily_observed")
+
+    def fake_build_futures(**kwargs: object) -> silver_cmd.SilverBuildReport:
+        built.append("futures")
+        return _report("futures_instrument_metadata_snapshot_daily_observed")
+
+    monkeypatch.setattr(silver_cmd, "discover_instrument_metadata_symbols", fake_discover_metadata)
+    monkeypatch.setattr(silver_cmd, "build_instrument_metadata_observed_for_symbol", fake_build_options)
+    monkeypatch.setattr(silver_cmd, "build_futures_instrument_metadata_observed_for_symbol", fake_build_futures)
+    monkeypatch.setattr(silver_cmd, "write_monthly_sidecars", lambda **kwargs: ([], []))
+    args = argparse.Namespace(
+        bronze_root="lake/bronze",
+        silver_root="lake/silver",
+        exchange="deribit",
+        market=[
+            "instrument_metadata_snapshot_daily",
+            "futures_instrument_metadata_snapshot_daily",
+        ],
+        symbols=None,
+        timeframe="1m",
+        manifest=False,
+        plot=False,
+        maxprocesses=1,
+        no_json_output=True,
+    )
+
+    silver_cmd.run_silver_build(args=args, logger=logging.getLogger("test"))
+
+    assert discovered == [
+        "instrument_metadata_snapshot_daily",
+        "futures_instrument_metadata_snapshot_daily",
+    ]
+    assert built == ["options", "futures"]
+
+
 def test_run_silver_build_rejects_invalid_maxprocesses() -> None:
     args = argparse.Namespace(
         bronze_root="lake/bronze",
