@@ -98,7 +98,7 @@ def _bronze_months(index_dirs: list[Path]) -> list[str]:
 
 def _bronze_month_files(index_dirs: list[Path], month: str) -> list[str]:
     year, month_part = month.split("-", 1)
-    files = []
+    files: list[Path] = []
     for index_dir in index_dirs:
         files.extend(index_dir.glob(f"year={year}/month={month_part}/date=*/hour=*/data.parquet"))
     return sorted(str(path) for path in files)
