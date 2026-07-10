@@ -198,3 +198,98 @@ def test_options_surface_buckets_precedence_freshness_and_no_future_leakage(tmp_
     assert first["quote_coverage_ratio"] == pytest.approx(5.0 / 6.0)
     assert second["atm_iv"] == pytest.approx(99.0)
     assert second["contract_count"] == 1
+
+
+def test_options_surface_bucket_boundaries_and_latest_ingest_tie_break(tmp_path: Path) -> None:
+    """Surface buckets should use documented edge rules and newest ingested duplicate quotes."""
+
+    silver = tmp_path / "silver"
+    t0 = datetime(2026, 5, 1, 12, 0, 10, tzinfo=UTC)
+    expiry = date(2026, 6, 15)
+    rows = [
+        _option_row(
+            timestamp=t0,
+            instrument_name="BTC-15JUN26-100-C",
+            expiry=expiry,
+            strike=100.0,
+            option_type="C",
+            implied_volatility=30.0,
+            ingested_after_seconds=5,
+        ),
+        _option_row(
+            timestamp=t0,
+            instrument_name="BTC-15JUN26-100-C",
+            expiry=expiry,
+            strike=100.0,
+            option_type="C",
+            implied_volatility=50.0,
+            ingested_after_seconds=20,
+        ),
+        _option_row(
+            timestamp=t0,
+            instrument_name="BTC-15JUN26-100-P",
+            expiry=expiry,
+            strike=100.0,
+            option_type="P",
+            implied_volatility=70.0,
+        ),
+        _option_row(
+            timestamp=t0,
+            instrument_name="BTC-15JUN26-95-P",
+            expiry=expiry,
+            strike=95.0,
+            option_type="P",
+            implied_volatility=90.0,
+        ),
+        _option_row(
+            timestamp=t0,
+            instrument_name="BTC-15JUN26-94.9-P",
+            expiry=expiry,
+            strike=94.9,
+            option_type="P",
+            implied_volatility=80.0,
+        ),
+        _option_row(
+            timestamp=t0,
+            instrument_name="BTC-15JUN26-105-C",
+            expiry=expiry,
+            strike=105.0,
+            option_type="C",
+            implied_volatility=40.0,
+        ),
+        _option_row(
+            timestamp=t0,
+            instrument_name="BTC-15JUN26-106-C",
+            expiry=expiry,
+            strike=106.0,
+            option_type="C",
+            implied_volatility=60.0,
+        ),
+    ]
+    _write_observed(
+        silver,
+        dataset_type="options_instrument_ticker_snapshot_1m_observed",
+        symbol="BTC",
+        month="2026-05",
+        rows=rows,
+    )
+
+    report = build_options_surface_1m_feature_for_symbol(silver_root=str(silver), exchange="deribit", symbol="BTC")
+
+    assert report.rows_in == 7
+    assert report.rows_out == 1
+    assert report.duplicates_removed == 1
+    output = pl.read_parquet(
+        silver
+        / "dataset_type=options_surface_1m_feature"
+        / "exchange=deribit"
+        / "symbol=BTC"
+        / "timeframe=1m"
+        / "year=2026"
+        / "month=2026-05"
+        / "BTC-2026-05.parquet"
+    )
+    row = output.row(0, named=True)
+    assert row["atm_iv"] == pytest.approx(50.0)
+    assert row["put_call_iv_spread"] == pytest.approx(25.0)
+    assert row["skew"] == pytest.approx(20.0)

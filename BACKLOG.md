@@ -709,7 +709,7 @@ Acceptance:
 
 ### PR-24: Options Surface Silver Materialization
 
-Status: Planned; code exists, physical Silver is missing
+Status: In progress
 
 Branch: `codex/pr24-options-surface-silver-materialization`
 
