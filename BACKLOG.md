@@ -592,7 +592,7 @@ datasets are fetched and transformed by this repository.
 
 ### PR-19: Silver Materialization Audit And Build Manifest
 
-Status: In review - draft PR #79: https://github.com/SergejSchweizer/crypto-history-loader/pull/79
+Status: Merge-ready - PR #79: https://github.com/SergejSchweizer/crypto-history-loader/pull/79
 
 Branch: `codex/pr19-silver-materialization-audit`
 
