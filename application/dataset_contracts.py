@@ -41,6 +41,7 @@ class GoldDatasetContract:
     dataset_id: str
     requirements: tuple[GoldSourceRequirement, ...]
     include_l2: bool
+    optional_requirements: tuple[GoldSourceRequirement, ...] = ()
     timestamp_column: str = "timestamp_m1"
     timestamp_semantics: TimestampSemantics = "minute_grid"
     missing_data_policy: MissingDataPolicy = "asof_join"
@@ -50,6 +51,7 @@ class GoldDatasetContract:
 
         return {
             "requirements": [requirement.as_tuple() for requirement in self.requirements],
+            "optional_requirements": [requirement.as_tuple() for requirement in self.optional_requirements],
             "include_l2": self.include_l2,
         }
 
@@ -690,6 +692,23 @@ FULL_MARKET_GOLD_REQUIREMENTS = (
     GoldSourceRequirement("volatility_index_data_observed", "1m"),
 )
 
+REGIME_FEATURE_GOLD_REQUIREMENTS = (
+    GoldSourceRequirement("spot_ohlcv", "1m"),
+    GoldSourceRequirement("perps_ohlcv", "1m"),
+    GoldSourceRequirement("funding_1m_feature", "1m"),
+    GoldSourceRequirement("open_interest_1m_feature", "1m"),
+    GoldSourceRequirement("realized_volatility_1m_feature", "1m"),
+    GoldSourceRequirement("iv_rv_1m_feature", "1m"),
+)
+
+REGIME_FEATURE_GOLD_OPTIONAL_REQUIREMENTS = (
+    GoldSourceRequirement("perps_l2_1m_feature", "1m"),
+    GoldSourceRequirement("options_l2_1m_feature", "1m"),
+    GoldSourceRequirement("options_surface_1m_feature", "1m"),
+    GoldSourceRequirement("index_price_1m_feature", "1m"),
+    GoldSourceRequirement("historical_volatility_observed", "1m"),
+)
+
 GOLD_DATASET_CONTRACTS: dict[str, GoldDatasetContract] = {
     "gold.market.perps_trades.m1": GoldDatasetContract(
         dataset_id="gold.market.perps_trades.m1",
@@ -728,6 +747,12 @@ GOLD_DATASET_CONTRACTS: dict[str, GoldDatasetContract] = {
     "gold.market.futures_summary.m1": GoldDatasetContract(
         dataset_id="gold.market.futures_summary.m1",
         requirements=(GoldSourceRequirement("futures_summary_1m_feature", "1m"),),
+        include_l2=False,
+    ),
+    "gold.market.regime_features.m1": GoldDatasetContract(
+        dataset_id="gold.market.regime_features.m1",
+        requirements=REGIME_FEATURE_GOLD_REQUIREMENTS,
+        optional_requirements=REGIME_FEATURE_GOLD_OPTIONAL_REQUIREMENTS,
         include_l2=False,
     ),
     "gold.market.full.m1": GoldDatasetContract(

@@ -627,6 +627,21 @@ uv run python main.py gold-build \
   --dataset-id gold.market.full.m1
 ```
 
+Regime research Gold contract (optional Silver sources may be absent):
+
+```bash
+uv run python main.py gold-build \
+  --silver-root lake/silver \
+  --gold-root lake/gold \
+  --exchange deribit \
+  --dataset-id gold.market.regime_features.m1 \
+  --symbols BTC ETH
+```
+
+`gold.market.regime_features.m1` always keeps the same schema. Its manifest reports optional
+source availability, minute coverage, source time span, and freshness; missing optional features
+remain typed nulls and never change the required-source minute grid.
+
 ## 5.3 Operational Notes
 
 Symbol-group controls for Bronze:

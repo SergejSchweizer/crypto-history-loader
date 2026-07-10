@@ -180,6 +180,10 @@ def _dataset_requirements(dataset_id: str) -> list[tuple[str, str]]:
     return [requirement.as_tuple() for requirement in gold_dataset_contract(dataset_id).requirements]
 
 
+def _dataset_optional_requirements(dataset_id: str) -> list[tuple[str, str]]:
+    return [requirement.as_tuple() for requirement in gold_dataset_contract(dataset_id).optional_requirements]
+
+
 def _dataset_includes_l2(dataset_id: str) -> bool:
     return gold_dataset_contract(dataset_id).include_l2
 
@@ -245,6 +249,10 @@ def _prepare_dataset_frame(pl: Any, dataset_type: str, frame: Any, symbol: str) 
     return gold_frames.prepare_dataset_frame(pl, dataset_type, frame, symbol)
 
 
+def _optional_feature_schema(pl: Any, dataset_type: str) -> list[tuple[str, Any]]:
+    return gold_frames.optional_feature_schema(pl, dataset_type)
+
+
 def _build_minute_grid(pl: Any, prepared: list[Any], exchange: str, symbol: str) -> Any:
     return gold_frames.build_minute_grid(pl, prepared, exchange, symbol)
 
@@ -267,6 +275,22 @@ def _source_dataset_summary(
     pl: Any, raw_by_dataset: dict[str, Any], l2_source_path: Path | None
 ) -> dict[str, dict[str, object]]:
     return gold_audit.source_dataset_summary(pl, raw_by_dataset, l2_source_path)
+
+
+def _optional_source_availability(
+    pl: Any,
+    optional_requirements: list[tuple[str, str]],
+    raw_by_dataset: dict[str, Any],
+    prepared_by_dataset: dict[str, Any],
+    required_grid: Any,
+) -> dict[str, dict[str, object]]:
+    return gold_audit.optional_source_availability(
+        pl,
+        optional_requirements,
+        raw_by_dataset,
+        prepared_by_dataset,
+        required_grid,
+    )
 
 
 def _missing_value_audit(pl: Any, frame: Any) -> tuple[dict[str, int], int]:
@@ -297,6 +321,7 @@ def build_gold_for_symbol(
     pl = _require_polars()
     symbol = normalize_symbol(symbol)
     required = _dataset_requirements(dataset_id)
+    optional = _dataset_optional_requirements(dataset_id)
     raw_by_dataset: dict[str, Any] = {}
     for dataset_type, timeframe in required:
         raw_by_dataset[dataset_type] = _read_dataset_frame(
@@ -307,7 +332,7 @@ def build_gold_for_symbol(
             timeframe=timeframe,
         )
 
-    prepared: list[Any] = []
+    required_prepared: list[Any] = []
     l2_source_path: Path | None = None
     if _dataset_includes_l2(dataset_id):
         effective_l2_root = l2_root or gold_root
@@ -317,14 +342,45 @@ def build_gold_for_symbol(
             symbol=symbol,
         )
         raw_by_dataset["gold_l2_m1"] = l2_raw
-    for dataset_type, raw_frame in raw_by_dataset.items():
-        prepared.append(_prepare_dataset_frame(pl, dataset_type, raw_frame, symbol))
-    if not prepared:
+    for dataset_type, _timeframe in required:
+        required_prepared.append(_prepare_dataset_frame(pl, dataset_type, raw_by_dataset[dataset_type], symbol))
+    if _dataset_includes_l2(dataset_id):
+        required_prepared.append(_prepare_dataset_frame(pl, "gold_l2_m1", raw_by_dataset["gold_l2_m1"], symbol))
+    if not required_prepared:
         raise ValueError(f"No prepared datasets for symbol={symbol} dataset_id={dataset_id}")
     key_cols = ["timestamp_m1", "exchange", "symbol"]
-    merged = _build_minute_grid(pl, prepared, exchange, symbol)
-    for frame in prepared:
+    merged = _build_minute_grid(pl, required_prepared, exchange, symbol)
+    for frame in required_prepared:
         merged = merged.join(frame, on=key_cols, how="left", coalesce=True)
+    required_grid = merged.select(key_cols)
+
+    optional_prepared_by_dataset: dict[str, Any] = {}
+    for dataset_type, timeframe in optional:
+        available_symbols = _discover_symbols_for_dataset(
+            silver_root=silver_root,
+            exchange=exchange,
+            dataset_type=dataset_type,
+            timeframe=timeframe,
+        )
+        if symbol in available_symbols:
+            optional_raw = _read_dataset_frame(
+                silver_root=silver_root,
+                exchange=exchange,
+                symbol=symbol,
+                dataset_type=dataset_type,
+                timeframe=timeframe,
+            )
+            raw_by_dataset[dataset_type] = optional_raw
+            optional_prepared = _prepare_dataset_frame(pl, dataset_type, optional_raw, symbol)
+            optional_prepared_by_dataset[dataset_type] = optional_prepared
+            merged = merged.join(optional_prepared, on=key_cols, how="left", coalesce=True)
+        else:
+            merged = merged.with_columns(
+                [
+                    pl.lit(None, dtype=dtype).alias(column)
+                    for column, dtype in _optional_feature_schema(pl, dataset_type)
+                ]
+            )
     merged = merged.sort("timestamp_m1")
     l2_validation_audit = {"l2_invalid_rows_found": 0, "l2_invalid_rows_dropped": 0}
     if _dataset_includes_l2(dataset_id):
@@ -335,11 +391,37 @@ def build_gold_for_symbol(
     cols = merged.columns
     min_ts, max_ts, expected_minutes, missing_minutes, observed_coverage_ratio = _time_span_coverage(merged)
     source_silver_datasets = _source_dataset_summary(pl, raw_by_dataset, l2_source_path)
-    source_data_hash = _json_payload_hash({"source_silver_datasets": source_silver_datasets})
+    optional_source_availability = _optional_source_availability(
+        pl,
+        optional,
+        raw_by_dataset,
+        optional_prepared_by_dataset,
+        required_grid,
+    )
+    for dataset_type, _timeframe in optional:
+        source_summary = source_silver_datasets.setdefault(
+            dataset_type,
+            {"columns": [], "rows": 0, "source_symbols": []},
+        )
+        source_summary["available"] = bool(optional_source_availability[dataset_type]["available"])
+    source_data_hash = _json_payload_hash(
+        {
+            "source_silver_datasets": source_silver_datasets,
+            "optional_source_availability": optional_source_availability,
+        }
+    )
+    configured_source_keys = [
+        f"{dataset_type}_1m" if dataset_type in {"spot_ohlcv", "perps_ohlcv"} else dataset_type
+        for dataset_type, _timeframe in [*required, *optional]
+    ]
+    if _dataset_includes_l2(dataset_id):
+        configured_source_keys.append("gold_l2_m1")
     contract_signature: dict[str, object] = {
         "columns": cols,
-        "join_policy": "minute_grid_left_join_coalesce",
-        "source_dataset_keys": sorted(source_silver_datasets.keys()),
+        "join_policy": (
+            "required_minute_grid_left_join_optional_nullable" if optional else "minute_grid_left_join_coalesce"
+        ),
+        "source_dataset_keys": sorted(configured_source_keys),
     }
     missing_by_column, missing_total = _missing_value_audit(pl, merged)
     feature_set_hash = _json_payload_hash(
@@ -414,6 +496,9 @@ def build_gold_for_symbol(
         "missing_value_count_total": missing_total,
         "missing_value_count_by_column": missing_by_column,
         "source_silver_datasets": source_silver_datasets,
+        "required_source_datasets": [dataset_type for dataset_type, _timeframe in required],
+        "optional_source_datasets": [dataset_type for dataset_type, _timeframe in optional],
+        "optional_source_availability": optional_source_availability,
         "feature_metadata": _feature_metadata(pl, merged, exchange),
     }
     hash_string = f"{feature_set_hash}_{source_data_hash}"

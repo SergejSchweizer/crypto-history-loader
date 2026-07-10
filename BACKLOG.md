@@ -509,7 +509,7 @@ Acceptance:
 
 ### PR-18: Gold Contract Update For Regime Feature Set
 
-Status: Planned
+Status: Done
 
 Branch: `codex/pr18-gold-regime-feature-contract`
 

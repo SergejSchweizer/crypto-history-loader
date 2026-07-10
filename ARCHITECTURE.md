@@ -154,6 +154,14 @@ source timestamp as an auxiliary reference. It accepts only finite, non-negative
 not resample or emit any internally computed `rv_*` field; `realized_volatility_1m_feature`
 remains the separately owned realized-volatility calculation.
 
+`gold.market.regime_features.m1` owns the research-facing IV/RV regime contract. Its minute grid
+is determined only by required spot, perpetual, funding, open-interest, realized-volatility, and
+IV/RV sources. Perpetual L2, options L2, option surface, index price, and external historical
+volatility are optional left joins with stable nullable columns; their presence never expands the
+grid or changes column order. Manifests record availability, covered grid minutes, coverage ratio,
+source time range, and freshness at the required-grid end for every optional source. The contract
+contains market state only and does not create predictive labels.
+
 ## Runtime And Side Effects
 
 `config.yaml` is the canonical durable runtime configuration source. Runtime values should be

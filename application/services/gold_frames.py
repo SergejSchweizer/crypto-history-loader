@@ -464,6 +464,232 @@ def prepare_futures_summary(pl: Any, frame: Any, symbol: str) -> Any:
     )
 
 
+def prepare_realized_volatility(pl: Any, frame: Any, symbol: str) -> Any:
+    """Prepare internally computed realized-volatility regime features."""
+
+    return (
+        frame.with_columns(
+            [
+                pl.col("timestamp_m1").cast(pl.Datetime(time_unit="us", time_zone="UTC")),
+                pl.lit(symbol).alias("symbol"),
+            ]
+        )
+        .select(
+            [
+                "timestamp_m1",
+                "exchange",
+                "symbol",
+                pl.col("rv_5m").cast(pl.Float64),
+                pl.col("rv_15m").cast(pl.Float64),
+                pl.col("rv_1h").cast(pl.Float64),
+                pl.col("rv_4h").cast(pl.Float64),
+                pl.col("rv_1d").cast(pl.Float64),
+                pl.col("parkinson_rv_1h").cast(pl.Float64),
+                pl.col("jump_proxy").cast(pl.Float64),
+                pl.col("spot_available").cast(pl.Boolean),
+                pl.col("perps_available").cast(pl.Boolean),
+            ]
+        )
+        .sort("timestamp_m1")
+    )
+
+
+def prepare_options_surface(pl: Any, frame: Any, symbol: str) -> Any:
+    """Prepare option-surface proxies with source-specific Gold names."""
+
+    return (
+        frame.with_columns(
+            [
+                pl.col("timestamp_m1").cast(pl.Datetime(time_unit="us", time_zone="UTC")),
+                pl.lit(symbol).alias("symbol"),
+            ]
+        )
+        .select(
+            [
+                "timestamp_m1",
+                "exchange",
+                "symbol",
+                pl.col("atm_iv").cast(pl.Float64).alias("options_surface_atm_iv"),
+                pl.col("short_dated_iv").cast(pl.Float64).alias("options_surface_short_dated_iv"),
+                pl.col("skew").cast(pl.Float64).alias("options_surface_skew"),
+                pl.col("term_structure").cast(pl.Float64).alias("options_surface_term_structure"),
+                pl.col("put_call_iv_spread").cast(pl.Float64).alias("options_surface_put_call_iv_spread"),
+                pl.col("contract_count").cast(pl.Int64).alias("options_surface_contract_count"),
+                pl.col("fresh_quote_count").cast(pl.Int64).alias("options_surface_fresh_quote_count"),
+                pl.col("stale_quote_count").cast(pl.Int64).alias("options_surface_stale_quote_count"),
+                pl.col("max_quote_age_seconds").cast(pl.Float64).alias("options_surface_max_quote_age_seconds"),
+                pl.col("quote_coverage_ratio").cast(pl.Float64).alias("options_surface_quote_coverage_ratio"),
+            ]
+        )
+        .sort("timestamp_m1")
+    )
+
+
+def prepare_perps_l2_feature(pl: Any, frame: Any, symbol: str) -> Any:
+    """Prepare perpetual L2 liquidity features for the regime contract."""
+
+    numeric = (
+        "best_bid_price",
+        "best_ask_price",
+        "mid_price",
+        "spread",
+        "top_bid_size",
+        "top_ask_size",
+        "top_of_book_imbalance",
+        "bid_depth_10bps",
+        "ask_depth_10bps",
+        "bid_depth_50bps",
+        "ask_depth_50bps",
+        "quote_age_seconds",
+    )
+    expressions = [pl.col(column).cast(pl.Float64).alias(f"perps_l2_{column}") for column in numeric]
+    return (
+        frame.with_columns(
+            [
+                pl.col("timestamp_m1").cast(pl.Datetime(time_unit="us", time_zone="UTC")),
+                pl.lit(symbol).alias("symbol"),
+            ]
+        )
+        .select(
+            [
+                "timestamp_m1",
+                "exchange",
+                "symbol",
+                *expressions,
+                pl.col("quote_available").cast(pl.Boolean).alias("perps_l2_quote_available"),
+                pl.col("stale_quote").cast(pl.Boolean).alias("perps_l2_stale_quote"),
+                pl.col("minutes_since_l2_observation").cast(pl.Int64).alias("perps_l2_minutes_since_observation"),
+            ]
+        )
+        .sort("timestamp_m1")
+    )
+
+
+def prepare_options_l2_feature(pl: Any, frame: Any, symbol: str) -> Any:
+    """Aggregate contract-level option liquidity into one regime row per minute."""
+
+    normalized = frame.with_columns(
+        [
+            pl.col("timestamp_m1").cast(pl.Datetime(time_unit="us", time_zone="UTC")),
+            pl.lit(symbol).alias("symbol"),
+        ]
+    )
+    return (
+        normalized.group_by(["timestamp_m1", "exchange", "symbol"], maintain_order=True)
+        .agg(
+            [
+                pl.col("instrument_name").n_unique().cast(pl.Int64).alias("options_l2_contract_count"),
+                pl.col("quote_available").cast(pl.Float64).mean().alias("options_l2_quote_coverage_ratio"),
+                pl.col("stale_quote").cast(pl.Float64).mean().alias("options_l2_stale_quote_ratio"),
+                pl.col("spread").median().cast(pl.Float64).alias("options_l2_median_spread"),
+                pl.col("top_bid_size").sum().cast(pl.Float64).alias("options_l2_top_bid_depth"),
+                pl.col("top_ask_size").sum().cast(pl.Float64).alias("options_l2_top_ask_depth"),
+                pl.col("bid_depth_10bps").sum().cast(pl.Float64).alias("options_l2_bid_depth_10bps"),
+                pl.col("ask_depth_10bps").sum().cast(pl.Float64).alias("options_l2_ask_depth_10bps"),
+                pl.col("bid_depth_50bps").sum().cast(pl.Float64).alias("options_l2_bid_depth_50bps"),
+                pl.col("ask_depth_50bps").sum().cast(pl.Float64).alias("options_l2_ask_depth_50bps"),
+                pl.col("quote_age_seconds").max().cast(pl.Float64).alias("options_l2_max_quote_age_seconds"),
+            ]
+        )
+        .sort("timestamp_m1")
+    )
+
+
+def prepare_historical_volatility(pl: Any, frame: Any, symbol: str) -> Any:
+    """Prepare the external historical-volatility reference without filling gaps."""
+
+    return (
+        frame.with_columns(
+            [
+                pl.col("timestamp").cast(pl.Datetime(time_unit="us", time_zone="UTC")).alias("timestamp_m1"),
+                pl.lit(symbol).alias("symbol"),
+            ]
+        )
+        .select(
+            [
+                "timestamp_m1",
+                "exchange",
+                "symbol",
+                pl.col("historical_volatility").cast(pl.Float64).alias("historical_volatility_reference"),
+                pl.col("historical_volatility_source_timestamp").cast(pl.Datetime(time_unit="us", time_zone="UTC")),
+                pl.lit(True).alias("historical_volatility_available"),
+            ]
+        )
+        .sort("timestamp_m1")
+    )
+
+
+def optional_feature_schema(pl: Any, dataset_type: str) -> list[tuple[str, Any]]:
+    """Return stable nullable Gold columns for one optional Silver source."""
+
+    schemas: dict[str, list[tuple[str, Any]]] = {
+        "perps_l2_1m_feature": [
+            *[
+                (f"perps_l2_{name}", pl.Float64)
+                for name in (
+                    "best_bid_price",
+                    "best_ask_price",
+                    "mid_price",
+                    "spread",
+                    "top_bid_size",
+                    "top_ask_size",
+                    "top_of_book_imbalance",
+                    "bid_depth_10bps",
+                    "ask_depth_10bps",
+                    "bid_depth_50bps",
+                    "ask_depth_50bps",
+                    "quote_age_seconds",
+                )
+            ],
+            ("perps_l2_quote_available", pl.Boolean),
+            ("perps_l2_stale_quote", pl.Boolean),
+            ("perps_l2_minutes_since_observation", pl.Int64),
+        ],
+        "options_l2_1m_feature": [
+            ("options_l2_contract_count", pl.Int64),
+            ("options_l2_quote_coverage_ratio", pl.Float64),
+            ("options_l2_stale_quote_ratio", pl.Float64),
+            ("options_l2_median_spread", pl.Float64),
+            ("options_l2_top_bid_depth", pl.Float64),
+            ("options_l2_top_ask_depth", pl.Float64),
+            ("options_l2_bid_depth_10bps", pl.Float64),
+            ("options_l2_ask_depth_10bps", pl.Float64),
+            ("options_l2_bid_depth_50bps", pl.Float64),
+            ("options_l2_ask_depth_50bps", pl.Float64),
+            ("options_l2_max_quote_age_seconds", pl.Float64),
+        ],
+        "options_surface_1m_feature": [
+            ("options_surface_atm_iv", pl.Float64),
+            ("options_surface_short_dated_iv", pl.Float64),
+            ("options_surface_skew", pl.Float64),
+            ("options_surface_term_structure", pl.Float64),
+            ("options_surface_put_call_iv_spread", pl.Float64),
+            ("options_surface_contract_count", pl.Int64),
+            ("options_surface_fresh_quote_count", pl.Int64),
+            ("options_surface_stale_quote_count", pl.Int64),
+            ("options_surface_max_quote_age_seconds", pl.Float64),
+            ("options_surface_quote_coverage_ratio", pl.Float64),
+        ],
+        "index_price_1m_feature": [
+            ("index_price", pl.Float64),
+            ("index_price_is_observed", pl.Boolean),
+            ("minutes_since_index_price_observation", pl.Int64),
+        ],
+        "historical_volatility_observed": [
+            ("historical_volatility_reference", pl.Float64),
+            (
+                "historical_volatility_source_timestamp",
+                pl.Datetime(time_unit="us", time_zone="UTC"),
+            ),
+            ("historical_volatility_available", pl.Boolean),
+        ],
+    }
+    try:
+        return schemas[dataset_type]
+    except KeyError as exc:
+        raise ValueError(f"Unsupported optional Gold dataset_type: {dataset_type}") from exc
+
+
 def prepare_dataset_frame(pl: Any, dataset_type: str, frame: Any, symbol: str) -> Any:
     """Dispatch preparation for a supported Gold source dataset.
 
@@ -482,6 +708,11 @@ def prepare_dataset_frame(pl: Any, dataset_type: str, frame: Any, symbol: str) -
         "iv_rv_1m_feature": lambda: prepare_iv_rv(pl, frame, symbol),
         "index_price_1m_feature": lambda: prepare_index_price(pl, frame, symbol),
         "futures_summary_1m_feature": lambda: prepare_futures_summary(pl, frame, symbol),
+        "realized_volatility_1m_feature": lambda: prepare_realized_volatility(pl, frame, symbol),
+        "options_surface_1m_feature": lambda: prepare_options_surface(pl, frame, symbol),
+        "perps_l2_1m_feature": lambda: prepare_perps_l2_feature(pl, frame, symbol),
+        "options_l2_1m_feature": lambda: prepare_options_l2_feature(pl, frame, symbol),
+        "historical_volatility_observed": lambda: prepare_historical_volatility(pl, frame, symbol),
         "gold_l2_m1": lambda: prepare_l2(pl, frame, symbol),
     }
     preparer = dataset_preparers.get(dataset_type)
