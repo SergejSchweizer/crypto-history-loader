@@ -317,12 +317,20 @@ def run_silver_build(args: argparse.Namespace, logger: logging.Logger) -> None:
             timeframe=timeframe,
         )
         feature_payload = _report_payload("realized_volatility_1m_feature", symbol, feature)
+        iv_rv = build_iv_rv_1m_feature_for_symbol(
+            silver_root=silver_root,
+            exchange=exchange,
+            symbol=symbol,
+            timeframe=timeframe,
+        )
+        iv_rv_payload = _report_payload("iv_rv_1m_feature", symbol, iv_rv)
         logger.info(
-            "Silver realized_volatility report written symbol=%s feature_rows=%s",
+            "Silver realized_volatility reports written symbol=%s rv_rows=%s iv_rv_rows=%s",
             symbol,
             feature.rows_out,
+            iv_rv.rows_out,
         )
-        return [feature_payload]
+        return [feature_payload, iv_rv_payload]
 
     def _run_iv_rv(symbol: str) -> list[dict[str, object]]:
         feature = build_iv_rv_1m_feature_for_symbol(

@@ -643,7 +643,7 @@ Acceptance:
 
 ### PR-21: Realized Volatility And IV/RV Silver Materialization
 
-Status: Planned; code exists, physical Silver is missing
+Status: In progress
 
 Branch: `codex/pr21-rv-iv-rv-silver-materialization`
 
