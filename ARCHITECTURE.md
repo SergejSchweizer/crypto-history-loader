@@ -200,6 +200,13 @@ pytest
 `Makefile` exposes the same logical sequence through `make check`. Coverage enforcement is
 configured in `pyproject.toml`.
 
+GitHub repository gates are managed through `scripts/github/apply_quality_gates.sh`, which uses
+`gh api` to configure server-side repository settings. The script is the durable configuration
+entrypoint for merge policy and `main` branch protection; the GitHub web UI should be treated as an
+inspection surface. The protected `main` branch requires the CI job named `quality`, up-to-date
+branches before merge, linear history, resolved PR conversations, no force pushes, and no branch
+deletions. Repository merge settings are squash-only with automatic branch deletion after merge.
+
 ## Update Protocol
 
 Update `ARCHITECTURE.md` in the same PR when a change does any of the following:
