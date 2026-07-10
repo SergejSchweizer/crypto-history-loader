@@ -337,7 +337,11 @@ SILVER_INSTRUMENT_METADATA_OBSERVED_COLUMNS = [
     "option_type",
     "tick_size",
     "contract_size",
+    "min_trade_amount",
+    "creation_timestamp",
     "is_active",
+    "is_listed",
+    "listing_state",
     "ingested_at",
     "source_endpoint",
 ]

@@ -458,7 +458,7 @@ Acceptance:
 
 ### PR-16: Instrument Metadata Silver
 
-Status: Planned
+Status: Done
 
 Branch: `codex/pr16-instrument-metadata-silver`
 

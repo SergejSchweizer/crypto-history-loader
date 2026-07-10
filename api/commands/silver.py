@@ -13,10 +13,12 @@ from application.services.silver_service import (
     SilverBuildReport,
     build_funding_1m_feature_for_symbol,
     build_funding_observed_for_symbol,
+    build_futures_instrument_metadata_observed_for_symbol,
     build_futures_summary_1m_feature_for_symbol,
     build_futures_summary_observed_for_symbol,
     build_index_price_1m_feature_for_symbol,
     build_index_price_observed_for_symbol,
+    build_instrument_metadata_observed_for_symbol,
     build_iv_rv_1m_feature_for_symbol,
     build_open_interest_1m_feature_for_symbol,
     build_open_interest_observed_for_symbol,
@@ -37,6 +39,7 @@ from application.services.silver_service import (
     build_volatility_snapshot_observed_for_symbol,
     discover_futures_summary_symbols,
     discover_index_price_symbols,
+    discover_instrument_metadata_symbols,
     discover_iv_rv_symbols,
     discover_l2_symbols,
     discover_options_instrument_ticker_symbols,
@@ -89,6 +92,8 @@ def add_silver_build_parser(subparsers: Any) -> None:
             "perps_l2_snapshot_1m",
             "options_l2_snapshot_1m",
             "recent_trade_snapshot_1m",
+            "instrument_metadata_snapshot_daily",
+            "futures_instrument_metadata_snapshot_daily",
         ],
         default=[
             "spot_ohlcv",
@@ -479,6 +484,34 @@ def run_silver_build(args: argparse.Namespace, logger: logging.Logger) -> None:
         )
         return [_report_payload("recent_trade_snapshot_1m_observed", symbol, observed)]
 
+    def _run_instrument_metadata(symbol: str) -> list[dict[str, object]]:
+        observed = build_instrument_metadata_observed_for_symbol(
+            bronze_root=bronze_root,
+            silver_root=silver_root,
+            exchange=exchange,
+            symbol=symbol,
+        )
+        logger.info(
+            "Silver instrument_metadata_snapshot_daily report written symbol=%s observed_rows=%s",
+            symbol,
+            observed.rows_out,
+        )
+        return [_report_payload("instrument_metadata_snapshot_daily_observed", symbol, observed)]
+
+    def _run_futures_instrument_metadata(symbol: str) -> list[dict[str, object]]:
+        observed = build_futures_instrument_metadata_observed_for_symbol(
+            bronze_root=bronze_root,
+            silver_root=silver_root,
+            exchange=exchange,
+            symbol=symbol,
+        )
+        logger.info(
+            "Silver futures_instrument_metadata_snapshot_daily report written symbol=%s observed_rows=%s",
+            symbol,
+            observed.rows_out,
+        )
+        return [_report_payload("futures_instrument_metadata_snapshot_daily_observed", symbol, observed)]
+
     def _run_ohlcv(market: str, symbol: str) -> list[dict[str, object]]:
         report = build_silver_for_symbol(
             bronze_root=bronze_root,
@@ -515,6 +548,8 @@ def run_silver_build(args: argparse.Namespace, logger: logging.Logger) -> None:
         "perps_l2_snapshot_1m": _run_perps_l2,
         "options_l2_snapshot_1m": _run_options_l2,
         "recent_trade_snapshot_1m": _run_recent_trade_snapshot,
+        "instrument_metadata_snapshot_daily": _run_instrument_metadata,
+        "futures_instrument_metadata_snapshot_daily": _run_futures_instrument_metadata,
     }
 
     def _discovery_params_for_market(market: str, default_timeframe: str) -> tuple[str, str, str]:
@@ -613,6 +648,15 @@ def run_silver_build(args: argparse.Namespace, logger: logging.Logger) -> None:
             effective_symbols = discover_recent_trade_symbols(
                 bronze_root=bronze_root,
                 exchange=exchange,
+            )
+        elif market in {
+            "instrument_metadata_snapshot_daily",
+            "futures_instrument_metadata_snapshot_daily",
+        }:
+            effective_symbols = discover_instrument_metadata_symbols(
+                bronze_root=bronze_root,
+                exchange=exchange,
+                dataset_type=market,
             )
         else:
             effective_symbols = discover_symbols(

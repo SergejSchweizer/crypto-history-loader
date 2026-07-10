@@ -15,6 +15,9 @@ from application.dataset_contracts import (
 )
 from application.dataset_contracts import SILVER_INDEX_PRICE_FEATURE_COLUMNS as SILVER_INDEX_PRICE_FEATURE_COLUMNS
 from application.dataset_contracts import SILVER_INDEX_PRICE_OBSERVED_COLUMNS as SILVER_INDEX_PRICE_OBSERVED_COLUMNS
+from application.dataset_contracts import (
+    SILVER_INSTRUMENT_METADATA_OBSERVED_COLUMNS as SILVER_INSTRUMENT_METADATA_OBSERVED_COLUMNS,
+)
 from application.dataset_contracts import SILVER_IV_RV_FEATURE_COLUMNS as SILVER_IV_RV_FEATURE_COLUMNS
 from application.dataset_contracts import SILVER_L2_FEATURE_COLUMNS as SILVER_L2_FEATURE_COLUMNS
 from application.dataset_contracts import SILVER_L2_OBSERVED_COLUMNS as SILVER_L2_OBSERVED_COLUMNS
@@ -45,6 +48,7 @@ from application.services import (
     silver_funding,
     silver_futures_summary,
     silver_index_price,
+    silver_instrument_metadata,
     silver_iv_rv,
     silver_l2,
     silver_open_interest,
@@ -72,6 +76,7 @@ discover_options_instrument_ticker_symbols = silver_options_ticker.discover_opti
 discover_options_surface_symbols = silver_options_surface.discover_options_surface_symbols
 discover_l2_symbols = silver_l2.discover_l2_symbols
 discover_recent_trade_symbols = silver_recent_trades.discover_recent_trade_symbols
+discover_instrument_metadata_symbols = silver_instrument_metadata.discover_instrument_metadata_symbols
 
 
 def _funding_dependencies() -> silver_funding.FundingDependencies:
@@ -1181,4 +1186,61 @@ def build_recent_trade_snapshot_observed_for_symbol(
     )
     if not isinstance(report, SilverBuildReport):
         raise TypeError("recent-trade snapshot builder returned an unexpected report type")
+    return report
+
+
+def _instrument_metadata_dependencies() -> silver_instrument_metadata.InstrumentMetadataDependencies:
+    return silver_instrument_metadata.InstrumentMetadataDependencies(
+        require_polars=_require_polars,
+        silver_month_path=_silver_month_path,
+        iso_utc=_iso_utc,
+        report_factory=SilverBuildReport,
+    )
+
+
+def build_instrument_metadata_observed_for_symbol(
+    *,
+    bronze_root: str,
+    silver_root: str,
+    exchange: str,
+    symbol: str,
+    timeframe: str = "1d",
+) -> SilverBuildReport:
+    """Build latest-valid daily instrument metadata for one base currency."""
+
+    report = silver_instrument_metadata.build_instrument_metadata_observed_for_symbol(
+        bronze_root=bronze_root,
+        silver_root=silver_root,
+        exchange=exchange,
+        symbol=symbol,
+        timeframe=timeframe,
+        dependencies=_instrument_metadata_dependencies(),
+    )
+    if not isinstance(report, SilverBuildReport):
+        raise TypeError("instrument metadata builder returned an unexpected report type")
+    return report
+
+
+def build_futures_instrument_metadata_observed_for_symbol(
+    *,
+    bronze_root: str,
+    silver_root: str,
+    exchange: str,
+    symbol: str,
+    timeframe: str = "1d",
+) -> SilverBuildReport:
+    """Build latest-valid daily futures metadata for one base currency."""
+
+    report = silver_instrument_metadata.build_instrument_metadata_observed_for_symbol(
+        bronze_root=bronze_root,
+        silver_root=silver_root,
+        exchange=exchange,
+        symbol=symbol,
+        timeframe=timeframe,
+        bronze_dataset_type="futures_instrument_metadata_snapshot_daily",
+        output_dataset_type="futures_instrument_metadata_snapshot_daily_observed",
+        dependencies=_instrument_metadata_dependencies(),
+    )
+    if not isinstance(report, SilverBuildReport):
+        raise TypeError("futures instrument metadata builder returned an unexpected report type")
     return report
