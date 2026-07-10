@@ -16,6 +16,8 @@ from application.dataset_contracts import (
 from application.dataset_contracts import SILVER_INDEX_PRICE_FEATURE_COLUMNS as SILVER_INDEX_PRICE_FEATURE_COLUMNS
 from application.dataset_contracts import SILVER_INDEX_PRICE_OBSERVED_COLUMNS as SILVER_INDEX_PRICE_OBSERVED_COLUMNS
 from application.dataset_contracts import SILVER_IV_RV_FEATURE_COLUMNS as SILVER_IV_RV_FEATURE_COLUMNS
+from application.dataset_contracts import SILVER_L2_FEATURE_COLUMNS as SILVER_L2_FEATURE_COLUMNS
+from application.dataset_contracts import SILVER_L2_OBSERVED_COLUMNS as SILVER_L2_OBSERVED_COLUMNS
 from application.dataset_contracts import (
     SILVER_OHLCV_COLUMNS,
     SILVER_TRADES_M1_FEATURE_COLUMNS,
@@ -41,6 +43,7 @@ from application.services import (
     silver_futures_summary,
     silver_index_price,
     silver_iv_rv,
+    silver_l2,
     silver_open_interest,
     silver_options_surface,
     silver_options_ticker,
@@ -63,6 +66,7 @@ discover_futures_summary_symbols = silver_futures_summary.discover_futures_summa
 discover_options_ticker_symbols = silver_options_ticker.discover_options_ticker_symbols
 discover_options_instrument_ticker_symbols = silver_options_ticker.discover_options_ticker_symbols
 discover_options_surface_symbols = silver_options_surface.discover_options_surface_symbols
+discover_l2_symbols = silver_l2.discover_l2_symbols
 
 
 def _funding_dependencies() -> silver_funding.FundingDependencies:
@@ -1038,4 +1042,57 @@ def build_options_surface_1m_feature_for_symbol(
     )
     if not isinstance(report, SilverBuildReport):
         raise TypeError("options-surface 1m feature builder returned an unexpected report type")
+    return report
+
+
+def _l2_dependencies() -> silver_l2.L2Dependencies:
+    return silver_l2.L2Dependencies(
+        require_polars=_require_polars,
+        silver_month_path=_silver_month_path,
+        iso_utc=_iso_utc,
+        report_factory=SilverBuildReport,
+    )
+
+
+def build_perps_l2_observed_for_symbol(
+    *,
+    bronze_root: str,
+    silver_root: str,
+    exchange: str,
+    symbol: str,
+    timeframe: str = "1m",
+) -> SilverBuildReport:
+    """Build validated observed perpetual L2 snapshots for one symbol."""
+
+    report = silver_l2.build_l2_observed_for_symbol(
+        bronze_root=bronze_root,
+        silver_root=silver_root,
+        exchange=exchange,
+        symbol=symbol,
+        timeframe=timeframe,
+        dependencies=_l2_dependencies(),
+    )
+    if not isinstance(report, SilverBuildReport):
+        raise TypeError("perps-L2 observed builder returned an unexpected report type")
+    return report
+
+
+def build_perps_l2_1m_feature_for_symbol(
+    *,
+    silver_root: str,
+    exchange: str,
+    symbol: str,
+    timeframe: str = "1m",
+) -> SilverBuildReport:
+    """Build minute-level perpetual L2 liquidity features for one symbol."""
+
+    report = silver_l2.build_l2_1m_feature_for_symbol(
+        silver_root=silver_root,
+        exchange=exchange,
+        symbol=symbol,
+        timeframe=timeframe,
+        dependencies=_l2_dependencies(),
+    )
+    if not isinstance(report, SilverBuildReport):
+        raise TypeError("perps-L2 feature builder returned an unexpected report type")
     return report

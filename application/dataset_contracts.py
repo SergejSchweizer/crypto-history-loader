@@ -283,6 +283,10 @@ SILVER_L2_FEATURE_COLUMNS = [
     "top_bid_size",
     "top_ask_size",
     "top_of_book_imbalance",
+    "bid_depth_10bps",
+    "ask_depth_10bps",
+    "bid_depth_50bps",
+    "ask_depth_50bps",
     "quote_available",
     "minutes_since_l2_observation",
 ]
