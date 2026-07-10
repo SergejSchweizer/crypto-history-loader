@@ -687,7 +687,7 @@ Acceptance:
 
 ### PR-23: Options Ticker Silver Materialization
 
-Status: Planned; code exists, physical Silver is missing
+Status: In progress
 
 Branch: `codex/pr23-options-ticker-silver-materialization`
 
