@@ -608,7 +608,7 @@ uv run python main.py silver-build \
   --silver-root lake/silver \
   --exchange deribit \
   --dataset spot_ohlcv perps_ohlcv open_interest funding perps_trades options_trades \
-    options_instrument_ticker_snapshot_1m \
+    options_instrument_ticker_snapshot_1m options_surface_1m_feature \
   --timeframe 1m \
   --maxprocesses 4
 ```

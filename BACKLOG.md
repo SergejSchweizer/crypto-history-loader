@@ -357,7 +357,7 @@ Acceptance:
 
 ### PR-12: Option Surface 1m Feature
 
-Status: Planned
+Status: Done
 
 Branch: `codex/pr12-option-surface-feature`
 
