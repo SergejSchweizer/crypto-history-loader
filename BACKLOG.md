@@ -437,7 +437,7 @@ Acceptance:
 
 ### PR-15: Recent Trade Snapshot Silver
 
-Status: Planned
+Status: Done
 
 Branch: `codex/pr15-recent-trade-snapshot-silver`
 

@@ -136,6 +136,12 @@ option contract identity. `options_l2_1m_feature` remains one row per contract a
 option surfaces on `exchange`, `instrument_name`, and `timestamp_m1`. A quote is stale when its
 non-negative ingest latency exceeds 60 seconds.
 
+`recent_trade_snapshot_1m_observed` is an explicitly snapshot-derived trade view, not a complete
+historical tick source. Real source trade IDs are the primary deduplication key; missing IDs use a
+deterministic composite of exchange, instrument, event time, price, quantity, and side. Monthly
+reconciliation sidecars compare source IDs with `perps_trades_observed` and
+`options_trades_observed`, while contract metadata and snapshot lineage remain in every row.
+
 ## Runtime And Side Effects
 
 `config.yaml` is the canonical durable runtime configuration source. Runtime values should be

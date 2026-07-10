@@ -318,6 +318,40 @@ def test_run_silver_build_routes_options_l2_dataset(monkeypatch) -> None:  # typ
     assert built == [("observed", "BTC"), ("feature", "BTC")]
 
 
+def test_run_silver_build_routes_recent_trade_snapshot(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    discovered: list[tuple[str, str]] = []
+    built: list[tuple[str, str]] = []
+
+    def fake_discover_recent_trade_symbols(**kwargs: object) -> list[str]:
+        discovered.append((str(kwargs["bronze_root"]), str(kwargs["exchange"])))
+        return ["BTC"]
+
+    def fake_build_recent(**kwargs: object) -> silver_cmd.SilverBuildReport:
+        built.append((str(kwargs["symbol"]), str(kwargs["timeframe"])))
+        return _report("recent_trade_snapshot_1m_observed")
+
+    monkeypatch.setattr(silver_cmd, "discover_recent_trade_symbols", fake_discover_recent_trade_symbols)
+    monkeypatch.setattr(silver_cmd, "build_recent_trade_snapshot_observed_for_symbol", fake_build_recent)
+    monkeypatch.setattr(silver_cmd, "write_monthly_sidecars", lambda **kwargs: ([], []))
+    args = argparse.Namespace(
+        bronze_root="lake/bronze",
+        silver_root="lake/silver",
+        exchange="deribit",
+        market=["recent_trade_snapshot_1m"],
+        symbols=None,
+        timeframe="1m",
+        manifest=False,
+        plot=False,
+        maxprocesses=1,
+        no_json_output=True,
+    )
+
+    silver_cmd.run_silver_build(args=args, logger=logging.getLogger("test"))
+
+    assert discovered == [("lake/bronze", "deribit")]
+    assert built == [("BTC", "tick")]
+
+
 def test_run_silver_build_rejects_invalid_maxprocesses() -> None:
     args = argparse.Namespace(
         bronze_root="lake/bronze",
