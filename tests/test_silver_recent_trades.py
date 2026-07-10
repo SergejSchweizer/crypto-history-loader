@@ -182,3 +182,70 @@ def test_recent_trades_use_source_id_then_composite_fallback_and_reconcile(tmp_p
     assert reconciliation["fallback_key_rows"] == 1
     assert reconciliation["overlapping_trade_ids"] == 1
     assert reconciliation["field_mismatch_counts"]["price"] == 1
+
+
+def test_recent_trades_write_deterministic_trade_time_order(tmp_path: Path) -> None:
+    """Recent trade output should be sorted by exchange trade time without caller-side sorting."""
+
+    bronze = tmp_path / "bronze"
+    silver = tmp_path / "silver"
+    t0 = datetime(2026, 6, 12, 12, 0, tzinfo=UTC)
+    _write_bronze(
+        bronze,
+        instrument_type="perp",
+        rows=[
+            _trade_row(
+                instrument_type="perp",
+                instrument_name="BTC-PERPETUAL",
+                trade_id="later",
+                trade_time=t0 + timedelta(minutes=2),
+                snapshot_time=t0 + timedelta(minutes=3),
+                price=102.0,
+                amount=1.0,
+                direction="buy",
+            ),
+            _trade_row(
+                instrument_type="perp",
+                instrument_name="BTC-PERPETUAL",
+                trade_id="earlier",
+                trade_time=t0,
+                snapshot_time=t0 + timedelta(minutes=3),
+                price=100.0,
+                amount=1.0,
+                direction="hold",
+            ),
+            _trade_row(
+                instrument_type="perp",
+                instrument_name="BTC-PERPETUAL",
+                trade_id="middle",
+                trade_time=t0 + timedelta(minutes=1),
+                snapshot_time=t0 + timedelta(minutes=3),
+                price=101.0,
+                amount=1.0,
+                direction="sell",
+            ),
+        ],
+    )
+
+    report = build_recent_trade_snapshot_observed_for_symbol(
+        bronze_root=str(bronze),
+        silver_root=str(silver),
+        exchange="deribit",
+        symbol="BTC",
+    )
+
+    assert report.rows_out == 3
+    output = pl.read_parquet(
+        silver
+        / "dataset_type=recent_trade_snapshot_1m_observed"
+        / "exchange=deribit"
+        / "symbol=BTC"
+        / "timeframe=tick"
+        / "year=2026"
+        / "month=2026-06"
+        / "BTC-2026-06.parquet"
+    )
+    assert output["trade_id"].to_list() == ["earlier", "middle", "later"]
+    assert output["price"].to_list() == [100.0, 101.0, 102.0]
+    assert output["side"].to_list() == ["unknown", "sell", "buy"]
+    assert output["snapshot_timestamp"].to_list() == [t0 + timedelta(minutes=3)] * 3
