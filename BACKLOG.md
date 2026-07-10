@@ -643,7 +643,7 @@ Acceptance:
 
 ### PR-21: Realized Volatility And IV/RV Silver Materialization
 
-Status: In progress
+Status: In review - draft PR #81: https://github.com/SergejSchweizer/crypto-history-loader/pull/81
 
 Branch: `codex/pr21-rv-iv-rv-silver-materialization`
 
