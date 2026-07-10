@@ -9,6 +9,30 @@ import pytest
 from api import cli
 from api.cli import build_parser
 
+EXPECTED_MEDALLION_SILVER_DATASETS = {
+    "spot_ohlcv",
+    "perps_ohlcv",
+    "open_interest",
+    "funding",
+    "perps_trades",
+    "options_trades",
+    "volatility_index_data",
+    "volatility_index_snapshot_1m",
+    "realized_volatility",
+    "iv_rv",
+    "index_price_snapshot_1m",
+    "futures_summary_snapshot_1m",
+    "options_ticker_snapshot_1m",
+    "options_instrument_ticker_snapshot_1m",
+    "options_surface_1m_feature",
+    "perps_l2_snapshot_1m",
+    "options_l2_snapshot_1m",
+    "recent_trade_snapshot_1m",
+    "instrument_metadata_snapshot_daily",
+    "futures_instrument_metadata_snapshot_daily",
+    "historical_volatility",
+}
+
 
 @pytest.mark.parametrize(
     ("argv", "expected"),
@@ -118,6 +142,36 @@ def test_medallion_pipeline_cli_args_in_config_are_parser_compatible() -> None:
         argv = [command, *[str(token) for token in cli_args]]
         parsed = parser.parse_args(argv)
         assert parsed.command == command
+
+
+def test_medallion_pipeline_schedules_complete_silver_and_gold_runs() -> None:
+    """The cron medallion run should not silently omit supported Silver or Gold families."""
+
+    yaml = pytest.importorskip("yaml")
+    config_path = Path(__file__).resolve().parents[1] / "config.yaml"
+    config_data = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    assert isinstance(config_data, dict)
+    pipeline_cfg = config_data.get("medallion-pipeline")
+    assert isinstance(pipeline_cfg, dict)
+
+    silver_cfg = pipeline_cfg.get("silver")
+    assert isinstance(silver_cfg, dict)
+    silver_args = silver_cfg.get("cli_args")
+    assert isinstance(silver_args, list)
+    silver_dataset_index = silver_args.index("--dataset")
+    silver_datasets: set[str] = set()
+    for token in silver_args[silver_dataset_index + 1 :]:
+        token_value = str(token)
+        if token_value.startswith("--"):
+            break
+        silver_datasets.add(token_value)
+    assert silver_datasets == EXPECTED_MEDALLION_SILVER_DATASETS
+
+    gold_cfg = pipeline_cfg.get("gold")
+    assert isinstance(gold_cfg, dict)
+    gold_args = gold_cfg.get("cli_args")
+    assert isinstance(gold_args, list)
+    assert "--dataset-id" not in gold_args
 
 
 def test_apply_yaml_defaults_keeps_save_parquet_cli_only() -> None:

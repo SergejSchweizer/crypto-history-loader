@@ -208,7 +208,8 @@ Applies when adding or changing tests, fixing bugs, refactoring behavior, adding
 
 - [MUST] Run targeted tests for changed areas.
 - [MUST] For stacked PRs, run only the smallest reliable set of tests related to that PR's changed contracts and behavior.
-- [SHOULD] Run full test suite before finalization when practical.
+- [SHOULD] Run the full test suite before finalization only when the PR is the final squash-merge candidate or the change has broad cross-cutting risk.
+- [MUST] For a stack of related PRs, run only the tests needed for each intermediate PR's changed contracts and behavior.
 - [MUST] For a stack of related PRs, run the full test suite before the final squash merge into `main`, not on every intermediate stacked PR.
 - [MUST] Disclose checks that could not run and why.
 - [MUST] Add regression tests for every bug fix.
@@ -238,7 +239,7 @@ Applies when adding or changing tests, fixing bugs, refactoring behavior, adding
 - Analyze logfile output while process runs.
 - Add or refine logs only where they improve failure isolation.
 - Add or adjust tests before finalizing the fix.
-- Run the documented pre-commit command sequence before finalizing: Ruff, `interrogate`, `pydoclint`, type checks, tests, and coverage.
+- Run the documented validation scope before finalizing: targeted related tests for intermediate stacked PRs, and the full quality and coverage sequence only for the final squash-merge candidate.
 
 ## Definition of Done
 
@@ -334,8 +335,9 @@ Applies to day-to-day agent execution flow for implementation, debugging, and de
 - [MUST] Before starting a task, run `git status`, `git branch --show-current`, `git fetch origin`, `git checkout main`, and `git pull --ff-only origin main`.
 - [MUST] If the working tree is not clean before starting, stop and report changed files.
 - [MUST] Do not overwrite, delete, stash, reset, or otherwise discard user changes unless explicitly instructed.
-- [MUST] Before committing, run `ruff check .`, `pyright`, `pytest`, and `coverage run -m pytest`.
-- [MUST] If configured, also run `pre-commit run --all-files` and include repository-specific typing or import boundary checks.
+- [MUST] Before committing an intermediate stacked PR, run the smallest reliable related checks for the changed contracts and behavior.
+- [MUST] Before committing the final squash-merge candidate, run `ruff check .`, `pyright`, `pytest`, and `coverage run -m pytest`.
+- [MUST] If configured, also run `pre-commit run --all-files` for the final squash-merge candidate and include repository-specific typing or import boundary checks.
 - [MUST] If a required check fails, fix it before commit or clearly report why it is unrelated and safe to defer.
 - [MUST] Before committing, inspect `git diff` and `git status` and ensure only task-relevant changes are included.
 - [MUST] Use concise imperative commit messages.
