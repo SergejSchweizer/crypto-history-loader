@@ -31,6 +31,24 @@ def feature_source_dataset(column_name: str) -> str:
         return "perps_trades_1m_feature"
     if column_name.startswith(("volatility_index_data_", "volatility_index_")):
         return "volatility_index_data_observed"
+    if column_name in {"iv_available", "rv_available"}:
+        return "iv_rv_1m_feature"
+    if column_name in {"spot_available", "perps_available"}:
+        return "realized_volatility_1m_feature"
+    if column_name.startswith(("rv_", "parkinson_rv_", "jump_proxy")):
+        return "realized_volatility_1m_feature"
+    if column_name.startswith(("iv_", "minutes_since_iv_", "minutes_since_rv_")):
+        return "iv_rv_1m_feature"
+    if column_name.startswith("perps_l2_"):
+        return "perps_l2_1m_feature"
+    if column_name.startswith("options_l2_"):
+        return "options_l2_1m_feature"
+    if column_name.startswith("options_surface_"):
+        return "options_surface_1m_feature"
+    if column_name.startswith(("index_price", "minutes_since_index_price_")):
+        return "index_price_1m_feature"
+    if column_name.startswith("historical_volatility_"):
+        return "historical_volatility_observed"
     return "gold_merged"
 
 
