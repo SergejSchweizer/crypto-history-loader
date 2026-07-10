@@ -99,7 +99,7 @@ def build_dataset_inventory(
             )
         )
 
-    for dataset, contract in sorted(SILVER_DATASET_CONTRACTS.items()):
+    for dataset, silver_contract in sorted(SILVER_DATASET_CONTRACTS.items()):
         physical_dataset = dataset
         files = physical_silver.get(dataset, [])
         state = "materialized" if files else "not_materialized"
@@ -117,12 +117,12 @@ def build_dataset_inventory(
                 origin_repository=_origin_for_dataset(dataset),
                 physical_dataset=physical_dataset if files else None,
                 files=files,
-                timestamp_hint=contract.timestamp_column,
-                fallback_columns=contract.output_columns,
+                timestamp_hint=silver_contract.timestamp_column,
+                fallback_columns=silver_contract.output_columns,
             )
         )
 
-    for dataset, contract in sorted(GOLD_DATASET_CONTRACTS.items()):
+    for dataset, gold_contract in sorted(GOLD_DATASET_CONTRACTS.items()):
         files = physical_gold.get(dataset, [])
         rows.append(
             _inventory_row(
@@ -132,7 +132,7 @@ def build_dataset_inventory(
                 origin_repository="crypto-history-loader",
                 physical_dataset=dataset if files else None,
                 files=files,
-                timestamp_hint=contract.timestamp_column,
+                timestamp_hint=gold_contract.timestamp_column,
             )
         )
 
