@@ -43,6 +43,23 @@ commands to hide it. Each PR must include its exact status output in the handoff
 Intermediate stacked PRs run only their smallest reliable related tests. The final PR before the squash
 merge into `main` runs the complete configured quality suite and a coverage report.
 
+The cron-friendly medallion script must remain a complete layer scheduler:
+
+- Bronze step: runs every historical Bronze dataset that this repository can fetch directly.
+- Silver step: runs every Bronze-backed and live-origin Silver dataset family supported by `silver-build`.
+- Gold step: omits `--dataset-id` intentionally so `gold-build` builds every supported Gold contract.
+
+Current complete-run commands:
+
+```bash
+uv run python scripts/run_medallion_pipeline.py --config config.yaml
+uv run python main.py silver-build --dataset spot_ohlcv perps_ohlcv open_interest funding perps_trades options_trades volatility_index_data volatility_index_snapshot_1m realized_volatility iv_rv index_price_snapshot_1m futures_summary_snapshot_1m options_ticker_snapshot_1m options_instrument_ticker_snapshot_1m options_surface_1m_feature perps_l2_snapshot_1m options_l2_snapshot_1m recent_trade_snapshot_1m instrument_metadata_snapshot_daily futures_instrument_metadata_snapshot_daily historical_volatility --manifest --plot --maxprocesses 4 --no-json-output
+uv run python main.py gold-build --manifest --plot --maxprocesses 4 --no-json-output
+```
+
+PRs that add a new supported Silver or Gold dataset must update `config.yaml`, this command list, and
+the parser/config compatibility tests in the same change set.
+
 ## Current Coverage Snapshot
 
 Bronze dataset types present locally:
@@ -587,6 +604,8 @@ files, and per-series missing-day statistics.
 
 Scope:
 - Add a read-only inventory report; do not write Lake data during audit.
+- Validate that `config.yaml` schedules every `silver-build` dataset family and that the Gold medallion
+  step still builds every supported Gold dataset by omitting `--dataset-id`.
 - Report `dataset_type`, origin repository, schema columns, file count, row count, start/end, observed days,
   missing days, and contract status.
 - Fail when a Bronze dataset has neither a physical Silver output nor an explicitly documented exception.
@@ -594,6 +613,7 @@ Scope:
 
 Acceptance:
 - The report reproduces the README inventory without manual edits.
+- A config compatibility test fails if any Silver or Gold dataset is omitted from the complete medallion run.
 - `git status --short` remains clean after the audit.
 - Targeted tests cover only inventory, contract, and report formatting behavior.
 

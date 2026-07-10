@@ -61,6 +61,20 @@ medallion-pipeline:
       - perps_trades
       - options_trades
       - volatility_index_data
+      - volatility_index_snapshot_1m
+      - realized_volatility
+      - iv_rv
+      - index_price_snapshot_1m
+      - futures_summary_snapshot_1m
+      - options_ticker_snapshot_1m
+      - options_instrument_ticker_snapshot_1m
+      - options_surface_1m_feature
+      - perps_l2_snapshot_1m
+      - options_l2_snapshot_1m
+      - recent_trade_snapshot_1m
+      - instrument_metadata_snapshot_daily
+      - futures_instrument_metadata_snapshot_daily
+      - historical_volatility
       - --manifest
       - --plot
       - --maxprocesses
