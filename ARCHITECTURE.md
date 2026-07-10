@@ -111,6 +111,12 @@ added, or removed, update all of the following in the same change set:
 - this file
 - focused tests for planning, contracts, storage, Silver, Gold, and CLI parsing
 
+Instrument-level option ticker snapshots are normalized into
+`options_instrument_ticker_snapshot_1m_observed`. They use the same option-contract columns as
+currency-level ticker snapshots, retain `source_endpoint`, and write a monthly reconciliation
+sidecar against `options_ticker_snapshot_1m_observed`. Instrument-level observations take
+precedence when the same exchange, instrument, and timestamp occur in both families.
+
 ## Runtime And Side Effects
 
 `config.yaml` is the canonical durable runtime configuration source. Runtime values should be

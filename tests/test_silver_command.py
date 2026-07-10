@@ -161,6 +161,51 @@ def test_run_silver_build_uses_tick_timeframe_for_options_trades_discovery(
     assert built == ["options_trades_observed", "options_trades_1m_feature"]
 
 
+def test_run_silver_build_routes_options_instrument_ticker_dataset(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    discovered: list[tuple[str, str, str]] = []
+    built: list[tuple[str, str]] = []
+
+    def fake_discover_options_instrument_ticker_symbols(
+        *, bronze_root: str, exchange: str, dataset_type: str
+    ) -> list[str]:
+        discovered.append((bronze_root, exchange, dataset_type))
+        return ["BTC"]
+
+    def fake_build_options_instrument_ticker(**kwargs: object) -> silver_cmd.SilverBuildReport:
+        built.append((str(kwargs["symbol"]), str(kwargs["timeframe"])))
+        return _report("options_instrument_ticker_snapshot_1m_observed")
+
+    monkeypatch.setattr(
+        silver_cmd,
+        "discover_options_instrument_ticker_symbols",
+        fake_discover_options_instrument_ticker_symbols,
+    )
+    monkeypatch.setattr(
+        silver_cmd,
+        "build_options_instrument_ticker_observed_for_symbol",
+        fake_build_options_instrument_ticker,
+    )
+    monkeypatch.setattr(silver_cmd, "write_monthly_sidecars", lambda **kwargs: ([], []))
+
+    args = argparse.Namespace(
+        bronze_root="lake/bronze",
+        silver_root="lake/silver",
+        exchange="deribit",
+        market=["options_instrument_ticker_snapshot_1m"],
+        symbols=None,
+        timeframe="1m",
+        manifest=False,
+        plot=False,
+        maxprocesses=1,
+        no_json_output=True,
+    )
+
+    silver_cmd.run_silver_build(args=args, logger=logging.getLogger("test"))
+
+    assert discovered == [("lake/bronze", "deribit", "options_instrument_ticker_snapshot_1m")]
+    assert built == [("BTC", "1m")]
+
+
 def test_run_silver_build_rejects_invalid_maxprocesses() -> None:
     args = argparse.Namespace(
         bronze_root="lake/bronze",
