@@ -119,7 +119,6 @@ scripts/
 lake/
 docs/
 tests/
-agents/
 config.yaml
 pyproject.toml
 main.py
@@ -137,12 +136,11 @@ AGENTS.md
 | `lake/` | Local medallion storage roots (for example `lake/bronze`, `lake/silver`, `lake/gold`) |
 | `tests/` | Validation and regression tests |
 | `docs/` | Documentation assets (figures, tables, reference materials) |
-| `agents/` | Agent-policy source fragments and synchronization helpers |
 | `config.yaml` | Canonical runtime configuration |
 | `pyproject.toml` | Project metadata and Python tooling configuration |
 | `main.py` | Python entrypoint wrapper for CLI execution |
 | `ARCHITECTURE.md` | Durable architecture contract for package boundaries, medallion flow, side effects, and update rules |
-| `AGENTS.md` | Generated repository operating policy (do not edit directly) |
+| `AGENTS.md` | Standalone repository operating policy |
 
 Dataset metadata is centralized in `application/datasets.py`. New Bronze datasets should start with a
 `DatasetSpec` entry that defines the CLI name, storage dataset type, instrument type, symbol group,
