@@ -592,7 +592,7 @@ datasets are fetched and transformed by this repository.
 
 ### PR-19: Silver Materialization Audit And Build Manifest
 
-Status: Planned
+Status: In progress
 
 Branch: `codex/pr19-silver-materialization-audit`
 
@@ -604,6 +604,7 @@ files, and per-series missing-day statistics.
 
 Scope:
 - Add a read-only inventory report; do not write Lake data during audit.
+- Add `dataset-inventory` as the deterministic read-only CLI entrypoint for the report.
 - Validate that `config.yaml` schedules every `silver-build` dataset family and that the Gold medallion
   step still builds every supported Gold dataset by omitting `--dataset-id`.
 - Report `dataset_type`, origin repository, schema columns, file count, row count, start/end, observed days,
@@ -613,6 +614,7 @@ Scope:
 
 Acceptance:
 - The report reproduces the README inventory without manual edits.
+- `dataset-inventory` runs without writing Lake files and supports Markdown and JSON rendering.
 - A config compatibility test fails if any Silver or Gold dataset is omitted from the complete medallion run.
 - `git status --short` remains clean after the audit.
 - Targeted tests cover only inventory, contract, and report formatting behavior.

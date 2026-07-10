@@ -713,6 +713,21 @@ uv run python main.py gold-build \
 source availability, minute coverage, source time span, and freshness; missing optional features
 remain typed nulls and never change the required-source minute grid.
 
+Inventory:
+
+```bash
+uv run python main.py dataset-inventory \
+  --bronze-root lake/bronze \
+  --silver-root lake/silver \
+  --gold-root lake/gold \
+  --format markdown \
+  --output docs/dataset_inventory.md \
+  --no-json-output
+```
+
+The inventory command is read-only for Lake data. It reports physical datasets, contracted but
+unmaterialized outputs, schemas, row/file counts, per-series date spans, and missing calendar days.
+
 ## 5.3 Operational Notes
 
 Symbol-group controls for Bronze:
