@@ -709,7 +709,7 @@ Acceptance:
 
 ### PR-24: Options Surface Silver Materialization
 
-Status: In progress
+Status: In review - draft PR #85: https://github.com/SergejSchweizer/crypto-history-loader/pull/85
 
 Branch: `codex/pr24-options-surface-silver-materialization`
 
