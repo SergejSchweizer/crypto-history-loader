@@ -1096,3 +1096,52 @@ def build_perps_l2_1m_feature_for_symbol(
     if not isinstance(report, SilverBuildReport):
         raise TypeError("perps-L2 feature builder returned an unexpected report type")
     return report
+
+
+def build_options_l2_observed_for_symbol(
+    *,
+    bronze_root: str,
+    silver_root: str,
+    exchange: str,
+    symbol: str,
+    timeframe: str = "1m",
+) -> SilverBuildReport:
+    """Build validated observed options L2 snapshots for one currency."""
+
+    report = silver_l2.build_l2_observed_for_symbol(
+        bronze_root=bronze_root,
+        silver_root=silver_root,
+        exchange=exchange,
+        symbol=symbol,
+        timeframe=timeframe,
+        bronze_dataset_type="options_l2_snapshot_1m",
+        output_dataset_type="options_l2_snapshot_1m_observed",
+        instrument_type="option",
+        dependencies=_l2_dependencies(),
+    )
+    if not isinstance(report, SilverBuildReport):
+        raise TypeError("options-L2 observed builder returned an unexpected report type")
+    return report
+
+
+def build_options_l2_1m_feature_for_symbol(
+    *,
+    silver_root: str,
+    exchange: str,
+    symbol: str,
+    timeframe: str = "1m",
+) -> SilverBuildReport:
+    """Build contract-level options L2 liquidity features for one currency."""
+
+    report = silver_l2.build_l2_1m_feature_for_symbol(
+        silver_root=silver_root,
+        exchange=exchange,
+        symbol=symbol,
+        timeframe=timeframe,
+        observed_dataset_type="options_l2_snapshot_1m_observed",
+        output_dataset_type="options_l2_1m_feature",
+        dependencies=_l2_dependencies(),
+    )
+    if not isinstance(report, SilverBuildReport):
+        raise TypeError("options-L2 feature builder returned an unexpected report type")
+    return report

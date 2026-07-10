@@ -130,6 +130,12 @@ two-sided books uncrossed. Empty or one-sided books remain explicit observations
 snapshot in each closed minute feeds `perps_l2_1m_feature`, including spread, top imbalance, and
 bid/ask depth within fixed 10- and 50-bps bands around the mid price.
 
+`options_l2_snapshot_1m_observed` applies the same book invariants while retaining normalized
+option contract identity. `options_l2_1m_feature` remains one row per contract and closed minute;
+`quote_available`, `quote_age_seconds`, and `stale_quote` make liquidity filtering joinable to
+option surfaces on `exchange`, `instrument_name`, and `timestamp_m1`. A quote is stale when its
+non-negative ingest latency exceeds 60 seconds.
+
 ## Runtime And Side Effects
 
 `config.yaml` is the canonical durable runtime configuration source. Runtime values should be
