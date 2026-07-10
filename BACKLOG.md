@@ -666,7 +666,7 @@ Acceptance:
 
 ### PR-22: Index Price And Futures Summary Silver Materialization
 
-Status: Planned; code exists, physical Silver is missing
+Status: In progress
 
 Branch: `codex/pr22-index-futures-silver-materialization`
 

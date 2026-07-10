@@ -642,11 +642,13 @@ def run_silver_build(args: argparse.Namespace, logger: logging.Logger) -> None:
             effective_symbols = discover_index_price_symbols(
                 bronze_root=bronze_root,
                 exchange=exchange,
+                dataset_type="index_price_snapshot_1m",
             )
         elif market == "futures_summary_snapshot_1m":
             effective_symbols = discover_futures_summary_symbols(
                 bronze_root=bronze_root,
                 exchange=exchange,
+                dataset_type="futures_summary_snapshot_1m",
             )
         elif market == "options_ticker_snapshot_1m":
             effective_symbols = discover_options_ticker_symbols(
