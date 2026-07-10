@@ -687,7 +687,7 @@ Acceptance:
 
 ### PR-23: Options Ticker Silver Materialization
 
-Status: In progress
+Status: In review - draft PR #84: https://github.com/SergejSchweizer/crypto-history-loader/pull/84
 
 Branch: `codex/pr23-options-ticker-silver-materialization`
 
