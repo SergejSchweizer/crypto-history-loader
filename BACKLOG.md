@@ -336,7 +336,7 @@ Acceptance:
 
 ### PR-11: Options Instrument Ticker Snapshot Silver
 
-Status: Planned
+Status: Done
 
 Branch: `codex/pr11-options-instrument-ticker-silver`
 
