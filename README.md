@@ -794,6 +794,10 @@ Operational notes:
 
 - `pytest` coverage and parallel execution defaults are configured in `pyproject.toml`; xdist uses logical CPU workers capped at 4 with load-scope distribution.
 - Pre-commit enforces the same logical quality-gate path used in CI.
+- GitHub repository gates are configured through the versioned CLI script
+  `scripts/github/apply_quality_gates.sh`. The GitHub web UI is only an inspection surface; rerun
+  the script after intentional changes to required checks, merge policy, or branch protection.
+- The required GitHub status check for `main` is the workflow job named `quality`.
 
 ---
 
