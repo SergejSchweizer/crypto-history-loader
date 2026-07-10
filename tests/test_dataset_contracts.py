@@ -31,6 +31,15 @@ def test_silver_contracts_cover_service_output_columns() -> None:
         "perps_trades_1m_feature": silver_service.SILVER_TRADES_M1_FEATURE_COLUMNS,
         "options_trades_1m_feature": silver_service.SILVER_TRADES_M1_FEATURE_COLUMNS,
         "volatility_index_data_observed": silver_service.SILVER_VOLATILITY_OBSERVED_COLUMNS,
+        "volatility_index_snapshot_1m_observed": silver_service.SILVER_VOLATILITY_OBSERVED_COLUMNS,
+        "volatility_index_1m_feature": silver_service.SILVER_VOLATILITY_FEATURE_COLUMNS,
+        "realized_volatility_1m_feature": silver_service.SILVER_REALIZED_VOLATILITY_FEATURE_COLUMNS,
+        "iv_rv_1m_feature": silver_service.SILVER_IV_RV_FEATURE_COLUMNS,
+        "index_price_snapshot_1m_observed": silver_service.SILVER_INDEX_PRICE_OBSERVED_COLUMNS,
+        "index_price_1m_feature": silver_service.SILVER_INDEX_PRICE_FEATURE_COLUMNS,
+        "futures_summary_snapshot_1m_observed": silver_service.SILVER_FUTURES_SUMMARY_OBSERVED_COLUMNS,
+        "futures_summary_1m_feature": silver_service.SILVER_FUTURES_SUMMARY_FEATURE_COLUMNS,
+        "options_ticker_snapshot_1m_observed": silver_service.SILVER_OPTIONS_TICKER_OBSERVED_COLUMNS,
     }
 
     for dataset_type, columns in expected_columns.items():

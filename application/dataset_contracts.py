@@ -173,6 +173,12 @@ SILVER_VOLATILITY_FEATURE_COLUMNS = [
     "iv_close",
     "iv_range",
     "iv_return_1m",
+    "iv_change_5m",
+    "iv_change_15m",
+    "iv_change_1h",
+    "iv_zscore_1d",
+    "iv_zscore_7d",
+    "iv_percentile_30d",
     "iv_source_dataset",
     "iv_source_timestamp",
     "minutes_since_iv_observation",
@@ -210,6 +216,22 @@ SILVER_FUTURES_SUMMARY_OBSERVED_COLUMNS = [
     "funding_rate",
     "ingested_at",
     "source_endpoint",
+]
+SILVER_FUTURES_SUMMARY_FEATURE_COLUMNS = [
+    "timestamp_m1",
+    "exchange",
+    "symbol",
+    "instrument_type",
+    "mark_price",
+    "index_price",
+    "mark_index_spread",
+    "mark_index_ratio",
+    "open_interest",
+    "volume",
+    "turnover",
+    "funding_rate",
+    "summary_is_observed",
+    "minutes_since_summary_observation",
 ]
 SILVER_OPTIONS_TICKER_OBSERVED_COLUMNS = [
     "timestamp",
@@ -338,6 +360,8 @@ SILVER_IV_RV_FEATURE_COLUMNS = [
     "iv_rv_ratio_1d",
     "iv_rv_zscore_1d",
     "iv_rv_percentile_30d",
+    "minutes_since_iv_observation",
+    "minutes_since_rv_observation",
     "iv_available",
     "rv_available",
 ]
@@ -452,8 +476,8 @@ SILVER_DATASET_CONTRACTS: dict[str, SilverDatasetContract] = {
         dataset_type="volatility_index_1m_feature",
         timeframe="1m",
         timestamp_column="timestamp_m1",
-        timestamp_semantics="minute_grid",
-        missing_data_policy="forward_fill",
+        timestamp_semantics="observed_timestamp",
+        missing_data_policy="observed_only",
         output_columns=tuple(SILVER_VOLATILITY_FEATURE_COLUMNS),
     ),
     "realized_volatility_1m_feature": SilverDatasetContract(
@@ -495,6 +519,14 @@ SILVER_DATASET_CONTRACTS: dict[str, SilverDatasetContract] = {
         timestamp_semantics="observed_timestamp",
         missing_data_policy="observed_only",
         output_columns=tuple(SILVER_FUTURES_SUMMARY_OBSERVED_COLUMNS),
+    ),
+    "futures_summary_1m_feature": SilverDatasetContract(
+        dataset_type="futures_summary_1m_feature",
+        timeframe="1m",
+        timestamp_column="timestamp_m1",
+        timestamp_semantics="minute_grid",
+        missing_data_policy="forward_fill",
+        output_columns=tuple(SILVER_FUTURES_SUMMARY_FEATURE_COLUMNS),
     ),
     "options_ticker_snapshot_1m_observed": SilverDatasetContract(
         dataset_type="options_ticker_snapshot_1m_observed",
@@ -601,7 +633,7 @@ BRONZE_TO_SILVER_DATASETS: dict[str, tuple[str, ...]] = {
     "volatility_index_snapshot_1m": ("volatility_index_snapshot_1m_observed", "volatility_index_1m_feature"),
     "historical_volatility": ("historical_volatility_observed",),
     "index_price_snapshot_1m": ("index_price_snapshot_1m_observed", "index_price_1m_feature"),
-    "futures_summary_snapshot_1m": ("futures_summary_snapshot_1m_observed",),
+    "futures_summary_snapshot_1m": ("futures_summary_snapshot_1m_observed", "futures_summary_1m_feature"),
     "options_ticker_snapshot_1m": ("options_ticker_snapshot_1m_observed", "options_surface_1m_feature"),
     "options_instrument_ticker_snapshot_1m": (
         "options_instrument_ticker_snapshot_1m_observed",
@@ -648,6 +680,21 @@ GOLD_DATASET_CONTRACTS: dict[str, GoldDatasetContract] = {
             GoldSourceRequirement("perps_ohlcv", "1m"),
             GoldSourceRequirement("funding_1m_feature", "1m"),
         ),
+        include_l2=False,
+    ),
+    "gold.market.iv_rv.m1": GoldDatasetContract(
+        dataset_id="gold.market.iv_rv.m1",
+        requirements=(GoldSourceRequirement("iv_rv_1m_feature", "1m"),),
+        include_l2=False,
+    ),
+    "gold.market.index_price.m1": GoldDatasetContract(
+        dataset_id="gold.market.index_price.m1",
+        requirements=(GoldSourceRequirement("index_price_1m_feature", "1m"),),
+        include_l2=False,
+    ),
+    "gold.market.futures_summary.m1": GoldDatasetContract(
+        dataset_id="gold.market.futures_summary.m1",
+        requirements=(GoldSourceRequirement("futures_summary_1m_feature", "1m"),),
         include_l2=False,
     ),
     "gold.market.full.m1": GoldDatasetContract(
