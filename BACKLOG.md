@@ -384,7 +384,7 @@ Acceptance:
 
 ### PR-13: Perps L2 Snapshot Silver
 
-Status: Planned
+Status: Done
 
 Branch: `codex/pr13-perps-l2-silver`
 

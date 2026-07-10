@@ -124,6 +124,12 @@ long-dated contracts expire after 30 days, and skew compares the 85-95% put wing
 105-115% call wing. The builder never carries a later observation backward and reports quote
 coverage plus fresh/stale counts using a 60-second ingest-latency threshold.
 
+`perps_l2_snapshot_1m_observed` retains validated, source-shaped bid and ask levels. Prices must
+be positive and finite, sizes non-negative and finite, bids descending, asks ascending, and
+two-sided books uncrossed. Empty or one-sided books remain explicit observations. The last
+snapshot in each closed minute feeds `perps_l2_1m_feature`, including spread, top imbalance, and
+bid/ask depth within fixed 10- and 50-bps bands around the mid price.
+
 ## Runtime And Side Effects
 
 `config.yaml` is the canonical durable runtime configuration source. Runtime values should be

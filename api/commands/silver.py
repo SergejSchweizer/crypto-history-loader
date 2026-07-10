@@ -23,6 +23,8 @@ from application.services.silver_service import (
     build_options_instrument_ticker_observed_for_symbol,
     build_options_surface_1m_feature_for_symbol,
     build_options_ticker_observed_for_symbol,
+    build_perps_l2_1m_feature_for_symbol,
+    build_perps_l2_observed_for_symbol,
     build_perps_trades_1m_feature_for_symbol,
     build_perps_trades_observed_for_symbol,
     build_realized_volatility_1m_feature_for_symbol,
@@ -33,6 +35,7 @@ from application.services.silver_service import (
     discover_futures_summary_symbols,
     discover_index_price_symbols,
     discover_iv_rv_symbols,
+    discover_l2_symbols,
     discover_options_instrument_ticker_symbols,
     discover_options_surface_symbols,
     discover_options_ticker_symbols,
@@ -79,6 +82,7 @@ def add_silver_build_parser(subparsers: Any) -> None:
             "options_ticker_snapshot_1m",
             "options_instrument_ticker_snapshot_1m",
             "options_surface_1m_feature",
+            "perps_l2_snapshot_1m",
         ],
         default=[
             "spot_ohlcv",
@@ -404,6 +408,31 @@ def run_silver_build(args: argparse.Namespace, logger: logging.Logger) -> None:
         )
         return [feature_payload]
 
+    def _run_perps_l2(symbol: str) -> list[dict[str, object]]:
+        observed = build_perps_l2_observed_for_symbol(
+            bronze_root=bronze_root,
+            silver_root=silver_root,
+            exchange=exchange,
+            symbol=symbol,
+            timeframe=timeframe,
+        )
+        feature = build_perps_l2_1m_feature_for_symbol(
+            silver_root=silver_root,
+            exchange=exchange,
+            symbol=symbol,
+            timeframe=timeframe,
+        )
+        logger.info(
+            "Silver perps_l2_snapshot_1m reports written symbol=%s observed_rows=%s feature_rows=%s",
+            symbol,
+            observed.rows_out,
+            feature.rows_out,
+        )
+        return [
+            _report_payload("perps_l2_snapshot_1m_observed", symbol, observed),
+            _report_payload("perps_l2_1m_feature", symbol, feature),
+        ]
+
     def _run_ohlcv(market: str, symbol: str) -> list[dict[str, object]]:
         report = build_silver_for_symbol(
             bronze_root=bronze_root,
@@ -437,6 +466,7 @@ def run_silver_build(args: argparse.Namespace, logger: logging.Logger) -> None:
         "options_ticker_snapshot_1m": _run_options_ticker,
         "options_instrument_ticker_snapshot_1m": _run_options_instrument_ticker,
         "options_surface_1m_feature": _run_options_surface,
+        "perps_l2_snapshot_1m": _run_perps_l2,
     }
 
     def _discovery_params_for_market(market: str, default_timeframe: str) -> tuple[str, str, str]:
@@ -516,6 +546,13 @@ def run_silver_build(args: argparse.Namespace, logger: logging.Logger) -> None:
                 silver_root=silver_root,
                 exchange=exchange,
                 timeframe=timeframe,
+            )
+        elif market == "perps_l2_snapshot_1m":
+            effective_symbols = discover_l2_symbols(
+                bronze_root=bronze_root,
+                exchange=exchange,
+                dataset_type="perps_l2_snapshot_1m",
+                instrument_type="perp",
             )
         else:
             effective_symbols = discover_symbols(

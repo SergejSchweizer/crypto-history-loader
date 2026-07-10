@@ -42,6 +42,8 @@ def test_silver_contracts_cover_service_output_columns() -> None:
         "options_ticker_snapshot_1m_observed": silver_service.SILVER_OPTIONS_TICKER_OBSERVED_COLUMNS,
         "options_instrument_ticker_snapshot_1m_observed": silver_service.SILVER_OPTIONS_TICKER_OBSERVED_COLUMNS,
         "options_surface_1m_feature": silver_service.SILVER_OPTION_SURFACE_FEATURE_COLUMNS,
+        "perps_l2_snapshot_1m_observed": silver_service.SILVER_L2_OBSERVED_COLUMNS,
+        "perps_l2_1m_feature": silver_service.SILVER_L2_FEATURE_COLUMNS,
     }
 
     for dataset_type, columns in expected_columns.items():
