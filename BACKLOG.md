@@ -621,7 +621,7 @@ Acceptance:
 
 ### PR-20: Volatility Index Silver Materialization
 
-Status: Planned; code exists, physical Silver is missing
+Status: In progress
 
 Branch: `codex/pr20-volatility-silver-materialization`
 

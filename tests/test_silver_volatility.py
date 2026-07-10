@@ -233,6 +233,84 @@ def test_build_volatility_observed_for_symbol_uses_dataset_family_module(tmp_pat
     assert written["volatility_close"].to_list() == [56.0]
 
 
+def test_build_volatility_observed_for_symbol_keeps_newest_ingested_duplicate(tmp_path: Path) -> None:
+    """Historical volatility observed deduplication should be deterministic by newest ingestion."""
+
+    bronze = tmp_path / "bronze"
+    silver = tmp_path / "silver"
+    rows = []
+    for run_id, ingested_at, close in (
+        ("new", datetime(2026, 5, 1, 0, 0, 40, tzinfo=UTC), 57.0),
+        ("old", datetime(2026, 5, 1, 0, 0, 30, tzinfo=UTC), 55.0),
+    ):
+        rows.append(
+            {
+                "schema_version": "v1",
+                "dataset_type": "volatility_index_data",
+                "exchange": "Deribit",
+                "symbol": "btc",
+                "instrument_type": "perp",
+                "event_time": datetime(2026, 5, 1, 0, 0, tzinfo=UTC),
+                "ingested_at": ingested_at,
+                "run_id": run_id,
+                "source_endpoint": "public_get_volatility_index_data",
+                "open_time": datetime(2026, 5, 1, 0, 0, tzinfo=UTC),
+                "close_time": datetime(2026, 5, 1, 0, 0, tzinfo=UTC),
+                "timeframe": "1m",
+                "value": close,
+                "open": close - 1.0,
+                "high": close + 1.0,
+                "low": close - 2.0,
+                "close": close,
+                "origin_payload": "{}",
+            }
+        )
+    _write_bronze_day_file(
+        bronze,
+        market="volatility_index_data",
+        exchange="deribit",
+        symbol="BTC",
+        timeframe="1m",
+        month="2026-05",
+        day="2026-05-01",
+        rows=rows,
+        instrument_type="perp",
+    )
+
+    report = silver_volatility.build_volatility_observed_for_symbol(
+        bronze_root=str(bronze),
+        silver_root=str(silver),
+        exchange="deribit",
+        symbol="BTC",
+        timeframe="1m",
+        bronze_dataset_type="volatility_index_data",
+        output_dataset_type="volatility_index_data_observed",
+        dependencies=silver_volatility.VolatilityObservedDependencies(
+            require_polars=_require_polars,
+            discover_months=discover_months,
+            bronze_month_files=_bronze_month_files,
+            silver_month_path=_silver_month_path,
+            normalize_symbol_expr=_normalize_symbol_expr,
+            iso_utc=_iso_utc,
+            report_factory=SilverBuildReport,
+        ),
+    )
+
+    assert report.duplicates_removed == 1
+    output_path = (
+        silver
+        / "dataset_type=volatility_index_data_observed"
+        / "exchange=deribit"
+        / "symbol=BTC"
+        / "timeframe=1m"
+        / "year=2026"
+        / "month=2026-05"
+        / "BTC-2026-05.parquet"
+    )
+    written = pl.read_parquet(output_path)
+    assert written["volatility_close"].to_list() == [57.0]
+
+
 def test_build_volatility_observed_for_symbol_reads_legacy_value_only_bronze(tmp_path: Path) -> None:
     """Legacy Bronze volatility files without OHLC columns should remain readable."""
 

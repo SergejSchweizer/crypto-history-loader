@@ -269,12 +269,20 @@ def run_silver_build(args: argparse.Namespace, logger: logging.Logger) -> None:
             output_dataset_type="volatility_index_data_observed",
         )
         observed_payload = _report_payload("volatility_index_data_observed", symbol, observed)
+        feature = build_volatility_index_1m_feature_for_symbol(
+            silver_root=silver_root,
+            exchange=exchange,
+            symbol=symbol,
+            timeframe=timeframe,
+        )
+        feature_payload = _report_payload("volatility_index_1m_feature", symbol, feature)
         logger.info(
-            "Silver volatility_index_data report written symbol=%s observed_rows=%s",
+            "Silver volatility_index_data reports written symbol=%s observed_rows=%s feature_rows=%s",
             symbol,
             observed.rows_out,
+            feature.rows_out,
         )
-        return [observed_payload]
+        return [observed_payload, feature_payload]
 
     def _run_volatility_index_snapshot(symbol: str) -> list[dict[str, object]]:
         observed = build_volatility_snapshot_observed_for_symbol(
