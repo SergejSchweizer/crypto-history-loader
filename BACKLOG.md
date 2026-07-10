@@ -730,7 +730,7 @@ Acceptance:
 
 ### PR-25: Perpetual L2 Silver Materialization
 
-Status: Planned; code exists, physical Silver is missing
+Status: In progress
 
 Branch: `codex/pr25-perps-l2-silver-materialization`
 
