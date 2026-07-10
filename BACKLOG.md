@@ -771,7 +771,7 @@ Acceptance:
 
 ### PR-27: Recent Trade Snapshot Silver Materialization
 
-Status: In progress
+Status: In review - draft PR #88: https://github.com/SergejSchweizer/crypto-history-loader/pull/88
 
 Branch: `codex/pr27-recent-trades-silver-materialization`
 
