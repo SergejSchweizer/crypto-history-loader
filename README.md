@@ -23,6 +23,7 @@ Author: Sergej Schweizer
   - [4.4 Funding (`dataset_type=funding`)](#44-funding-dataset_typefunding)
   - [4.5 `perps_trades` (`dataset_type=perps_trades`)](#45-perps_trades-dataset_typeperps_trades)
   - [4.6 `options_trades` (`dataset_type=options_trades`)](#46-options_trades-dataset_typeoptions_trades)
+  - [4.7 Layer Inventory Snapshot](#47-layer-inventory-snapshot)
 - [5. Example Commands](#5-example-commands)
   - [5.1 End-to-End Pipeline](#51-end-to-end-pipeline)
   - [5.2 Layer Commands](#52-layer-commands)
@@ -119,7 +120,6 @@ scripts/
 lake/
 docs/
 tests/
-agents/
 config.yaml
 pyproject.toml
 main.py
@@ -137,12 +137,11 @@ AGENTS.md
 | `lake/` | Local medallion storage roots (for example `lake/bronze`, `lake/silver`, `lake/gold`) |
 | `tests/` | Validation and regression tests |
 | `docs/` | Documentation assets (figures, tables, reference materials) |
-| `agents/` | Agent-policy source fragments and synchronization helpers |
 | `config.yaml` | Canonical runtime configuration |
 | `pyproject.toml` | Project metadata and Python tooling configuration |
 | `main.py` | Python entrypoint wrapper for CLI execution |
 | `ARCHITECTURE.md` | Durable architecture contract for package boundaries, medallion flow, side effects, and update rules |
-| `AGENTS.md` | Generated repository operating policy (do not edit directly) |
+| `AGENTS.md` | Standalone repository operating policy |
 
 Dataset metadata is centralized in `application/datasets.py`. New Bronze datasets should start with a
 `DatasetSpec` entry that defines the CLI name, storage dataset type, instrument type, symbol group,
@@ -212,8 +211,10 @@ Trade symbol inheritance:
 # 4. Raw Datasets
 
 Raw ingests are defined by `application/datasets.py` and persisted by Bronze writers in
-`ingestion/lake.py`. The repository currently defines seven registry-backed raw dataset types:
-`spot_ohlcv`, `perps_ohlcv`, `open_interest`, `funding`, `perps_trades`, `options_trades`, and `volatility_index_data`.
+`ingestion/lake.py`. The historical CLI registry defines seven raw dataset types:
+`spot_ohlcv`, `perps_ohlcv`, `open_interest`, `funding`, `perps_trades`, `options_trades`, and
+`volatility_index_data`. The physical Bronze inventory also contains eleven live-origin snapshot
+datasets, all listed in section 4.7.1.
 
 All datasets share structural metadata columns:
 `schema_version`, `dataset_type`, `exchange`, `symbol`, `instrument_type`, `event_time`,
@@ -225,45 +226,9 @@ Coverage reference for missing statistics in this section:
 - Missing %: missing calendar days / expected calendar days
 - Missing Days: count of missing calendar days in the [Start Date, End Date] span
 
-Current Bronze missing-day snapshot generated from `lake/bronze` on 2026-07-09 15:55 CEST:
-
-| Dataset Type | Series | Start Date | End Date | Expected Days | Observed Days | Missing Days | Missing % |
-|---|---:|---|---|---:|---:|---:|---:|
-| `funding` | 3 | 2019-04-30 | 2026-07-04 | 6,818 | 6,818 | 0 | 0.00% |
-| `historical_volatility` | 3 | 2026-05-08 | 2026-05-24 | 51 | 51 | 0 | 0.00% |
-| `open_interest` | 3 | 2018-08-15 | 2026-07-04 | 7,122 | 7,122 | 0 | 0.00% |
-| `options_trades` | 3 | 2018-08-14 | 2026-07-05 | 5,788 | 5,788 | 0 | 0.00% |
-| `perps_ohlcv` | 3 | 2018-08-14 | 2026-07-05 | 7,083 | 7,083 | 0 | 0.00% |
-| `perps_trades` | 3 | 2018-08-14 | 2026-06-11 | 5,739 | 4,038 | 1,701 | 29.64% |
-| `spot_ohlcv` | 3 | 2023-04-24 | 2026-07-05 | 3,198 | 3,198 | 0 | 0.00% |
-| `volatility_index_data` | 3 | 2022-11-07 | 2026-05-25 | 83 | 83 | 0 | 0.00% |
-
-| Dataset Type | Exchange | Instrument | Symbol | Timeframe | Start Date | End Date | Expected Days | Observed Days | Missing Days | Missing % |
-|---|---|---|---|---|---|---|---:|---:|---:|---:|
-| `funding` | deribit | perp | `BTC-PERPETUAL` | 8h | 2019-04-30 | 2026-07-04 | 2,623 | 2,623 | 0 | 0.00% |
-| `funding` | deribit | perp | `ETH-PERPETUAL` | 8h | 2019-04-30 | 2026-07-04 | 2,623 | 2,623 | 0 | 0.00% |
-| `funding` | deribit | perp | `SOL-PERPETUAL` | 8h | 2022-03-16 | 2026-07-04 | 1,572 | 1,572 | 0 | 0.00% |
-| `historical_volatility` | deribit | perp | `BTC` | 1m | 2026-05-08 | 2026-05-24 | 17 | 17 | 0 | 0.00% |
-| `historical_volatility` | deribit | perp | `ETH` | 1m | 2026-05-08 | 2026-05-24 | 17 | 17 | 0 | 0.00% |
-| `historical_volatility` | deribit | perp | `SOL` | 1m | 2026-05-08 | 2026-05-24 | 17 | 17 | 0 | 0.00% |
-| `open_interest` | deribit | perp | `BTC-PERPETUAL` | 1m | 2018-08-15 | 2026-07-04 | 2,881 | 2,881 | 0 | 0.00% |
-| `open_interest` | deribit | perp | `ETH-PERPETUAL` | 1m | 2019-03-15 | 2026-07-04 | 2,669 | 2,669 | 0 | 0.00% |
-| `open_interest` | deribit | perp | `SOL-PERPETUAL` | 1m | 2022-03-16 | 2026-07-04 | 1,572 | 1,572 | 0 | 0.00% |
-| `options_trades` | deribit | option | `BTC` | tick | 2018-08-14 | 2026-07-05 | 2,883 | 2,883 | 0 | 0.00% |
-| `options_trades` | deribit | option | `ETH` | tick | 2019-03-21 | 2026-07-05 | 2,664 | 2,664 | 0 | 0.00% |
-| `options_trades` | deribit | option | `SOL` | tick | 2022-05-04 | 2022-12-30 | 241 | 241 | 0 | 0.00% |
-| `perps_ohlcv` | deribit | perp | `BTC-PERPETUAL` | 1m | 2018-08-14 | 2026-07-05 | 2,883 | 2,883 | 0 | 0.00% |
-| `perps_ohlcv` | deribit | perp | `ETH-PERPETUAL` | 1m | 2019-03-14 | 2026-07-05 | 2,671 | 2,671 | 0 | 0.00% |
-| `perps_ohlcv` | deribit | perp | `SOL-PERPETUAL` | 1m | 2022-04-29 | 2026-07-05 | 1,529 | 1,529 | 0 | 0.00% |
-| `perps_trades` | deribit | perp | `BTC-PERPETUAL` | tick | 2018-08-14 | 2026-06-11 | 2,859 | 2,136 | 723 | 25.29% |
-| `perps_trades` | deribit | perp | `ETH-PERPETUAL` | tick | 2019-03-14 | 2026-05-29 | 2,634 | 1,656 | 978 | 37.13% |
-| `perps_trades` | deribit | perp | `SOL-PERPETUAL` | tick | 2022-04-29 | 2022-12-30 | 246 | 246 | 0 | 0.00% |
-| `spot_ohlcv` | deribit | spot_ohlcv | `BTC_USDC` | 1m | 2023-04-24 | 2026-07-05 | 1,169 | 1,169 | 0 | 0.00% |
-| `spot_ohlcv` | deribit | spot_ohlcv | `ETH_USDC` | 1m | 2023-04-24 | 2026-07-05 | 1,169 | 1,169 | 0 | 0.00% |
-| `spot_ohlcv` | deribit | spot_ohlcv | `SOL_USDC` | 1m | 2024-02-27 | 2026-07-05 | 860 | 860 | 0 | 0.00% |
-| `volatility_index_data` | deribit | perp | `BTC` | 1m | 2026-04-24 | 2026-05-25 | 32 | 32 | 0 | 0.00% |
-| `volatility_index_data` | deribit | perp | `ETH` | 1m | 2026-04-24 | 2026-05-25 | 32 | 32 | 0 | 0.00% |
-| `volatility_index_data` | deribit | perp | `SOL` | 1m | 2022-11-07 | 2022-11-25 | 19 | 19 | 0 | 0.00% |
+The complete Bronze missing-day snapshot generated from `lake/bronze` on 2026-07-10 CEST is in
+[the authoritative layer inventory](#47-layer-inventory-snapshot). It reports dates and missing days
+per primary series, which avoids treating BTC, ETH, and SOL series with different lifetimes as one series.
 
 ## 4.1 Spot (`dataset_type=spot_ohlcv`)
 
@@ -574,6 +539,111 @@ Coverage:
 
 ---
 
+## 4.7 Layer Inventory Snapshot
+
+This is the authoritative local-data snapshot as of 2026-07-10 CEST. Dates are derived from the
+partitioned Parquet files. Missing days are counted per primary series between that series' first and
+last observed day; different series with different lifetimes are not treated as one continuous series.
+The tables describe physical files, not only contracts declared in code.
+
+### 4.7.1 Bronze: all physical datasets
+
+Historical datasets are produced by this repository. Snapshot datasets are produced by the live-loader
+origin and copied or mounted into the shared lake. The variable lists below are the observed Parquet
+schemas, including lineage and payload fields.
+
+| Dataset type | Series | Period | Missing days | Physical variables |
+|---|---|---|---|---|
+| `funding` | BTC/ETH/SOL perpetuals | BTC/ETH 2019-04-30..2026-07-09; SOL 2022-03-16..2026-07-09 | 0 per series | `schema_version`, `dataset_type`, `exchange`, `symbol`, `instrument_type`, `event_time`, `ingested_at`, `run_id`, `source_endpoint`, `open_time`, `close_time`, `timeframe`, `funding_rate`, `index_price`, `mark_price` |
+| `perps_ohlcv` | BTC/ETH/SOL perpetuals | BTC 2018-08-14..2026-07-10; ETH 2019-03-14..2026-07-10; SOL 2022-04-29..2026-07-10 | 0 per series | `schema_version`, `dataset_type`, `exchange`, `symbol`, `instrument_type`, `event_time`, `ingested_at`, `run_id`, `source_endpoint`, `open_time`, `close_time`, `timeframe`, `open_price`, `high_price`, `low_price`, `close_price`, `volume`, `quote_volume`, `trade_count`, `origin_payload` |
+| `open_interest` | BTC/ETH/SOL perpetuals | BTC 2018-08-15..2026-07-09; ETH 2019-03-15..2026-07-09; SOL 2022-03-16..2026-07-09 | 0 per series | `schema_version`, `dataset_type`, `exchange`, `symbol`, `instrument_type`, `event_time`, `ingested_at`, `run_id`, `source_endpoint`, `open_time`, `close_time`, `timeframe`, `open_interest`, `open_interest_value` |
+| `perps_trades` | BTC/ETH/SOL perpetuals | BTC 2018-08-14..2026-06-11; ETH 2019-03-14..2026-05-29; SOL 2022-04-29..2022-12-30 | BTC 608; ETH 857; SOL 0 | `schema_version`, `dataset_type`, `exchange`, `symbol`, `instrument_type`, `event_time`, `ingested_at`, `run_id`, `source_endpoint`, `open_time`, `close_time`, `timeframe`, `trade_id`, `price`, `quantity`, `side`, `is_maker` |
+| `options_trades` | BTC/ETH/SOL options | BTC 2018-08-14..2026-07-10; ETH 2019-03-21..2026-07-10; SOL 2022-05-04..2022-12-30 | 0 per series | `schema_version`, `dataset_type`, `exchange`, `symbol`, `instrument_type`, `event_time`, `ingested_at`, `run_id`, `source_endpoint`, `open_time`, `close_time`, `timeframe`, `trade_id`, `price`, `quantity`, `side`, `is_maker`, `instrument_name`, `expiry`, `strike`, `option_type` |
+| `volatility_index_data` | BTC/ETH/SOL index series | BTC/ETH 2026-04-24..2026-05-25; SOL 2022-11-07..2022-11-25 | 0 per series; 1,245 only in the combined cross-series envelope | `schema_version`, `dataset_type`, `exchange`, `symbol`, `instrument_type`, `event_time`, `ingested_at`, `run_id`, `source_endpoint`, `open_time`, `close_time`, `timeframe`, `value` |
+| `historical_volatility` | BTC/ETH/SOL | 2026-05-08..2026-05-24 | 0 per series | `schema_version`, `dataset_type`, `exchange`, `symbol`, `instrument_type`, `event_time`, `ingested_at`, `run_id`, `source_endpoint`, `open_time`, `close_time`, `timeframe`, `value` |
+| `volatility_index_snapshot_1m` | BTC/ETH live snapshots | 2026-06-12..2026-07-10 | 0 per series; SOL not present | `schema_version`, `dataset_type`, `exchange`, `source`, `currency`, `source_currency`, `timestamp`, `open`, `high`, `low`, `close`, `resolution`, `snapshot_time`, `ingested_at`, `run_id`, `raw_payload_hash` |
+| `index_price_snapshot_1m` | `btc_usd`, `eth_usd`, `sol_usdc` | 2026-05-24..2026-07-10 | 0 per series | `schema_version`, `dataset_type`, `exchange`, `source`, `index_name`, `snapshot_time`, `event_time`, `price`, `ingested_at`, `run_id`, `raw_payload_hash` |
+| `futures_summary_snapshot_1m` | BTC/ETH/SOL currency groups | 2026-06-12..2026-07-10 | 0 per series | `schema_version`, `dataset_type`, `exchange`, `source`, `currency`, `requested_currency`, `source_currency`, `instrument_name`, `instrument_type`, `snapshot_time`, `exchange_creation_time`, `ingested_at`, `run_id`, `bid_price`, `ask_price`, `mid_price`, `mark_price`, `last`, `open_interest`, `volume`, `volume_usd`, `high`, `low`, `price_change`, `underlying_price`, `estimated_delivery_price`, `interest_rate`, `raw_payload_hash` |
+| `options_ticker_snapshot_1m` | BTC/ETH/SOL currency groups | 2026-05-24..2026-07-10 | 0 per series | `exchange`, `dataset_type`, `source`, `currency`, `requested_currency`, `source_currency`, `instrument_name`, `base_currency`, `quote_currency`, `instrument_type`, `snapshot_time`, `exchange_creation_time`, `ingested_at`, `run_id`, `bid_price`, `ask_price`, `mid_price`, `mark_price`, `mark_iv`, `underlying_price`, `underlying_index`, `interest_rate`, `open_interest`, `volume`, `volume_usd`, `high`, `low`, `last`, `price_change`, `raw_payload_hash`, `schema_version` |
+| `options_instrument_ticker_snapshot_1m` | BTC/ETH/SOL currency groups | 2026-06-12..2026-07-10 | 0 per series | `exchange`, `dataset_type`, `source`, `currency`, `instrument_name`, `instrument_type`, `snapshot_time`, `exchange_creation_time`, `exchange_timestamp`, `ingested_at`, `run_id`, `state`, `bid_price`, `ask_price`, `best_bid_price`, `best_ask_price`, `best_bid_amount`, `best_ask_amount`, `bid_iv`, `ask_iv`, `mark_iv`, `mark_price`, `last_price`, `underlying_price`, `underlying_index`, `index_price`, `interest_rate`, `open_interest`, `volume`, `volume_usd`, `high`, `low`, `price_change`, `delta`, `gamma`, `theta`, `vega`, `rho`, `raw_payload_hash`, `schema_version` |
+| `perps_l2_snapshot_1m` | BTC/ETH/SOL perpetuals | 2026-05-05..2026-07-10 | 0 per series | `schema_version`, `dataset_type`, `exchange`, `symbol`, `instrument_type`, `event_time`, `ingested_at`, `run_id`, `source`, `depth`, `fetch_duration_s`, `bids`, `asks`, `mark_price`, `index_price`, `open_interest`, `funding_8h`, `current_funding` |
+| `options_l2_snapshot_1m` | BTC/ETH/SOL options | 2026-07-03..2026-07-10 | 0 per series | `schema_version`, `dataset_type`, `exchange`, `symbol`, `instrument_type`, `event_time`, `ingested_at`, `run_id`, `source`, `depth`, `fetch_duration_s`, `bids`, `asks`, `currency`, `instrument_name`, `snapshot_time`, `exchange_timestamp`, `state`, `bid_levels`, `ask_levels`, `best_bid_price`, `best_ask_price`, `best_bid_amount`, `best_ask_amount`, `mark_price`, `index_price`, `underlying_price`, `underlying_index`, `interest_rate`, `bid_iv`, `ask_iv`, `mark_iv`, `open_interest`, `last_price`, `settlement_price`, `min_price`, `max_price`, `volume`, `volume_usd`, `high`, `low`, `price_change`, `delta`, `gamma`, `theta`, `vega`, `rho`, `raw_payload_hash` |
+| `recent_trade_snapshot_1m` | BTC/ETH/SOL currency groups | 2026-06-12..2026-07-10 | 0 per series | `schema_version`, `dataset_type`, `exchange`, `source`, `requested_currency`, `source_currency`, `currency`, `instrument_name`, `instrument_type`, `kind`, `trade_id`, `trade_sequence`, `exchange_timestamp`, `snapshot_time`, `ingested_at`, `run_id`, `price`, `amount`, `direction`, `tick_direction`, `mark_price`, `index_price`, `iv`, `liquidation`, `block_trade_id`, `signed_amount`, `notional`, `raw_payload_hash` |
+| `instrument_metadata_snapshot_daily` | aggregate | 2026-05-25..2026-07-10 | 0 | `schema_version`, `dataset_type`, `exchange`, `source`, `snapshot_date`, `ingested_at`, `run_id`, `instrument_name`, `kind`, `base_currency`, `quote_currency`, `counter_currency`, `settlement_currency`, `instrument_type`, `tick_size`, `contract_size`, `min_trade_amount`, `is_active`, `creation_timestamp`, `expiration_timestamp`, `option_type`, `strike`, `raw_payload_hash` |
+| `futures_instrument_metadata_snapshot_daily` | aggregate | 2026-06-13..2026-07-10 | 0 | `schema_version`, `dataset_type`, `exchange`, `source`, `snapshot_date`, `ingested_at`, `run_id`, `instrument_name`, `kind`, `base_currency`, `quote_currency`, `counter_currency`, `settlement_currency`, `instrument_type`, `settlement_period`, `price_index`, `state`, `tick_size`, `contract_size`, `min_trade_amount`, `is_active`, `creation_timestamp`, `expiration_timestamp`, `option_type`, `strike`, `raw_payload_hash` |
+
+### 4.7.2 Silver: physical status and exact contract variables
+
+The following ten Silver datasets are physically present. The remaining contracted Silver outputs are
+listed as missing and must be materialized by the backlog stack. Exact contract definitions are also
+maintained in [`application/dataset_contracts.py`](application/dataset_contracts.py).
+
+| Silver dataset | Physical period / missing days | Contract variables |
+|---|---|---|
+| `spot_ohlcv` | BTC/ETH 2023-04-24..2026-06-25, SOL 2024-02-27..2026-06-25; 0 per series | `schema_version`, `dataset_type`, `exchange`, `symbol`, `instrument_type`, `event_time`, `ingested_at`, `run_id`, `source_endpoint`, `open_time`, `close_time`, `timeframe`, `open_price`, `high_price`, `low_price`, `close_price`, `volume`, `quote_volume`, `trade_count`, `origin_payload` |
+| `perp` (legacy `perps_ohlcv`) | BTC 2018-08-14..2026-06-25, ETH 2019-03-14..2026-06-25, SOL 2022-04-29..2026-06-25; 0 | Same OHLCV variables as `spot_ohlcv` |
+| `funding_observed` | BTC/ETH 2019-04-30..2026-06-24, SOL 2022-03-16..2026-06-24; 0 | `funding_time`, `exchange`, `symbol`, `base_asset`, `instrument_type`, `funding_rate`, `funding_interval_hours`, `ingested_at_min`, `ingested_at_max`, `source_row_count`, `silver_built_at`, `data_quality_status` |
+| `funding_1m_feature` | BTC/ETH 2019-04-01..2026-06-24, SOL 2022-03-01..2026-06-24; 0 | `timestamp`, `exchange`, `symbol`, `funding_rate_last_known`, `funding_observed_at`, `minutes_since_funding`, `is_funding_observation_minute`, `funding_data_available` |
+| `open_interest_observed` | BTC 2018-08-15..2026-06-24, ETH 2019-03-15..2026-06-24, SOL 2022-03-16..2026-06-24; 0 | `timestamp`, `exchange`, `symbol`, `open_interest`, `open_interest_source_timestamp`, `ingested_at`, `source_endpoint` |
+| `open_interest_1m_feature` | BTC 2018-08-01..2026-06-24, ETH 2019-03-01..2026-06-24, SOL 2022-03-01..2026-06-24; 0 | `timestamp_m1`, `exchange`, `symbol`, `open_interest`, `open_interest_is_observed`, `open_interest_is_ffill`, `minutes_since_open_interest_observation`, `open_interest_observation_lag_sec`, `open_interest_source_timestamp` |
+| `perps_trades_observed` | BTC 2018-08-14..2026-06-11: 1,717 missing; ETH 2019-03-14..2026-05-29: 1,939 missing; SOL 0 | `trade_time`, `exchange`, `symbol`, `instrument_type`, `trade_id`, `price`, `quantity`, `side` |
+| `perps_trades_1m_feature` | Same source spans; BTC 1,717 missing, ETH 1,939 missing, SOL 0 | `timestamp_m1`, `exchange`, `symbol`, `instrument_type`, `open_price`, `high_price`, `low_price`, `close_price`, `volume`, `quote_volume`, `trade_count`, `buy_volume`, `sell_volume`, `buy_trade_count`, `sell_trade_count`, `buy_volume_share` |
+| `options_trades_observed` | BTC 2018-08-14..2026-06-25, ETH 2019-03-21..2026-06-11: 184 missing, SOL 2022-05-04..2022-12-30; 0/184/0 | Same observed trade variables as `perps_trades_observed` |
+| `options_trades_1m_feature` | Same source spans; BTC 0, ETH 184, SOL 0 | Same 1m trade-feature variables as `perps_trades_1m_feature` |
+
+Missing contracted Silver datasets: `volatility_index_data_observed`,
+`volatility_index_1m_observed`, `volatility_index_snapshot_1m_observed`, `volatility_index_1m_feature`,
+`realized_volatility_1m_feature`, `iv_rv_1m_feature`, `index_price_snapshot_1m_observed`,
+`index_price_1m_feature`, `futures_summary_snapshot_1m_observed`, `futures_summary_1m_feature`,
+`options_ticker_snapshot_1m_observed`, `options_instrument_ticker_snapshot_1m_observed`,
+`options_surface_1m_feature`, `perps_l2_snapshot_1m_observed`, `perps_l2_1m_feature`,
+`options_l2_snapshot_1m_observed`, `options_l2_1m_feature`, `recent_trade_snapshot_1m_observed`,
+`instrument_metadata_snapshot_daily_observed`, `futures_instrument_metadata_snapshot_daily_observed`, and
+`historical_volatility_observed`. Their exact variables are the corresponding contract `output_columns`.
+They currently have no physical Silver period and therefore no observed/missing-day count.
+
+Exact variables for the missing Silver contracts:
+
+| Dataset | Variables |
+|---|---|
+| `volatility_index_data_observed`, `volatility_index_1m_observed`, `volatility_index_snapshot_1m_observed` | `timestamp`, `exchange`, `symbol`, `instrument_type`, `dataset_type`, `volatility_value`, `volatility_open`, `volatility_high`, `volatility_low`, `volatility_close`, `volatility_source_timestamp`, `ingested_at`, `source_endpoint` |
+| `volatility_index_1m_feature` | `timestamp_m1`, `exchange`, `symbol`, `iv_open`, `iv_high`, `iv_low`, `iv_close`, `iv_range`, `iv_return_1m`, `iv_change_5m`, `iv_change_15m`, `iv_change_1h`, `iv_zscore_1d`, `iv_zscore_7d`, `iv_percentile_30d`, `iv_source_dataset`, `iv_source_timestamp`, `minutes_since_iv_observation`, `iv_data_available` |
+| `realized_volatility_1m_feature` | `timestamp_m1`, `exchange`, `symbol`, `rv_5m`, `rv_15m`, `rv_1h`, `rv_4h`, `rv_1d`, `parkinson_rv_1h`, `jump_proxy`, `spot_available`, `perps_available` |
+| `iv_rv_1m_feature` | `timestamp_m1`, `exchange`, `symbol`, `iv_minus_rv_1h`, `iv_minus_rv_1d`, `iv_rv_ratio_1h`, `iv_rv_ratio_1d`, `iv_rv_zscore_1d`, `iv_rv_percentile_30d`, `minutes_since_iv_observation`, `minutes_since_rv_observation`, `iv_available`, `rv_available` |
+| `index_price_snapshot_1m_observed` | `timestamp`, `exchange`, `symbol`, `index_name`, `index_price`, `index_price_source_timestamp`, `ingested_at`, `source_endpoint` |
+| `index_price_1m_feature` | `timestamp_m1`, `exchange`, `symbol`, `index_price`, `index_price_is_observed`, `index_price_source_timestamp`, `minutes_since_index_price_observation` |
+| `futures_summary_snapshot_1m_observed` | `timestamp`, `exchange`, `symbol`, `instrument_type`, `mark_price`, `index_price`, `open_interest`, `volume`, `turnover`, `funding_rate`, `ingested_at`, `source_endpoint` |
+| `futures_summary_1m_feature` | `timestamp_m1`, `exchange`, `symbol`, `instrument_type`, `mark_price`, `index_price`, `mark_index_spread`, `mark_index_ratio`, `open_interest`, `volume`, `turnover`, `funding_rate`, `summary_is_observed`, `minutes_since_summary_observation` |
+| `options_ticker_snapshot_1m_observed`, `options_instrument_ticker_snapshot_1m_observed` | `timestamp`, `exchange`, `symbol`, `instrument_name`, `underlying`, `expiry`, `strike`, `underlying_price`, `index_price`, `option_type`, `mark_price`, `bid_price`, `ask_price`, `implied_volatility`, `delta`, `gamma`, `vega`, `theta`, `open_interest`, `volume`, `ingested_at`, `source_endpoint` |
+| `options_surface_1m_feature` | `timestamp_m1`, `exchange`, `symbol`, `atm_iv`, `short_dated_iv`, `skew`, `term_structure`, `put_call_iv_spread`, `contract_count`, `fresh_quote_count`, `stale_quote_count`, `max_quote_age_seconds`, `quote_coverage_ratio` |
+| `perps_l2_snapshot_1m_observed`, `options_l2_snapshot_1m_observed` | `timestamp`, `exchange`, `symbol`, `instrument_type`, `instrument_name`, `underlying`, `expiry`, `strike`, `option_type`, `best_bid_price`, `best_bid_size`, `best_ask_price`, `best_ask_size`, `bids`, `asks`, `ingested_at`, `source_endpoint` |
+| `perps_l2_1m_feature`, `options_l2_1m_feature` | `timestamp_m1`, `exchange`, `symbol`, `instrument_type`, `instrument_name`, `underlying`, `expiry`, `strike`, `option_type`, `best_bid_price`, `best_ask_price`, `mid_price`, `spread`, `top_bid_size`, `top_ask_size`, `top_of_book_imbalance`, `bid_depth_10bps`, `ask_depth_10bps`, `bid_depth_50bps`, `ask_depth_50bps`, `quote_available`, `quote_age_seconds`, `stale_quote`, `minutes_since_l2_observation` |
+| `recent_trade_snapshot_1m_observed` | `trade_time`, `exchange`, `symbol`, `instrument_type`, `instrument_name`, `underlying`, `expiry`, `strike`, `option_type`, `trade_id`, `deduplication_key`, `trade_id_is_source`, `price`, `quantity`, `side`, `snapshot_timestamp`, `snapshot_derived`, `ingested_at`, `source_endpoint` |
+| `instrument_metadata_snapshot_daily_observed`, `futures_instrument_metadata_snapshot_daily_observed` | `snapshot_date`, `exchange`, `instrument_name`, `symbol`, `instrument_type`, `base_currency`, `quote_currency`, `settlement_currency`, `expiry`, `strike`, `option_type`, `tick_size`, `contract_size`, `min_trade_amount`, `creation_timestamp`, `is_active`, `is_listed`, `listing_state`, `ingested_at`, `source_endpoint` |
+| `historical_volatility_observed` | `timestamp`, `exchange`, `symbol`, `historical_volatility`, `historical_volatility_source_timestamp`, `ingested_at`, `source_endpoint` |
+
+### 4.7.3 Gold: physical status by repository origin
+
+Historical Gold artifacts are built by this repository. Live Gold artifacts have lineage paths under
+`/home/vcs/git/crypto-live-loader`; this is recorded in the transform-state JSON files.
+
+| Origin | Gold dataset | Physical period / missing days | Variables |
+|---|---|---|---|
+| Historical | `gold.market.core.m1` | BTC 2018-08-14..2026-06-25, ETH 2019-03-14..2026-06-25, SOL 2022-04-29..2026-06-25; 0 | `timestamp_m1`, `exchange`, `symbol`, `spot_open_price`, `spot_high_price`, `spot_low_price`, `spot_close_price`, `spot_volume`, `perp_open_price`, `perp_high_price`, `perp_low_price`, `perp_close_price`, `perp_volume` |
+| Historical | `gold.market.core_funding.m1` | Same core period; 0 | Core variables plus `funding_rate_last_known`, `minutes_since_funding`, `is_funding_observation_minute`, `funding_data_available` |
+| Historical | `gold.market.perps_trades.m1` | BTC 2018-08-14..2026-06-11, ETH 2019-03-14..2026-05-29, SOL 2022-04-29..2022-12-30; 0 in Gold artifact | `timestamp_m1`, `exchange`, `symbol`, `trades_open_price`, `trades_high_price`, `trades_low_price`, `trades_close_price`, `trades_volume`, `trades_quote_volume`, `trades_trade_count`, `trades_buy_volume`, `trades_sell_volume`, `trades_buy_trade_count`, `trades_sell_trade_count`, `trades_buy_volume_share` |
+| Historical | `gold.market.options_trades.m1` | BTC 2018-08-14..2026-06-25, ETH 2019-03-21..2026-06-11, SOL 2022-05-04..2022-12-30; 0 | Same trade variables with `option_trades_` prefix |
+| Historical | `gold.market.full.m1` | BTC 2018-08-01..2026-06-25, ETH 2019-03-01..2026-06-25, SOL 2022-03-01..2026-06-25; 0 | Core plus OI flags, funding features, perp trade features, and option trade features; no IV/RV or regime variables |
+| Live | `index_price_m1_features` | BTC/ETH/SOL 2026-05-24..2026-06-07; 0 | `schema_version`, `dataset_type`, `exchange`, `index_name`, `ts_minute`, `snapshot_count`, `price_open`, `price_high`, `price_low`, `price_close`, `price_mean`, `log_return_1m_mean` |
+| Live | `l2_m1_features` | BTC/ETH/SOL 2026-05-05..2026-06-07; 0 | `ts_minute`, `exchange`, `symbol`, `instrument_type`, `depth`, `feature_set_version`, `snapshot_count`, `coverage_ratio`, `first_snapshot_ts`, `last_snapshot_ts`, `is_complete_minute`, `quality_flags`, mid/microprice OHLC statistics, spreads, imbalance, bid/ask depth, book pressure, mark/index/OI/funding fields |
+| Live | `option_surface_m1` | BTC/ETH/SOL on 2026-05-24 only; 0 within that day | `schema_version`, `dataset_type`, `ts_minute`, `month`, `exchange`, `instrument_type`, `currency`, `expiry_date`, `term_days`, `term_bucket`, `atm_iv`, `atm_strike`, `atm_moneyness`, `iv_near_atm_call`, `iv_near_atm_put`, `open_interest_sum`, `volume_sum`, `contract_count`, `valid_surface_contract_count`, `surface_coverage_ratio`, `skew_slope`, `smile_curvature`, `rr25`, `bf25` |
+| Live | `instrument_metadata_daily_summary` | Aggregate 2026-05-25..2026-06-07; 0 | `schema_version`, `dataset_type`, `exchange`, `snapshot_date`, `kind`, `base_currency`, `instrument_count`, `active_instrument_count`, `option_instrument_count`, `mean_strike` |
+
+Contracts without physical Gold artifacts are `gold.market.iv_rv.m1`,
+`gold.market.index_price.m1`, `gold.market.futures_summary.m1`, `gold.market.regime_features.m1`,
+and `gold.hybrid.full_l2.m1`. The existing `gold.market.full.m1` must not be treated as an IV/RV-ready
+dataset until those feature columns and manifests are rebuilt.
+
 # 5. Example Commands
 
 ## 5.1 End-to-End Pipeline
@@ -584,10 +654,9 @@ uv run python scripts/run_medallion_pipeline.py --config config.yaml
 
 Runs `bronze-build -> silver-build -> gold-build` using `medallion-pipeline` settings from
 `config.yaml`, enforces single-run locking via `.run/full-pipeline.lock`, and writes a shared
-append-only pipeline log. The configured Bronze and Silver steps include
-`volatility_index_data`, so Deribit volatility-index OHLC fields flow into Gold as
-`volatility_index_value`, `volatility_index_open`, `volatility_index_high`,
-`volatility_index_low`, and `volatility_index_close`.
+append-only pipeline log. The configured code path supports volatility-index OHLC fields, but the
+physical inventory in section 4.7 is authoritative: existing Gold artifacts must be rebuilt before
+they can be considered IV/RV-ready.
 
 ## 5.2 Layer Commands
 
@@ -608,10 +677,12 @@ uv run python main.py silver-build \
   --silver-root lake/silver \
   --exchange deribit \
   --dataset spot_ohlcv perps_ohlcv open_interest funding perps_trades options_trades \
-    options_instrument_ticker_snapshot_1m options_surface_1m_feature \
-    perps_l2_snapshot_1m options_l2_snapshot_1m recent_trade_snapshot_1m \
-    instrument_metadata_snapshot_daily futures_instrument_metadata_snapshot_daily \
-    historical_volatility \
+    volatility_index_data volatility_index_snapshot_1m historical_volatility \
+    index_price_snapshot_1m futures_summary_snapshot_1m \
+    options_ticker_snapshot_1m options_instrument_ticker_snapshot_1m \
+    options_surface_1m_feature perps_l2_snapshot_1m options_l2_snapshot_1m \
+    recent_trade_snapshot_1m instrument_metadata_snapshot_daily \
+    futures_instrument_metadata_snapshot_daily \
   --timeframe 1m \
   --maxprocesses 4
 ```
@@ -687,7 +758,12 @@ Available Gold dataset IDs:
 - `gold.market.options_trades.m1` (`options_trades` flow only)
 - `gold.market.core.m1`
 - `gold.market.core_funding.m1`
-- `gold.hybrid.full_l2.m1`
+- `gold.market.full.m1`
+- `gold.market.iv_rv.m1` (contract; not yet physically materialized)
+- `gold.market.index_price.m1` (contract; not yet physically materialized)
+- `gold.market.futures_summary.m1` (contract; not yet physically materialized)
+- `gold.market.regime_features.m1` (contract; not yet physically materialized)
+- `gold.hybrid.full_l2.m1` (contract; not yet physically materialized)
 
 ## 5.4 Quality Checks
 
