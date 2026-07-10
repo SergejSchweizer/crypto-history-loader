@@ -22,6 +22,9 @@ from application.dataset_contracts import (
     SILVER_TRADES_OBSERVED_COLUMNS,
 )
 from application.dataset_contracts import (
+    SILVER_OPTION_SURFACE_FEATURE_COLUMNS as SILVER_OPTION_SURFACE_FEATURE_COLUMNS,
+)
+from application.dataset_contracts import (
     SILVER_OPTIONS_TICKER_OBSERVED_COLUMNS as SILVER_OPTIONS_TICKER_OBSERVED_COLUMNS,
 )
 from application.dataset_contracts import (
@@ -39,6 +42,7 @@ from application.services import (
     silver_index_price,
     silver_iv_rv,
     silver_open_interest,
+    silver_options_surface,
     silver_options_ticker,
     silver_realized_volatility,
     silver_trades,
@@ -58,6 +62,7 @@ discover_index_price_symbols = silver_index_price.discover_index_price_symbols
 discover_futures_summary_symbols = silver_futures_summary.discover_futures_summary_symbols
 discover_options_ticker_symbols = silver_options_ticker.discover_options_ticker_symbols
 discover_options_instrument_ticker_symbols = silver_options_ticker.discover_options_ticker_symbols
+discover_options_surface_symbols = silver_options_surface.discover_options_surface_symbols
 
 
 def _funding_dependencies() -> silver_funding.FundingDependencies:
@@ -1003,4 +1008,34 @@ def build_options_instrument_ticker_observed_for_symbol(
     )
     if not isinstance(report, SilverBuildReport):
         raise TypeError("options-instrument-ticker observed builder returned an unexpected report type")
+    return report
+
+
+def _options_surface_dependencies() -> silver_options_surface.OptionsSurfaceDependencies:
+    return silver_options_surface.OptionsSurfaceDependencies(
+        require_polars=_require_polars,
+        silver_month_path=_silver_month_path,
+        iso_utc=_iso_utc,
+        report_factory=SilverBuildReport,
+    )
+
+
+def build_options_surface_1m_feature_for_symbol(
+    *,
+    silver_root: str,
+    exchange: str,
+    symbol: str,
+    timeframe: str = "1m",
+) -> SilverBuildReport:
+    """Build minute-level option-surface features for one currency."""
+
+    report = silver_options_surface.build_options_surface_1m_feature_for_symbol(
+        silver_root=silver_root,
+        exchange=exchange,
+        symbol=symbol,
+        timeframe=timeframe,
+        dependencies=_options_surface_dependencies(),
+    )
+    if not isinstance(report, SilverBuildReport):
+        raise TypeError("options-surface 1m feature builder returned an unexpected report type")
     return report

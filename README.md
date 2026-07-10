@@ -119,6 +119,7 @@ scripts/
 lake/
 docs/
 tests/
+agents/
 config.yaml
 pyproject.toml
 main.py
@@ -136,11 +137,12 @@ AGENTS.md
 | `lake/` | Local medallion storage roots (for example `lake/bronze`, `lake/silver`, `lake/gold`) |
 | `tests/` | Validation and regression tests |
 | `docs/` | Documentation assets (figures, tables, reference materials) |
+| `agents/` | Agent-policy source fragments and synchronization helpers |
 | `config.yaml` | Canonical runtime configuration |
 | `pyproject.toml` | Project metadata and Python tooling configuration |
 | `main.py` | Python entrypoint wrapper for CLI execution |
 | `ARCHITECTURE.md` | Durable architecture contract for package boundaries, medallion flow, side effects, and update rules |
-| `AGENTS.md` | Standalone repository operating policy |
+| `AGENTS.md` | Generated repository operating policy (do not edit directly) |
 
 Dataset metadata is centralized in `application/datasets.py`. New Bronze datasets should start with a
 `DatasetSpec` entry that defines the CLI name, storage dataset type, instrument type, symbol group,
@@ -606,7 +608,7 @@ uv run python main.py silver-build \
   --silver-root lake/silver \
   --exchange deribit \
   --dataset spot_ohlcv perps_ohlcv open_interest funding perps_trades options_trades \
-    options_instrument_ticker_snapshot_1m \
+    options_instrument_ticker_snapshot_1m options_surface_1m_feature \
   --timeframe 1m \
   --maxprocesses 4
 ```

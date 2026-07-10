@@ -206,6 +206,40 @@ def test_run_silver_build_routes_options_instrument_ticker_dataset(monkeypatch) 
     assert built == [("BTC", "1m")]
 
 
+def test_run_silver_build_routes_options_surface_feature(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    discovered: list[tuple[str, str, str]] = []
+    built: list[str] = []
+
+    def fake_discover_options_surface_symbols(*, silver_root: str, exchange: str, timeframe: str) -> list[str]:
+        discovered.append((silver_root, exchange, timeframe))
+        return ["ETH"]
+
+    def fake_build_options_surface(**kwargs: object) -> silver_cmd.SilverBuildReport:
+        built.append(str(kwargs["symbol"]))
+        return _report("options_surface_1m_feature")
+
+    monkeypatch.setattr(silver_cmd, "discover_options_surface_symbols", fake_discover_options_surface_symbols)
+    monkeypatch.setattr(silver_cmd, "build_options_surface_1m_feature_for_symbol", fake_build_options_surface)
+    monkeypatch.setattr(silver_cmd, "write_monthly_sidecars", lambda **kwargs: ([], []))
+    args = argparse.Namespace(
+        bronze_root="lake/bronze",
+        silver_root="lake/silver",
+        exchange="deribit",
+        market=["options_surface_1m_feature"],
+        symbols=None,
+        timeframe="1m",
+        manifest=False,
+        plot=False,
+        maxprocesses=1,
+        no_json_output=True,
+    )
+
+    silver_cmd.run_silver_build(args=args, logger=logging.getLogger("test"))
+
+    assert discovered == [("lake/silver", "deribit", "1m")]
+    assert built == ["ETH"]
+
+
 def test_run_silver_build_rejects_invalid_maxprocesses() -> None:
     args = argparse.Namespace(
         bronze_root="lake/bronze",

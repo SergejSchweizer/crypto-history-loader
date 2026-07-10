@@ -117,6 +117,13 @@ currency-level ticker snapshots, retain `source_endpoint`, and write a monthly r
 sidecar against `options_ticker_snapshot_1m_observed`. Instrument-level observations take
 precedence when the same exchange, instrument, and timestamp occur in both families.
 
+`options_surface_1m_feature` combines both observed ticker families at closed-minute boundaries.
+Instrument observations retain precedence. ATM contracts satisfy
+`abs(log(strike / underlying_price)) <= 0.05`; short-dated contracts expire within seven days,
+long-dated contracts expire after 30 days, and skew compares the 85-95% put wing with the
+105-115% call wing. The builder never carries a later observation backward and reports quote
+coverage plus fresh/stale counts using a 60-second ingest-latency threshold.
+
 ## Runtime And Side Effects
 
 `config.yaml` is the canonical durable runtime configuration source. Runtime values should be

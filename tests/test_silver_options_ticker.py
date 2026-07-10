@@ -202,6 +202,18 @@ def test_build_options_instrument_ticker_dedupes_and_reconciles_overlap(tmp_path
         exchange="deribit",
         symbol="BTC",
     )
+    reference_path = (
+        silver
+        / "dataset_type=options_ticker_snapshot_1m_observed"
+        / "exchange=deribit"
+        / "symbol=BTC"
+        / "timeframe=1m"
+        / "year=2026"
+        / "month=2026-05"
+        / "BTC-2026-05.parquet"
+    )
+    # Existing PR-11 outputs predate the surface-required underlying fields.
+    pl.read_parquet(reference_path).drop(["underlying_price", "index_price"]).write_parquet(reference_path)
 
     instrument_snapshot = {
         "exchange": "deribit",

@@ -241,6 +241,8 @@ SILVER_OPTIONS_TICKER_OBSERVED_COLUMNS = [
     "underlying",
     "expiry",
     "strike",
+    "underlying_price",
+    "index_price",
     "option_type",
     "mark_price",
     "bid_price",
@@ -334,6 +336,9 @@ SILVER_OPTION_SURFACE_FEATURE_COLUMNS = [
     "term_structure",
     "put_call_iv_spread",
     "contract_count",
+    "fresh_quote_count",
+    "stale_quote_count",
+    "max_quote_age_seconds",
     "quote_coverage_ratio",
 ]
 SILVER_REALIZED_VOLATILITY_FEATURE_COLUMNS = [

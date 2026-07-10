@@ -152,13 +152,23 @@ def _write_reconciliation_report(
         "field_mismatch_counts": {},
     }
     if reference_path.exists() and observed.height > 0:
-        reference = pl.read_parquet(reference_path).select(SILVER_OPTIONS_TICKER_OBSERVED_COLUMNS)
+        reference = pl.read_parquet(reference_path)
+        missing_columns = [
+            column for column in SILVER_OPTIONS_TICKER_OBSERVED_COLUMNS if column not in reference.columns
+        ]
+        if missing_columns:
+            reference = reference.with_columns(
+                [pl.lit(None, dtype=observed.schema[column]).alias(column) for column in missing_columns]
+            )
+        reference = reference.select(SILVER_OPTIONS_TICKER_OBSERVED_COLUMNS)
         keys = ["exchange", "instrument_name", "timestamp"]
         overlap = observed.join(reference, on=keys, how="inner", suffix="_reference")
         instrument_only = observed.join(reference.select(keys), on=keys, how="anti")
         reference_only = reference.join(observed.select(keys), on=keys, how="anti")
         fields = [
             "mark_price",
+            "underlying_price",
+            "index_price",
             "bid_price",
             "ask_price",
             "implied_volatility",
@@ -248,6 +258,8 @@ def build_options_ticker_observed_for_symbol(
                 name.str.extract(r"^[A-Z0-9]+-[0-9]{1,2}[A-Z]{3}[0-9]{2}-([0-9.]+)-[CP]$", 1)
                 .cast(pl.Float64, strict=False)
                 .alias("strike"),
+                _column_or_null(pl, frame, "underlying_price", pl.Float64).alias("underlying_price"),
+                _column_or_null(pl, frame, "index_price", pl.Float64).alias("index_price"),
                 name.str.extract(r"^[A-Z0-9]+-[0-9]{1,2}[A-Z]{3}[0-9]{2}-[0-9.]+-([CP])$", 1).alias("option_type"),
                 _column_or_null(pl, frame, "mark_price", pl.Float64).alias("mark_price"),
                 _first_column_or_null(pl, frame, ("bid_price", "best_bid_price"), pl.Float64).alias("bid_price"),

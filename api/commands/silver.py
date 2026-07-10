@@ -21,6 +21,7 @@ from application.services.silver_service import (
     build_open_interest_1m_feature_for_symbol,
     build_open_interest_observed_for_symbol,
     build_options_instrument_ticker_observed_for_symbol,
+    build_options_surface_1m_feature_for_symbol,
     build_options_ticker_observed_for_symbol,
     build_perps_trades_1m_feature_for_symbol,
     build_perps_trades_observed_for_symbol,
@@ -33,6 +34,7 @@ from application.services.silver_service import (
     discover_index_price_symbols,
     discover_iv_rv_symbols,
     discover_options_instrument_ticker_symbols,
+    discover_options_surface_symbols,
     discover_options_ticker_symbols,
     discover_realized_volatility_symbols,
     discover_symbols,
@@ -76,6 +78,7 @@ def add_silver_build_parser(subparsers: Any) -> None:
             "futures_summary_snapshot_1m",
             "options_ticker_snapshot_1m",
             "options_instrument_ticker_snapshot_1m",
+            "options_surface_1m_feature",
         ],
         default=[
             "spot_ohlcv",
@@ -386,6 +389,21 @@ def run_silver_build(args: argparse.Namespace, logger: logging.Logger) -> None:
         )
         return [observed_payload]
 
+    def _run_options_surface(symbol: str) -> list[dict[str, object]]:
+        feature = build_options_surface_1m_feature_for_symbol(
+            silver_root=silver_root,
+            exchange=exchange,
+            symbol=symbol,
+            timeframe=timeframe,
+        )
+        feature_payload = _report_payload("options_surface_1m_feature", symbol, feature)
+        logger.info(
+            "Silver options_surface_1m_feature report written symbol=%s feature_rows=%s",
+            symbol,
+            feature.rows_out,
+        )
+        return [feature_payload]
+
     def _run_ohlcv(market: str, symbol: str) -> list[dict[str, object]]:
         report = build_silver_for_symbol(
             bronze_root=bronze_root,
@@ -418,6 +436,7 @@ def run_silver_build(args: argparse.Namespace, logger: logging.Logger) -> None:
         "futures_summary_snapshot_1m": _run_futures_summary,
         "options_ticker_snapshot_1m": _run_options_ticker,
         "options_instrument_ticker_snapshot_1m": _run_options_instrument_ticker,
+        "options_surface_1m_feature": _run_options_surface,
     }
 
     def _discovery_params_for_market(market: str, default_timeframe: str) -> tuple[str, str, str]:
@@ -491,6 +510,12 @@ def run_silver_build(args: argparse.Namespace, logger: logging.Logger) -> None:
                 bronze_root=bronze_root,
                 exchange=exchange,
                 dataset_type="options_instrument_ticker_snapshot_1m",
+            )
+        elif market == "options_surface_1m_feature":
+            effective_symbols = discover_options_surface_symbols(
+                silver_root=silver_root,
+                exchange=exchange,
+                timeframe=timeframe,
             )
         else:
             effective_symbols = discover_symbols(
