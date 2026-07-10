@@ -751,7 +751,7 @@ Acceptance:
 
 ### PR-26: Options L2 Silver Materialization
 
-Status: In progress
+Status: In review - draft PR #87: https://github.com/SergejSchweizer/crypto-history-loader/pull/87
 
 Branch: `codex/pr26-options-l2-silver-materialization`
 
