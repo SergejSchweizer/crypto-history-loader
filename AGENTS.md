@@ -207,7 +207,9 @@ Applies when adding or changing tests, fixing bugs, refactoring behavior, adding
 ## Rules
 
 - [MUST] Run targeted tests for changed areas.
+- [MUST] For stacked PRs, run only the smallest reliable set of tests related to that PR's changed contracts and behavior.
 - [SHOULD] Run full test suite before finalization when practical.
+- [MUST] For a stack of related PRs, run the full test suite before the final squash merge into `main`, not on every intermediate stacked PR.
 - [MUST] Disclose checks that could not run and why.
 - [MUST] Add regression tests for every bug fix.
 - [MUST] Test happy path, edge cases, and failure paths.
