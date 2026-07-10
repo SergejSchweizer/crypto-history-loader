@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
 
 from application.dataset_contracts import SILVER_L2_FEATURE_COLUMNS, SILVER_L2_OBSERVED_COLUMNS
 from application.services.silver_service import (
+    build_options_l2_1m_feature_for_symbol,
+    build_options_l2_observed_for_symbol,
     build_perps_l2_1m_feature_for_symbol,
     build_perps_l2_observed_for_symbol,
     discover_l2_symbols,
@@ -142,3 +144,116 @@ def test_perps_l2_filters_malformed_books_and_uses_latest_snapshot_per_minute(
     assert second["quote_available"] is False
     assert second["mid_price"] is None
     assert second["bid_depth_10bps"] is None
+
+
+def _option_row(
+    *,
+    timestamp: datetime,
+    instrument_name: str,
+    bids: list[dict[str, float]],
+    asks: list[dict[str, float]],
+    quote_age_seconds: int,
+) -> dict[str, object]:
+    return {
+        "schema_version": "v1",
+        "dataset_type": "options_l2_snapshot_1m",
+        "exchange": "deribit",
+        "symbol": instrument_name,
+        "currency": "BTC",
+        "instrument_name": instrument_name,
+        "instrument_type": "option",
+        "event_time": timestamp,
+        "snapshot_time": timestamp,
+        "ingested_at": timestamp + timedelta(seconds=quote_age_seconds),
+        "run_id": "test",
+        "source": "rest_order_book",
+        "depth": 50,
+        "bids": bids,
+        "asks": asks,
+    }
+
+
+def test_options_l2_parses_contracts_and_exposes_liquidity_filter_keys(tmp_path: Path) -> None:
+    """Option L2 rows should stay contract-level and expose freshness for surface joins."""
+
+    bronze = tmp_path / "bronze"
+    silver = tmp_path / "silver"
+    t0 = datetime(2026, 7, 3, 12, 0, tzinfo=UTC)
+    rows = [
+        _option_row(
+            timestamp=t0,
+            instrument_name="BTC-10JUL26-60000-C",
+            bids=[_level(0.10, 2.0)],
+            asks=[_level(0.11, 3.0)],
+            quote_age_seconds=10,
+        ),
+        _option_row(
+            timestamp=t0,
+            instrument_name="BTC-10JUL26-60000-P",
+            bids=[_level(0.08, 2.0)],
+            asks=[_level(0.09, 3.0)],
+            quote_age_seconds=120,
+        ),
+        _option_row(
+            timestamp=t0,
+            instrument_name="BTC-17JUL26-65000-C",
+            bids=[],
+            asks=[],
+            quote_age_seconds=10,
+        ),
+        _option_row(
+            timestamp=t0,
+            instrument_name="NOT-A-CONTRACT",
+            bids=[_level(0.10, 1.0)],
+            asks=[_level(0.11, 1.0)],
+            quote_age_seconds=10,
+        ),
+    ]
+    target = (
+        bronze
+        / "dataset_type=options_l2_snapshot_1m"
+        / "exchange=deribit"
+        / "instrument_type=option"
+        / "symbol=BTC"
+        / "depth=50"
+        / "source=rest_order_book"
+        / "year=2026"
+        / "month=07"
+        / "date=2026-07-03"
+        / "hour=12"
+        / "data.parquet"
+    )
+    target.parent.mkdir(parents=True, exist_ok=True)
+    pl.DataFrame(rows).write_parquet(target)
+
+    observed_report = build_options_l2_observed_for_symbol(
+        bronze_root=str(bronze),
+        silver_root=str(silver),
+        exchange="deribit",
+        symbol="BTC",
+    )
+    feature_report = build_options_l2_1m_feature_for_symbol(silver_root=str(silver), exchange="deribit", symbol="BTC")
+
+    assert observed_report.rows_in == 4
+    assert observed_report.rows_out == 3
+    assert observed_report.invalid_ohlc_rows == 1
+    assert feature_report.rows_out == 3
+    feature_path = (
+        silver
+        / "dataset_type=options_l2_1m_feature"
+        / "exchange=deribit"
+        / "symbol=BTC"
+        / "timeframe=1m"
+        / "year=2026"
+        / "month=2026-07"
+        / "BTC-2026-07.parquet"
+    )
+    feature = pl.read_parquet(feature_path).sort("instrument_name")
+    assert feature.columns == SILVER_L2_FEATURE_COLUMNS
+    assert feature["underlying"].unique().to_list() == ["BTC"]
+    assert feature["strike"].to_list() == [60000.0, 60000.0, 65000.0]
+    assert feature["option_type"].to_list() == ["C", "P", "C"]
+    assert feature["quote_age_seconds"].to_list() == [10.0, 120.0, 10.0]
+    assert feature["stale_quote"].to_list() == [False, True, False]
+    quality = feature.filter(pl.col("quote_available") & ~pl.col("stale_quote"))
+    assert quality["instrument_name"].to_list() == ["BTC-10JUL26-60000-C"]

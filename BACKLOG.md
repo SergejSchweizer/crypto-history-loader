@@ -411,7 +411,7 @@ Acceptance:
 
 ### PR-14: Options L2 Snapshot Silver
 
-Status: Planned
+Status: Done
 
 Branch: `codex/pr14-options-l2-silver`
 

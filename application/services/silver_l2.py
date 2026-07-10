@@ -124,19 +124,48 @@ def _book_valid_expr(pl: Any, column: str, *, descending: bool) -> Any:
     )
 
 
-def _observed_frame(pl: Any, frame: Any, normalized_symbol: str) -> tuple[Any, int, int]:
+def _observed_frame(pl: Any, frame: Any, normalized_symbol: str, instrument_type: str) -> tuple[Any, int, int]:
     bids_valid = _book_valid_expr(pl, "bids", descending=True)
     asks_valid = _book_valid_expr(pl, "asks", descending=False)
     best_bid = pl.col("bids").list.get(0, null_on_oob=True).struct.field("price")
     best_bid_size = pl.col("bids").list.get(0, null_on_oob=True).struct.field("amount")
     best_ask = pl.col("asks").list.get(0, null_on_oob=True).struct.field("price")
     best_ask_size = pl.col("asks").list.get(0, null_on_oob=True).struct.field("amount")
+    instrument_name = (
+        (
+            pl.coalesce([pl.col("instrument_name"), pl.col("symbol")])
+            if "instrument_name" in frame.columns
+            else pl.col("symbol")
+        )
+        .cast(pl.Utf8)
+        .str.strip_chars()
+        .str.to_uppercase()
+    )
+    if instrument_type == "option":
+        underlying = instrument_name.str.extract(r"^([A-Z0-9]+)-[0-9]{1,2}[A-Z]{3}[0-9]{2}-[0-9.]+-[CP]$", 1)
+        expiry = instrument_name.str.extract(r"^[A-Z0-9]+-([0-9]{1,2}[A-Z]{3}[0-9]{2})-[0-9.]+-[CP]$", 1).str.strptime(
+            pl.Date, "%d%b%y", strict=False
+        )
+        strike = instrument_name.str.extract(r"^[A-Z0-9]+-[0-9]{1,2}[A-Z]{3}[0-9]{2}-([0-9.]+)-[CP]$", 1).cast(
+            pl.Float64, strict=False
+        )
+        option_type = instrument_name.str.extract(r"^[A-Z0-9]+-[0-9]{1,2}[A-Z]{3}[0-9]{2}-[0-9.]+-([CP])$", 1)
+    else:
+        underlying = pl.lit(normalized_symbol.removesuffix("-PERPETUAL"), dtype=pl.Utf8)
+        expiry = pl.lit(None, dtype=pl.Date)
+        strike = pl.lit(None, dtype=pl.Float64)
+        option_type = pl.lit(None, dtype=pl.Utf8)
     normalized = frame.with_columns(
         [
             pl.col("event_time").cast(pl.Datetime(time_unit="us", time_zone="UTC")).alias("timestamp"),
             pl.col("exchange").cast(pl.Utf8).str.strip_chars().str.to_lowercase().alias("exchange"),
             pl.lit(normalized_symbol).alias("symbol"),
             pl.col("instrument_type").cast(pl.Utf8).str.strip_chars().str.to_lowercase(),
+            instrument_name.alias("instrument_name"),
+            underlying.alias("underlying"),
+            expiry.alias("expiry"),
+            strike.alias("strike"),
+            option_type.alias("option_type"),
             best_bid.cast(pl.Float64).alias("best_bid_price"),
             best_bid_size.cast(pl.Float64).alias("best_bid_size"),
             best_ask.cast(pl.Float64).alias("best_ask_price"),
@@ -151,12 +180,21 @@ def _observed_frame(pl: Any, frame: Any, normalized_symbol: str) -> tuple[Any, i
         & (pl.col("best_bid_price") >= pl.col("best_ask_price"))
     )
     invalid = pl.col("timestamp").is_null() | (~bids_valid.fill_null(False)) | (~asks_valid.fill_null(False)) | crossed
+    if instrument_type == "option":
+        invalid = (
+            invalid
+            | pl.col("underlying").is_null()
+            | pl.col("expiry").is_null()
+            | pl.col("strike").is_null()
+            | (pl.col("strike") <= 0.0)
+            | (~pl.col("option_type").is_in(["C", "P"]))
+        )
     invalid_rows = int(normalized.select(invalid.cast(pl.Int64).sum()).item())
     cleaned = normalized.filter(~invalid)
     observed = (
         cleaned.sort(["timestamp", "ingested_at"])
-        .unique(subset=["exchange", "symbol", "timestamp"], keep="last", maintain_order=True)
-        .sort(["exchange", "symbol", "timestamp"])
+        .unique(subset=["exchange", "instrument_name", "timestamp"], keep="last", maintain_order=True)
+        .sort(["exchange", "symbol", "instrument_name", "timestamp"])
         .select(SILVER_L2_OBSERVED_COLUMNS)
     )
     return observed, invalid_rows, cleaned.height - observed.height
@@ -185,10 +223,13 @@ def _depth_within_bps(row: dict[str, Any], *, side: str, bps: int) -> float | No
 def _feature_frame(pl: Any, observed: Any) -> tuple[Any, int]:
     latest = (
         observed.with_columns(pl.col("timestamp").dt.truncate("1m").alias("timestamp_m1"))
-        .sort(["exchange", "symbol", "timestamp_m1", "timestamp", "ingested_at"])
-        .unique(subset=["exchange", "symbol", "timestamp_m1"], keep="last", maintain_order=True)
+        .sort(["exchange", "instrument_name", "timestamp_m1", "timestamp", "ingested_at"])
+        .unique(subset=["exchange", "instrument_name", "timestamp_m1"], keep="last", maintain_order=True)
     )
     quote_available = pl.col("best_bid_price").is_not_null() & pl.col("best_ask_price").is_not_null()
+    quote_age_seconds = (
+        (pl.col("ingested_at") - pl.col("timestamp")).dt.total_milliseconds().cast(pl.Float64) / 1000.0
+    ).clip(lower_bound=0.0)
     feature = latest.with_columns(
         [
             quote_available.alias("quote_available"),
@@ -202,13 +243,17 @@ def _feature_frame(pl: Any, observed: Any) -> tuple[Any, int]:
             .alias("spread"),
             pl.col("best_bid_size").alias("top_bid_size"),
             pl.col("best_ask_size").alias("top_ask_size"),
-            pl.lit(0, dtype=pl.Int64).alias("minutes_since_l2_observation"),
+            quote_age_seconds.alias("quote_age_seconds"),
         ]
     ).with_columns(
-        pl.when((pl.col("top_bid_size") + pl.col("top_ask_size")) > 0.0)
-        .then((pl.col("top_bid_size") - pl.col("top_ask_size")) / (pl.col("top_bid_size") + pl.col("top_ask_size")))
-        .otherwise(None)
-        .alias("top_of_book_imbalance")
+        [
+            pl.when((pl.col("top_bid_size") + pl.col("top_ask_size")) > 0.0)
+            .then((pl.col("top_bid_size") - pl.col("top_ask_size")) / (pl.col("top_bid_size") + pl.col("top_ask_size")))
+            .otherwise(None)
+            .alias("top_of_book_imbalance"),
+            (pl.col("quote_age_seconds") > 60.0).alias("stale_quote"),
+            (pl.col("quote_age_seconds") / 60.0).floor().cast(pl.Int64).alias("minutes_since_l2_observation"),
+        ]
     )
     depth_columns = []
     for bps in DEPTH_BANDS_BPS:
@@ -223,7 +268,7 @@ def _feature_frame(pl: Any, observed: Any) -> tuple[Any, int]:
             )
     feature = (
         feature.with_columns(depth_columns)
-        .sort(["exchange", "symbol", "timestamp_m1"])
+        .sort(["exchange", "symbol", "instrument_name", "timestamp_m1"])
         .select(SILVER_L2_FEATURE_COLUMNS)
     )
     return feature, observed.height - latest.height
@@ -280,7 +325,7 @@ def build_l2_observed_for_symbol(
             continue
         frame = _collect_files(pl, files)
         rows_in += frame.height
-        observed, month_invalid, month_duplicates = _observed_frame(pl, frame, normalized_symbol)
+        observed, month_invalid, month_duplicates = _observed_frame(pl, frame, normalized_symbol, instrument_type)
         invalid_rows += month_invalid
         duplicates_removed += month_duplicates
         if observed.height == 0:
