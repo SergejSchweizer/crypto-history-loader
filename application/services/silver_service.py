@@ -33,6 +33,9 @@ from application.dataset_contracts import (
     SILVER_REALIZED_VOLATILITY_FEATURE_COLUMNS as SILVER_REALIZED_VOLATILITY_FEATURE_COLUMNS,
 )
 from application.dataset_contracts import (
+    SILVER_RECENT_TRADE_SNAPSHOT_OBSERVED_COLUMNS as SILVER_RECENT_TRADE_SNAPSHOT_OBSERVED_COLUMNS,
+)
+from application.dataset_contracts import (
     SILVER_VOLATILITY_FEATURE_COLUMNS as SILVER_VOLATILITY_FEATURE_COLUMNS,
 )
 from application.dataset_contracts import (
@@ -48,6 +51,7 @@ from application.services import (
     silver_options_surface,
     silver_options_ticker,
     silver_realized_volatility,
+    silver_recent_trades,
     silver_trades,
     silver_volatility,
 )
@@ -67,6 +71,7 @@ discover_options_ticker_symbols = silver_options_ticker.discover_options_ticker_
 discover_options_instrument_ticker_symbols = silver_options_ticker.discover_options_ticker_symbols
 discover_options_surface_symbols = silver_options_surface.discover_options_surface_symbols
 discover_l2_symbols = silver_l2.discover_l2_symbols
+discover_recent_trade_symbols = silver_recent_trades.discover_recent_trade_symbols
 
 
 def _funding_dependencies() -> silver_funding.FundingDependencies:
@@ -1144,4 +1149,36 @@ def build_options_l2_1m_feature_for_symbol(
     )
     if not isinstance(report, SilverBuildReport):
         raise TypeError("options-L2 feature builder returned an unexpected report type")
+    return report
+
+
+def _recent_trade_dependencies() -> silver_recent_trades.RecentTradeDependencies:
+    return silver_recent_trades.RecentTradeDependencies(
+        require_polars=_require_polars,
+        silver_month_path=_silver_month_path,
+        iso_utc=_iso_utc,
+        report_factory=SilverBuildReport,
+    )
+
+
+def build_recent_trade_snapshot_observed_for_symbol(
+    *,
+    bronze_root: str,
+    silver_root: str,
+    exchange: str,
+    symbol: str,
+    timeframe: str = "tick",
+) -> SilverBuildReport:
+    """Build snapshot-derived observed trades for one currency."""
+
+    report = silver_recent_trades.build_recent_trade_snapshot_observed_for_symbol(
+        bronze_root=bronze_root,
+        silver_root=silver_root,
+        exchange=exchange,
+        symbol=symbol,
+        timeframe=timeframe,
+        dependencies=_recent_trade_dependencies(),
+    )
+    if not isinstance(report, SilverBuildReport):
+        raise TypeError("recent-trade snapshot builder returned an unexpected report type")
     return report
