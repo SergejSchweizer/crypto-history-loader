@@ -91,6 +91,7 @@ EXPECTED_MEDALLION_SILVER_DATASETS = {
         (["dataset-inventory", "--gold-root", "lake/test-gold"], {"gold_root": "lake/test-gold"}),
         (["dataset-inventory", "--output", "docs/inventory.md"], {"output": "docs/inventory.md"}),
         (["dataset-inventory", "--format", "json"], {"format": "json"}),
+        (["dataset-inventory", "--builder-commit", "abc123"], {"builder_commit": "abc123"}),
         (["dataset-inventory", "--no-json-output"], {"no_json_output": True}),
         (["list-spot_ohlcv-timeframes", "--exchange", "deribit"], {"exchange": "deribit"}),
         (["list-spot_ohlcv-timeframes", "--exchanges", "deribit"], {"exchanges": ["deribit"]}),

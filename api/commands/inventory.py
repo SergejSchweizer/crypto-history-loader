@@ -5,6 +5,8 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -27,6 +29,7 @@ def add_dataset_inventory_parser(subparsers: Any) -> None:
     parser.add_argument("--gold-root", default="lake/gold", help="Gold lake root")
     parser.add_argument("--output", help="Optional report output path")
     parser.add_argument("--format", choices=["json", "markdown"], default="markdown", help="Report format")
+    parser.add_argument("--builder-commit", help="Commit identifier to include in the inventory report")
     parser.add_argument("--no-json-output", action="store_true", help="Suppress stdout output")
 
 
@@ -37,6 +40,7 @@ def run_dataset_inventory(args: argparse.Namespace, logger: logging.Logger) -> N
         bronze_root=Path(str(args.bronze_root)),
         silver_root=Path(str(args.silver_root)),
         gold_root=Path(str(args.gold_root)),
+        builder_commit=_resolve_builder_commit(getattr(args, "builder_commit", None)),
     )
     if str(args.format) == "json":
         rendered = inventory_to_json(rows)
@@ -54,3 +58,22 @@ def run_dataset_inventory(args: argparse.Namespace, logger: logging.Logger) -> N
             print(json.dumps([row.to_dict() for row in rows], indent=2, sort_keys=True))
         else:
             print(rendered, end="")
+
+
+def _resolve_builder_commit(value: object) -> str:
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    github_sha = os.environ.get("GITHUB_SHA")
+    if github_sha:
+        return github_sha
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return "unknown"
+    return result.stdout.strip() or "unknown"

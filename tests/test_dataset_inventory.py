@@ -69,6 +69,17 @@ def test_inventory_reports_partition_dates_and_mixed_series_lifetimes(tmp_path: 
     assert spot.observed_days == 3
     assert spot.missing_days == 1
     assert spot.per_series_missing_days == ("BTC=1", "ETH=0")
+    assert spot.source_hash is not None
+    assert len(spot.source_hash) == 64
+    assert spot.builder_commit == "unknown"
+    assert spot.quality_counters == {
+        "expected_days": 4,
+        "file_count": 3,
+        "missing_days": 1,
+        "observed_days": 3,
+        "row_count": 3,
+        "series_count": 2,
+    }
 
 
 def test_inventory_reports_legacy_perp_as_canonical_perps_ohlcv(tmp_path: Path) -> None:
@@ -105,10 +116,18 @@ def test_inventory_renders_stable_json_and_markdown(tmp_path: Path) -> None:
         bronze_root=tmp_path / "bronze",
         silver_root=tmp_path / "silver",
         gold_root=tmp_path / "gold",
+        builder_commit="abc123",
     )
 
     assert inventory_to_json(rows) == inventory_to_json(rows)
+    payload = inventory_to_json(rows)
+    assert '"builder_commit": "abc123"' in payload
+    assert '"quality_counters"' in payload
+    assert '"source_hash": null' in payload
     markdown = inventory_to_markdown(rows)
+    assert "Source Hash" in markdown
+    assert "`abc123`" in markdown
+    assert '`{"expected_days":0' in markdown
     assert "`iv_rv_1m_feature`" in markdown
     assert "`gold.market.regime_features.m1`" in markdown
 
@@ -126,6 +145,7 @@ def test_inventory_command_writes_explicit_output_only(tmp_path: Path) -> None:
             "gold_root": str(tmp_path / "gold"),
             "output": str(output),
             "format": "markdown",
+            "builder_commit": "commit-for-test",
             "no_json_output": True,
         },
     )()
@@ -133,7 +153,9 @@ def test_inventory_command_writes_explicit_output_only(tmp_path: Path) -> None:
     run_dataset_inventory(args=args, logger=_NullLogger())
 
     assert output.exists()
-    assert "`spot_ohlcv`" in output.read_text(encoding="utf-8")
+    text = output.read_text(encoding="utf-8")
+    assert "`spot_ohlcv`" in text
+    assert "`commit-for-test`" in text
 
 
 class _NullLogger:
