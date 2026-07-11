@@ -675,7 +675,8 @@ def build_volatility_observed_for_symbol(
         invalid_rows = frame.select(invalid_expr.cast(pl.Int64).sum().alias("count")).item()
         cleaned = frame.filter(~invalid_expr)
         observed = (
-            cleaned.unique(
+            cleaned.sort(["timestamp", "ingested_at"])
+            .unique(
                 subset=["exchange", "symbol", "dataset_type", "timestamp"],
                 keep="last",
                 maintain_order=True,

@@ -161,6 +161,54 @@ def test_run_silver_build_uses_tick_timeframe_for_options_trades_discovery(
     assert built == ["options_trades_observed", "options_trades_1m_feature"]
 
 
+def test_run_silver_build_volatility_index_data_builds_observed_and_feature(
+    monkeypatch,
+) -> None:  # type: ignore[no-untyped-def]
+    built: list[tuple[str, str]] = []
+
+    def fake_discover_symbols(
+        bronze_root: str,
+        market: str,
+        exchange: str,
+        timeframe: str = "1m",
+        instrument_type: str | None = None,
+    ) -> list[str]:
+        del bronze_root, exchange, timeframe, instrument_type
+        if market == "volatility_index_data":
+            return ["SOL"]
+        return []
+
+    def fake_build_observed(**kwargs: object) -> silver_cmd.SilverBuildReport:
+        built.append(("observed", str(kwargs["symbol"])))
+        return _report("volatility_index_data_observed")
+
+    def fake_build_feature(**kwargs: object) -> silver_cmd.SilverBuildReport:
+        built.append(("feature", str(kwargs["symbol"])))
+        return _report("volatility_index_1m_feature")
+
+    monkeypatch.setattr(silver_cmd, "discover_symbols", fake_discover_symbols)
+    monkeypatch.setattr(silver_cmd, "build_volatility_observed_for_symbol", fake_build_observed)
+    monkeypatch.setattr(silver_cmd, "build_volatility_index_1m_feature_for_symbol", fake_build_feature)
+    monkeypatch.setattr(silver_cmd, "write_monthly_sidecars", lambda **kwargs: ([], []))
+
+    args = argparse.Namespace(
+        bronze_root="lake/bronze",
+        silver_root="lake/silver",
+        exchange="deribit",
+        market=["volatility_index_data"],
+        symbols=None,
+        timeframe="1m",
+        manifest=False,
+        plot=False,
+        maxprocesses=1,
+        no_json_output=True,
+    )
+
+    silver_cmd.run_silver_build(args=args, logger=logging.getLogger("test"))
+
+    assert built == [("observed", "SOL"), ("feature", "SOL")]
+
+
 def test_run_silver_build_routes_options_instrument_ticker_dataset(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     discovered: list[tuple[str, str, str]] = []
     built: list[tuple[str, str]] = []
