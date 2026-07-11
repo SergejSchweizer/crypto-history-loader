@@ -223,6 +223,13 @@ def test_options_l2_parses_contracts_and_exposes_liquidity_filter_keys(tmp_path:
         ),
         _option_row(
             timestamp=t0,
+            instrument_name="BTC-17JUL26-65000-P",
+            bids=[_level(0.12, 1.0)],
+            asks=[_level(0.11, 1.0)],
+            quote_age_seconds=10,
+        ),
+        _option_row(
+            timestamp=t0,
             instrument_name="NOT-A-CONTRACT",
             bids=[_level(0.10, 1.0)],
             asks=[_level(0.11, 1.0)],
@@ -254,9 +261,9 @@ def test_options_l2_parses_contracts_and_exposes_liquidity_filter_keys(tmp_path:
     )
     feature_report = build_options_l2_1m_feature_for_symbol(silver_root=str(silver), exchange="deribit", symbol="BTC")
 
-    assert observed_report.rows_in == 4
+    assert observed_report.rows_in == 5
     assert observed_report.rows_out == 3
-    assert observed_report.invalid_ohlc_rows == 1
+    assert observed_report.invalid_ohlc_rows == 2
     assert feature_report.rows_out == 3
     feature_path = (
         silver
@@ -275,5 +282,10 @@ def test_options_l2_parses_contracts_and_exposes_liquidity_filter_keys(tmp_path:
     assert feature["option_type"].to_list() == ["C", "P", "C"]
     assert feature["quote_age_seconds"].to_list() == [10.0, 120.0, 10.0]
     assert feature["stale_quote"].to_list() == [False, True, False]
+    assert feature["quote_available"].to_list() == [True, True, False]
+    mid_prices = feature["mid_price"].to_list()
+    assert mid_prices[:2] == pytest.approx([0.105, 0.085])
+    assert mid_prices[2] is None
+    assert feature["bid_depth_10bps"].to_list() == [0.0, 0.0, None]
     quality = feature.filter(pl.col("quote_available") & ~pl.col("stale_quote"))
     assert quality["instrument_name"].to_list() == ["BTC-10JUL26-60000-C"]
