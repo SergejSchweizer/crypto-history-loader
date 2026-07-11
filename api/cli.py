@@ -12,6 +12,7 @@ from typing import Any, cast
 from api.commands import loader as loader_cmd
 from api.commands import stats as stats_cmd
 from api.commands.gold import add_gold_build_parser, run_gold_build
+from api.commands.inventory import add_dataset_inventory_parser, run_dataset_inventory
 from api.commands.loader import add_bronze_build_parser
 from api.commands.silver import add_silver_build_parser, run_silver_build
 from api.commands.stats import add_export_descriptive_stats_parser, run_export_descriptive_stats
@@ -142,6 +143,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_bronze_build_parser(subparsers)
     add_silver_build_parser(subparsers)
     add_gold_build_parser(subparsers)
+    add_dataset_inventory_parser(subparsers)
     add_list_spot_ohlcv_timeframes_parser(subparsers)
     add_export_descriptive_stats_parser(subparsers)
 
@@ -310,6 +312,8 @@ def main() -> None:
         run_silver_build(args=args, logger=logger)
     elif args.command == "gold-build":
         run_gold_build(args=args, logger=logger)
+    elif args.command == "dataset-inventory":
+        run_dataset_inventory(args=args, logger=logger)
     elif args.command == "list-spot_ohlcv-timeframes":
         run_list_spot_ohlcv_timeframes(args=args, logger=logger)
     elif args.command == "export-descriptive-stats":
