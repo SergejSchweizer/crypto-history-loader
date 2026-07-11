@@ -345,6 +345,27 @@ def test_regime_gold_contract_is_stable_with_and_without_optional_sources(tmp_pa
     )
 
 
+def test_regime_gold_required_source_gap_fails_loudly(tmp_path: Path) -> None:
+    """Missing required regime inputs should fail before emitting a partial feature artifact."""
+
+    silver = tmp_path / "silver"
+    t0 = datetime(2026, 5, 1, 0, 0, tzinfo=UTC)
+    t1 = datetime(2026, 5, 1, 0, 1, tzinfo=UTC)
+    _write_required_sources(silver, t0, t1)
+    iv_rv_root = silver / "dataset_type=iv_rv_1m_feature"
+    for path in iv_rv_root.rglob("*.parquet"):
+        path.unlink()
+
+    with pytest.raises(ValueError, match="Missing silver dataset for symbol=BTC: iv_rv_1m_feature"):
+        build_gold_for_symbol(
+            silver_root=str(silver),
+            gold_root=str(tmp_path / "gold"),
+            exchange="deribit",
+            symbol="BTC",
+            dataset_id="gold.market.regime_features.m1",
+        )
+
+
 def test_regime_gold_contract_declares_exact_required_and_optional_sources() -> None:
     """The typed regime contract should match the backlog source policy exactly."""
 
