@@ -23,7 +23,13 @@ def _level(price: float, amount: float) -> dict[str, float]:
     return {"price": price, "amount": amount}
 
 
-def _row(*, timestamp: datetime, bids: list[dict[str, float]], asks: list[dict[str, float]]) -> dict[str, object]:
+def _row(
+    *,
+    timestamp: datetime,
+    bids: list[dict[str, float]],
+    asks: list[dict[str, float]],
+    quote_age_seconds: int = 0,
+) -> dict[str, object]:
     return {
         "schema_version": "v1",
         "dataset_type": "perps_l2_snapshot_1m",
@@ -31,7 +37,7 @@ def _row(*, timestamp: datetime, bids: list[dict[str, float]], asks: list[dict[s
         "symbol": "BTC-PERPETUAL",
         "instrument_type": "perp",
         "event_time": timestamp,
-        "ingested_at": timestamp,
+        "ingested_at": timestamp + timedelta(seconds=quote_age_seconds),
         "run_id": "test",
         "source": "rest_order_book",
         "depth": 50,
@@ -94,6 +100,12 @@ def test_perps_l2_filters_malformed_books_and_uses_latest_snapshot_per_minute(
             asks=[_level(100.0, 1.0)],
         ),
         _row(timestamp=t0.replace(minute=1), bids=[], asks=[]),
+        _row(
+            timestamp=t0.replace(minute=2),
+            bids=[_level(99.9, 1.0)],
+            asks=[_level(100.1, 1.0)],
+            quote_age_seconds=125,
+        ),
     ]
     _write_bronze(bronze, rows)
 
@@ -108,11 +120,11 @@ def test_perps_l2_filters_malformed_books_and_uses_latest_snapshot_per_minute(
         silver_root=str(silver), exchange="deribit", symbol="BTC-PERPETUAL"
     )
 
-    assert observed_report.rows_in == 6
-    assert observed_report.rows_out == 3
+    assert observed_report.rows_in == 7
+    assert observed_report.rows_out == 4
     assert observed_report.invalid_ohlc_rows == 3
-    assert feature_report.rows_in == 3
-    assert feature_report.rows_out == 2
+    assert feature_report.rows_in == 4
+    assert feature_report.rows_out == 3
     assert feature_report.duplicates_removed == 1
     observed_path = (
         silver
@@ -131,6 +143,7 @@ def test_perps_l2_filters_malformed_books_and_uses_latest_snapshot_per_minute(
     assert feature.columns == SILVER_L2_FEATURE_COLUMNS
     first = feature.row(0, named=True)
     second = feature.row(1, named=True)
+    third = feature.row(2, named=True)
     assert first["best_bid_price"] == pytest.approx(100.0)
     assert first["best_ask_price"] == pytest.approx(100.1)
     assert first["mid_price"] == pytest.approx(100.05)
@@ -141,9 +154,16 @@ def test_perps_l2_filters_malformed_books_and_uses_latest_snapshot_per_minute(
     assert first["bid_depth_50bps"] == pytest.approx(10.0)
     assert first["ask_depth_50bps"] == pytest.approx(7.0)
     assert first["quote_available"] is True
+    assert first["quote_age_seconds"] == pytest.approx(0.0)
+    assert first["stale_quote"] is False
+    assert first["minutes_since_l2_observation"] == 0
     assert second["quote_available"] is False
     assert second["mid_price"] is None
     assert second["bid_depth_10bps"] is None
+    assert third["quote_available"] is True
+    assert third["quote_age_seconds"] == pytest.approx(125.0)
+    assert third["stale_quote"] is True
+    assert third["minutes_since_l2_observation"] == 2
 
 
 def _option_row(
