@@ -666,7 +666,7 @@ Acceptance:
 
 ### PR-22: Index Price And Futures Summary Silver Materialization
 
-Status: Planned; code exists, physical Silver is missing
+Status: Merge-ready - PR #83: https://github.com/SergejSchweizer/crypto-history-loader/pull/83
 
 Branch: `codex/pr22-index-futures-silver-materialization`
 
