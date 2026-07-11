@@ -428,6 +428,46 @@ def prepare_volatility_index_data(pl: Any, frame: Any, symbol: str) -> Any:
     )
 
 
+def prepare_volatility_index_feature(pl: Any, frame: Any, symbol: str) -> Any:
+    """Prepare live-origin volatility-index features without changing IV feature semantics."""
+
+    return (
+        frame.with_columns(
+            [
+                pl.col("timestamp_m1").cast(pl.Datetime(time_unit="us", time_zone="UTC")),
+                pl.col("iv_source_timestamp").cast(pl.Datetime(time_unit="us", time_zone="UTC")),
+                pl.lit(symbol).alias("symbol"),
+            ]
+        )
+        .select(
+            [
+                "timestamp_m1",
+                "exchange",
+                "symbol",
+                pl.col("iv_open").cast(pl.Float64),
+                pl.col("iv_high").cast(pl.Float64),
+                pl.col("iv_low").cast(pl.Float64),
+                pl.col("iv_close").cast(pl.Float64),
+                pl.col("iv_range").cast(pl.Float64),
+                pl.col("iv_return_1m").cast(pl.Float64),
+                pl.col("iv_change_5m").cast(pl.Float64),
+                pl.col("iv_change_15m").cast(pl.Float64),
+                pl.col("iv_change_1h").cast(pl.Float64),
+                pl.col("iv_zscore_1d").cast(pl.Float64),
+                pl.col("iv_zscore_7d").cast(pl.Float64),
+                pl.col("iv_percentile_30d").cast(pl.Float64),
+                pl.col("iv_source_dataset").cast(pl.Utf8),
+                pl.col("iv_source_timestamp"),
+                pl.col("minutes_since_iv_observation").cast(pl.Int64),
+                pl.col("iv_data_available").cast(pl.Boolean),
+                pl.col("iv_source_timestamp").alias("as_of"),
+                pl.lit(True).alias("live_snapshot_derived"),
+            ]
+        )
+        .sort("timestamp_m1")
+    )
+
+
 def prepare_iv_rv(pl: Any, frame: Any, symbol: str) -> Any:
     """Prepare IV/RV spread features for the Gold join contract."""
 
@@ -1090,6 +1130,7 @@ def prepare_dataset_frame(pl: Any, dataset_type: str, frame: Any, symbol: str) -
         "perps_trades_1m_feature": lambda: prepare_trades(pl, frame, symbol),
         "options_trades_1m_feature": lambda: prepare_options_trades(pl, frame, symbol),
         "volatility_index_data_observed": lambda: prepare_volatility_index_data(pl, frame, symbol),
+        "volatility_index_1m_feature": lambda: prepare_volatility_index_feature(pl, frame, symbol),
         "iv_rv_1m_feature": lambda: prepare_iv_rv(pl, frame, symbol),
         "index_price_1m_feature": lambda: prepare_index_price(pl, frame, symbol),
         "futures_summary_1m_feature": lambda: prepare_futures_summary(pl, frame, symbol),
