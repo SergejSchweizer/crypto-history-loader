@@ -24,12 +24,12 @@ Mitigation: Keep debug logs, checkpoint keys, deterministic windows, and complet
 
 Evidence:
 
+- 2026-07-10 `ccb6962` Merge pull request #72 from SergejSchweizer/codex/pr15-recent-trade-snapshot-silver
+- 2026-07-04 `ca0e922` Rename option trades dataset to options_trades
 - 2026-07-04 `11da15c` Rename options trades and perps OHLCV datasets
 - 2026-07-03 `4393c40` Rename perpetual trades dataset
 - 2026-07-01 `f55d766` [codex] Extract OHLCV symbol fetch planning (#46)
 - 2026-06-29 `7232cc4` Extract fetch head gap planning (#42)
-- 2026-06-29 `23082ec` Extract loader symbol fetch adapters
-- 2026-06-29 `4691a58` Extract fetch range planning helpers
 
 ## R002. Dataset naming drift can break Bronze, Silver, and Gold joins
 
@@ -41,12 +41,12 @@ Mitigation: Rename work must update registry specs, lake paths, contracts, CLI c
 
 Evidence:
 
+- 2026-07-10 `8902f6b` Merge pull request #77 from SergejSchweizer/codex/pr18-gold-regime-feature-contract
+- 2026-07-09 `c43e3e3` Merge pull request #58 from SergejSchweizer/codex/pr01-silver-contract-registry-baseline
+- 2026-07-04 `ca0e922` Rename option trades dataset to options_trades
 - 2026-07-04 `ab5543d` Rename open_interest dataset to open interest
 - 2026-07-04 `11da15c` Rename options trades and perps OHLCV datasets
 - 2026-07-03 `c9d39e1` Rename spot_ohlcv OHLCV dataset
-- 2026-07-03 `4393c40` Rename perpetual trades dataset
-- 2026-07-03 `91d7475` Rename perpetual OHLCV dataset
-- 2026-06-27 `a44abc8` Extract dataset transformation contracts (#19)
 
 ## R003. Large refactors can blur architecture boundaries
 
@@ -58,12 +58,12 @@ Mitigation: Keep dependency direction and side effects explicit; verify with arc
 
 Evidence:
 
+- 2026-07-04 `ba93394` Add architecture documentation
 - 2026-07-01 `4e203fb` [codex] Complete Bronze refactor stack (#51)
 - 2026-07-01 `f55d766` [codex] Extract OHLCV symbol fetch planning (#46)
 - 2026-07-01 `a2287a1` Align architecture and coverage refactor gates
 - 2026-07-01 `a674417` Consolidate refactor boundary work
 - 2026-06-29 `febd87e` Extract silver volatility transformation (#45)
-- 2026-06-29 `a8b033d` Extract lake read helpers (#44)
 
 ## R004. Coverage and strict typing can drift after broad edits
 
@@ -75,12 +75,12 @@ Mitigation: Run focused tests first, then full pytest, Ruff, and type checks bef
 
 Evidence:
 
+- 2026-07-10 `850150b` Add GitHub quality gate script
+- 2026-07-10 `c0fca84` Sync stacked PR validation policy
+- 2026-07-09 `2a57684` Extend volatility medallion coverage
 - 2026-07-01 `225a01e` Update README coverage statistics
 - 2026-07-01 `a2287a1` Align architecture and coverage refactor gates
 - 2026-06-27 `931263d` Align validation gates (#17)
-- 2026-05-23 `7f21bf2` Improve project quality gates and config scripts (#2)
-- 2026-05-17 `32c3d28` Remove option instruments dataset, suppress heartbeat logs, and stabilize coverage
-- 2026-05-17 `174ec90` Add option instruments bronze ingestion, unify fetch logs, and raise coverage
 
 ## R005. Documentation snapshots can become stale relative to the lake
 
