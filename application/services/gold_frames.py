@@ -675,6 +675,19 @@ def optional_feature_schema(pl: Any, dataset_type: str) -> list[tuple[str, Any]]
             ("index_price_is_observed", pl.Boolean),
             ("minutes_since_index_price_observation", pl.Int64),
         ],
+        "futures_summary_1m_feature": [
+            ("futures_summary_instrument_type", pl.Utf8),
+            ("futures_summary_mark_price", pl.Float64),
+            ("futures_summary_index_price", pl.Float64),
+            ("futures_summary_mark_index_spread", pl.Float64),
+            ("futures_summary_mark_index_ratio", pl.Float64),
+            ("futures_summary_open_interest", pl.Float64),
+            ("futures_summary_volume", pl.Float64),
+            ("futures_summary_turnover", pl.Float64),
+            ("futures_summary_funding_rate", pl.Float64),
+            ("futures_summary_is_observed", pl.Boolean),
+            ("minutes_since_summary_observation", pl.Int64),
+        ],
         "historical_volatility_observed": [
             ("historical_volatility_reference", pl.Float64),
             (

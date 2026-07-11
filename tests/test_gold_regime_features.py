@@ -248,6 +248,30 @@ def _write_optional_sources(silver: Path, t0: datetime) -> None:
     )
     _write_silver(
         silver,
+        dataset_type="futures_summary_1m_feature",
+        symbol="BTC-PERPETUAL",
+        timeframe="1m",
+        rows=[
+            {
+                "timestamp_m1": t0,
+                "exchange": "deribit",
+                "symbol": "BTC-PERPETUAL",
+                "instrument_type": "future",
+                "mark_price": 101.0,
+                "index_price": 100.0,
+                "mark_index_spread": 1.0,
+                "mark_index_ratio": 1.01,
+                "open_interest": 1000.0,
+                "volume": 25.0,
+                "turnover": 2525.0,
+                "funding_rate": 0.0001,
+                "summary_is_observed": True,
+                "minutes_since_summary_observation": 0,
+            }
+        ],
+    )
+    _write_silver(
+        silver,
         dataset_type="historical_volatility_observed",
         symbol="BTC",
         timeframe="1m",
@@ -315,13 +339,25 @@ def test_regime_gold_contract_is_stable_with_and_without_optional_sources(tmp_pa
     optional_columns = [
         column
         for column in missing.columns
-        if column.startswith(("perps_l2_", "options_l2_", "options_surface_", "index_price", "historical_"))
+        if column.startswith(
+            (
+                "perps_l2_",
+                "options_l2_",
+                "options_surface_",
+                "index_price",
+                "futures_summary_",
+                "historical_",
+            )
+        )
+        or column == "minutes_since_summary_observation"
     ]
     assert optional_columns
     assert all(missing[column].null_count() == missing.height for column in optional_columns)
     assert present["options_surface_atm_iv"].to_list() == [50.0, None]
     assert present["options_l2_contract_count"].to_list() == [2, None]
     assert present["options_l2_quote_coverage_ratio"].to_list() == [0.5, None]
+    assert present["futures_summary_mark_price"].to_list() == [101.0, None]
+    assert present["minutes_since_summary_observation"].to_list() == [0, None]
     assert present["historical_volatility_reference"].to_list() == [30.0, None]
 
     required = [dataset for dataset, _timeframe in _dataset_requirements("gold.market.regime_features.m1")]
@@ -383,5 +419,6 @@ def test_regime_gold_contract_declares_exact_required_and_optional_sources() -> 
         "options_l2_1m_feature",
         "options_surface_1m_feature",
         "index_price_1m_feature",
+        "futures_summary_1m_feature",
         "historical_volatility_observed",
     ]
