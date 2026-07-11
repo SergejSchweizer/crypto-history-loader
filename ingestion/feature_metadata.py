@@ -49,6 +49,8 @@ def feature_source_dataset(column_name: str) -> str:
         return "index_price_1m_feature"
     if column_name.startswith(("futures_summary_", "minutes_since_summary_observation")):
         return "futures_summary_1m_feature"
+    if column_name.startswith("strategy_"):
+        return "gold_strategy_features"
     if column_name.startswith("historical_volatility_"):
         return "historical_volatility_observed"
     return "gold_merged"

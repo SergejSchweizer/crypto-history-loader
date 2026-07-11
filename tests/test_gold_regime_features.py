@@ -41,6 +41,18 @@ def _write_silver(
 
 
 def _write_required_sources(silver: Path, t0: datetime, t1: datetime) -> None:
+    _write_required_sources_for_timestamps(silver, [t0, t1])
+
+
+def _write_required_sources_for_timestamps(
+    silver: Path,
+    timestamps: Sequence[datetime],
+    *,
+    perp_closes: Sequence[float] | None = None,
+    volumes: Sequence[float] | None = None,
+) -> None:
+    closes = list(perp_closes or [10.5 + index for index, _timestamp in enumerate(timestamps)])
+    traded_volumes = list(volumes or [100.0 + index for index, _timestamp in enumerate(timestamps)])
     for dataset_type, symbol, scale in (
         ("spot_ohlcv", "BTC_USDC", 1.0),
         ("perps_ohlcv", "BTC-PERPETUAL", 10.0),
@@ -55,13 +67,13 @@ def _write_required_sources(silver: Path, t0: datetime, t1: datetime) -> None:
                     "open_time": timestamp,
                     "exchange": "deribit",
                     "symbol": "BTC",
-                    "open_price": scale + index,
-                    "high_price": scale + index + 1.0,
-                    "low_price": scale + index - 0.5,
-                    "close_price": scale + index + 0.5,
-                    "volume": 100.0 + index,
+                    "open_price": (closes[index] - 0.5) if dataset_type == "perps_ohlcv" else scale + index,
+                    "high_price": (closes[index] + 0.5) if dataset_type == "perps_ohlcv" else scale + index + 1.0,
+                    "low_price": (closes[index] - 1.0) if dataset_type == "perps_ohlcv" else scale + index - 0.5,
+                    "close_price": closes[index] if dataset_type == "perps_ohlcv" else scale + index + 0.5,
+                    "volume": traded_volumes[index],
                 }
-                for index, timestamp in enumerate((t0, t1))
+                for index, timestamp in enumerate(timestamps)
             ],
         )
     _write_silver(
@@ -79,7 +91,7 @@ def _write_required_sources(silver: Path, t0: datetime, t1: datetime) -> None:
                 "is_funding_observation_minute": index == 0,
                 "funding_data_available": True,
             }
-            for index, timestamp in enumerate((t0, t1))
+            for index, timestamp in enumerate(timestamps)
         ],
     )
     _write_silver(
@@ -98,7 +110,7 @@ def _write_required_sources(silver: Path, t0: datetime, t1: datetime) -> None:
                 "minutes_since_open_interest_observation": 0,
                 "open_interest_observation_lag_sec": 0,
             }
-            for index, timestamp in enumerate((t0, t1))
+            for index, timestamp in enumerate(timestamps)
         ],
     )
     _write_silver(
@@ -121,7 +133,7 @@ def _write_required_sources(silver: Path, t0: datetime, t1: datetime) -> None:
                 "spot_available": True,
                 "perps_available": True,
             }
-            for index, timestamp in enumerate((t0, t1))
+            for index, timestamp in enumerate(timestamps)
         ],
     )
     _write_silver(
@@ -145,7 +157,7 @@ def _write_required_sources(silver: Path, t0: datetime, t1: datetime) -> None:
                 "iv_available": True,
                 "rv_available": True,
             }
-            for index, timestamp in enumerate((t0, t1))
+            for index, timestamp in enumerate(timestamps)
         ],
     )
 
@@ -400,6 +412,77 @@ def test_regime_gold_required_source_gap_fails_loudly(tmp_path: Path) -> None:
             symbol="BTC",
             dataset_id="gold.market.regime_features.m1",
         )
+
+
+def test_regime_gold_strategy_features_are_trailing_state_variables(tmp_path: Path) -> None:
+    """Strategy features should be declared, stable on warm-up, and independent of future rows."""
+
+    timestamps = [datetime(2026, 5, 1, 0, minute, tzinfo=UTC) for minute in range(7)]
+    base_silver = tmp_path / "silver-base"
+    changed_silver = tmp_path / "silver-changed"
+    constant_silver = tmp_path / "silver-constant"
+    base_prices = [100.0, 101.0, 102.0, 101.0, 103.0, 104.0, 105.0]
+    changed_prices = [*base_prices[:-1], 130.0]
+    _write_required_sources_for_timestamps(base_silver, timestamps, perp_closes=base_prices)
+    _write_required_sources_for_timestamps(changed_silver, timestamps, perp_closes=changed_prices)
+    _write_required_sources_for_timestamps(
+        constant_silver,
+        timestamps,
+        perp_closes=[100.0 for _timestamp in timestamps],
+        volumes=[0.0 for _timestamp in timestamps],
+    )
+
+    base_report = build_gold_for_symbol(
+        silver_root=str(base_silver),
+        gold_root=str(tmp_path / "gold-base"),
+        exchange="deribit",
+        symbol="BTC",
+        dataset_id="gold.market.regime_features.m1",
+    )
+    changed_report = build_gold_for_symbol(
+        silver_root=str(changed_silver),
+        gold_root=str(tmp_path / "gold-changed"),
+        exchange="deribit",
+        symbol="BTC",
+        dataset_id="gold.market.regime_features.m1",
+    )
+    constant_report = build_gold_for_symbol(
+        silver_root=str(constant_silver),
+        gold_root=str(tmp_path / "gold-constant"),
+        exchange="deribit",
+        symbol="BTC",
+        dataset_id="gold.market.regime_features.m1",
+    )
+
+    base = pl.read_parquet(base_report.parquet_path).sort("timestamp_m1")
+    changed = pl.read_parquet(changed_report.parquet_path).sort("timestamp_m1")
+    constant = pl.read_parquet(constant_report.parquet_path).sort("timestamp_m1")
+    base_manifest = _manifest(base_report)
+    lookbacks = base_manifest["strategy_feature_lookbacks"]
+    strategy_columns = [column for column in base.columns if column.startswith("strategy_")]
+
+    assert strategy_columns
+    assert set(strategy_columns) == set(lookbacks)
+    assert lookbacks["strategy_momentum_log_return_5m"] == "5m"
+    assert lookbacks["strategy_reversion_vwap_distance_5m"] == "5m"
+    assert not any(
+        token in column.lower()
+        for column in strategy_columns
+        for token in ("label", "target", "future_return", "prediction")
+    )
+    assert base["strategy_momentum_log_return_1m"].to_list()[0] is None
+    assert base["strategy_momentum_log_return_5m"].to_list()[:5] == [None, None, None, None, None]
+    assert base["strategy_cost_turnover_notional_1m"].to_list()[1] == pytest.approx(101.0 * 101.0)
+    assert base["strategy_reversion_vwap_distance_5m"].null_count() < base.height
+    assert constant["strategy_momentum_log_return_1m"].to_list()[1:] == [0.0 for _timestamp in timestamps[1:]]
+    assert constant["strategy_reversion_price_zscore_5m"].null_count() == constant.height
+    assert constant["strategy_reversion_vwap_distance_5m"].null_count() == constant.height
+
+    comparable_columns = ["timestamp_m1", *strategy_columns]
+    assert base.select(comparable_columns).head(6).equals(changed.select(comparable_columns).head(6))
+    assert base_manifest["feature_metadata"]["strategy_momentum_log_return_1m"]["source_dataset"] == (
+        "gold_strategy_features"
+    )
 
 
 def test_regime_gold_contract_declares_exact_required_and_optional_sources() -> None:

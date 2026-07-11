@@ -6,6 +6,23 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+STRATEGY_FEATURE_LOOKBACKS: dict[str, str] = {
+    "strategy_momentum_log_return_1m": "1m",
+    "strategy_momentum_log_return_5m": "5m",
+    "strategy_momentum_vol_scaled_return_5m": "5m",
+    "strategy_trend_ema_3m": "3m",
+    "strategy_trend_ema_slope_3m": "3m",
+    "strategy_trend_breakout_distance_5m": "5m",
+    "strategy_trend_persistence_5m": "5m",
+    "strategy_reversion_price_zscore_5m": "5m",
+    "strategy_reversion_vwap_distance_5m": "5m",
+    "strategy_reversion_bollinger_distance_5m": "5m",
+    "strategy_reversion_spot_perp_spread_zscore_5m": "5m",
+    "strategy_reversion_half_life_5m": "5m",
+    "strategy_cost_turnover_notional_1m": "1m",
+    "strategy_cost_spot_perp_spread": "1m",
+}
+
 
 def require_polars() -> Any:
     """Import Polars for Gold frame operations.
@@ -701,6 +718,152 @@ def optional_feature_schema(pl: Any, dataset_type: str) -> list[tuple[str, Any]]
         return schemas[dataset_type]
     except KeyError as exc:
         raise ValueError(f"Unsupported optional Gold dataset_type: {dataset_type}") from exc
+
+
+def strategy_feature_lookbacks() -> dict[str, str]:
+    """Return declared trailing lookbacks for Gold strategy feature families."""
+
+    return dict(STRATEGY_FEATURE_LOOKBACKS)
+
+
+def add_strategy_feature_families(pl: Any, frame: Any) -> Any:
+    """Add trailing strategy state features without forward-looking labels or targets."""
+
+    group = ["exchange", "symbol"]
+    sorted_frame = frame.sort("timestamp_m1")
+    price = pl.col("perp_close_price")
+    spot_price = pl.col("spot_ohlcv_close_price")
+    volume = pl.col("perp_volume")
+
+    enriched = sorted_frame.with_columns(
+        [
+            _safe_log_return(pl, "perp_close_price", 1).alias("strategy_momentum_log_return_1m"),
+            _safe_log_return(pl, "perp_close_price", 5).alias("strategy_momentum_log_return_5m"),
+            (_safe_ratio(pl, price, spot_price) - 1.0).alias("strategy_cost_spot_perp_spread"),
+            (price * volume).alias("strategy_cost_turnover_notional_1m"),
+        ]
+    )
+    enriched = enriched.with_columns(
+        [
+            price.ewm_mean(span=3, adjust=False).over(group).alias("strategy_trend_ema_3m"),
+            price.rolling_max_by("timestamp_m1", window_size="5m", min_samples=2)
+            .over(group)
+            .alias("_strategy_price_high_5m"),
+            price.rolling_mean_by("timestamp_m1", window_size="5m", min_samples=2)
+            .over(group)
+            .alias("_strategy_price_mean_5m"),
+            price.rolling_std_by("timestamp_m1", window_size="5m", min_samples=2)
+            .over(group)
+            .alias("_strategy_price_std_5m"),
+            (price * volume)
+            .rolling_sum_by("timestamp_m1", window_size="5m", min_samples=1)
+            .over(group)
+            .alias("_strategy_price_volume_sum_5m"),
+            volume.rolling_sum_by("timestamp_m1", window_size="5m", min_samples=1)
+            .over(group)
+            .alias("_strategy_volume_sum_5m"),
+            pl.col("strategy_cost_spot_perp_spread")
+            .rolling_mean_by("timestamp_m1", window_size="5m", min_samples=2)
+            .over(group)
+            .alias("_strategy_spread_mean_5m"),
+            pl.col("strategy_cost_spot_perp_spread")
+            .rolling_std_by("timestamp_m1", window_size="5m", min_samples=2)
+            .over(group)
+            .alias("_strategy_spread_std_5m"),
+        ]
+    )
+    enriched = enriched.with_columns(
+        [
+            (
+                _safe_ratio(pl, pl.col("strategy_trend_ema_3m"), pl.col("strategy_trend_ema_3m").shift(1).over(group))
+                - 1.0
+            ).alias("strategy_trend_ema_slope_3m"),
+            (_safe_ratio(pl, price, pl.col("_strategy_price_high_5m")) - 1.0).alias(
+                "strategy_trend_breakout_distance_5m"
+            ),
+            _rolling_direction_score(pl, "strategy_momentum_log_return_1m", "5m").alias(
+                "strategy_trend_persistence_5m"
+            ),
+            _safe_ratio(pl, pl.col("strategy_momentum_log_return_5m"), pl.col("rv_1h")).alias(
+                "strategy_momentum_vol_scaled_return_5m"
+            ),
+            _safe_ratio(pl, price - pl.col("_strategy_price_mean_5m"), pl.col("_strategy_price_std_5m")).alias(
+                "strategy_reversion_price_zscore_5m"
+            ),
+            _safe_ratio(
+                pl,
+                price - _safe_ratio(pl, pl.col("_strategy_price_volume_sum_5m"), pl.col("_strategy_volume_sum_5m")),
+                _safe_ratio(pl, pl.col("_strategy_price_volume_sum_5m"), pl.col("_strategy_volume_sum_5m")),
+            ).alias("strategy_reversion_vwap_distance_5m"),
+            _safe_ratio(pl, price - pl.col("_strategy_price_mean_5m"), pl.col("_strategy_price_std_5m") * 2.0).alias(
+                "strategy_reversion_bollinger_distance_5m"
+            ),
+            _safe_ratio(
+                pl,
+                pl.col("strategy_cost_spot_perp_spread") - pl.col("_strategy_spread_mean_5m"),
+                pl.col("_strategy_spread_std_5m"),
+            ).alias("strategy_reversion_spot_perp_spread_zscore_5m"),
+        ]
+    )
+    enriched = enriched.with_columns(
+        [
+            (price - pl.col("_strategy_price_mean_5m")).alias("_strategy_reversion_deviation"),
+        ]
+    )
+    enriched = enriched.with_columns(
+        [
+            pl.col("_strategy_reversion_deviation").shift(1).over(group).alias("_strategy_reversion_deviation_lag1"),
+        ]
+    )
+    enriched = enriched.with_columns(
+        [
+            (pl.col("_strategy_reversion_deviation") * pl.col("_strategy_reversion_deviation_lag1"))
+            .rolling_sum_by("timestamp_m1", window_size="5m", min_samples=3)
+            .over(group)
+            .alias("_strategy_reversion_autocov_5m"),
+            pl.col("_strategy_reversion_deviation_lag1")
+            .pow(2)
+            .rolling_sum_by("timestamp_m1", window_size="5m", min_samples=3)
+            .over(group)
+            .alias("_strategy_reversion_lag_var_5m"),
+        ]
+    )
+    enriched = enriched.with_columns(
+        [
+            _safe_ratio(pl, pl.col("_strategy_reversion_autocov_5m"), pl.col("_strategy_reversion_lag_var_5m")).alias(
+                "_strategy_reversion_phi_5m"
+            ),
+        ]
+    )
+    return (
+        enriched.with_columns(
+            [
+                pl.when((pl.col("_strategy_reversion_phi_5m") > 0.0) & (pl.col("_strategy_reversion_phi_5m") < 1.0))
+                .then(0.6931471805599453 / -pl.col("_strategy_reversion_phi_5m").log())
+                .otherwise(None)
+                .alias("strategy_reversion_half_life_5m"),
+            ]
+        )
+        .drop([column for column in enriched.columns if column.startswith("_strategy_")])
+        .sort("timestamp_m1")
+    )
+
+
+def _safe_log_return(pl: Any, column: str, periods: int) -> Any:
+    current = pl.col(column)
+    previous = pl.col(column).shift(periods).over(["exchange", "symbol"])
+    return pl.when((current > 0.0) & (previous > 0.0)).then((current / previous).log()).otherwise(None)
+
+
+def _safe_ratio(pl: Any, numerator: Any, denominator: Any) -> Any:
+    return pl.when(denominator.is_not_null() & (denominator != 0.0)).then(numerator / denominator).otherwise(None)
+
+
+def _rolling_direction_score(pl: Any, column: str, window_size: str) -> Any:
+    direction = pl.when(pl.col(column) > 0.0).then(1.0).when(pl.col(column) < 0.0).then(-1.0).otherwise(0.0)
+    return direction.rolling_mean_by("timestamp_m1", window_size=window_size, min_samples=2).over(
+        ["exchange", "symbol"]
+    )
 
 
 def prepare_dataset_frame(pl: Any, dataset_type: str, frame: Any, symbol: str) -> Any:
