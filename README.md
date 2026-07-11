@@ -799,6 +799,8 @@ Operational notes:
   the script after intentional changes to required checks, merge policy, or branch protection.
 - Pull requests run the required `pr-quality` job before merge.
 - Pushes to `main` and merge-queue candidates run the full `main-quality` job, including coverage.
+- If GitHub rejects merge-queue setup through the API, the script keeps branch protection in place
+  and reports the remaining manual UI action.
 
 ---
 

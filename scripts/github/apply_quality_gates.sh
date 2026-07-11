@@ -26,12 +26,14 @@ gh api \
   --field allow_rebase_merge=false \
   --field delete_branch_on_merge=true \
   --field squash_merge_commit_title=PR_TITLE \
-  --field squash_merge_commit_message=PR_BODY
+  --field squash_merge_commit_message=PR_BODY \
+  --silent
 
 gh api \
   --method PUT \
   "repos/${repo}/branches/${branch}/protection" \
-  --input - <<JSON
+  --input - \
+  --silent <<JSON
 {
   "required_status_checks": {
     "strict": true,
@@ -50,77 +52,86 @@ gh api \
 }
 JSON
 
-ruleset_id="$(
-  gh api "repos/${repo}/rulesets" \
-    --jq ".[] | select(.name == \"${ruleset_name}\") | .id" \
+repo_owner="${repo%%/*}"
+repo_name="${repo#*/}"
+repo_node_id="$(
+  gh api graphql \
+    -f owner="${repo_owner}" \
+    -f name="${repo_name}" \
+    -f query='query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) { id } }' \
+    --jq '.data.repository.id'
+)"
+existing_ruleset_id="$(
+  gh api graphql \
+    -f owner="${repo_owner}" \
+    -f name="${repo_name}" \
+    -f query='query($owner: String!, $name: String!) {
+      repository(owner: $owner, name: $name) {
+        rulesets(first: 100) {
+          nodes { id name }
+        }
+      }
+    }' \
+    --jq ".data.repository.rulesets.nodes[] | select(.name == \"${ruleset_name}\") | .id" \
     | head -n 1
 )"
 
-ruleset_payload="$(
-  cat <<JSON
-{
-  "name": "${ruleset_name}",
-  "target": "branch",
-  "enforcement": "active",
-  "conditions": {
-    "ref_name": {
-      "include": ["refs/heads/${branch}"],
-      "exclude": []
-    }
-  },
-  "rules": [
-    {"type": "deletion"},
-    {"type": "non_fast_forward"},
-    {"type": "required_linear_history"},
-    {
-      "type": "pull_request",
-      "parameters": {
-        "required_approving_review_count": 0,
-        "dismiss_stale_reviews_on_push": false,
-        "require_code_owner_review": false,
-        "require_last_push_approval": false,
-        "required_review_thread_resolution": true,
-        "allowed_merge_methods": ["squash"]
-      }
-    },
-    {
-      "type": "required_status_checks",
-      "parameters": {
-        "strict_required_status_checks_policy": true,
-        "do_not_enforce_on_create": false,
-        "required_status_checks": [
-          {"context": "${main_required_check}"}
-        ]
-      }
-    },
-    {
-      "type": "merge_queue",
-      "parameters": {
-        "merge_method": "SQUASH",
-        "max_entries_to_build": 5,
-        "max_entries_to_merge": 5,
-        "min_entries_to_merge": 1,
-        "min_entries_to_merge_wait_minutes": 0,
-        "grouping_strategy": "ALLGREEN",
-        "check_response_timeout_minutes": 60
-      }
-    }
-  ],
-  "bypass_actors": []
-}
-JSON
-)"
-
-if [[ -n "${ruleset_id}" ]]; then
-  gh api \
-    --method PUT \
-    "repos/${repo}/rulesets/${ruleset_id}" \
-    --input - <<<"${ruleset_payload}"
-else
-  gh api \
-    --method POST \
-    "repos/${repo}/rulesets" \
-    --input - <<<"${ruleset_payload}"
+if [[ -n "${existing_ruleset_id}" ]]; then
+  echo "Merge-queue ruleset '${ruleset_name}' already exists; leaving it unchanged."
+  echo "Configured squash-only merges, automatic branch deletion, and pr-quality branch protection."
+  exit 0
 fi
 
+merge_queue_result="$(
+  gh api graphql \
+    -f sourceId="${repo_node_id}" \
+    -f rulesetName="${ruleset_name}" \
+    -f branchRef="refs/heads/${branch}" \
+    -f mainCheck="${main_required_check}" \
+    -f query='mutation($sourceId: ID!, $rulesetName: String!, $branchRef: String!, $mainCheck: String!) {
+      createRepositoryRuleset(input: {
+        sourceId: $sourceId
+        name: $rulesetName
+        target: BRANCH
+        enforcement: ACTIVE
+        conditions: { refName: { include: [$branchRef], exclude: [] } }
+        bypassActors: []
+        rules: [
+          { type: DELETION }
+          { type: NON_FAST_FORWARD }
+          { type: REQUIRED_LINEAR_HISTORY }
+          { type: PULL_REQUEST, parameters: { pullRequest: {
+            requiredApprovingReviewCount: 0
+            dismissStaleReviewsOnPush: false
+            requireCodeOwnerReview: false
+            requireLastPushApproval: false
+            requiredReviewThreadResolution: true
+            allowedMergeMethods: [SQUASH]
+          } } }
+          { type: REQUIRED_STATUS_CHECKS, parameters: { requiredStatusChecks: {
+            strictRequiredStatusChecksPolicy: true
+            doNotEnforceOnCreate: false
+            requiredStatusChecks: [{ context: $mainCheck }]
+          } } }
+          { type: MERGE_QUEUE, parameters: { mergeQueue: {
+            mergeMethod: SQUASH
+            maxEntriesToBuild: 5
+            maxEntriesToMerge: 5
+            minEntriesToMerge: 1
+            minEntriesToMergeWaitMinutes: 0
+            groupingStrategy: ALLGREEN
+            checkResponseTimeoutMinutes: 60
+          } } }
+        ]
+      }) { ruleset { databaseId name } }
+    }' 2>&1
+)" || {
+  echo "Warning: GitHub rejected merge-queue ruleset '${ruleset_name}'." >&2
+  echo "${merge_queue_result}" >&2
+  echo "Branch protection still requires ${pr_required_check}; ${main_required_check} runs on pushes to ${branch}." >&2
+  echo "Enable merge queue in the GitHub UI if this repository plan or account does not allow API setup." >&2
+  exit 0
+}
+
+echo "${merge_queue_result}"
 echo "Configured squash-only merges, automatic branch deletion, pr-quality branch protection, and main-quality merge queue."
