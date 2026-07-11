@@ -771,7 +771,7 @@ Acceptance:
 
 ### PR-27: Recent Trade Snapshot Silver Materialization
 
-Status: Planned; code exists, physical Silver is missing
+Status: Merge-ready - PR #97: https://github.com/SergejSchweizer/crypto-history-loader/pull/97
 
 Branch: `codex/pr27-recent-trades-silver-materialization`
 
