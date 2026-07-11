@@ -327,6 +327,9 @@ Applies to day-to-day agent execution flow for implementation, debugging, and de
 - [MUST] Use lowercase letters, numbers, and hyphens only in branch names.
 - [MUST] Do not use vague branch names such as `codex/fixes`, `codex/update`, `codex/big-change`, `codex/refactor-all`, or `codex/work`.
 - [MUST] Keep one branch to one logical change.
+- [MUST] Pursue backlog PRs as stacked PRs: preserve their declared order, base each follow-up
+  backlog branch on the preceding backlog branch until it merges, and restack downstream branches
+  after upstream merges.
 - [MUST] Before starting a task, run `git status`, `git branch --show-current`, `git fetch origin`, `git checkout main`, and `git pull --ff-only origin main`.
 - [MUST] If the working tree is not clean before starting, stop and report changed files.
 - [MUST] Do not overwrite, delete, stash, reset, or otherwise discard user changes unless explicitly instructed.
