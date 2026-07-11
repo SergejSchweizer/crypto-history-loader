@@ -417,11 +417,32 @@ def test_regime_gold_required_source_gap_fails_loudly(tmp_path: Path) -> None:
 def test_regime_gold_strategy_features_are_trailing_state_variables(tmp_path: Path) -> None:
     """Strategy features should be declared, stable on warm-up, and independent of future rows."""
 
-    timestamps = [datetime(2026, 5, 1, 0, minute, tzinfo=UTC) for minute in range(7)]
+    timestamps = [datetime(2026, 5, 1, 0, minute, tzinfo=UTC) for minute in range(20)]
     base_silver = tmp_path / "silver-base"
     changed_silver = tmp_path / "silver-changed"
     constant_silver = tmp_path / "silver-constant"
-    base_prices = [100.0, 101.0, 102.0, 101.0, 103.0, 104.0, 105.0]
+    base_prices = [
+        100.0,
+        101.0,
+        102.0,
+        101.0,
+        103.0,
+        104.0,
+        105.0,
+        104.0,
+        106.0,
+        107.0,
+        108.0,
+        107.0,
+        109.0,
+        110.0,
+        111.0,
+        112.0,
+        111.0,
+        113.0,
+        114.0,
+        115.0,
+    ]
     changed_prices = [*base_prices[:-1], 130.0]
     _write_required_sources_for_timestamps(base_silver, timestamps, perp_closes=base_prices)
     _write_required_sources_for_timestamps(changed_silver, timestamps, perp_closes=changed_prices)
@@ -464,7 +485,10 @@ def test_regime_gold_strategy_features_are_trailing_state_variables(tmp_path: Pa
     assert strategy_columns
     assert set(strategy_columns) == set(lookbacks)
     assert lookbacks["strategy_momentum_log_return_5m"] == "5m"
+    assert lookbacks["strategy_momentum_log_return_15m"] == "15m"
+    assert lookbacks["strategy_trend_ema_slope_10m"] == "10m"
     assert lookbacks["strategy_reversion_vwap_distance_5m"] == "5m"
+    assert lookbacks["strategy_reversion_vwap_distance_15m"] == "15m"
     assert not any(
         token in column.lower()
         for column in strategy_columns
@@ -472,14 +496,23 @@ def test_regime_gold_strategy_features_are_trailing_state_variables(tmp_path: Pa
     )
     assert base["strategy_momentum_log_return_1m"].to_list()[0] is None
     assert base["strategy_momentum_log_return_5m"].to_list()[:5] == [None, None, None, None, None]
+    assert base["strategy_momentum_log_return_15m"].to_list()[:15] == [None for _index in range(15)]
     assert base["strategy_cost_turnover_notional_1m"].to_list()[1] == pytest.approx(101.0 * 101.0)
+    assert base["strategy_cost_turnover_notional_5m"].to_list()[1] == pytest.approx((100.0 * 100.0) + (101.0 * 101.0))
+    assert base["strategy_cost_turnover_notional_15m"].to_list()[1] == pytest.approx((100.0 * 100.0) + (101.0 * 101.0))
     assert base["strategy_reversion_vwap_distance_5m"].null_count() < base.height
+    assert base["strategy_reversion_vwap_distance_15m"].null_count() < base.height
+    assert base["strategy_trend_ema_slope_10m"].null_count() < base.height
+    assert base["strategy_trend_persistence_15m"].null_count() < base.height
     assert constant["strategy_momentum_log_return_1m"].to_list()[1:] == [0.0 for _timestamp in timestamps[1:]]
+    assert constant["strategy_momentum_log_return_15m"].to_list()[15:] == [0.0 for _timestamp in timestamps[15:]]
     assert constant["strategy_reversion_price_zscore_5m"].null_count() == constant.height
+    assert constant["strategy_reversion_price_zscore_15m"].null_count() == constant.height
     assert constant["strategy_reversion_vwap_distance_5m"].null_count() == constant.height
+    assert constant["strategy_reversion_vwap_distance_15m"].null_count() == constant.height
 
     comparable_columns = ["timestamp_m1", *strategy_columns]
-    assert base.select(comparable_columns).head(6).equals(changed.select(comparable_columns).head(6))
+    assert base.select(comparable_columns).head(19).equals(changed.select(comparable_columns).head(19))
     assert base_manifest["feature_metadata"]["strategy_momentum_log_return_1m"]["source_dataset"] == (
         "gold_strategy_features"
     )

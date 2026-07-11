@@ -9,17 +9,29 @@ from typing import Any
 STRATEGY_FEATURE_LOOKBACKS: dict[str, str] = {
     "strategy_momentum_log_return_1m": "1m",
     "strategy_momentum_log_return_5m": "5m",
+    "strategy_momentum_log_return_15m": "15m",
     "strategy_momentum_vol_scaled_return_5m": "5m",
+    "strategy_momentum_vol_scaled_return_15m": "15m",
     "strategy_trend_ema_3m": "3m",
     "strategy_trend_ema_slope_3m": "3m",
+    "strategy_trend_ema_10m": "10m",
+    "strategy_trend_ema_slope_10m": "10m",
     "strategy_trend_breakout_distance_5m": "5m",
+    "strategy_trend_breakout_distance_15m": "15m",
     "strategy_trend_persistence_5m": "5m",
+    "strategy_trend_persistence_15m": "15m",
     "strategy_reversion_price_zscore_5m": "5m",
+    "strategy_reversion_price_zscore_15m": "15m",
     "strategy_reversion_vwap_distance_5m": "5m",
+    "strategy_reversion_vwap_distance_15m": "15m",
     "strategy_reversion_bollinger_distance_5m": "5m",
+    "strategy_reversion_bollinger_distance_15m": "15m",
     "strategy_reversion_spot_perp_spread_zscore_5m": "5m",
+    "strategy_reversion_spot_perp_spread_zscore_15m": "15m",
     "strategy_reversion_half_life_5m": "5m",
     "strategy_cost_turnover_notional_1m": "1m",
+    "strategy_cost_turnover_notional_5m": "5m",
+    "strategy_cost_turnover_notional_15m": "15m",
     "strategy_cost_spot_perp_spread": "1m",
 }
 
@@ -739,6 +751,7 @@ def add_strategy_feature_families(pl: Any, frame: Any) -> Any:
         [
             _safe_log_return(pl, "perp_close_price", 1).alias("strategy_momentum_log_return_1m"),
             _safe_log_return(pl, "perp_close_price", 5).alias("strategy_momentum_log_return_5m"),
+            _safe_log_return(pl, "perp_close_price", 15).alias("strategy_momentum_log_return_15m"),
             (_safe_ratio(pl, price, spot_price) - 1.0).alias("strategy_cost_spot_perp_spread"),
             (price * volume).alias("strategy_cost_turnover_notional_1m"),
         ]
@@ -746,30 +759,63 @@ def add_strategy_feature_families(pl: Any, frame: Any) -> Any:
     enriched = enriched.with_columns(
         [
             price.ewm_mean(span=3, adjust=False).over(group).alias("strategy_trend_ema_3m"),
+            price.ewm_mean(span=10, adjust=False).over(group).alias("strategy_trend_ema_10m"),
             price.rolling_max_by("timestamp_m1", window_size="5m", min_samples=2)
             .over(group)
             .alias("_strategy_price_high_5m"),
+            price.rolling_max_by("timestamp_m1", window_size="15m", min_samples=2)
+            .over(group)
+            .alias("_strategy_price_high_15m"),
             price.rolling_mean_by("timestamp_m1", window_size="5m", min_samples=2)
             .over(group)
             .alias("_strategy_price_mean_5m"),
+            price.rolling_mean_by("timestamp_m1", window_size="15m", min_samples=2)
+            .over(group)
+            .alias("_strategy_price_mean_15m"),
             price.rolling_std_by("timestamp_m1", window_size="5m", min_samples=2)
             .over(group)
             .alias("_strategy_price_std_5m"),
+            price.rolling_std_by("timestamp_m1", window_size="15m", min_samples=2)
+            .over(group)
+            .alias("_strategy_price_std_15m"),
             (price * volume)
             .rolling_sum_by("timestamp_m1", window_size="5m", min_samples=1)
             .over(group)
             .alias("_strategy_price_volume_sum_5m"),
+            (price * volume)
+            .rolling_sum_by("timestamp_m1", window_size="15m", min_samples=1)
+            .over(group)
+            .alias("_strategy_price_volume_sum_15m"),
             volume.rolling_sum_by("timestamp_m1", window_size="5m", min_samples=1)
             .over(group)
             .alias("_strategy_volume_sum_5m"),
+            volume.rolling_sum_by("timestamp_m1", window_size="15m", min_samples=1)
+            .over(group)
+            .alias("_strategy_volume_sum_15m"),
+            pl.col("strategy_cost_turnover_notional_1m")
+            .rolling_sum_by("timestamp_m1", window_size="5m", min_samples=1)
+            .over(group)
+            .alias("strategy_cost_turnover_notional_5m"),
+            pl.col("strategy_cost_turnover_notional_1m")
+            .rolling_sum_by("timestamp_m1", window_size="15m", min_samples=1)
+            .over(group)
+            .alias("strategy_cost_turnover_notional_15m"),
             pl.col("strategy_cost_spot_perp_spread")
             .rolling_mean_by("timestamp_m1", window_size="5m", min_samples=2)
             .over(group)
             .alias("_strategy_spread_mean_5m"),
             pl.col("strategy_cost_spot_perp_spread")
+            .rolling_mean_by("timestamp_m1", window_size="15m", min_samples=2)
+            .over(group)
+            .alias("_strategy_spread_mean_15m"),
+            pl.col("strategy_cost_spot_perp_spread")
             .rolling_std_by("timestamp_m1", window_size="5m", min_samples=2)
             .over(group)
             .alias("_strategy_spread_std_5m"),
+            pl.col("strategy_cost_spot_perp_spread")
+            .rolling_std_by("timestamp_m1", window_size="15m", min_samples=2)
+            .over(group)
+            .alias("_strategy_spread_std_15m"),
         ]
     )
     enriched = enriched.with_columns(
@@ -778,31 +824,66 @@ def add_strategy_feature_families(pl: Any, frame: Any) -> Any:
                 _safe_ratio(pl, pl.col("strategy_trend_ema_3m"), pl.col("strategy_trend_ema_3m").shift(1).over(group))
                 - 1.0
             ).alias("strategy_trend_ema_slope_3m"),
+            (
+                _safe_ratio(
+                    pl,
+                    pl.col("strategy_trend_ema_10m"),
+                    pl.col("strategy_trend_ema_10m").shift(1).over(group),
+                )
+                - 1.0
+            ).alias("strategy_trend_ema_slope_10m"),
             (_safe_ratio(pl, price, pl.col("_strategy_price_high_5m")) - 1.0).alias(
                 "strategy_trend_breakout_distance_5m"
+            ),
+            (_safe_ratio(pl, price, pl.col("_strategy_price_high_15m")) - 1.0).alias(
+                "strategy_trend_breakout_distance_15m"
             ),
             _rolling_direction_score(pl, "strategy_momentum_log_return_1m", "5m").alias(
                 "strategy_trend_persistence_5m"
             ),
+            _rolling_direction_score(pl, "strategy_momentum_log_return_1m", "15m").alias(
+                "strategy_trend_persistence_15m"
+            ),
             _safe_ratio(pl, pl.col("strategy_momentum_log_return_5m"), pl.col("rv_1h")).alias(
                 "strategy_momentum_vol_scaled_return_5m"
             ),
+            _safe_ratio(pl, pl.col("strategy_momentum_log_return_15m"), pl.col("rv_1h")).alias(
+                "strategy_momentum_vol_scaled_return_15m"
+            ),
             _safe_ratio(pl, price - pl.col("_strategy_price_mean_5m"), pl.col("_strategy_price_std_5m")).alias(
                 "strategy_reversion_price_zscore_5m"
+            ),
+            _safe_ratio(pl, price - pl.col("_strategy_price_mean_15m"), pl.col("_strategy_price_std_15m")).alias(
+                "strategy_reversion_price_zscore_15m"
             ),
             _safe_ratio(
                 pl,
                 price - _safe_ratio(pl, pl.col("_strategy_price_volume_sum_5m"), pl.col("_strategy_volume_sum_5m")),
                 _safe_ratio(pl, pl.col("_strategy_price_volume_sum_5m"), pl.col("_strategy_volume_sum_5m")),
             ).alias("strategy_reversion_vwap_distance_5m"),
+            _safe_ratio(
+                pl,
+                price - _safe_ratio(pl, pl.col("_strategy_price_volume_sum_15m"), pl.col("_strategy_volume_sum_15m")),
+                _safe_ratio(pl, pl.col("_strategy_price_volume_sum_15m"), pl.col("_strategy_volume_sum_15m")),
+            ).alias("strategy_reversion_vwap_distance_15m"),
             _safe_ratio(pl, price - pl.col("_strategy_price_mean_5m"), pl.col("_strategy_price_std_5m") * 2.0).alias(
                 "strategy_reversion_bollinger_distance_5m"
             ),
             _safe_ratio(
                 pl,
+                price - pl.col("_strategy_price_mean_15m"),
+                pl.col("_strategy_price_std_15m") * 2.0,
+            ).alias("strategy_reversion_bollinger_distance_15m"),
+            _safe_ratio(
+                pl,
                 pl.col("strategy_cost_spot_perp_spread") - pl.col("_strategy_spread_mean_5m"),
                 pl.col("_strategy_spread_std_5m"),
             ).alias("strategy_reversion_spot_perp_spread_zscore_5m"),
+            _safe_ratio(
+                pl,
+                pl.col("strategy_cost_spot_perp_spread") - pl.col("_strategy_spread_mean_15m"),
+                pl.col("_strategy_spread_std_15m"),
+            ).alias("strategy_reversion_spot_perp_spread_zscore_15m"),
         ]
     )
     enriched = enriched.with_columns(
