@@ -792,7 +792,7 @@ Acceptance:
 
 ### PR-28: Instrument Metadata Silver Materialization
 
-Status: Planned; code exists, physical Silver is missing
+Status: Merge-ready - PR #98: https://github.com/SergejSchweizer/crypto-history-loader/pull/98
 
 Branch: `codex/pr28-instrument-metadata-silver-materialization`
 

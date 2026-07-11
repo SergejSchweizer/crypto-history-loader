@@ -171,3 +171,118 @@ def test_metadata_builders_share_contract_and_keep_latest_valid_daily_rows(tmp_p
     assert futures["listing_state"].to_list() == ["open", "open"]
     common = pl.concat([options, futures], how="vertical")
     assert common.select(["snapshot_date", "instrument_name"]).unique().height == 3
+
+
+def test_metadata_builder_preserves_expiry_transitions_and_inactive_instruments(tmp_path: Path) -> None:
+    """Metadata rows should carry lifecycle state without inferring identity from names alone."""
+
+    bronze = tmp_path / "bronze"
+    silver = tmp_path / "silver"
+    ingested = datetime(2026, 5, 25, 3, tzinfo=UTC)
+    active_option = _metadata_row(
+        dataset_type="instrument_metadata_snapshot_daily",
+        instrument_name="BTC-12JUN26-65000-C",
+        kind="option",
+        ingested_at=ingested,
+        expiration_timestamp=datetime(2026, 6, 12, 8, tzinfo=UTC),
+        option_type="call",
+        strike=65000.0,
+        tick_size=0.0001,
+        state="open",
+    )
+    expired_option = _metadata_row(
+        dataset_type="instrument_metadata_snapshot_daily",
+        instrument_name="BTC-24MAY26-60000-P",
+        kind="option",
+        ingested_at=ingested + timedelta(minutes=1),
+        expiration_timestamp=datetime(2026, 5, 24, 8, tzinfo=UTC),
+        option_type="put",
+        strike=60000.0,
+        tick_size=0.0002,
+        state="expired",
+    )
+    inactive_future = _metadata_row(
+        dataset_type="futures_instrument_metadata_snapshot_daily",
+        instrument_name="BTC-24MAY26",
+        kind="future",
+        ingested_at=ingested,
+        expiration_timestamp=datetime(2026, 5, 24, 8, tzinfo=UTC),
+        option_type=None,
+        strike=None,
+        tick_size=2.5,
+        state="closed",
+    )
+    _write_metadata(
+        bronze,
+        dataset_type="instrument_metadata_snapshot_daily",
+        rows=[
+            active_option,
+            expired_option,
+            {
+                **active_option,
+                "instrument_name": "BTC-13JUN26-70000-C",
+                "option_type": None,
+                "strike": None,
+            },
+        ],
+    )
+    _write_metadata(
+        bronze,
+        dataset_type="futures_instrument_metadata_snapshot_daily",
+        rows=[{**inactive_future, "is_active": False}],
+    )
+
+    option_report = build_instrument_metadata_observed_for_symbol(
+        bronze_root=str(bronze), silver_root=str(silver), exchange="deribit", symbol="BTC"
+    )
+    futures_report = build_futures_instrument_metadata_observed_for_symbol(
+        bronze_root=str(bronze), silver_root=str(silver), exchange="deribit", symbol="BTC"
+    )
+
+    assert option_report.rows_in == 3
+    assert option_report.rows_out == 2
+    assert option_report.invalid_ohlc_rows == 1
+    assert futures_report.rows_in == 1
+    assert futures_report.rows_out == 1
+    options = pl.read_parquet(
+        silver
+        / "dataset_type=instrument_metadata_snapshot_daily_observed"
+        / "exchange=deribit"
+        / "symbol=BTC"
+        / "timeframe=1d"
+        / "year=2026"
+        / "month=2026-05"
+        / "BTC-2026-05.parquet"
+    ).sort("instrument_name")
+    futures = pl.read_parquet(
+        silver
+        / "dataset_type=futures_instrument_metadata_snapshot_daily_observed"
+        / "exchange=deribit"
+        / "symbol=BTC"
+        / "timeframe=1d"
+        / "year=2026"
+        / "month=2026-05"
+        / "BTC-2026-05.parquet"
+    )
+
+    assert options.select(["instrument_name", "is_listed", "listing_state"]).to_dicts() == [
+        {
+            "instrument_name": "BTC-12JUN26-65000-C",
+            "is_listed": True,
+            "listing_state": "open",
+        },
+        {
+            "instrument_name": "BTC-24MAY26-60000-P",
+            "is_listed": False,
+            "listing_state": "expired",
+        },
+    ]
+    assert options["option_type"].to_list() == ["C", "P"]
+    assert futures.select(["instrument_name", "is_active", "is_listed", "listing_state"]).to_dicts() == [
+        {
+            "instrument_name": "BTC-24MAY26",
+            "is_active": False,
+            "is_listed": False,
+            "listing_state": "closed",
+        }
+    ]
