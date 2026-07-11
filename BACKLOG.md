@@ -921,7 +921,7 @@ Acceptance:
 
 ### PR-34: Live-Origin Gold Feature Contract
 
-Status: In progress - PR #107: https://github.com/SergejSchweizer/crypto-history-loader/pull/107
+Status: In progress - PR #107: https://github.com/SergejSchweizer/crypto-history-loader/pull/107; PR #108: https://github.com/SergejSchweizer/crypto-history-loader/pull/108
 
 Branch: `codex/pr34-live-gold-feature-contract`
 

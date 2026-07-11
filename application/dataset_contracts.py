@@ -719,6 +719,11 @@ PREDICTION_TARGET_GOLD_REQUIREMENTS = (
 
 LIVE_VOLATILITY_GOLD_REQUIREMENTS = (GoldSourceRequirement("volatility_index_1m_feature", "1m"),)
 
+LIVE_MICROSTRUCTURE_GOLD_REQUIREMENTS = (
+    GoldSourceRequirement("perps_l2_1m_feature", "1m"),
+    GoldSourceRequirement("options_l2_1m_feature", "1m"),
+)
+
 GOLD_DATASET_CONTRACTS: dict[str, GoldDatasetContract] = {
     "gold.market.perps_trades.m1": GoldDatasetContract(
         dataset_id="gold.market.perps_trades.m1",
@@ -781,6 +786,12 @@ GOLD_DATASET_CONTRACTS: dict[str, GoldDatasetContract] = {
     "gold.live.volatility_features.m1": GoldDatasetContract(
         dataset_id="gold.live.volatility_features.m1",
         requirements=LIVE_VOLATILITY_GOLD_REQUIREMENTS,
+        include_l2=False,
+        missing_data_policy="observed_only",
+    ),
+    "gold.live.microstructure_features.m1": GoldDatasetContract(
+        dataset_id="gold.live.microstructure_features.m1",
+        requirements=LIVE_MICROSTRUCTURE_GOLD_REQUIREMENTS,
         include_l2=False,
         missing_data_policy="observed_only",
     ),

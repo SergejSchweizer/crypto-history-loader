@@ -650,6 +650,8 @@ def prepare_perps_l2_feature(pl: Any, frame: Any, symbol: str) -> Any:
                 pl.col("quote_available").cast(pl.Boolean).alias("perps_l2_quote_available"),
                 pl.col("stale_quote").cast(pl.Boolean).alias("perps_l2_stale_quote"),
                 pl.col("minutes_since_l2_observation").cast(pl.Int64).alias("perps_l2_minutes_since_observation"),
+                pl.col("timestamp_m1").alias("perps_l2_as_of"),
+                pl.lit(True).alias("perps_l2_live_snapshot_derived"),
             ]
         )
         .sort("timestamp_m1")
@@ -680,6 +682,8 @@ def prepare_options_l2_feature(pl: Any, frame: Any, symbol: str) -> Any:
                 pl.col("bid_depth_50bps").sum().cast(pl.Float64).alias("options_l2_bid_depth_50bps"),
                 pl.col("ask_depth_50bps").sum().cast(pl.Float64).alias("options_l2_ask_depth_50bps"),
                 pl.col("quote_age_seconds").max().cast(pl.Float64).alias("options_l2_max_quote_age_seconds"),
+                pl.col("timestamp_m1").max().alias("options_l2_as_of"),
+                pl.lit(True).alias("options_l2_live_snapshot_derived"),
             ]
         )
         .sort("timestamp_m1")
@@ -735,6 +739,8 @@ def optional_feature_schema(pl: Any, dataset_type: str) -> list[tuple[str, Any]]
             ("perps_l2_quote_available", pl.Boolean),
             ("perps_l2_stale_quote", pl.Boolean),
             ("perps_l2_minutes_since_observation", pl.Int64),
+            ("perps_l2_as_of", pl.Datetime(time_unit="us", time_zone="UTC")),
+            ("perps_l2_live_snapshot_derived", pl.Boolean),
         ],
         "options_l2_1m_feature": [
             ("options_l2_contract_count", pl.Int64),
@@ -748,6 +754,8 @@ def optional_feature_schema(pl: Any, dataset_type: str) -> list[tuple[str, Any]]
             ("options_l2_bid_depth_50bps", pl.Float64),
             ("options_l2_ask_depth_50bps", pl.Float64),
             ("options_l2_max_quote_age_seconds", pl.Float64),
+            ("options_l2_as_of", pl.Datetime(time_unit="us", time_zone="UTC")),
+            ("options_l2_live_snapshot_derived", pl.Boolean),
         ],
         "options_surface_1m_feature": [
             ("options_surface_atm_iv", pl.Float64),

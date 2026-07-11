@@ -176,6 +176,13 @@ These columns must never be joined back into live or historical feature outputs.
 `live_snapshot_derived` lineage columns. Missing live minutes remain null inside the Gold grid;
 the contract does not backfill from historical datasets.
 
+`gold.live.microstructure_features.m1` exposes live L2 microstructure state from
+`perps_l2_1m_feature` and `options_l2_1m_feature`. Perpetual L2 fields keep the `perps_l2_`
+prefix, option-book aggregates keep the `options_l2_` prefix, and each source carries its own
+`*_as_of` and `*_live_snapshot_derived` lineage. Quote availability, staleness, quote age, depth,
+and option quote coverage remain explicit so live consumers can filter stale or incomplete rows
+without hidden fills.
+
 ## Runtime And Side Effects
 
 `config.yaml` is the canonical durable runtime configuration source. Runtime values should be
