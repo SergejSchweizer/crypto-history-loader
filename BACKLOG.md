@@ -858,7 +858,7 @@ Acceptance:
 
 ### PR-31: Historical Gold Regime Features
 
-Status: Planned; contract exists, physical Gold is missing
+Status: In progress - PR #101: https://github.com/SergejSchweizer/crypto-history-loader/pull/101
 
 Branch: `codex/pr31-historical-gold-regime-features`
 
