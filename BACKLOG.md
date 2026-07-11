@@ -709,7 +709,7 @@ Acceptance:
 
 ### PR-24: Options Surface Silver Materialization
 
-Status: Planned; code exists, physical Silver is missing
+Status: Merge-ready - PR #94: https://github.com/SergejSchweizer/crypto-history-loader/pull/94
 
 Branch: `codex/pr24-options-surface-silver-materialization`
 
