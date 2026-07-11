@@ -51,6 +51,8 @@ def feature_source_dataset(column_name: str) -> str:
         return "futures_summary_1m_feature"
     if column_name.startswith("strategy_"):
         return "gold_strategy_features"
+    if column_name.startswith(("target_", "label_")):
+        return "gold_prediction_targets"
     if column_name.startswith("historical_volatility_"):
         return "historical_volatility_observed"
     return "gold_merged"

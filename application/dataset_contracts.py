@@ -710,6 +710,13 @@ REGIME_FEATURE_GOLD_OPTIONAL_REQUIREMENTS = (
     GoldSourceRequirement("historical_volatility_observed", "1m"),
 )
 
+PREDICTION_TARGET_GOLD_REQUIREMENTS = (
+    GoldSourceRequirement("perps_ohlcv", "1m"),
+    GoldSourceRequirement("funding_1m_feature", "1m"),
+    GoldSourceRequirement("realized_volatility_1m_feature", "1m"),
+    GoldSourceRequirement("iv_rv_1m_feature", "1m"),
+)
+
 GOLD_DATASET_CONTRACTS: dict[str, GoldDatasetContract] = {
     "gold.market.perps_trades.m1": GoldDatasetContract(
         dataset_id="gold.market.perps_trades.m1",
@@ -762,6 +769,11 @@ GOLD_DATASET_CONTRACTS: dict[str, GoldDatasetContract] = {
         dataset_id="gold.market.regime_features.m1",
         requirements=REGIME_FEATURE_GOLD_REQUIREMENTS,
         optional_requirements=REGIME_FEATURE_GOLD_OPTIONAL_REQUIREMENTS,
+        include_l2=False,
+    ),
+    "gold.market.prediction_targets.m1": GoldDatasetContract(
+        dataset_id="gold.market.prediction_targets.m1",
+        requirements=PREDICTION_TARGET_GOLD_REQUIREMENTS,
         include_l2=False,
     ),
     "gold.market.full.m1": GoldDatasetContract(

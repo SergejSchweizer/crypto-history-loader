@@ -165,6 +165,11 @@ Strategy feature families in the regime contract are derived only from the joine
 trailing windows. Their declared lookbacks are emitted in the Gold manifest, and target or label
 columns remain reserved for separate forward-looking datasets.
 
+`gold.market.prediction_targets.m1` is the separate forward-looking training-target contract. It
+emits only timestamp keys plus `target_*` and `label_*` columns, with horizon definitions,
+transaction-cost assumptions, regime-shift thresholds, and null rules recorded in the manifest.
+These columns must never be joined back into live or historical feature outputs.
+
 ## Runtime And Side Effects
 
 `config.yaml` is the canonical durable runtime configuration source. Runtime values should be
