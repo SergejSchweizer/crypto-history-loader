@@ -170,6 +170,12 @@ emits only timestamp keys plus `target_*` and `label_*` columns, with horizon de
 transaction-cost assumptions, regime-shift thresholds, and null rules recorded in the manifest.
 These columns must never be joined back into live or historical feature outputs.
 
+`gold.live.volatility_features.m1` is the live-origin volatility-index Gold contract. It uses
+`volatility_index_1m_feature` as its only required source, preserves the overlapping historical
+`iv_*` feature names, units, minute timestamp semantics, and null rules, and adds `as_of` plus
+`live_snapshot_derived` lineage columns. Missing live minutes remain null inside the Gold grid;
+the contract does not backfill from historical datasets.
+
 ## Runtime And Side Effects
 
 `config.yaml` is the canonical durable runtime configuration source. Runtime values should be

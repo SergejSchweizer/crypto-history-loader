@@ -17,6 +17,23 @@ def feature_hash(columns: list[str]) -> str:
 def feature_source_dataset(column_name: str) -> str:
     """Infer the source dataset label from a derived feature column name."""
 
+    volatility_index_feature_columns = {
+        "iv_open",
+        "iv_high",
+        "iv_low",
+        "iv_close",
+        "iv_range",
+        "iv_return_1m",
+        "iv_change_5m",
+        "iv_change_15m",
+        "iv_change_1h",
+        "iv_zscore_1d",
+        "iv_zscore_7d",
+        "iv_percentile_30d",
+        "iv_source_dataset",
+        "iv_source_timestamp",
+        "iv_data_available",
+    }
     if column_name.startswith("options_trades_"):
         return "options_trades_1m_feature"
     if column_name.startswith("spot_ohlcv_"):
@@ -31,6 +48,10 @@ def feature_source_dataset(column_name: str) -> str:
         return "perps_trades_1m_feature"
     if column_name.startswith(("volatility_index_data_", "volatility_index_")):
         return "volatility_index_data_observed"
+    if column_name in volatility_index_feature_columns:
+        return "volatility_index_1m_feature"
+    if column_name in {"as_of", "live_snapshot_derived"}:
+        return "gold_live_lineage"
     if column_name in {"iv_available", "rv_available"}:
         return "iv_rv_1m_feature"
     if column_name in {"spot_available", "perps_available"}:

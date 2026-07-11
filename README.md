@@ -641,7 +641,8 @@ Historical Gold artifacts are built by this repository. Live Gold artifacts have
 
 Contracts without physical Gold artifacts are `gold.market.iv_rv.m1`,
 `gold.market.index_price.m1`, `gold.market.futures_summary.m1`, `gold.market.regime_features.m1`,
-`gold.market.prediction_targets.m1`, and `gold.hybrid.full_l2.m1`. The existing
+`gold.market.prediction_targets.m1`, `gold.live.volatility_features.m1`, and
+`gold.hybrid.full_l2.m1`. The existing
 `gold.market.full.m1` must not be treated as an IV/RV-ready dataset until those feature columns and
 manifests are rebuilt.
 
@@ -714,6 +715,22 @@ uv run python main.py gold-build \
 source availability, minute coverage, source time span, and freshness; missing optional features
 remain typed nulls and never change the required-source minute grid.
 
+Live volatility Gold contract:
+
+```bash
+uv run python main.py gold-build \
+  --silver-root lake/silver \
+  --gold-root lake/gold \
+  --exchange deribit \
+  --dataset-id gold.live.volatility_features.m1 \
+  --symbols BTC ETH
+```
+
+`gold.live.volatility_features.m1` is sourced only from `volatility_index_1m_feature`. It keeps the
+historical `iv_*` feature names and minute timestamp semantics, records `as_of` and
+`live_snapshot_derived` lineage, and leaves missing live minutes null instead of backfilling from
+historical datasets.
+
 Inventory:
 
 ```bash
@@ -780,6 +797,7 @@ Available Gold dataset IDs:
 - `gold.market.futures_summary.m1` (contract; not yet physically materialized)
 - `gold.market.regime_features.m1` (contract; not yet physically materialized)
 - `gold.market.prediction_targets.m1` (contract; not yet physically materialized)
+- `gold.live.volatility_features.m1` (contract; not yet physically materialized)
 - `gold.hybrid.full_l2.m1` (contract; not yet physically materialized)
 
 ## 5.4 Quality Checks
