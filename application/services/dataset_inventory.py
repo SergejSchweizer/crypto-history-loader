@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from collections import defaultdict
 from dataclasses import asdict, dataclass
@@ -50,6 +51,9 @@ class DatasetInventoryRow:
     observed_days: int | None
     missing_days: int | None
     per_series_missing_days: tuple[str, ...]
+    source_hash: str | None
+    builder_commit: str
+    quality_counters: dict[str, int]
 
     def to_dict(self) -> dict[str, object]:
         """Return a JSON-serializable representation."""
@@ -65,6 +69,7 @@ def build_dataset_inventory(
     bronze_root: Path,
     silver_root: Path,
     gold_root: Path,
+    builder_commit: str | None = None,
 ) -> list[DatasetInventoryRow]:
     """Return deterministic inventory rows for local lake roots.
 
@@ -72,6 +77,7 @@ def build_dataset_inventory(
         bronze_root: Bronze parquet lake root.
         silver_root: Silver parquet lake root.
         gold_root: Gold parquet lake root.
+        builder_commit: Commit identifier for the code that generated the report.
 
     Returns:
         Sorted inventory rows for physical Bronze data, contracted Silver outputs, and contracted Gold outputs.
@@ -83,6 +89,7 @@ def build_dataset_inventory(
     physical_bronze = _physical_dataset_files(bronze_root, "dataset_type")
     physical_silver = _physical_dataset_files(silver_root, "dataset_type")
     physical_gold = _physical_dataset_files(gold_root, "dataset_id")
+    commit = builder_commit or "unknown"
 
     rows: list[DatasetInventoryRow] = []
     for dataset in sorted(physical_bronze):
@@ -96,6 +103,7 @@ def build_dataset_inventory(
                 physical_dataset=dataset,
                 files=physical_bronze[dataset],
                 timestamp_hint=None,
+                builder_commit=commit,
             )
         )
 
@@ -119,6 +127,7 @@ def build_dataset_inventory(
                 files=files,
                 timestamp_hint=silver_contract.timestamp_column,
                 fallback_columns=silver_contract.output_columns,
+                builder_commit=commit,
             )
         )
 
@@ -133,6 +142,7 @@ def build_dataset_inventory(
                 physical_dataset=dataset if files else None,
                 files=files,
                 timestamp_hint=gold_contract.timestamp_column,
+                builder_commit=commit,
             )
         )
 
@@ -152,8 +162,9 @@ def inventory_to_markdown(rows: list[DatasetInventoryRow]) -> str:
         "# Dataset Inventory",
         "",
         "| Layer | Dataset | State | Origin | Physical Dataset | Files | Rows | Series | Start | End "
-        "| Expected Days | Observed Days | Missing Days | Timestamp | Columns | Per-Series Missing |",
-        "|---|---|---|---|---|---:|---:|---:|---|---|---:|---:|---:|---|---|---|",
+        "| Expected Days | Observed Days | Missing Days | Timestamp | Source Hash | Builder Commit "
+        "| Quality Counters | Columns | Per-Series Missing |",
+        "|---|---|---|---|---|---:|---:|---:|---|---|---:|---:|---:|---|---|---|---|---|---|",
     ]
     for row in rows:
         lines.append(
@@ -174,6 +185,9 @@ def inventory_to_markdown(rows: list[DatasetInventoryRow]) -> str:
                     str(row.observed_days) if row.observed_days is not None else "n/a",
                     str(row.missing_days) if row.missing_days is not None else "n/a",
                     f"`{row.timestamp_column}`" if row.timestamp_column else "n/a",
+                    f"`{row.source_hash}`" if row.source_hash else "n/a",
+                    f"`{row.builder_commit}`",
+                    "`" + json.dumps(row.quality_counters, sort_keys=True, separators=(",", ":")) + "`",
                     ", ".join(f"`{column}`" for column in row.schema_columns) or "n/a",
                     "; ".join(row.per_series_missing_days) or "n/a",
                 ]
@@ -205,6 +219,7 @@ def _inventory_row(
     files: list[Path],
     timestamp_hint: str | None,
     fallback_columns: tuple[str, ...] = (),
+    builder_commit: str = "unknown",
 ) -> DatasetInventoryRow:
     if not files:
         return DatasetInventoryRow(
@@ -224,6 +239,16 @@ def _inventory_row(
             observed_days=None,
             missing_days=None,
             per_series_missing_days=(),
+            source_hash=None,
+            builder_commit=builder_commit,
+            quality_counters=_quality_counters(
+                file_count=0,
+                row_count=0,
+                series_count=0,
+                expected_days=None,
+                observed_days=None,
+                missing_days=None,
+            ),
         )
 
     pl = _require_polars()
@@ -248,7 +273,56 @@ def _inventory_row(
         observed_days=coverage["observed_days"],
         missing_days=coverage["missing_days"],
         per_series_missing_days=coverage["per_series_missing_days"],
+        source_hash=_source_hash(files),
+        builder_commit=builder_commit,
+        quality_counters=_quality_counters(
+            file_count=len(files),
+            row_count=row_count,
+            series_count=coverage["series_count"],
+            expected_days=coverage["expected_days"],
+            observed_days=coverage["observed_days"],
+            missing_days=coverage["missing_days"],
+        ),
     )
+
+
+def _quality_counters(
+    *,
+    file_count: int,
+    row_count: int,
+    series_count: int,
+    expected_days: int | None,
+    observed_days: int | None,
+    missing_days: int | None,
+) -> dict[str, int]:
+    return {
+        "file_count": file_count,
+        "row_count": row_count,
+        "series_count": series_count,
+        "expected_days": expected_days or 0,
+        "observed_days": observed_days or 0,
+        "missing_days": missing_days or 0,
+    }
+
+
+def _source_hash(files: list[Path]) -> str:
+    digest = hashlib.sha256()
+    for path in sorted(files, key=_stable_file_identity):
+        digest.update(_stable_file_identity(path).encode("utf-8"))
+        digest.update(b"\0")
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+        digest.update(b"\0")
+    return digest.hexdigest()
+
+
+def _stable_file_identity(path: Path) -> str:
+    parts = path.parts
+    for index, part in enumerate(parts):
+        if part.startswith(("dataset_type=", "dataset_id=")):
+            return "/".join(parts[index:])
+    return path.name
 
 
 def _schema_columns(pl: Any, parquet_path: Path) -> tuple[str, ...]:

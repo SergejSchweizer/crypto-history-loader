@@ -813,7 +813,7 @@ Acceptance:
 
 ### PR-29: Historical Silver Backfill And Reconciliation
 
-Status: Planned
+Status: In progress - PR #99: https://github.com/SergejSchweizer/crypto-history-loader/pull/99
 
 Branch: `codex/pr29-silver-backfill-reconciliation`
 
