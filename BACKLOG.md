@@ -900,7 +900,7 @@ Acceptance:
 
 ### PR-33: Historical Prediction Targets And Regime Labels
 
-Status: Planned
+Status: In progress - PR #106: https://github.com/SergejSchweizer/crypto-history-loader/pull/106
 
 Branch: `codex/pr33-historical-targets-labels`
 

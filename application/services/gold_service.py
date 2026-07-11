@@ -259,9 +259,21 @@ def _strategy_feature_lookbacks(dataset_id: str) -> dict[str, str]:
     return {}
 
 
+def _prediction_target_definitions(dataset_id: str) -> dict[str, object]:
+    if dataset_id == "gold.market.prediction_targets.m1":
+        return gold_frames.prediction_target_definitions()
+    return {}
+
+
 def _add_strategy_feature_families(pl: Any, frame: Any, dataset_id: str) -> Any:
     if dataset_id == "gold.market.regime_features.m1":
         return gold_frames.add_strategy_feature_families(pl, frame)
+    return frame
+
+
+def _add_prediction_targets(pl: Any, frame: Any, dataset_id: str) -> Any:
+    if dataset_id == "gold.market.prediction_targets.m1":
+        return gold_frames.add_prediction_target_columns(pl, frame)
     return frame
 
 
@@ -394,6 +406,7 @@ def build_gold_for_symbol(
                 ]
             )
     merged = _add_strategy_feature_families(pl, merged.sort("timestamp_m1"), dataset_id)
+    merged = _add_prediction_targets(pl, merged, dataset_id)
     l2_validation_audit = {"l2_invalid_rows_found": 0, "l2_invalid_rows_dropped": 0}
     if _dataset_includes_l2(dataset_id):
         merged, l2_validation_audit = _validate_or_filter_l2_quality(pl, merged, l2_validation_mode)
@@ -512,6 +525,7 @@ def build_gold_for_symbol(
         "optional_source_datasets": [dataset_type for dataset_type, _timeframe in optional],
         "optional_source_availability": optional_source_availability,
         "strategy_feature_lookbacks": _strategy_feature_lookbacks(dataset_id),
+        "prediction_target_definitions": _prediction_target_definitions(dataset_id),
         "feature_metadata": _feature_metadata(pl, merged, exchange),
     }
     hash_string = f"{feature_set_hash}_{source_data_hash}"

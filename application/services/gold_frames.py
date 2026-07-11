@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+from collections.abc import Iterable
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -33,6 +35,26 @@ STRATEGY_FEATURE_LOOKBACKS: dict[str, str] = {
     "strategy_cost_turnover_notional_5m": "5m",
     "strategy_cost_turnover_notional_15m": "15m",
     "strategy_cost_spot_perp_spread": "1m",
+}
+
+PREDICTION_TARGET_HORIZONS: dict[str, int] = {
+    "1h": 60,
+    "4h": 240,
+    "1d": 1440,
+}
+PREDICTION_TARGET_DEFINITIONS: dict[str, object] = {
+    "horizons": PREDICTION_TARGET_HORIZONS,
+    "transaction_cost_bps": 2.0,
+    "regime_shift_zscore_delta": 1.0,
+    "null_rule": "future window must contain the full horizon; otherwise target and label values are null",
+    "price_return": "log(perp_close_price[t+horizon] / perp_close_price[t])",
+    "drawdown": "min(perp_close_price[t+1:t+horizon]) / perp_close_price[t] - 1",
+    "cost_adjusted_return": (
+        "forward_return - transaction_cost_bps/10000 - abs(funding_rate_last_known)*horizon_minutes/480"
+    ),
+    "future_rv": "realized-volatility feature value at t+horizon",
+    "iv_change": "iv_rv spread feature value at t+horizon minus value at t",
+    "regime_shift_label": "abs(future iv_rv_zscore_1d - current iv_rv_zscore_1d) >= regime_shift_zscore_delta",
 }
 
 
@@ -738,6 +760,12 @@ def strategy_feature_lookbacks() -> dict[str, str]:
     return dict(STRATEGY_FEATURE_LOOKBACKS)
 
 
+def prediction_target_definitions() -> dict[str, object]:
+    """Return versioned definitions for forward-looking Gold prediction targets."""
+
+    return dict(PREDICTION_TARGET_DEFINITIONS)
+
+
 def add_strategy_feature_families(pl: Any, frame: Any) -> Any:
     """Add trailing strategy state features without forward-looking labels or targets."""
 
@@ -930,6 +958,23 @@ def add_strategy_feature_families(pl: Any, frame: Any) -> Any:
     )
 
 
+def add_prediction_target_columns(pl: Any, frame: Any) -> Any:
+    """Add forward-looking targets in a dedicated target dataset only."""
+
+    sorted_frame = frame.sort(["exchange", "symbol", "timestamp_m1"])
+    rows = sorted_frame.to_dicts()
+    output_rows: list[dict[str, object]] = []
+    for group_rows in _group_target_rows(rows):
+        output_rows.extend(_prediction_target_rows(group_rows))
+    target_frame = pl.DataFrame(output_rows)
+    target_columns = [
+        column
+        for column in target_frame.columns
+        if column in {"timestamp_m1", "exchange", "symbol"} or column.startswith(("target_", "label_"))
+    ]
+    return target_frame.select(target_columns).sort("timestamp_m1")
+
+
 def _safe_log_return(pl: Any, column: str, periods: int) -> Any:
     current = pl.col(column)
     previous = pl.col(column).shift(periods).over(["exchange", "symbol"])
@@ -945,6 +990,89 @@ def _rolling_direction_score(pl: Any, column: str, window_size: str) -> Any:
     return direction.rolling_mean_by("timestamp_m1", window_size=window_size, min_samples=2).over(
         ["exchange", "symbol"]
     )
+
+
+def _group_target_rows(rows: list[dict[str, object]]) -> list[list[dict[str, object]]]:
+    groups: list[list[dict[str, object]]] = []
+    current_key: tuple[object, object] | None = None
+    current_rows: list[dict[str, object]] = []
+    for row in rows:
+        key = (row["exchange"], row["symbol"])
+        if current_key is not None and key != current_key:
+            groups.append(current_rows)
+            current_rows = []
+        current_key = key
+        current_rows.append(row)
+    if current_rows:
+        groups.append(current_rows)
+    return groups
+
+
+def _prediction_target_rows(rows: list[dict[str, object]]) -> list[dict[str, object]]:
+    output: list[dict[str, object]] = []
+    for index, row in enumerate(rows):
+        target_row = dict(row)
+        current_price = _float_or_none(row.get("perp_close_price"))
+        current_spread = _float_or_none(row.get("iv_minus_rv_1h"))
+        current_zscore = _float_or_none(row.get("iv_rv_zscore_1d"))
+        current_funding = _float_or_none(row.get("funding_rate_last_known")) or 0.0
+        for label, horizon in PREDICTION_TARGET_HORIZONS.items():
+            future_index = index + horizon
+            future_row = rows[future_index] if future_index < len(rows) else None
+            future_price = _float_or_none(future_row.get("perp_close_price")) if future_row is not None else None
+            future_spread = _float_or_none(future_row.get("iv_minus_rv_1h")) if future_row is not None else None
+            future_zscore = _float_or_none(future_row.get("iv_rv_zscore_1d")) if future_row is not None else None
+            future_rv = _float_or_none(future_row.get("rv_1h")) if future_row is not None else None
+            # Targets intentionally read strictly after the feature timestamp; incomplete future
+            # windows stay null so training code cannot silently learn from partial horizons.
+            future_window = rows[index + 1 : future_index + 1] if future_row is not None else []
+            future_min_price = _min_float(row.get("perp_close_price") for row in future_window)
+            forward_return = _forward_log_return(current_price, future_price)
+            target_row[f"target_forward_return_{label}"] = forward_return
+            target_row[f"target_forward_drawdown_{label}"] = (
+                (future_min_price / current_price) - 1.0
+                if current_price is not None and current_price > 0.0 and future_min_price is not None
+                else None
+            )
+            target_row[f"target_cost_adjusted_return_{label}"] = (
+                forward_return - 0.0002 - (abs(current_funding) * horizon / 480.0)
+                if forward_return is not None
+                else None
+            )
+            target_row[f"target_future_rv_{label}"] = future_rv
+            target_row[f"target_future_iv_spread_change_{label}"] = (
+                future_spread - current_spread if future_spread is not None and current_spread is not None else None
+            )
+            target_row[f"label_regime_shift_{label}"] = (
+                abs(future_zscore - current_zscore) >= 1.0
+                if future_zscore is not None and current_zscore is not None
+                else None
+            )
+        output.append(target_row)
+    return output
+
+
+def _float_or_none(value: object) -> float | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    return None
+
+
+def _min_float(values: Iterable[object]) -> float | None:
+    finite_values = []
+    for value in values:
+        number = _float_or_none(value)
+        if number is not None:
+            finite_values.append(number)
+    return min(finite_values) if finite_values else None
+
+
+def _forward_log_return(current_price: float | None, future_price: float | None) -> float | None:
+    if current_price is None or future_price is None or current_price <= 0.0 or future_price <= 0.0:
+        return None
+    return math.log(future_price / current_price)
 
 
 def prepare_dataset_frame(pl: Any, dataset_type: str, frame: Any, symbol: str) -> Any:

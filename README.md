@@ -641,8 +641,9 @@ Historical Gold artifacts are built by this repository. Live Gold artifacts have
 
 Contracts without physical Gold artifacts are `gold.market.iv_rv.m1`,
 `gold.market.index_price.m1`, `gold.market.futures_summary.m1`, `gold.market.regime_features.m1`,
-and `gold.hybrid.full_l2.m1`. The existing `gold.market.full.m1` must not be treated as an IV/RV-ready
-dataset until those feature columns and manifests are rebuilt.
+`gold.market.prediction_targets.m1`, and `gold.hybrid.full_l2.m1`. The existing
+`gold.market.full.m1` must not be treated as an IV/RV-ready dataset until those feature columns and
+manifests are rebuilt.
 
 # 5. Example Commands
 
@@ -778,6 +779,7 @@ Available Gold dataset IDs:
 - `gold.market.index_price.m1` (contract; not yet physically materialized)
 - `gold.market.futures_summary.m1` (contract; not yet physically materialized)
 - `gold.market.regime_features.m1` (contract; not yet physically materialized)
+- `gold.market.prediction_targets.m1` (contract; not yet physically materialized)
 - `gold.hybrid.full_l2.m1` (contract; not yet physically materialized)
 
 ## 5.4 Quality Checks
