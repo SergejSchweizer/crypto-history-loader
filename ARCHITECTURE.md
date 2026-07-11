@@ -161,6 +161,9 @@ volatility, and futures summary are optional left joins with stable nullable col
 presence never expands the grid or changes column order. Manifests record availability, covered
 grid minutes, coverage ratio, source time range, and freshness at the required-grid end for every
 optional source. The contract contains market state only and does not create predictive labels.
+Strategy feature families in the regime contract are derived only from the joined minute state with
+trailing windows. Their declared lookbacks are emitted in the Gold manifest, and target or label
+columns remain reserved for separate forward-looking datasets.
 
 ## Runtime And Side Effects
 

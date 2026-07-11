@@ -253,6 +253,18 @@ def _optional_feature_schema(pl: Any, dataset_type: str) -> list[tuple[str, Any]
     return gold_frames.optional_feature_schema(pl, dataset_type)
 
 
+def _strategy_feature_lookbacks(dataset_id: str) -> dict[str, str]:
+    if dataset_id == "gold.market.regime_features.m1":
+        return gold_frames.strategy_feature_lookbacks()
+    return {}
+
+
+def _add_strategy_feature_families(pl: Any, frame: Any, dataset_id: str) -> Any:
+    if dataset_id == "gold.market.regime_features.m1":
+        return gold_frames.add_strategy_feature_families(pl, frame)
+    return frame
+
+
 def _build_minute_grid(pl: Any, prepared: list[Any], exchange: str, symbol: str) -> Any:
     return gold_frames.build_minute_grid(pl, prepared, exchange, symbol)
 
@@ -381,7 +393,7 @@ def build_gold_for_symbol(
                     for column, dtype in _optional_feature_schema(pl, dataset_type)
                 ]
             )
-    merged = merged.sort("timestamp_m1")
+    merged = _add_strategy_feature_families(pl, merged.sort("timestamp_m1"), dataset_id)
     l2_validation_audit = {"l2_invalid_rows_found": 0, "l2_invalid_rows_dropped": 0}
     if _dataset_includes_l2(dataset_id):
         merged, l2_validation_audit = _validate_or_filter_l2_quality(pl, merged, l2_validation_mode)
@@ -499,6 +511,7 @@ def build_gold_for_symbol(
         "required_source_datasets": [dataset_type for dataset_type, _timeframe in required],
         "optional_source_datasets": [dataset_type for dataset_type, _timeframe in optional],
         "optional_source_availability": optional_source_availability,
+        "strategy_feature_lookbacks": _strategy_feature_lookbacks(dataset_id),
         "feature_metadata": _feature_metadata(pl, merged, exchange),
     }
     hash_string = f"{feature_set_hash}_{source_data_hash}"

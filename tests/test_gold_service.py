@@ -139,6 +139,7 @@ def test_dataset_specs_symbol_normalization_and_hash_helpers() -> None:
     assert _feature_source_dataset("options_surface_atm_iv") == "options_surface_1m_feature"
     assert _feature_source_dataset("index_price") == "index_price_1m_feature"
     assert _feature_source_dataset("futures_summary_mark_price") == "futures_summary_1m_feature"
+    assert _feature_source_dataset("strategy_momentum_log_return_1m") == "gold_strategy_features"
     assert _feature_source_dataset("historical_volatility_reference") == ("historical_volatility_observed")
     assert _feature_source_dataset("l2_coverage_ratio") == "gold_merged"
     assert _feature_source_dataset("custom_col") == "gold_merged"
