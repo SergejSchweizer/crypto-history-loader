@@ -902,6 +902,204 @@ def test_build_gold_for_symbol_normalizes_input_symbol(tmp_path: Path) -> None:
     assert "dataset_id=gold.market.full.m1" in report.parquet_path
 
 
+def test_build_gold_iv_rv_uses_historical_sources_without_forward_looking_reference(tmp_path: Path) -> None:
+    silver = tmp_path / "silver"
+    gold = tmp_path / "gold"
+    exchange = "deribit"
+    symbol = "BTC"
+    t0 = datetime(2026, 5, 1, 0, 0, tzinfo=UTC)
+    t1 = datetime(2026, 5, 1, 0, 1, tzinfo=UTC)
+    timestamps = [t0, t1]
+
+    _write_silver_month(
+        silver,
+        dataset_type="spot_ohlcv",
+        exchange=exchange,
+        symbol="BTC_USDC",
+        timeframe="1m",
+        month="2026-05",
+        rows=[
+            {
+                "open_time": timestamp,
+                "exchange": exchange,
+                "symbol": "BTC",
+                "open_price": 100.0 + index,
+                "high_price": 101.0 + index,
+                "low_price": 99.0 + index,
+                "close_price": 100.5 + index,
+                "volume": 10.0 + index,
+            }
+            for index, timestamp in enumerate(timestamps)
+        ],
+    )
+    _write_silver_month(
+        silver,
+        dataset_type="perps_ohlcv",
+        exchange=exchange,
+        symbol="BTC-PERPETUAL",
+        timeframe="1m",
+        month="2026-05",
+        rows=[
+            {
+                "open_time": timestamp,
+                "exchange": exchange,
+                "symbol": "BTC-PERPETUAL",
+                "open_price": 101.0 + index,
+                "high_price": 102.0 + index,
+                "low_price": 100.0 + index,
+                "close_price": 101.5 + index,
+                "volume": 20.0 + index,
+            }
+            for index, timestamp in enumerate(timestamps)
+        ],
+    )
+    _write_silver_month(
+        silver,
+        dataset_type="funding_1m_feature",
+        exchange=exchange,
+        symbol="BTC-PERPETUAL",
+        timeframe="1m",
+        month="2026-05",
+        rows=[
+            {
+                "timestamp": timestamp,
+                "exchange": exchange,
+                "symbol": "BTC-PERPETUAL",
+                "funding_rate_last_known": 0.001,
+                "minutes_since_funding": index,
+                "is_funding_observation_minute": index == 0,
+                "funding_data_available": True,
+            }
+            for index, timestamp in enumerate(timestamps)
+        ],
+    )
+    _write_silver_month(
+        silver,
+        dataset_type="open_interest_1m_feature",
+        exchange=exchange,
+        symbol="BTC-PERPETUAL",
+        timeframe="1m",
+        month="2026-05",
+        rows=[
+            {
+                "timestamp_m1": timestamp,
+                "exchange": exchange,
+                "symbol": "BTC-PERPETUAL",
+                "open_interest": 1000.0 + index,
+                "open_interest_is_observed": index == 0,
+                "open_interest_is_ffill": index == 1,
+                "minutes_since_open_interest_observation": index,
+                "open_interest_observation_lag_sec": index * 60,
+            }
+            for index, timestamp in enumerate(timestamps)
+        ],
+    )
+    _write_silver_month(
+        silver,
+        dataset_type="realized_volatility_1m_feature",
+        exchange=exchange,
+        symbol="BTC",
+        timeframe="1m",
+        month="2026-05",
+        rows=[
+            {
+                "timestamp_m1": timestamp,
+                "exchange": exchange,
+                "symbol": "BTC",
+                "rv_5m": 0.01 + index,
+                "rv_15m": 0.02 + index,
+                "rv_1h": 0.03 + index,
+                "rv_4h": 0.04 + index,
+                "rv_1d": 0.05 + index,
+                "parkinson_rv_1h": 0.06 + index,
+                "jump_proxy": 0.001 * index,
+                "spot_available": True,
+                "perps_available": True,
+            }
+            for index, timestamp in enumerate(timestamps)
+        ],
+    )
+    _write_silver_month(
+        silver,
+        dataset_type="iv_rv_1m_feature",
+        exchange=exchange,
+        symbol="BTC",
+        timeframe="1m",
+        month="2026-05",
+        rows=[
+            {
+                "timestamp_m1": timestamp,
+                "exchange": exchange,
+                "symbol": "BTC",
+                "iv_minus_rv_1h": 5.0 + index,
+                "iv_minus_rv_1d": 3.0 + index,
+                "iv_rv_ratio_1h": 1.2 + index,
+                "iv_rv_ratio_1d": 1.1 + index,
+                "iv_rv_zscore_1d": 0.5 + index,
+                "iv_rv_percentile_30d": 0.7 + index,
+                "minutes_since_iv_observation": index,
+                "minutes_since_rv_observation": index,
+                "iv_available": True,
+                "rv_available": True,
+            }
+            for index, timestamp in enumerate(timestamps)
+        ],
+    )
+    _write_silver_month(
+        silver,
+        dataset_type="historical_volatility_observed",
+        exchange=exchange,
+        symbol="BTC",
+        timeframe="1m",
+        month="2026-05",
+        rows=[
+            {
+                "timestamp": t1,
+                "exchange": exchange,
+                "symbol": "BTC",
+                "historical_volatility": 42.0,
+                "historical_volatility_source_timestamp": t1,
+                "ingested_at": t1,
+                "source_endpoint": "public_get_historical_volatility",
+            }
+        ],
+    )
+
+    report = build_gold_for_symbol(
+        silver_root=str(silver),
+        gold_root=str(gold),
+        exchange=exchange,
+        symbol=symbol,
+        dataset_id="gold.market.iv_rv.m1",
+    )
+
+    frame = pl.read_parquet(report.parquet_path).sort("timestamp_m1")
+    payload = json.loads(_require_manifest_path(report).read_text(encoding="utf-8"))
+
+    assert payload["required_source_datasets"] == [
+        "spot_ohlcv",
+        "perps_ohlcv",
+        "funding_1m_feature",
+        "open_interest_1m_feature",
+        "realized_volatility_1m_feature",
+        "iv_rv_1m_feature",
+    ]
+    assert payload["optional_source_datasets"] == ["historical_volatility_observed"]
+    assert payload["optional_source_availability"]["historical_volatility_observed"]["available"] is True
+    assert payload["source_silver_datasets"]["historical_volatility_observed"]["available"] is True
+    assert "feature_set_hash" in payload
+    assert payload["source_silver_datasets"]["iv_rv_1m_feature"]["rows"] == 2
+    assert payload["source_silver_datasets"]["realized_volatility_1m_feature"]["rows"] == 2
+    assert frame["timestamp_m1"].to_list() == timestamps
+    assert frame["historical_volatility_reference"].to_list() == [None, 42.0]
+    assert frame["rv_1h"].to_list() == [0.03, 1.03]
+    assert frame["iv_minus_rv_1h"].to_list() == [5.0, 6.0]
+    assert frame["spot_ohlcv_close_price"].to_list() == [100.5, 101.5]
+    assert frame["perp_close_price"].to_list() == [101.5, 102.5]
+    assert frame["funding_rate_last_known"].to_list() == [0.001, 0.001]
+    assert frame["open_interest_open_interest"].to_list() == [1000.0, 1001.0]
+
+
 def test_build_gold_for_symbol_trades_only_dataset(tmp_path: Path) -> None:
     silver = tmp_path / "silver"
     gold = tmp_path / "gold"

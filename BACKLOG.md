@@ -836,7 +836,7 @@ Acceptance:
 
 ### PR-30: Historical Gold IV/RV Feature Dataset
 
-Status: Planned
+Status: In progress - PR #100: https://github.com/SergejSchweizer/crypto-history-loader/pull/100
 
 Branch: `codex/pr30-historical-gold-iv-rv`
 

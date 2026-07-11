@@ -736,7 +736,15 @@ GOLD_DATASET_CONTRACTS: dict[str, GoldDatasetContract] = {
     ),
     "gold.market.iv_rv.m1": GoldDatasetContract(
         dataset_id="gold.market.iv_rv.m1",
-        requirements=(GoldSourceRequirement("iv_rv_1m_feature", "1m"),),
+        requirements=(
+            GoldSourceRequirement("spot_ohlcv", "1m"),
+            GoldSourceRequirement("perps_ohlcv", "1m"),
+            GoldSourceRequirement("funding_1m_feature", "1m"),
+            GoldSourceRequirement("open_interest_1m_feature", "1m"),
+            GoldSourceRequirement("realized_volatility_1m_feature", "1m"),
+            GoldSourceRequirement("iv_rv_1m_feature", "1m"),
+        ),
+        optional_requirements=(GoldSourceRequirement("historical_volatility_observed", "1m"),),
         include_l2=False,
     ),
     "gold.market.index_price.m1": GoldDatasetContract(
