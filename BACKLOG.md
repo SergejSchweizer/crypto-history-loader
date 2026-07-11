@@ -879,7 +879,7 @@ Acceptance:
 
 ### PR-32: Historical Strategy Feature Families
 
-Status: In progress - PR #104: https://github.com/SergejSchweizer/crypto-history-loader/pull/104
+Status: In progress - PR #104: https://github.com/SergejSchweizer/crypto-history-loader/pull/104; PR #105: https://github.com/SergejSchweizer/crypto-history-loader/pull/105
 
 Branch: `codex/pr32-historical-strategy-features`
 
