@@ -706,6 +706,7 @@ REGIME_FEATURE_GOLD_OPTIONAL_REQUIREMENTS = (
     GoldSourceRequirement("options_l2_1m_feature", "1m"),
     GoldSourceRequirement("options_surface_1m_feature", "1m"),
     GoldSourceRequirement("index_price_1m_feature", "1m"),
+    GoldSourceRequirement("futures_summary_1m_feature", "1m"),
     GoldSourceRequirement("historical_volatility_observed", "1m"),
 )
 

@@ -858,7 +858,7 @@ Acceptance:
 
 ### PR-31: Historical Gold Regime Features
 
-Status: In progress - PR #101: https://github.com/SergejSchweizer/crypto-history-loader/pull/101
+Status: In progress - PR #101: https://github.com/SergejSchweizer/crypto-history-loader/pull/101; PR #103: https://github.com/SergejSchweizer/crypto-history-loader/pull/103
 
 Branch: `codex/pr31-historical-gold-regime-features`
 
