@@ -812,7 +812,10 @@ Operational notes:
 - GitHub repository gates are configured through the versioned CLI script
   `scripts/github/apply_quality_gates.sh`. The GitHub web UI is only an inspection surface; rerun
   the script after intentional changes to required checks, merge policy, or branch protection.
-- The required GitHub status check for `main` is the workflow job named `quality`.
+- Pull requests run the required `pr-quality` job before merge.
+- Pushes to `main` and merge-queue candidates run the full `main-quality` job, including coverage.
+- If GitHub rejects merge-queue setup through the API, the script keeps branch protection in place
+  and reports the remaining manual UI action.
 
 ---
 

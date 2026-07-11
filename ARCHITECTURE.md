@@ -202,10 +202,14 @@ configured in `pyproject.toml`.
 
 GitHub repository gates are managed through `scripts/github/apply_quality_gates.sh`, which uses
 `gh api` to configure server-side repository settings. The script is the durable configuration
-entrypoint for merge policy and `main` branch protection; the GitHub web UI should be treated as an
-inspection surface. The protected `main` branch requires the CI job named `quality`, up-to-date
-branches before merge, linear history, resolved PR conversations, no force pushes, and no branch
-deletions. Repository merge settings are squash-only with automatic branch deletion after merge.
+entrypoint for merge policy, `main` branch protection, and the default-branch merge-queue ruleset;
+the GitHub web UI should be treated as an inspection surface. Pull requests require the
+`pr-quality` CI job before merge. Pushes to `main` and merge-queue candidates run the full
+`main-quality` job, including coverage. If GitHub rejects API-based merge-queue setup for the
+repository plan or account, the script leaves branch protection active and reports the required
+manual UI step. The protected `main` branch also requires up-to-date branches before merge, linear
+history, resolved PR conversations, no force pushes, and no branch deletions. Repository merge
+settings are squash-only with automatic branch deletion after merge.
 
 ## Update Protocol
 

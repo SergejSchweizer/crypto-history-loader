@@ -22,12 +22,12 @@ Consequence: New datasets need registry and contract updates before storage, Sil
 
 Evidence:
 
+- 2026-07-10 `8902f6b` Merge pull request #77 from SergejSchweizer/codex/pr18-gold-regime-feature-contract
+- 2026-07-09 `c43e3e3` Merge pull request #58 from SergejSchweizer/codex/pr01-silver-contract-registry-baseline
+- 2026-07-09 `2a57684` Extend volatility medallion coverage
+- 2026-07-04 `ca0e922` Rename option trades dataset to options_trades
 - 2026-07-04 `ab5543d` Rename open_interest dataset to open interest
 - 2026-07-04 `11da15c` Rename options trades and perps OHLCV datasets
-- 2026-07-03 `c9d39e1` Rename spot_ohlcv OHLCV dataset
-- 2026-07-03 `4393c40` Rename perpetual trades dataset
-- 2026-07-03 `91d7475` Rename perpetual OHLCV dataset
-- 2026-06-27 `a44abc8` Extract dataset transformation contracts (#19)
 
 ## D002. Keep Bronze orchestration registry-driven
 
@@ -82,12 +82,12 @@ Consequence: Refactors should include tests and keep tooling strict instead of s
 
 Evidence:
 
+- 2026-07-10 `850150b` Add GitHub quality gate script
+- 2026-07-10 `c0fca84` Sync stacked PR validation policy
+- 2026-07-09 `2a57684` Extend volatility medallion coverage
 - 2026-07-01 `225a01e` Update README coverage statistics
 - 2026-07-01 `a2287a1` Align architecture and coverage refactor gates
 - 2026-06-27 `931263d` Align validation gates (#17)
-- 2026-05-23 `7f21bf2` Improve project quality gates and config scripts (#2)
-- 2026-05-17 `32c3d28` Remove option instruments dataset, suppress heartbeat logs, and stabilize coverage
-- 2026-05-17 `174ec90` Add option instruments bronze ingestion, unify fetch logs, and raise coverage
 
 ## D006. Treat README and generated history docs as operational contracts
 
@@ -97,9 +97,9 @@ Consequence: Documentation updates belong in the same change set as behavior, da
 
 Evidence:
 
+- 2026-07-09 `45fd589` Rename decisions ledger
 - 2026-07-01 `225a01e` Update README coverage statistics
 - 2026-06-29 `60fcfcb` Remove README missing-day detail label
 - 2026-06-29 `0d1ce23` Fix README table of contents
 - 2026-06-28 `660f9f2` Deduplicate README table of contents
 - 2026-06-26 `40cc90e` Merge branch 'codex/docs-update-missing-values'
-- 2026-05-25 `b8b5b82` Refine raw dataset docs and Deribit endpoint sections (#7)

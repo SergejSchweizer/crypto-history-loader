@@ -46,17 +46,27 @@ def test_pre_commit_and_ci_include_same_required_quality_gates() -> None:
             for hook in repo["hooks"]
         ]
     )
-    ci_steps = _normalized_commands(
+    pr_ci_steps = _normalized_commands(
         [
             str(step["run"]).removeprefix("uv run --extra dev ").removeprefix("uv run ")
-            for step in ci["jobs"]["quality"]["steps"]
+            for step in ci["jobs"]["pr-quality"]["steps"]
+            if "run" in step
+        ]
+    )
+    main_ci_steps = _normalized_commands(
+        [
+            str(step["run"]).removeprefix("uv run --extra dev ").removeprefix("uv run ")
+            for step in ci["jobs"]["main-quality"]["steps"]
             if "run" in step
         ]
     )
 
     for command in REQUIRED_GATE_COMMANDS:
         assert any(command in entry for entry in hook_entries), f"pre-commit missing gate: {command}"
-        assert any(command in step for step in ci_steps), f"CI missing gate: {command}"
+        assert any(command in step for step in pr_ci_steps), f"pr-quality missing gate: {command}"
+        assert any(command in step for step in main_ci_steps), f"main-quality missing gate: {command}"
+
+    assert any("pytest --cov --cov-report=term-missing" in step for step in main_ci_steps)
 
 
 def test_make_check_runs_required_quality_gates() -> None:
