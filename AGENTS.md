@@ -337,7 +337,11 @@ Applies to day-to-day agent execution flow for implementation, debugging, and de
 - [MUST] If configured, also run `pre-commit run --all-files` for the final squash-merge candidate and include repository-specific typing or import boundary checks.
 - [MUST] If a required check fails, fix it before commit or clearly report why it is unrelated and safe to defer.
 - [MUST] Before committing, inspect `git diff` and `git status` and ensure only task-relevant changes are included.
-- [MUST] Use concise imperative commit messages.
+- [MUST] Use Conventional Commit messages: `<type>[optional-scope][!]: <description>`.
+- [MUST] Allowed Conventional Commit types are `build`, `chore`, `ci`, `docs`, `feat`, `fix`, `perf`,
+  `refactor`, `revert`, `style`, and `test`.
+- [MUST] Pull request titles must also use Conventional Commit format because squash merges use the PR title
+  as the final commit subject.
 - [MUST] Push the feature branch and open a pull request into `main`.
 - [MUST] Never self-merge a pull request unless explicitly instructed.
 - [SHOULD] Prefer squash merge and delete the feature branch after merge.

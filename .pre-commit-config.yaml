@@ -36,6 +36,11 @@ repos:
         entry: uv run python scripts/validate_config_with_pydantic.py --config config.yaml
         language: system
         pass_filenames: false
+      - id: conventional-commit
+        name: conventional-commit
+        entry: uv run python scripts/validate_conventional_commit.py --message-file
+        language: system
+        stages: [commit-msg]
       - id: pytest
         name: pytest
         entry: uv run --extra dev pytest

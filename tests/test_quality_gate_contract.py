@@ -18,6 +18,7 @@ REQUIRED_GATE_COMMANDS = (
     "ty check",
     "lint-imports --config .importlinter",
     "python scripts/validate_config_with_pydantic.py --config config.yaml",
+    "python scripts/validate_conventional_commit.py",
     "pytest",
 )
 
@@ -77,7 +78,17 @@ def test_make_check_runs_required_quality_gates() -> None:
     assert check_match is not None
     check_deps = set(check_match.group("deps").split())
 
-    assert {"lint", "format", "typecheck", "pyright", "ty", "imports", "config-check", "test"} <= check_deps
+    assert {
+        "lint",
+        "format",
+        "typecheck",
+        "pyright",
+        "ty",
+        "imports",
+        "config-check",
+        "conventional-commit",
+        "test",
+    } <= check_deps
 
 
 def test_coverage_threshold_is_explicit_in_pyproject() -> None:
