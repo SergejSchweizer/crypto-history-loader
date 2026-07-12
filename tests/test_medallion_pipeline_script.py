@@ -7,11 +7,12 @@ import os
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 
-def _load_pipeline_module():
+def _load_pipeline_module() -> Any:
     script_path = Path(__file__).resolve().parents[1] / "scripts" / "run_medallion_pipeline.py"
     spec = importlib.util.spec_from_file_location("run_medallion_pipeline", script_path)
     assert spec is not None and spec.loader is not None
@@ -226,18 +227,19 @@ def test_rotate_pipeline_log_rotates_and_prunes(tmp_path: Path) -> None:
     log_path.write_text("a\n", encoding="utf-8")
     today = datetime.now(UTC).date()
     rotated_date = today.fromordinal(today.toordinal() - 1)
-    retained_date = today.fromordinal(today.toordinal() - 10)
-    stale_date = today.fromordinal(today.toordinal() - 40)
+    archived_date = today.fromordinal(today.toordinal() - 6)
+    stale_date = today.fromordinal(today.toordinal() - 120)
     os.utime(log_path, (datetime.combine(rotated_date, datetime.min.time(), UTC).timestamp(),) * 2)
-    stale = tmp_path / f"pipeline.log.{stale_date.isoformat()}"
-    stale.write_text("x\n", encoding="utf-8")
-    keep = tmp_path / f"pipeline.log.{retained_date.isoformat()}"
-    keep.write_text("x\n", encoding="utf-8")
-    module._rotate_pipeline_log(log_path, retention_days=30)
+    for days_ago in range(2, 7):
+        daily_date = today.fromordinal(today.toordinal() - days_ago)
+        (tmp_path / f"pipeline.log.{daily_date.isoformat()}").write_text("x\n", encoding="utf-8")
+    stale = tmp_path / f"pipeline.log.{stale_date.isoformat()}.gz"
+    stale.write_bytes(b"stale")
+    module._rotate_pipeline_log(log_path)
     assert not log_path.exists()
     assert (tmp_path / f"pipeline.log.{rotated_date.isoformat()}").exists()
+    assert (tmp_path / f"pipeline.log.{archived_date.isoformat()}.gz").exists()
     assert not stale.exists()
-    assert keep.exists()
 
 
 def test_main_missing_paths_returns_2(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

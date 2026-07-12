@@ -3,12 +3,19 @@
 from __future__ import annotations
 
 import logging
+from datetime import date
 from pathlib import Path
 from typing import Any, cast
 
 import pytest
 
-from application.services.runtime_service import configure_logging, env_list, fetch_concurrency, load_env_file
+from application.services.runtime_service import (
+    configure_logging,
+    enforce_log_retention,
+    env_list,
+    fetch_concurrency,
+    load_env_file,
+)
 
 
 def test_configure_logging_uses_module_name_for_log_file(
@@ -116,3 +123,25 @@ def test_configure_logging_uses_unified_format_with_module_name(
             logger.removeHandler(handler)
             handler.close()
         logging.getLogger("crypto_history_loader.gold-build").handlers.clear()
+
+
+def test_enforce_log_retention_keeps_five_plain_days_archives_older_and_deletes_stale(tmp_path: Path) -> None:
+    """Daily log retention should keep five plain rotations, gzip older days, and prune stale archives."""
+
+    log_path = tmp_path / "loader.log"
+    today = date(2026, 7, 12)
+    for days_ago in range(1, 8):
+        rotated_date = today.fromordinal(today.toordinal() - days_ago)
+        (tmp_path / f"loader.log.{rotated_date.isoformat()}").write_text(f"day {days_ago}\n", encoding="utf-8")
+    stale_archive_date = today.fromordinal(today.toordinal() - 120)
+    stale_archive = tmp_path / f"loader.log.{stale_archive_date.isoformat()}.gz"
+    stale_archive.write_bytes(b"stale")
+
+    enforce_log_retention(log_path, today=today)
+
+    plain_dates = {path.name.removeprefix("loader.log.") for path in tmp_path.glob("loader.log.????-??-??")}
+    expected_plain_dates = {today.fromordinal(today.toordinal() - days_ago).isoformat() for days_ago in range(1, 6)}
+    assert plain_dates == expected_plain_dates
+    assert (tmp_path / f"loader.log.{today.fromordinal(today.toordinal() - 6).isoformat()}.gz").exists()
+    assert (tmp_path / f"loader.log.{today.fromordinal(today.toordinal() - 7).isoformat()}.gz").exists()
+    assert not stale_archive.exists()

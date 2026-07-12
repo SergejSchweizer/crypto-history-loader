@@ -3,10 +3,15 @@
 from __future__ import annotations
 
 import fcntl
+import gzip
 import logging
 import os
+import re
+import shutil
+from datetime import UTC, date, datetime
 from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
+from typing import Any
 
 from application.services.fetch_runtime_policy import (
     DEFAULT_FETCH_CONCURRENCY as _DEFAULT_FETCH_CONCURRENCY,
@@ -23,6 +28,104 @@ DEFAULT_LOG_DIR = ".logs"
 DEFAULT_LOG_FILE = "crypto-history-loader.log"
 DEFAULT_FETCH_CONCURRENCY = _DEFAULT_FETCH_CONCURRENCY
 MAX_FETCH_CONCURRENCY = _MAX_FETCH_CONCURRENCY
+LOG_PLAIN_DAILY_FILES = 5
+LOG_ARCHIVE_RETENTION_DAYS = 90
+
+_ROTATED_LOG_RE = re.compile(r"^(?P<base>.+\.log)\.(?P<date>\d{4}-\d{2}-\d{2})(?:\.(?P<time>\d{6}))?(?P<gzip>\.gz)?$")
+
+
+def _rotated_log_sort_key(path: Path) -> tuple[date, str]:
+    match = _ROTATED_LOG_RE.match(path.name)
+    if match is None:
+        return (date.min, path.name)
+    try:
+        rotated_date = date.fromisoformat(match.group("date"))
+    except ValueError:
+        return (date.min, path.name)
+    return (rotated_date, path.name)
+
+
+def _gzip_log_file(path: Path) -> Path:
+    archive_path = path.with_name(f"{path.name}.gz")
+    if archive_path.exists():
+        path.unlink(missing_ok=True)
+        return archive_path
+    source_stat = path.stat()
+    with path.open("rb") as source, gzip.open(archive_path, "wb") as archive:
+        shutil.copyfileobj(source, archive)
+    os.utime(archive_path, (source_stat.st_atime, source_stat.st_mtime))
+    path.unlink(missing_ok=True)
+    return archive_path
+
+
+def enforce_log_retention(
+    log_path: Path,
+    *,
+    plain_daily_files: int = LOG_PLAIN_DAILY_FILES,
+    archive_retention_days: int = LOG_ARCHIVE_RETENTION_DAYS,
+    today: date | None = None,
+) -> None:
+    """Keep recent daily logs plain, gzip older logs, and delete stale archives."""
+
+    if plain_daily_files < 0:
+        raise ValueError("plain_daily_files must be greater than or equal to 0")
+    if archive_retention_days < 1:
+        raise ValueError("archive_retention_days must be greater than 0")
+
+    log_dir = log_path.parent
+    if not log_dir.exists():
+        return
+
+    current_date = today or datetime.now(UTC).date()
+    cutoff = current_date.toordinal() - archive_retention_days
+    plain_rotations: list[Path] = []
+    archives: list[Path] = []
+    for candidate in log_dir.iterdir():
+        match = _ROTATED_LOG_RE.match(candidate.name)
+        if match is None or match.group("base") != log_path.name:
+            continue
+        if match.group("gzip"):
+            archives.append(candidate)
+        else:
+            plain_rotations.append(candidate)
+
+    plain_rotations.sort(key=_rotated_log_sort_key, reverse=True)
+    archives.extend(_gzip_log_file(path) for path in plain_rotations[plain_daily_files:])
+    for archive in archives:
+        match = _ROTATED_LOG_RE.match(archive.name)
+        if match is None:
+            continue
+        try:
+            archive_date = date.fromisoformat(match.group("date"))
+        except ValueError:
+            continue
+        if archive_date.toordinal() <= cutoff:
+            archive.unlink(missing_ok=True)
+
+
+class RetentionTimedRotatingFileHandler(TimedRotatingFileHandler):
+    """Timed rotating file handler that applies repository log retention after rollover."""
+
+    def __init__(
+        self,
+        *args: Any,
+        plain_daily_files: int = LOG_PLAIN_DAILY_FILES,
+        archive_retention_days: int = LOG_ARCHIVE_RETENTION_DAYS,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(*args, **kwargs)
+        self._plain_daily_files = plain_daily_files
+        self._archive_retention_days = archive_retention_days
+
+    def doRollover(self) -> None:  # noqa: N802
+        """Rotate the active log and apply daily plain/archive retention."""
+
+        super().doRollover()
+        enforce_log_retention(
+            Path(self.baseFilename),
+            plain_daily_files=self._plain_daily_files,
+            archive_retention_days=self._archive_retention_days,
+        )
 
 
 def load_env_file(path: str = ".env") -> None:
@@ -141,7 +244,7 @@ def _safe_log_module_name(module_name: str) -> str:
 
 
 def configure_logging(module_name: str = "crypto-history-loader", *, debug: bool = False) -> logging.Logger:
-    """Configure process logging with daily rotation and 30-day retention."""
+    """Configure process logging with daily rotation and repository retention."""
 
     safe_module_name = _safe_log_module_name(module_name)
     logger = logging.getLogger(f"{LOGGER_NAME}.{safe_module_name}")
@@ -162,17 +265,18 @@ def configure_logging(module_name: str = "crypto-history-loader", *, debug: bool
     file_handler: TimedRotatingFileHandler | None = None
     try:
         log_path.parent.mkdir(parents=True, exist_ok=True)
-        file_handler = TimedRotatingFileHandler(
+        file_handler = RetentionTimedRotatingFileHandler(
             filename=log_path,
             when="midnight",
             interval=1,
-            backupCount=30,
+            backupCount=0,
             encoding="utf-8",
             utc=True,
         )
         file_handler.suffix = "%Y-%m-%d"
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)
+        enforce_log_retention(log_path)
     except OSError:
         logger.warning("Falling back to stderr logging; cannot create log path '%s'", log_path)
 
