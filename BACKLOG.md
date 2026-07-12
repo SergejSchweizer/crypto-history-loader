@@ -1240,15 +1240,21 @@ Acceptance:
 
 ### PR-43: Typed Test Fixture And Command Harness Consolidation
 
-Status: Planned
+Status: In review - PR #124: https://github.com/SergejSchweizer/crypto-history-loader/pull/124
 
-PR: Pending - add the GitHub pull request URL when published.
+PR: https://github.com/SergejSchweizer/crypto-history-loader/pull/124
 
 Branch: `codex/pr43-typed-test-command-harness`
 
 Depends on: PR-42
 
 Planning `git status --short`:
+
+```text
+clean
+```
+
+Publication `git status --short`:
 
 ```text
 clean
