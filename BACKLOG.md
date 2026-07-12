@@ -1078,7 +1078,7 @@ idempotent, and behavior-preserving; each PR must keep existing public commands 
 
 ### PR-39: Silver Build Registry Extraction
 
-Status: In review - PR #120: https://github.com/SergejSchweizer/crypto-history-loader/pull/120
+Status: Done - PR #120: https://github.com/SergejSchweizer/crypto-history-loader/pull/120
 
 PR: https://github.com/SergejSchweizer/crypto-history-loader/pull/120
 
@@ -1117,7 +1117,7 @@ Acceptance:
 
 ### PR-40: Shared Silver Monthly IO And Report Kernel
 
-Status: In review - PR #121: https://github.com/SergejSchweizer/crypto-history-loader/pull/121
+Status: Done - PR #121: https://github.com/SergejSchweizer/crypto-history-loader/pull/121
 
 PR: https://github.com/SergejSchweizer/crypto-history-loader/pull/121
 
@@ -1158,7 +1158,7 @@ Acceptance:
 
 ### PR-41: Gold Frame Preparation Registry
 
-Status: In review - PR #122: https://github.com/SergejSchweizer/crypto-history-loader/pull/122
+Status: Done - PR #122: https://github.com/SergejSchweizer/crypto-history-loader/pull/122
 
 PR: https://github.com/SergejSchweizer/crypto-history-loader/pull/122
 
@@ -1200,7 +1200,7 @@ Acceptance:
 
 ### PR-42: Contract-Driven Dataset Lists And Command Choices
 
-Status: In review - PR #123: https://github.com/SergejSchweizer/crypto-history-loader/pull/123
+Status: Done - PR #123: https://github.com/SergejSchweizer/crypto-history-loader/pull/123
 
 PR: https://github.com/SergejSchweizer/crypto-history-loader/pull/123
 
@@ -1240,7 +1240,7 @@ Acceptance:
 
 ### PR-43: Typed Test Fixture And Command Harness Consolidation
 
-Status: In review - PR #124: https://github.com/SergejSchweizer/crypto-history-loader/pull/124
+Status: Done - PR #124: https://github.com/SergejSchweizer/crypto-history-loader/pull/124
 
 PR: https://github.com/SergejSchweizer/crypto-history-loader/pull/124
 
