@@ -154,6 +154,18 @@ source timestamp as an auxiliary reference. It accepts only finite, non-negative
 not resample or emit any internally computed `rv_*` field; `realized_volatility_1m_feature`
 remains the separately owned realized-volatility calculation.
 
+The Gold layer has two canonical model-ready endpoints: `gold.market.history_full.m1` for
+historical data produced by this repository, and `gold.live.full.m1` for live-origin data produced
+from `crypto-live-loader` inputs. Narrower Gold contracts remain available as internal building
+blocks and compatibility outputs, but downstream training and inference code should target the two
+canonical full datasets.
+
+`gold.market.history_full.m1` is the inference-safe historical full dataset. It joins historical
+spot, perpetual, funding, open-interest, trade, realized-volatility, and IV/RV feature families on
+the historical minute grid; optional historical reference, index, futures, option-surface, and L2
+sources stay nullable with explicit availability in the manifest. Strategy feature families are
+trailing state variables, and forward-looking `target_*` or `label_*` columns are excluded.
+
 `gold.market.regime_features.m1` owns the research-facing IV/RV regime contract. Its minute grid
 is determined only by required spot, perpetual, funding, open-interest, realized-volatility, and
 IV/RV sources. Perpetual L2, options L2, option surface, index price, and external historical

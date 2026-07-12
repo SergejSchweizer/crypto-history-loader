@@ -3,7 +3,7 @@
 This backlog is the source of truth for stacked, atomic PRs that bring every Bronze dataset into a
 contracted Silver representation suitable for IV/RV and regime-change research.
 
-Last updated: 2026-07-10
+Last updated: 2026-07-12
 
 ## Policy
 
@@ -941,13 +941,101 @@ Acceptance:
 - Historical/live overlapping features have identical names, units, timestamp semantics, and null rules.
 - Live artifacts remain clearly marked as snapshot-derived and source-repository-specific.
 
-### PR-35: Gold Inventory Documentation And Release Gate
+### PR-35: Historical Full Gold Dataset
+
+Status: In progress - PR #110: https://github.com/SergejSchweizer/crypto-history-loader/pull/110
+
+Branch: `codex/pr35-historical-full-gold-dataset`
+
+Depends on: PR-33
+
+Goal:
+Create one point-in-time historical Gold dataset that joins every available historical-origin Silver/Gold
+feature family into a single model-ready table for offline IV/RV, regime-change, momentum, trend, and
+mean-reversion research.
+
+Scope:
+- Add `gold.market.history_full.m1` as the complete historical feature join.
+- Required historical sources:
+  - `spot_ohlcv`
+  - `perps_ohlcv`
+  - `funding_1m_feature`
+  - `open_interest_1m_feature`
+  - `perps_trades_1m_feature`
+  - `options_trades_1m_feature`
+  - `realized_volatility_1m_feature`
+  - `iv_rv_1m_feature`
+- Optional historical sources stay nullable with availability flags:
+  - `historical_volatility_observed`
+  - `index_price_1m_feature`
+  - `futures_summary_1m_feature`
+  - `options_surface_1m_feature`
+  - `perps_l2_1m_feature`
+  - `options_l2_1m_feature`
+- Reuse the existing regime/strategy feature builders where semantics overlap with the historical full
+  dataset.
+- Keep target columns out of the default inference-safe feature view; labelled training output remains the
+  separate `gold.market.prediction_targets.m1` dataset.
+- Update complete-run commands, parser compatibility tests, and README inventory docs.
+
+Acceptance:
+- One deterministic row per `exchange/symbol/timestamp_m1` on the historical minute grid.
+- Every joined source column has explicit prefixing, timestamp semantics, null policy, and availability flag.
+- Leakage tests prove forward-looking targets are absent from the inference-safe output.
+- Manifest reports row count, source coverage, start/end, observed days, missing days, source hashes, and
+  builder commit.
+- Intermediate PR runs only the focused historical full-Gold tests.
+
+### PR-36: Live Full Gold Dataset
 
 Status: Planned
 
-Branch: `codex/pr35-gold-silver-documentation-gate`
+Branch: `codex/pr36-live-full-gold-dataset`
 
-Depends on: PR-29, PR-33, PR-34
+Depends on: PR-34, PR-35
+
+Goal:
+Create one live-origin Gold dataset that joins every live-loader-derived Silver/Gold feature family into a
+single inference table compatible with the historical full dataset where semantics overlap.
+
+Scope:
+- Add `gold.live.full.m1` as the complete live feature join.
+- Required live sources:
+  - `gold.live.volatility_features.m1`
+  - `gold.live.microstructure_features.m1`
+  - `gold.live.regime_features.m1`
+  - `gold.live.instrument_universe.d1` as the as-of universe/metadata source.
+- Optional live Silver sources remain nullable with explicit availability/freshness fields:
+  - `volatility_index_snapshot_1m_observed`
+  - `index_price_1m_feature`
+  - `futures_summary_1m_feature`
+  - `options_ticker_snapshot_1m_observed`
+  - `options_instrument_ticker_snapshot_1m_observed`
+  - `options_surface_1m_feature`
+  - `perps_l2_1m_feature`
+  - `options_l2_1m_feature`
+  - `recent_trade_snapshot_1m_observed`
+  - instrument metadata observed datasets.
+- Do not backfill live gaps from historical datasets; live missing minutes stay null and are represented by
+  coverage, freshness, and source-availability fields.
+- Align overlapping column names, units, and null semantics with `gold.market.history_full.m1`.
+- Update `config.yaml`, complete-run commands, parser/config compatibility tests, and README inventory docs.
+
+Acceptance:
+- One deterministic row per live `exchange/symbol/timestamp_m1` where the live minute grid exists.
+- All live-loader-derived sources are represented directly or through documented availability flags.
+- Historical/live schema compatibility tests pass for overlapping feature families.
+- Manifest reports origin repository, source coverage, freshness, start/end, observed days, missing days,
+  source hashes, and builder commit.
+- Intermediate PR runs only focused live full-Gold tests.
+
+### PR-37: Gold Inventory Documentation And Release Gate
+
+Status: Planned
+
+Branch: `codex/pr37-gold-silver-documentation-gate`
+
+Depends on: PR-29, PR-33, PR-34, PR-35, PR-36
 
 Goal:
 Make README and backlog status reproducible and release-blocking.

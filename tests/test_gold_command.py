@@ -12,6 +12,7 @@ from api.commands import gold as gold_cmd
 
 def test_resolve_dataset_ids_returns_single_when_explicit() -> None:
     assert gold_cmd._resolve_dataset_ids("gold.market.full.m1") == ["gold.market.full.m1"]
+    assert gold_cmd._resolve_dataset_ids("gold.market.history_full.m1") == ["gold.market.history_full.m1"]
     assert gold_cmd._resolve_dataset_ids("gold.market.regime_features.m1") == ["gold.market.regime_features.m1"]
     assert gold_cmd._resolve_dataset_ids("gold.market.prediction_targets.m1") == ["gold.market.prediction_targets.m1"]
     assert gold_cmd._resolve_dataset_ids("gold.live.volatility_features.m1") == ["gold.live.volatility_features.m1"]
