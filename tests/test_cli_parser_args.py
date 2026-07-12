@@ -83,7 +83,7 @@ EXPECTED_MEDALLION_SILVER_DATASETS = {
         (["gold-build", "--manifest"], {"manifest": True}),
         (["gold-build", "--plot"], {"plot": True}),
         (["gold-build", "--l2-validation-mode", "lenient"], {"l2_validation_mode": "lenient"}),
-        (["gold-build", "--retention-keep-versions", "5"], {"retention_keep_versions": 5}),
+        (["gold-build", "--retention-keep-versions", "3"], {"retention_keep_versions": 3}),
         (["gold-build", "--maxprocesses", "4"], {"maxprocesses": 4}),
         (["gold-build", "--no-json-output"], {"no_json_output": True}),
         (["dataset-inventory", "--bronze-root", "lake/test-bronze"], {"bronze_root": "lake/test-bronze"}),

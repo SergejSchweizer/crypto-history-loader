@@ -11,11 +11,13 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Any, cast
 
 from application.services.gold_service import (
+    GOLD_RETENTION_KEEP_VERSIONS,
     SUPPORTED_GOLD_DATASET_IDS,
     build_gold_for_symbol,
     discover_gold_symbols,
     discover_gold_symbols_for_dataset,
     normalize_symbol,
+    validate_gold_retention_keep_versions,
 )
 
 _SEMVER_RE = re.compile(r"^v\d+\.\d+\.\d+$")
@@ -53,8 +55,8 @@ def add_gold_build_parser(subparsers: Any) -> None:
     parser.add_argument(
         "--retention-keep-versions",
         type=int,
-        default=3,
-        help="Keep only the latest N gold feature_set_version artifacts per dataset_id/exchange/symbol",
+        default=GOLD_RETENTION_KEEP_VERSIONS,
+        help="Fixed Gold retention window; only the value 3 is accepted",
     )
     parser.add_argument("--maxprocesses", type=int, default=4, help="Maximum parallel gold build workers")
     parser.add_argument("--no-json-output", action="store_true", help="Suppress JSON output")
@@ -104,9 +106,9 @@ def run_gold_build(args: argparse.Namespace, logger: logging.Logger) -> None:
     version_base = cast(str, getattr(args, "version_base", "v1.0.0"))
     symbols = cast(list[str] | None, args.symbols)
     l2_validation_mode = cast(str, getattr(args, "l2_validation_mode", "strict"))
-    keep_last_versions = int(getattr(args, "retention_keep_versions", 3))
-    if keep_last_versions < 1:
-        raise ValueError(f"Invalid --retention-keep-versions '{keep_last_versions}'. Value must be an integer >= 1")
+    keep_last_versions = validate_gold_retention_keep_versions(
+        int(getattr(args, "retention_keep_versions", GOLD_RETENTION_KEEP_VERSIONS))
+    )
     maxprocesses = int(getattr(args, "maxprocesses", 4))
     if maxprocesses < 1:
         raise ValueError(f"Invalid --maxprocesses '{maxprocesses}'. Value must be an integer >= 1")

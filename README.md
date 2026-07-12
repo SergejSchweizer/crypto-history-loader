@@ -826,9 +826,8 @@ Gold source selection:
 
 Gold retention policy:
 
-- keep latest `N` versions per `dataset_id/exchange/symbol` lineage (default `N=3`)
-- configure via `gold-build.retention_keep_versions` in `config.yaml` or override with
-  `--retention-keep-versions`.
+- always keep only the latest 3 versions per `dataset_id/exchange/symbol` lineage
+- `--retention-keep-versions` remains accepted for compatibility, but only the value `3` is valid.
 
 Available Gold dataset IDs:
 
