@@ -8,10 +8,12 @@ import logging
 import pytest
 
 from api.commands import silver as silver_cmd
+from application.dataset_contracts import supported_silver_build_ids
 
 
 def test_silver_build_registry_covers_all_parser_datasets() -> None:
-    assert tuple(silver_cmd.SILVER_BUILD_SPECS) == silver_cmd.SILVER_BUILD_DATASETS
+    assert set(silver_cmd.SILVER_BUILD_SPECS) == set(silver_cmd.SILVER_BUILD_DATASETS)
+    assert silver_cmd.SILVER_BUILD_DATASETS == supported_silver_build_ids()
     assert set(silver_cmd.DEFAULT_SILVER_BUILD_DATASETS).issubset(silver_cmd.SILVER_BUILD_SPECS)
     for dataset, spec in silver_cmd.SILVER_BUILD_SPECS.items():
         assert spec.dataset == dataset

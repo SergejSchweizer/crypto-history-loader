@@ -8,30 +8,9 @@ import pytest
 
 from api import cli
 from api.cli import build_parser
+from application.dataset_contracts import supported_silver_build_ids
 
-EXPECTED_MEDALLION_SILVER_DATASETS = {
-    "spot_ohlcv",
-    "perps_ohlcv",
-    "open_interest",
-    "funding",
-    "perps_trades",
-    "options_trades",
-    "volatility_index_data",
-    "volatility_index_snapshot_1m",
-    "realized_volatility",
-    "iv_rv",
-    "index_price_snapshot_1m",
-    "futures_summary_snapshot_1m",
-    "options_ticker_snapshot_1m",
-    "options_instrument_ticker_snapshot_1m",
-    "options_surface_1m_feature",
-    "perps_l2_snapshot_1m",
-    "options_l2_snapshot_1m",
-    "recent_trade_snapshot_1m",
-    "instrument_metadata_snapshot_daily",
-    "futures_instrument_metadata_snapshot_daily",
-    "historical_volatility",
-}
+EXPECTED_MEDALLION_SILVER_DATASETS = set(supported_silver_build_ids())
 
 
 @pytest.mark.parametrize(

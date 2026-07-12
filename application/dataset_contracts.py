@@ -681,6 +681,40 @@ BRONZE_TO_SILVER_DATASETS: dict[str, tuple[str, ...]] = {
     "futures_instrument_metadata_snapshot_daily": ("futures_instrument_metadata_snapshot_daily_observed",),
 }
 
+SILVER_LIVE_ORIGIN_BUILD_DATASETS: dict[str, tuple[str, ...]] = {
+    "volatility_index_snapshot_1m": ("volatility_index_snapshot_1m_observed", "volatility_index_1m_feature"),
+    "realized_volatility": ("realized_volatility_1m_feature",),
+    "iv_rv": ("iv_rv_1m_feature",),
+    "index_price_snapshot_1m": ("index_price_1m_feature",),
+    "futures_summary_snapshot_1m": ("futures_summary_1m_feature",),
+    "options_ticker_snapshot_1m": ("options_surface_1m_feature",),
+    "options_instrument_ticker_snapshot_1m": ("options_surface_1m_feature",),
+    "options_surface_1m_feature": ("options_surface_1m_feature",),
+    "perps_l2_snapshot_1m": ("perps_l2_1m_feature",),
+    "options_l2_snapshot_1m": ("options_l2_1m_feature",),
+    "recent_trade_snapshot_1m": ("recent_trade_snapshot_1m_observed",),
+    "instrument_metadata_snapshot_daily": ("instrument_metadata_snapshot_daily_observed",),
+    "futures_instrument_metadata_snapshot_daily": ("futures_instrument_metadata_snapshot_daily_observed",),
+}
+
+
+def supported_bronze_backed_silver_build_ids() -> tuple[str, ...]:
+    """Return stable Silver build IDs that read directly from Bronze datasets."""
+
+    return tuple(sorted(BRONZE_TO_SILVER_DATASETS))
+
+
+def supported_live_origin_silver_build_ids() -> tuple[str, ...]:
+    """Return stable Silver build IDs that derive from live or existing Silver feature sources."""
+
+    return tuple(sorted(SILVER_LIVE_ORIGIN_BUILD_DATASETS))
+
+
+def supported_silver_build_ids() -> tuple[str, ...]:
+    """Return every supported ``silver-build`` dataset choice in stable order."""
+
+    return tuple(sorted({*BRONZE_TO_SILVER_DATASETS, *SILVER_LIVE_ORIGIN_BUILD_DATASETS}))
+
 
 FULL_MARKET_GOLD_REQUIREMENTS = (
     GoldSourceRequirement("spot_ohlcv", "1m"),
@@ -851,6 +885,12 @@ GOLD_DATASET_CONTRACTS: dict[str, GoldDatasetContract] = {
         include_l2=True,
     ),
 }
+
+
+def supported_gold_dataset_ids() -> tuple[str, ...]:
+    """Return every supported ``gold-build`` dataset ID in stable order."""
+
+    return tuple(sorted(GOLD_DATASET_CONTRACTS))
 
 
 def silver_dataset_contract(dataset_type: str) -> SilverDatasetContract:

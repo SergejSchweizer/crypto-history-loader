@@ -1200,15 +1200,21 @@ Acceptance:
 
 ### PR-42: Contract-Driven Dataset Lists And Command Choices
 
-Status: Planned
+Status: In review - PR #123: https://github.com/SergejSchweizer/crypto-history-loader/pull/123
 
-PR: Pending - add the GitHub pull request URL when published.
+PR: https://github.com/SergejSchweizer/crypto-history-loader/pull/123
 
 Branch: `codex/pr42-contract-driven-dataset-lists`
 
 Depends on: PR-41
 
 Planning `git status --short`:
+
+```text
+clean
+```
+
+Publication `git status --short`:
 
 ```text
 clean

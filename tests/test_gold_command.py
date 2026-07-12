@@ -8,6 +8,7 @@ import logging
 import pytest
 
 from api.commands import gold as gold_cmd
+from application.dataset_contracts import supported_gold_dataset_ids
 
 
 def test_resolve_dataset_ids_returns_single_when_explicit() -> None:
@@ -23,7 +24,7 @@ def test_resolve_dataset_ids_returns_single_when_explicit() -> None:
 
 
 def test_resolve_dataset_ids_returns_sorted_supported_when_missing() -> None:
-    expected = sorted(gold_cmd.SUPPORTED_GOLD_DATASET_IDS)
+    expected = list(supported_gold_dataset_ids())
     assert gold_cmd._resolve_dataset_ids(None) == expected
 
 
