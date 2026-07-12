@@ -14,6 +14,7 @@ from application.services.gold_versioning import (
     latest_manifest_for_dataset,
     parse_semver,
     prune_gold_artifacts,
+    prune_gold_versions,
 )
 
 
@@ -104,3 +105,27 @@ def test_prune_gold_artifacts_keeps_latest_stem_groups(tmp_path: Path) -> None:
     assert len(list(artifact_dir.glob("*.parquet"))) == 2
     assert len(list(artifact_dir.glob("*.json"))) == 2
     assert len(list(artifact_dir.glob("*.png"))) == 2
+
+
+def test_prune_gold_versions_enforces_dataset_wide_latest_three(tmp_path: Path) -> None:
+    dataset_base = tmp_path / "dataset_id=gold.market.core.m1" / "dataset_type=gold_symbol_dataset"
+    for version, symbol in (
+        ("v1.0.0", "ETH"),
+        ("v1.0.1", "BTC"),
+        ("v1.0.2", "BTC"),
+        ("v1.0.3", "BTC"),
+    ):
+        symbol_dir = dataset_base / f"feature_set_version={version}" / "exchange=deribit" / f"symbol={symbol}"
+        symbol_dir.mkdir(parents=True)
+        (symbol_dir / f"{symbol}_GOLD.parquet").write_text("x", encoding="utf-8")
+
+    prune_gold_versions(
+        gold_root=tmp_path,
+        dataset_id="gold.market.core.m1",
+        exchange="deribit",
+        symbol="BTC",
+        keep_last_versions=3,
+    )
+
+    kept_versions = sorted(path.name.split("=", 1)[1] for path in dataset_base.glob("feature_set_version=*"))
+    assert kept_versions == ["v1.0.1", "v1.0.2", "v1.0.3"]

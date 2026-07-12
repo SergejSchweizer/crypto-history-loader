@@ -87,21 +87,14 @@ def prune_gold_versions(
     symbol: str,
     keep_last_versions: int,
 ) -> None:
-    """Remove old Gold feature-set version directories for one lineage."""
+    """Remove old Gold feature-set version directories for one dataset."""
 
     if keep_last_versions < 1:
         raise ValueError(f"keep_last_versions must be >= 1; received {keep_last_versions}")
     dataset_base = gold_root / f"dataset_id={dataset_id}" / "dataset_type=gold_symbol_dataset"
-    symbol_dirs = list(dataset_base.glob(f"feature_set_version=*/exchange={exchange}/symbol={symbol}"))
-    if len(symbol_dirs) <= keep_last_versions:
-        return
-
-    version_dirs: list[Path] = []
-    for symbol_dir in symbol_dirs:
-        version_dir = symbol_dir.parent.parent
-        if version_dir.exists():
-            version_dirs.append(version_dir)
-    version_dirs = sorted(set(version_dirs))
+    _ = exchange
+    _ = symbol
+    version_dirs = [path for path in dataset_base.glob("feature_set_version=*") if path.is_dir()]
     if len(version_dirs) <= keep_last_versions:
         return
 
