@@ -844,6 +844,7 @@ uv run pyright --level error
 uv run ty check
 uv run lint-imports --config .importlinter
 uv run python scripts/validate_config_with_pydantic.py --config config.yaml
+uv run python scripts/validate_conventional_commit.py --latest
 uv run --extra dev pytest
 ```
 
@@ -855,12 +856,15 @@ uv run --extra dev pytest
 | `uv run ty check` | Additional typing gate | Maintain policy-level typing consistency across the codebase. | Unresolved typing gaps and annotation inconsistencies. |
 | `uv run lint-imports --config .importlinter` | Architecture boundaries | Enforce dependency direction and import-layer contracts. | Boundary violations (for example domain importing infrastructure internals). |
 | `uv run python scripts/validate_config_with_pydantic.py --config config.yaml` | Runtime config schema | Reject invalid runtime configuration before pipeline execution. | Missing/invalid config fields or schema/type constraint failures. |
+| `uv run python scripts/validate_conventional_commit.py --latest` | Commit policy | Enforce Conventional Commit subjects for local commits, PR titles, and squash commits. | Non-compliant commit or PR title such as missing `type:` prefix. |
 | `uv run --extra dev pytest` | Behavioral + regression tests | Validate functional behavior in parallel and enforce coverage thresholds. | Test failures, behavioral regressions, or coverage below configured threshold. |
 
 Operational notes:
 
 - `pytest` coverage and parallel execution defaults are configured in `pyproject.toml`; xdist uses logical CPU workers capped at 4 with load-scope distribution.
 - Pre-commit enforces the same logical quality-gate path used in CI.
+- Commit messages and PR titles must follow Conventional Commits, for example
+  `docs: update README missing day snapshot` or `feat(gold): add live full dataset contract`.
 - GitHub repository gates are configured through the versioned CLI script
   `scripts/github/apply_quality_gates.sh`. The GitHub web UI is only an inspection surface; rerun
   the script after intentional changes to required checks, merge policy, or branch protection.

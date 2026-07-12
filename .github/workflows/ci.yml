@@ -55,6 +55,11 @@ jobs:
       - name: Validate config schema
         run: uv run python scripts/validate_config_with_pydantic.py --config config.yaml
 
+      - name: Validate PR title
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: uv run python scripts/validate_conventional_commit.py --title "$PR_TITLE"
+
       - name: Pytest
         run: uv run --extra dev pytest -q
 
@@ -100,6 +105,9 @@ jobs:
 
       - name: Validate config schema
         run: uv run python scripts/validate_config_with_pydantic.py --config config.yaml
+
+      - name: Validate latest commit title
+        run: uv run python scripts/validate_conventional_commit.py --latest
 
       - name: Pytest with coverage
         run: uv run --extra dev pytest --cov --cov-report=term-missing
