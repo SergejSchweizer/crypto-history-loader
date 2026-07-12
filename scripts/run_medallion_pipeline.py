@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import fcntl
 import os
-import re
 import subprocess
 import sys
 from contextlib import contextmanager
@@ -13,6 +12,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+
+from application.services.runtime_service import LOG_ARCHIVE_RETENTION_DAYS, enforce_log_retention
 
 
 @dataclass(frozen=True)
@@ -222,8 +223,8 @@ def _release_lock(fd: int) -> None:
     os.close(fd)
 
 
-def _rotate_pipeline_log(log_path: Path, *, retention_days: int = 30) -> None:
-    """Rotate shared pipeline log by day and delete rotations older than retention."""
+def _rotate_pipeline_log(log_path: Path, *, retention_days: int = LOG_ARCHIVE_RETENTION_DAYS) -> None:
+    """Rotate shared pipeline log by day and apply repository log retention."""
 
     if not log_path.exists():
         return
@@ -236,18 +237,7 @@ def _rotate_pipeline_log(log_path: Path, *, retention_days: int = 30) -> None:
             rotated_path = log_path.with_name(f"{log_path.name}.{modified_date.isoformat()}.{suffix}")
         log_path.rename(rotated_path)
 
-    cutoff = datetime.now(UTC).date().toordinal() - retention_days
-    pattern = re.compile(rf"^{re.escape(log_path.name)}\.(\d{{4}}-\d{{2}}-\d{{2}})(?:\.\d{{6}})?$")
-    for candidate in log_path.parent.iterdir():
-        match = pattern.match(candidate.name)
-        if not match:
-            continue
-        try:
-            candidate_date = datetime.fromisoformat(match.group(1)).date()
-        except ValueError:
-            continue
-        if candidate_date.toordinal() <= cutoff:
-            candidate.unlink(missing_ok=True)
+    enforce_log_retention(log_path, archive_retention_days=retention_days)
 
 
 def parse_args() -> argparse.Namespace:
@@ -287,7 +277,7 @@ def main() -> int:
     log_path = Path(args.log_file).resolve() if args.log_file else config_log_path
 
     log_path.parent.mkdir(parents=True, exist_ok=True)
-    _rotate_pipeline_log(log_path, retention_days=30)
+    _rotate_pipeline_log(log_path)
 
     lock_fd = _acquire_nonblocking_lock(lock_file)
     if lock_fd is None:
