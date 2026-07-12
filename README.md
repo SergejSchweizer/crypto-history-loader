@@ -226,7 +226,7 @@ Coverage reference for missing statistics in this section:
 - Missing %: missing calendar days / expected calendar days
 - Missing Days: count of missing calendar days in the [Start Date, End Date] span
 
-The complete Bronze missing-day snapshot generated from `lake/bronze` on 2026-07-10 CEST is in
+The complete Bronze missing-day snapshot generated from `lake/bronze` on 2026-07-12 CEST is in
 [the authoritative layer inventory](#47-layer-inventory-snapshot). It reports dates and missing days
 per primary series, which avoids treating BTC, ETH, and SOL series with different lifetimes as one series.
 
@@ -276,9 +276,9 @@ Coverage:
 
 | Exchange | Symbol | Timeframe | Start Date | End Date | Missing Days | Missing % |
 |---|---|---|---|---|---:|---:|
-| `deribit` | `BTC_USDC` | `1m` | `2023-04-24` | `2026-07-05` | 0 | 0.00% |
-| `deribit` | `ETH_USDC` | `1m` | `2023-04-24` | `2026-07-05` | 0 | 0.00% |
-| `deribit` | `SOL_USDC` | `1m` | `2024-02-27` | `2026-07-05` | 0 | 0.00% |
+| `deribit` | `BTC_USDC` | `1m` | `2023-04-24` | `2026-07-12` | 0 | 0.00% |
+| `deribit` | `ETH_USDC` | `1m` | `2023-04-24` | `2026-07-12` | 0 | 0.00% |
+| `deribit` | `SOL_USDC` | `1m` | `2024-02-27` | `2026-07-12` | 0 | 0.00% |
 
 ## 4.2 Perpetual (`dataset_type=perps_ohlcv`)
 
@@ -326,9 +326,9 @@ Coverage:
 
 | Exchange | Symbol | Timeframe | Start Date | End Date | Missing Days | Missing % |
 |---|---|---|---|---|---:|---:|
-| `deribit` | `BTC-PERPETUAL` | `1m` | `2018-08-14` | `2026-07-05` | 0 | 0.00% |
-| `deribit` | `ETH-PERPETUAL` | `1m` | `2019-03-14` | `2026-07-05` | 0 | 0.00% |
-| `deribit` | `SOL-PERPETUAL` | `1m` | `2022-04-29` | `2026-07-05` | 0 | 0.00% |
+| `deribit` | `BTC-PERPETUAL` | `1m` | `2018-08-14` | `2026-07-12` | 0 | 0.00% |
+| `deribit` | `ETH-PERPETUAL` | `1m` | `2019-03-14` | `2026-07-12` | 0 | 0.00% |
+| `deribit` | `SOL-PERPETUAL` | `1m` | `2022-04-29` | `2026-07-12` | 0 | 0.00% |
 
 ## 4.3 Open Interest (`dataset_type=open_interest`)
 
@@ -372,9 +372,9 @@ Coverage:
 
 | Exchange | Symbol | Timeframe | Start Date | End Date | Missing Days | Missing % |
 |---|---|---|---|---|---:|---:|
-| `deribit` | `BTC-PERPETUAL` | `1m` | `2018-08-15` | `2026-07-04` | 0 | 0.00% |
-| `deribit` | `ETH-PERPETUAL` | `1m` | `2019-03-15` | `2026-07-04` | 0 | 0.00% |
-| `deribit` | `SOL-PERPETUAL` | `1m` | `2022-03-16` | `2026-07-04` | 0 | 0.00% |
+| `deribit` | `BTC-PERPETUAL` | `1m` | `2018-08-15` | `2026-07-11` | 0 | 0.00% |
+| `deribit` | `ETH-PERPETUAL` | `1m` | `2019-03-15` | `2026-07-11` | 0 | 0.00% |
+| `deribit` | `SOL-PERPETUAL` | `1m` | `2022-03-16` | `2026-07-11` | 0 | 0.00% |
 
 ## 4.4 Funding (`dataset_type=funding`)
 
@@ -420,9 +420,9 @@ Coverage:
 
 | Exchange | Symbol | Timeframe | Start Date | End Date | Missing Days | Missing % |
 |---|---|---|---|---|---:|---:|
-| `deribit` | `BTC-PERPETUAL` | `8h` | `2019-04-30` | `2026-07-04` | 0 | 0.00% |
-| `deribit` | `ETH-PERPETUAL` | `8h` | `2019-04-30` | `2026-07-04` | 0 | 0.00% |
-| `deribit` | `SOL-PERPETUAL` | `8h` | `2022-03-16` | `2026-07-04` | 0 | 0.00% |
+| `deribit` | `BTC-PERPETUAL` | `8h` | `2019-04-30` | `2026-07-11` | 0 | 0.00% |
+| `deribit` | `ETH-PERPETUAL` | `8h` | `2019-04-30` | `2026-07-11` | 0 | 0.00% |
+| `deribit` | `SOL-PERPETUAL` | `8h` | `2022-03-16` | `2026-07-11` | 0 | 0.00% |
 
 ## 4.5 `perps_trades` (`dataset_type=perps_trades`)
 
@@ -475,8 +475,8 @@ Coverage:
 
 | Exchange | Symbol | Timeframe | Start Date | End Date | Missing Days | Missing % |
 |---|---|---|---|---|---:|---:|
-| `deribit` | `BTC-PERPETUAL` | `tick` | `2018-08-14` | `2026-06-11` | 723 | 25.29% |
-| `deribit` | `ETH-PERPETUAL` | `tick` | `2019-03-14` | `2026-05-29` | 978 | 37.13% |
+| `deribit` | `BTC-PERPETUAL` | `tick` | `2018-08-14` | `2026-06-11` | 498 | 17.42% |
+| `deribit` | `ETH-PERPETUAL` | `tick` | `2019-03-14` | `2026-05-29` | 748 | 28.40% |
 | `deribit` | `SOL-PERPETUAL` | `tick` | `2022-04-29` | `2022-12-30` | 0 | 0.00% |
 
 ## 4.6 `options_trades` (`dataset_type=options_trades`)
@@ -533,15 +533,15 @@ Coverage:
 
 | Exchange | Symbol | Timeframe | Start Date | End Date | Missing Days | Missing % |
 |---|---|---|---|---|---:|---:|
-| `deribit` | `BTC` | `tick` | `2018-08-14` | `2026-07-05` | 0 | 0.00% |
-| `deribit` | `ETH` | `tick` | `2019-03-21` | `2026-07-05` | 0 | 0.00% |
+| `deribit` | `BTC` | `tick` | `2018-08-14` | `2026-07-12` | 0 | 0.00% |
+| `deribit` | `ETH` | `tick` | `2019-03-21` | `2026-07-12` | 0 | 0.00% |
 | `deribit` | `SOL` | `tick` | `2022-05-04` | `2022-12-30` | 0 | 0.00% |
 
 ---
 
 ## 4.7 Layer Inventory Snapshot
 
-This is the authoritative local-data snapshot as of 2026-07-10 CEST. Dates are derived from the
+This is the authoritative local-data snapshot as of 2026-07-12 CEST. Dates are derived from the
 partitioned Parquet files. Missing days are counted per primary series between that series' first and
 last observed day; different series with different lifetimes are not treated as one continuous series.
 The tables describe physical files, not only contracts declared in code.
@@ -554,23 +554,23 @@ schemas, including lineage and payload fields.
 
 | Dataset type | Series | Period | Missing days | Physical variables |
 |---|---|---|---|---|
-| `funding` | BTC/ETH/SOL perpetuals | BTC/ETH 2019-04-30..2026-07-09; SOL 2022-03-16..2026-07-09 | 0 per series | `schema_version`, `dataset_type`, `exchange`, `symbol`, `instrument_type`, `event_time`, `ingested_at`, `run_id`, `source_endpoint`, `open_time`, `close_time`, `timeframe`, `funding_rate`, `index_price`, `mark_price` |
-| `perps_ohlcv` | BTC/ETH/SOL perpetuals | BTC 2018-08-14..2026-07-10; ETH 2019-03-14..2026-07-10; SOL 2022-04-29..2026-07-10 | 0 per series | `schema_version`, `dataset_type`, `exchange`, `symbol`, `instrument_type`, `event_time`, `ingested_at`, `run_id`, `source_endpoint`, `open_time`, `close_time`, `timeframe`, `open_price`, `high_price`, `low_price`, `close_price`, `volume`, `quote_volume`, `trade_count`, `origin_payload` |
-| `open_interest` | BTC/ETH/SOL perpetuals | BTC 2018-08-15..2026-07-09; ETH 2019-03-15..2026-07-09; SOL 2022-03-16..2026-07-09 | 0 per series | `schema_version`, `dataset_type`, `exchange`, `symbol`, `instrument_type`, `event_time`, `ingested_at`, `run_id`, `source_endpoint`, `open_time`, `close_time`, `timeframe`, `open_interest`, `open_interest_value` |
-| `perps_trades` | BTC/ETH/SOL perpetuals | BTC 2018-08-14..2026-06-11; ETH 2019-03-14..2026-05-29; SOL 2022-04-29..2022-12-30 | BTC 608; ETH 857; SOL 0 | `schema_version`, `dataset_type`, `exchange`, `symbol`, `instrument_type`, `event_time`, `ingested_at`, `run_id`, `source_endpoint`, `open_time`, `close_time`, `timeframe`, `trade_id`, `price`, `quantity`, `side`, `is_maker` |
-| `options_trades` | BTC/ETH/SOL options | BTC 2018-08-14..2026-07-10; ETH 2019-03-21..2026-07-10; SOL 2022-05-04..2022-12-30 | 0 per series | `schema_version`, `dataset_type`, `exchange`, `symbol`, `instrument_type`, `event_time`, `ingested_at`, `run_id`, `source_endpoint`, `open_time`, `close_time`, `timeframe`, `trade_id`, `price`, `quantity`, `side`, `is_maker`, `instrument_name`, `expiry`, `strike`, `option_type` |
+| `funding` | BTC/ETH/SOL perpetuals | BTC/ETH 2019-04-30..2026-07-11; SOL 2022-03-16..2026-07-11 | 0 per series | `schema_version`, `dataset_type`, `exchange`, `symbol`, `instrument_type`, `event_time`, `ingested_at`, `run_id`, `source_endpoint`, `open_time`, `close_time`, `timeframe`, `funding_rate`, `index_price`, `mark_price` |
+| `perps_ohlcv` | BTC/ETH/SOL perpetuals | BTC 2018-08-14..2026-07-12; ETH 2019-03-14..2026-07-12; SOL 2022-04-29..2026-07-12 | 0 per series | `schema_version`, `dataset_type`, `exchange`, `symbol`, `instrument_type`, `event_time`, `ingested_at`, `run_id`, `source_endpoint`, `open_time`, `close_time`, `timeframe`, `open_price`, `high_price`, `low_price`, `close_price`, `volume`, `quote_volume`, `trade_count`, `origin_payload` |
+| `open_interest` | BTC/ETH/SOL perpetuals | BTC 2018-08-15..2026-07-11; ETH 2019-03-15..2026-07-11; SOL 2022-03-16..2026-07-11 | 0 per series | `schema_version`, `dataset_type`, `exchange`, `symbol`, `instrument_type`, `event_time`, `ingested_at`, `run_id`, `source_endpoint`, `open_time`, `close_time`, `timeframe`, `open_interest`, `open_interest_value` |
+| `perps_trades` | BTC/ETH/SOL perpetuals | BTC 2018-08-14..2026-06-11; ETH 2019-03-14..2026-05-29; SOL 2022-04-29..2022-12-30 | BTC 498; ETH 748; SOL 0 | `schema_version`, `dataset_type`, `exchange`, `symbol`, `instrument_type`, `event_time`, `ingested_at`, `run_id`, `source_endpoint`, `open_time`, `close_time`, `timeframe`, `trade_id`, `price`, `quantity`, `side`, `is_maker` |
+| `options_trades` | BTC/ETH/SOL options | BTC 2018-08-14..2026-07-12; ETH 2019-03-21..2026-07-12; SOL 2022-05-04..2022-12-30 | 0 per series | `schema_version`, `dataset_type`, `exchange`, `symbol`, `instrument_type`, `event_time`, `ingested_at`, `run_id`, `source_endpoint`, `open_time`, `close_time`, `timeframe`, `trade_id`, `price`, `quantity`, `side`, `is_maker`, `instrument_name`, `expiry`, `strike`, `option_type` |
 | `volatility_index_data` | BTC/ETH/SOL index series | BTC/ETH 2026-04-24..2026-05-25; SOL 2022-11-07..2022-11-25 | 0 per series; 1,245 only in the combined cross-series envelope | `schema_version`, `dataset_type`, `exchange`, `symbol`, `instrument_type`, `event_time`, `ingested_at`, `run_id`, `source_endpoint`, `open_time`, `close_time`, `timeframe`, `value` |
 | `historical_volatility` | BTC/ETH/SOL | 2026-05-08..2026-05-24 | 0 per series | `schema_version`, `dataset_type`, `exchange`, `symbol`, `instrument_type`, `event_time`, `ingested_at`, `run_id`, `source_endpoint`, `open_time`, `close_time`, `timeframe`, `value` |
-| `volatility_index_snapshot_1m` | BTC/ETH live snapshots | 2026-06-12..2026-07-10 | 0 per series; SOL not present | `schema_version`, `dataset_type`, `exchange`, `source`, `currency`, `source_currency`, `timestamp`, `open`, `high`, `low`, `close`, `resolution`, `snapshot_time`, `ingested_at`, `run_id`, `raw_payload_hash` |
-| `index_price_snapshot_1m` | `btc_usd`, `eth_usd`, `sol_usdc` | 2026-05-24..2026-07-10 | 0 per series | `schema_version`, `dataset_type`, `exchange`, `source`, `index_name`, `snapshot_time`, `event_time`, `price`, `ingested_at`, `run_id`, `raw_payload_hash` |
-| `futures_summary_snapshot_1m` | BTC/ETH/SOL currency groups | 2026-06-12..2026-07-10 | 0 per series | `schema_version`, `dataset_type`, `exchange`, `source`, `currency`, `requested_currency`, `source_currency`, `instrument_name`, `instrument_type`, `snapshot_time`, `exchange_creation_time`, `ingested_at`, `run_id`, `bid_price`, `ask_price`, `mid_price`, `mark_price`, `last`, `open_interest`, `volume`, `volume_usd`, `high`, `low`, `price_change`, `underlying_price`, `estimated_delivery_price`, `interest_rate`, `raw_payload_hash` |
-| `options_ticker_snapshot_1m` | BTC/ETH/SOL currency groups | 2026-05-24..2026-07-10 | 0 per series | `exchange`, `dataset_type`, `source`, `currency`, `requested_currency`, `source_currency`, `instrument_name`, `base_currency`, `quote_currency`, `instrument_type`, `snapshot_time`, `exchange_creation_time`, `ingested_at`, `run_id`, `bid_price`, `ask_price`, `mid_price`, `mark_price`, `mark_iv`, `underlying_price`, `underlying_index`, `interest_rate`, `open_interest`, `volume`, `volume_usd`, `high`, `low`, `last`, `price_change`, `raw_payload_hash`, `schema_version` |
-| `options_instrument_ticker_snapshot_1m` | BTC/ETH/SOL currency groups | 2026-06-12..2026-07-10 | 0 per series | `exchange`, `dataset_type`, `source`, `currency`, `instrument_name`, `instrument_type`, `snapshot_time`, `exchange_creation_time`, `exchange_timestamp`, `ingested_at`, `run_id`, `state`, `bid_price`, `ask_price`, `best_bid_price`, `best_ask_price`, `best_bid_amount`, `best_ask_amount`, `bid_iv`, `ask_iv`, `mark_iv`, `mark_price`, `last_price`, `underlying_price`, `underlying_index`, `index_price`, `interest_rate`, `open_interest`, `volume`, `volume_usd`, `high`, `low`, `price_change`, `delta`, `gamma`, `theta`, `vega`, `rho`, `raw_payload_hash`, `schema_version` |
-| `perps_l2_snapshot_1m` | BTC/ETH/SOL perpetuals | 2026-05-05..2026-07-10 | 0 per series | `schema_version`, `dataset_type`, `exchange`, `symbol`, `instrument_type`, `event_time`, `ingested_at`, `run_id`, `source`, `depth`, `fetch_duration_s`, `bids`, `asks`, `mark_price`, `index_price`, `open_interest`, `funding_8h`, `current_funding` |
-| `options_l2_snapshot_1m` | BTC/ETH/SOL options | 2026-07-03..2026-07-10 | 0 per series | `schema_version`, `dataset_type`, `exchange`, `symbol`, `instrument_type`, `event_time`, `ingested_at`, `run_id`, `source`, `depth`, `fetch_duration_s`, `bids`, `asks`, `currency`, `instrument_name`, `snapshot_time`, `exchange_timestamp`, `state`, `bid_levels`, `ask_levels`, `best_bid_price`, `best_ask_price`, `best_bid_amount`, `best_ask_amount`, `mark_price`, `index_price`, `underlying_price`, `underlying_index`, `interest_rate`, `bid_iv`, `ask_iv`, `mark_iv`, `open_interest`, `last_price`, `settlement_price`, `min_price`, `max_price`, `volume`, `volume_usd`, `high`, `low`, `price_change`, `delta`, `gamma`, `theta`, `vega`, `rho`, `raw_payload_hash` |
-| `recent_trade_snapshot_1m` | BTC/ETH/SOL currency groups | 2026-06-12..2026-07-10 | 0 per series | `schema_version`, `dataset_type`, `exchange`, `source`, `requested_currency`, `source_currency`, `currency`, `instrument_name`, `instrument_type`, `kind`, `trade_id`, `trade_sequence`, `exchange_timestamp`, `snapshot_time`, `ingested_at`, `run_id`, `price`, `amount`, `direction`, `tick_direction`, `mark_price`, `index_price`, `iv`, `liquidation`, `block_trade_id`, `signed_amount`, `notional`, `raw_payload_hash` |
-| `instrument_metadata_snapshot_daily` | aggregate | 2026-05-25..2026-07-10 | 0 | `schema_version`, `dataset_type`, `exchange`, `source`, `snapshot_date`, `ingested_at`, `run_id`, `instrument_name`, `kind`, `base_currency`, `quote_currency`, `counter_currency`, `settlement_currency`, `instrument_type`, `tick_size`, `contract_size`, `min_trade_amount`, `is_active`, `creation_timestamp`, `expiration_timestamp`, `option_type`, `strike`, `raw_payload_hash` |
-| `futures_instrument_metadata_snapshot_daily` | aggregate | 2026-06-13..2026-07-10 | 0 | `schema_version`, `dataset_type`, `exchange`, `source`, `snapshot_date`, `ingested_at`, `run_id`, `instrument_name`, `kind`, `base_currency`, `quote_currency`, `counter_currency`, `settlement_currency`, `instrument_type`, `settlement_period`, `price_index`, `state`, `tick_size`, `contract_size`, `min_trade_amount`, `is_active`, `creation_timestamp`, `expiration_timestamp`, `option_type`, `strike`, `raw_payload_hash` |
+| `volatility_index_snapshot_1m` | BTC/ETH live snapshots | 2026-06-12..2026-07-11 | 0 per series; SOL not present | `schema_version`, `dataset_type`, `exchange`, `source`, `currency`, `source_currency`, `timestamp`, `open`, `high`, `low`, `close`, `resolution`, `snapshot_time`, `ingested_at`, `run_id`, `raw_payload_hash` |
+| `index_price_snapshot_1m` | `btc_usd`, `eth_usd`, `sol_usdc` | 2026-05-24..2026-07-11 | 0 per series | `schema_version`, `dataset_type`, `exchange`, `source`, `index_name`, `snapshot_time`, `event_time`, `price`, `ingested_at`, `run_id`, `raw_payload_hash` |
+| `futures_summary_snapshot_1m` | BTC/ETH/SOL currency groups | 2026-06-12..2026-07-11 | 0 per series | `schema_version`, `dataset_type`, `exchange`, `source`, `currency`, `requested_currency`, `source_currency`, `instrument_name`, `instrument_type`, `snapshot_time`, `exchange_creation_time`, `ingested_at`, `run_id`, `bid_price`, `ask_price`, `mid_price`, `mark_price`, `last`, `open_interest`, `volume`, `volume_usd`, `high`, `low`, `price_change`, `underlying_price`, `estimated_delivery_price`, `interest_rate`, `raw_payload_hash` |
+| `options_ticker_snapshot_1m` | BTC/ETH/SOL currency groups | 2026-05-24..2026-07-11 | 0 per series | `exchange`, `dataset_type`, `source`, `currency`, `requested_currency`, `source_currency`, `instrument_name`, `base_currency`, `quote_currency`, `instrument_type`, `snapshot_time`, `exchange_creation_time`, `ingested_at`, `run_id`, `bid_price`, `ask_price`, `mid_price`, `mark_price`, `mark_iv`, `underlying_price`, `underlying_index`, `interest_rate`, `open_interest`, `volume`, `volume_usd`, `high`, `low`, `last`, `price_change`, `raw_payload_hash`, `schema_version` |
+| `options_instrument_ticker_snapshot_1m` | BTC/ETH/SOL currency groups | 2026-06-12..2026-07-11 | 0 per series | `exchange`, `dataset_type`, `source`, `currency`, `instrument_name`, `instrument_type`, `snapshot_time`, `exchange_creation_time`, `exchange_timestamp`, `ingested_at`, `run_id`, `state`, `bid_price`, `ask_price`, `best_bid_price`, `best_ask_price`, `best_bid_amount`, `best_ask_amount`, `bid_iv`, `ask_iv`, `mark_iv`, `mark_price`, `last_price`, `underlying_price`, `underlying_index`, `index_price`, `interest_rate`, `open_interest`, `volume`, `volume_usd`, `high`, `low`, `price_change`, `delta`, `gamma`, `theta`, `vega`, `rho`, `raw_payload_hash`, `schema_version` |
+| `perps_l2_snapshot_1m` | BTC/ETH/SOL perpetuals | 2026-05-05..2026-07-11 | 0 per series | `schema_version`, `dataset_type`, `exchange`, `symbol`, `instrument_type`, `event_time`, `ingested_at`, `run_id`, `source`, `depth`, `fetch_duration_s`, `bids`, `asks`, `mark_price`, `index_price`, `open_interest`, `funding_8h`, `current_funding` |
+| `options_l2_snapshot_1m` | BTC/ETH/SOL options | 2026-07-03..2026-07-11 | 0 per currency group | `schema_version`, `dataset_type`, `exchange`, `symbol`, `instrument_type`, `event_time`, `ingested_at`, `run_id`, `source`, `depth`, `fetch_duration_s`, `bids`, `asks`, `currency`, `instrument_name`, `snapshot_time`, `exchange_timestamp`, `state`, `bid_levels`, `ask_levels`, `best_bid_price`, `best_ask_price`, `best_bid_amount`, `best_ask_amount`, `mark_price`, `index_price`, `underlying_price`, `underlying_index`, `interest_rate`, `bid_iv`, `ask_iv`, `mark_iv`, `open_interest`, `last_price`, `settlement_price`, `min_price`, `max_price`, `volume`, `volume_usd`, `high`, `low`, `price_change`, `delta`, `gamma`, `theta`, `vega`, `rho`, `raw_payload_hash` |
+| `recent_trade_snapshot_1m` | BTC/ETH/SOL currency groups | 2026-06-12..2026-07-11 | 0 per series | `schema_version`, `dataset_type`, `exchange`, `source`, `requested_currency`, `source_currency`, `currency`, `instrument_name`, `instrument_type`, `kind`, `trade_id`, `trade_sequence`, `exchange_timestamp`, `snapshot_time`, `ingested_at`, `run_id`, `price`, `amount`, `direction`, `tick_direction`, `mark_price`, `index_price`, `iv`, `liquidation`, `block_trade_id`, `signed_amount`, `notional`, `raw_payload_hash` |
+| `instrument_metadata_snapshot_daily` | aggregate | 2026-05-25..2026-07-11 | 0 | `schema_version`, `dataset_type`, `exchange`, `source`, `snapshot_date`, `ingested_at`, `run_id`, `instrument_name`, `kind`, `base_currency`, `quote_currency`, `counter_currency`, `settlement_currency`, `instrument_type`, `tick_size`, `contract_size`, `min_trade_amount`, `is_active`, `creation_timestamp`, `expiration_timestamp`, `option_type`, `strike`, `raw_payload_hash` |
+| `futures_instrument_metadata_snapshot_daily` | aggregate | 2026-06-13..2026-07-11 | 0 | `schema_version`, `dataset_type`, `exchange`, `source`, `snapshot_date`, `ingested_at`, `run_id`, `instrument_name`, `kind`, `base_currency`, `quote_currency`, `counter_currency`, `settlement_currency`, `instrument_type`, `settlement_period`, `price_index`, `state`, `tick_size`, `contract_size`, `min_trade_amount`, `is_active`, `creation_timestamp`, `expiration_timestamp`, `option_type`, `strike`, `raw_payload_hash` |
 
 ### 4.7.2 Silver: physical status and exact contract variables
 

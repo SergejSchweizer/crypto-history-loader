@@ -330,7 +330,7 @@ def _schema_columns(pl: Any, parquet_path: Path) -> tuple[str, ...]:
 
 
 def _row_count(pl: Any, files: list[Path]) -> int:
-    frame = pl.scan_parquet([str(path) for path in files]).select(pl.len().alias("row_count")).collect()
+    frame = _scan_inventory_parquet(pl, files).select(pl.len().alias("row_count")).collect()
     return int(frame.item())
 
 
@@ -347,7 +347,7 @@ def _coverage(
     selected_columns = [timestamp_column]
     if series_column is not None:
         selected_columns.append(series_column)
-    frame = pl.scan_parquet([str(path) for path in files]).select(selected_columns).collect()
+    frame = _scan_inventory_parquet(pl, files).select(selected_columns).collect()
     if frame.height == 0:
         return _empty_coverage()
     frame = frame.drop_nulls(timestamp_column)
@@ -411,6 +411,13 @@ def _empty_coverage() -> dict[str, Any]:
         "missing_days": None,
         "per_series_missing_days": (),
     }
+
+
+def _scan_inventory_parquet(pl: Any, files: list[Path]) -> Any:
+    # Inventory scans summarize historical lake files that may contain additive schema drift.
+    # Extra columns are ignored so coverage reporting remains read-only and tolerant of
+    # backward-compatible field additions across partitions.
+    return pl.scan_parquet([str(path) for path in files], extra_columns="ignore")
 
 
 def _timestamp_column(schema_columns: tuple[str, ...], timestamp_hint: str | None) -> str | None:
