@@ -7,14 +7,14 @@ name = "crypto-history-loader"
 version = "0.1.0"
 description = "Framework for crypto market data ingestion"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.14"
 dependencies = [
-  "numpy>=2.4.4",
-  "pandas>=3.0.2",
-  "polars>=1.40.1",
-  "duckdb>=1.5.2",
-  "matplotlib>=3.10.9",
-  "pyarrow>=24.0.0",
+  "numpy>=2.5.1",
+  "pandas>=3.0.3",
+  "polars>=1.42.1",
+  "duckdb>=1.5.4",
+  "matplotlib>=3.11.0",
+  "pyarrow>=25.0.0",
   "PyYAML>=6.0.3",
   "pydantic>=2.13.4",
   "psycopg[binary]>=3.3.4",
@@ -22,15 +22,15 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-  "import-linter>=2.7",
-  "mypy>=1.18",
-  "pre-commit>=4.4",
-  "pyright>=1.1.407",
-  "pytest>=9.0",
-  "pytest-cov>=7.0",
+  "import-linter>=2.13",
+  "mypy>=2.2",
+  "pre-commit>=4.6",
+  "pyright>=1.1.411",
+  "pytest>=9.1",
+  "pytest-cov>=7.1",
   "pytest-xdist>=3.8",
-  "ruff>=0.14",
-  "ty>=0.0.1a23",
+  "ruff>=0.15",
+  "ty>=0.0.58",
 ]
 
 [tool.setuptools.packages.find]
@@ -53,22 +53,26 @@ show_missing = true
 
 [tool.ruff]
 line-length = 120
-target-version = "py311"
+target-version = "py314"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "W"]
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.14"
 strict = true
 warn_unused_configs = true
 mypy_path = "."
 exclude = ["notebooks/", "tests/", "scripts/"]
 
+[[tool.mypy.overrides]]
+module = ["pyarrow", "pyarrow.*"]
+ignore_missing_imports = true
+
 [tool.pyright]
 include = ["api", "application", "ingestion", "scripts"]
 exclude = ["tests", "notebooks", ".venv"]
-pythonVersion = "3.11"
+pythonVersion = "3.14"
 typeCheckingMode = "standard"
 
 [tool.ty.src]

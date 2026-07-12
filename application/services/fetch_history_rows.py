@@ -4,11 +4,9 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import datetime
-from typing import Any, TypeVar, cast
+from typing import Any, cast
 
 from application.services.fetch_bootstrap import fetch_bootstrap_history_rows, fetch_bounded_daily_rows
-
-TRow = TypeVar("TRow")
 
 
 def row_open_time_ms(row: object) -> int:
@@ -23,7 +21,7 @@ def row_open_time_ms(row: object) -> int:
     return int(timestamp.timestamp() * 1000)
 
 
-def filter_rows_by_start_bound(rows: list[TRow], start_open_ms_bound: int | None) -> list[TRow]:
+def filter_rows_by_start_bound[TRow](rows: list[TRow], start_open_ms_bound: int | None) -> list[TRow]:
     """Filter rows by inclusive start bound when provided."""
 
     if start_open_ms_bound is None:
@@ -31,7 +29,7 @@ def filter_rows_by_start_bound(rows: list[TRow], start_open_ms_bound: int | None
     return [item for item in rows if row_open_time_ms(item) >= start_open_ms_bound]
 
 
-def filter_chunk_callback(
+def filter_chunk_callback[TRow](
     on_history_chunk: Callable[[list[TRow]], None] | None,
     start_open_ms_bound: int | None,
 ) -> Callable[[list[TRow]], None] | None:
@@ -50,7 +48,7 @@ def filter_chunk_callback(
     return _filtered_chunk
 
 
-def fetch_bounded_daily_rows_with_start_bound(
+def fetch_bounded_daily_rows_with_start_bound[TRow](
     *,
     day_windows: list[tuple[int, int]],
     range_fetcher: Callable[..., list[TRow]],
@@ -68,7 +66,7 @@ def fetch_bounded_daily_rows_with_start_bound(
     )
 
 
-def fetch_bootstrap_history_rows_with_start_bound(
+def fetch_bootstrap_history_rows_with_start_bound[TRow](
     *,
     history_fetcher: Callable[..., list[TRow]],
     fetch_kwargs: dict[str, object],

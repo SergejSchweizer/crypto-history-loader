@@ -5,9 +5,9 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import TypeAlias, cast
+from typing import cast
 
-FetchAllResult8: TypeAlias = tuple[
+type FetchAllResult8 = tuple[
     dict[tuple[str, str, str, str], list[object]],
     dict[tuple[str, str, str, str], str],
     dict[tuple[str, str, str], list[object]],
@@ -17,7 +17,7 @@ FetchAllResult8: TypeAlias = tuple[
     dict[tuple[str, str, str], list[object]],
     dict[tuple[str, str, str], str],
 ]
-FetchAllResult10: TypeAlias = tuple[
+type FetchAllResult10 = tuple[
     dict[tuple[str, str, str, str], list[object]],
     dict[tuple[str, str, str, str], str],
     dict[tuple[str, str, str], list[object]],

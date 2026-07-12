@@ -3,12 +3,9 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import TypeVar
-
-TRow = TypeVar("TRow")
 
 
-def fetch_bounded_daily_rows(
+def fetch_bounded_daily_rows[TRow](
     *,
     day_windows: list[tuple[int, int]],
     range_fetcher: Callable[..., list[TRow]],
@@ -32,7 +29,7 @@ def fetch_bounded_daily_rows(
     return [unique_by_open_time[key] for key in sorted(unique_by_open_time)]
 
 
-def fetch_bootstrap_history_rows(
+def fetch_bootstrap_history_rows[TRow](
     *,
     history_fetcher: Callable[..., list[TRow]],
     fetch_kwargs: dict[str, object],

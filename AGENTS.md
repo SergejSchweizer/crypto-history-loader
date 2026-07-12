@@ -289,7 +289,7 @@ Applies to Python quality tooling, typing, formatting, and local validation comm
 - [MUST] `pyproject.toml` includes and maintains `interrogate` with `fail-under = 95`.
 - [MUST] `pyproject.toml` includes and maintains `pydoclint` with Google style and return-type checks.
 - [MUST] `pyproject.toml` includes and maintains coverage report threshold with `fail_under = 90`.
-- [MUST] `pyproject.toml` keeps `line-length = 100` and `target-version = "py312"` for Ruff unless intentionally changed and documented.
+- [MUST] `pyproject.toml` keeps `line-length = 120` and `target-version = "py314"` for Ruff unless intentionally changed and documented.
 
 ## Agent Action Checklist
 

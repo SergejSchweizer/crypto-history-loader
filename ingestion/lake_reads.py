@@ -55,8 +55,8 @@ def load_spot_ohlcv_candles_from_lake(
 
     candles_by_open_time: dict[datetime, SpotCandle] = {}
     for data_file in partition_data_files(partition_root):
-        parquet_file = pq.ParquetFile(data_file)  # type: ignore[no-untyped-call]
-        for batch in parquet_file.iter_batches(batch_size=10_000):  # type: ignore[no-untyped-call]
+        parquet_file = pq.ParquetFile(data_file)
+        for batch in parquet_file.iter_batches(batch_size=10_000):
             for row in batch.to_pylist():
                 open_time = row.get("open_time")
                 close_time = row.get("close_time")
@@ -121,8 +121,8 @@ def load_open_interest_from_lake(
 
     items_by_open_time: dict[datetime, OpenInterestPoint] = {}
     for data_file in partition_data_files(partition_root):
-        parquet_file = pq.ParquetFile(data_file)  # type: ignore[no-untyped-call]
-        for batch in parquet_file.iter_batches(batch_size=10_000):  # type: ignore[no-untyped-call]
+        parquet_file = pq.ParquetFile(data_file)
+        for batch in parquet_file.iter_batches(batch_size=10_000):
             for row in batch.to_pylist():
                 open_time = row.get("open_time")
                 close_time = row.get("close_time")
@@ -181,8 +181,8 @@ def load_funding_from_lake(
 
     items_by_open_time: dict[datetime, FundingPoint] = {}
     for data_file in partition_data_files(partition_root):
-        parquet_file = pq.ParquetFile(data_file)  # type: ignore[no-untyped-call]
-        for batch in parquet_file.iter_batches(batch_size=10_000):  # type: ignore[no-untyped-call]
+        parquet_file = pq.ParquetFile(data_file)
+        for batch in parquet_file.iter_batches(batch_size=10_000):
             for row in batch.to_pylist():
                 open_time = row.get("open_time")
                 close_time = row.get("close_time")
