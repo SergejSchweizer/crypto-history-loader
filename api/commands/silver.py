@@ -125,9 +125,7 @@ SILVER_BUILD_SPECS: dict[str, SilverBuildSpec] = {
     "realized_volatility": SilverBuildSpec(dataset="realized_volatility", discovery="realized_volatility"),
     "iv_rv": SilverBuildSpec(dataset="iv_rv", discovery="iv_rv"),
     "index_price_snapshot_1m": SilverBuildSpec(dataset="index_price_snapshot_1m", discovery="index_price"),
-    "futures_summary_snapshot_1m": SilverBuildSpec(
-        dataset="futures_summary_snapshot_1m", discovery="futures_summary"
-    ),
+    "futures_summary_snapshot_1m": SilverBuildSpec(dataset="futures_summary_snapshot_1m", discovery="futures_summary"),
     "options_ticker_snapshot_1m": SilverBuildSpec(dataset="options_ticker_snapshot_1m", discovery="options_ticker"),
     "options_instrument_ticker_snapshot_1m": SilverBuildSpec(
         dataset="options_instrument_ticker_snapshot_1m", discovery="options_instrument_ticker"
