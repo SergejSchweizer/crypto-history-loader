@@ -744,6 +744,18 @@ LIVE_MICROSTRUCTURE_GOLD_REQUIREMENTS = (
     GoldSourceRequirement("options_l2_1m_feature", "1m"),
 )
 
+LIVE_FULL_GOLD_REQUIREMENTS = (
+    GoldSourceRequirement("volatility_index_1m_feature", "1m"),
+    GoldSourceRequirement("perps_l2_1m_feature", "1m"),
+    GoldSourceRequirement("options_l2_1m_feature", "1m"),
+)
+
+LIVE_FULL_GOLD_OPTIONAL_REQUIREMENTS = (
+    GoldSourceRequirement("index_price_1m_feature", "1m"),
+    GoldSourceRequirement("futures_summary_1m_feature", "1m"),
+    GoldSourceRequirement("options_surface_1m_feature", "1m"),
+)
+
 GOLD_DATASET_CONTRACTS: dict[str, GoldDatasetContract] = {
     "gold.market.perps_trades.m1": GoldDatasetContract(
         dataset_id="gold.market.perps_trades.m1",
@@ -818,6 +830,13 @@ GOLD_DATASET_CONTRACTS: dict[str, GoldDatasetContract] = {
     "gold.live.microstructure_features.m1": GoldDatasetContract(
         dataset_id="gold.live.microstructure_features.m1",
         requirements=LIVE_MICROSTRUCTURE_GOLD_REQUIREMENTS,
+        include_l2=False,
+        missing_data_policy="observed_only",
+    ),
+    "gold.live.full.m1": GoldDatasetContract(
+        dataset_id="gold.live.full.m1",
+        requirements=LIVE_FULL_GOLD_REQUIREMENTS,
+        optional_requirements=LIVE_FULL_GOLD_OPTIONAL_REQUIREMENTS,
         include_l2=False,
         missing_data_policy="observed_only",
     ),

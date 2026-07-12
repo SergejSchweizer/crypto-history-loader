@@ -19,6 +19,7 @@ def test_resolve_dataset_ids_returns_single_when_explicit() -> None:
     assert gold_cmd._resolve_dataset_ids("gold.live.microstructure_features.m1") == [
         "gold.live.microstructure_features.m1"
     ]
+    assert gold_cmd._resolve_dataset_ids("gold.live.full.m1") == ["gold.live.full.m1"]
 
 
 def test_resolve_dataset_ids_returns_sorted_supported_when_missing() -> None:

@@ -988,7 +988,7 @@ Acceptance:
 
 ### PR-36: Live Full Gold Dataset
 
-Status: Planned
+Status: In progress - PR #112: https://github.com/SergejSchweizer/crypto-history-loader/pull/112
 
 Branch: `codex/pr36-live-full-gold-dataset`
 
@@ -1001,29 +1001,23 @@ single inference table compatible with the historical full dataset where semanti
 Scope:
 - Add `gold.live.full.m1` as the complete live feature join.
 - Required live sources:
-  - `gold.live.volatility_features.m1`
-  - `gold.live.microstructure_features.m1`
-  - `gold.live.regime_features.m1`
-  - `gold.live.instrument_universe.d1` as the as-of universe/metadata source.
-- Optional live Silver sources remain nullable with explicit availability/freshness fields:
-  - `volatility_index_snapshot_1m_observed`
-  - `index_price_1m_feature`
-  - `futures_summary_1m_feature`
-  - `options_ticker_snapshot_1m_observed`
-  - `options_instrument_ticker_snapshot_1m_observed`
-  - `options_surface_1m_feature`
+  - `volatility_index_1m_feature`
   - `perps_l2_1m_feature`
   - `options_l2_1m_feature`
-  - `recent_trade_snapshot_1m_observed`
-  - instrument metadata observed datasets.
+- Optional live Silver sources remain nullable with explicit availability/freshness fields:
+  - `index_price_1m_feature`
+  - `futures_summary_1m_feature`
+  - `options_surface_1m_feature`
+- Keep future live regime and instrument-universe additions as extensions of `gold.live.full.m1`, not as
+  separate primary Gold endpoints.
 - Do not backfill live gaps from historical datasets; live missing minutes stay null and are represented by
   coverage, freshness, and source-availability fields.
 - Align overlapping column names, units, and null semantics with `gold.market.history_full.m1`.
-- Update `config.yaml`, complete-run commands, parser/config compatibility tests, and README inventory docs.
+- Update complete-run commands, parser compatibility tests, and README inventory docs.
 
 Acceptance:
 - One deterministic row per live `exchange/symbol/timestamp_m1` where the live minute grid exists.
-- All live-loader-derived sources are represented directly or through documented availability flags.
+- Existing live-loader-derived feature families are represented directly or through documented availability flags.
 - Historical/live schema compatibility tests pass for overlapping feature families.
 - Manifest reports origin repository, source coverage, freshness, start/end, observed days, missing days,
   source hashes, and builder commit.
