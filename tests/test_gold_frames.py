@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from application.dataset_contracts import GOLD_DATASET_CONTRACTS
 from application.services import gold_frames
 
 pl = pytest.importorskip("polars")
@@ -141,3 +142,14 @@ def test_prepare_dataset_frame_and_minute_grid() -> None:
     ]
     assert grid.height == 3
     assert grid.get_column("symbol").to_list() == ["BTC", "BTC", "BTC"]
+
+
+def test_gold_contract_requirements_have_preparation_specs() -> None:
+    registered = set(gold_frames.gold_frame_preparation_specs())
+    contract_sources = {
+        requirement.dataset_type
+        for contract in GOLD_DATASET_CONTRACTS.values()
+        for requirement in (*contract.requirements, *contract.optional_requirements)
+    }
+
+    assert contract_sources <= registered

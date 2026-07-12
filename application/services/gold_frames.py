@@ -3,10 +3,27 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+
+type GoldFramePrepareFunc = Callable[[Any, Any, str], Any]
+type OptionalFeatureSchemaFunc = Callable[[Any], list[tuple[str, Any]]]
+
+
+@dataclass(frozen=True)
+class GoldFramePreparationSpec:
+    """Preparation contract for one Silver source entering a Gold frame."""
+
+    dataset_type: str
+    prepare: GoldFramePrepareFunc
+    source_lineage: str
+    required_columns: tuple[str, ...] = ()
+    output_columns: tuple[str, ...] = ()
+    optional_nullable_schema: OptionalFeatureSchemaFunc | None = None
+
 
 STRATEGY_FEATURE_LOOKBACKS: dict[str, str] = {
     "strategy_momentum_log_return_1m": "1m",
@@ -714,92 +731,212 @@ def prepare_historical_volatility(pl: Any, frame: Any, symbol: str) -> Any:
     )
 
 
+def _perps_l2_optional_schema(pl: Any) -> list[tuple[str, Any]]:
+    return [
+        *[
+            (f"perps_l2_{name}", pl.Float64)
+            for name in (
+                "best_bid_price",
+                "best_ask_price",
+                "mid_price",
+                "spread",
+                "top_bid_size",
+                "top_ask_size",
+                "top_of_book_imbalance",
+                "bid_depth_10bps",
+                "ask_depth_10bps",
+                "bid_depth_50bps",
+                "ask_depth_50bps",
+                "quote_age_seconds",
+            )
+        ],
+        ("perps_l2_quote_available", pl.Boolean),
+        ("perps_l2_stale_quote", pl.Boolean),
+        ("perps_l2_minutes_since_observation", pl.Int64),
+        ("perps_l2_as_of", pl.Datetime(time_unit="us", time_zone="UTC")),
+        ("perps_l2_live_snapshot_derived", pl.Boolean),
+    ]
+
+
+def _options_l2_optional_schema(pl: Any) -> list[tuple[str, Any]]:
+    return [
+        ("options_l2_contract_count", pl.Int64),
+        ("options_l2_quote_coverage_ratio", pl.Float64),
+        ("options_l2_stale_quote_ratio", pl.Float64),
+        ("options_l2_median_spread", pl.Float64),
+        ("options_l2_top_bid_depth", pl.Float64),
+        ("options_l2_top_ask_depth", pl.Float64),
+        ("options_l2_bid_depth_10bps", pl.Float64),
+        ("options_l2_ask_depth_10bps", pl.Float64),
+        ("options_l2_bid_depth_50bps", pl.Float64),
+        ("options_l2_ask_depth_50bps", pl.Float64),
+        ("options_l2_max_quote_age_seconds", pl.Float64),
+        ("options_l2_as_of", pl.Datetime(time_unit="us", time_zone="UTC")),
+        ("options_l2_live_snapshot_derived", pl.Boolean),
+    ]
+
+
+def _options_surface_optional_schema(pl: Any) -> list[tuple[str, Any]]:
+    return [
+        ("options_surface_atm_iv", pl.Float64),
+        ("options_surface_short_dated_iv", pl.Float64),
+        ("options_surface_skew", pl.Float64),
+        ("options_surface_term_structure", pl.Float64),
+        ("options_surface_put_call_iv_spread", pl.Float64),
+        ("options_surface_contract_count", pl.Int64),
+        ("options_surface_fresh_quote_count", pl.Int64),
+        ("options_surface_stale_quote_count", pl.Int64),
+        ("options_surface_max_quote_age_seconds", pl.Float64),
+        ("options_surface_quote_coverage_ratio", pl.Float64),
+    ]
+
+
+def _index_price_optional_schema(pl: Any) -> list[tuple[str, Any]]:
+    return [
+        ("index_price", pl.Float64),
+        ("index_price_is_observed", pl.Boolean),
+        ("minutes_since_index_price_observation", pl.Int64),
+    ]
+
+
+def _futures_summary_optional_schema(pl: Any) -> list[tuple[str, Any]]:
+    return [
+        ("futures_summary_instrument_type", pl.Utf8),
+        ("futures_summary_mark_price", pl.Float64),
+        ("futures_summary_index_price", pl.Float64),
+        ("futures_summary_mark_index_spread", pl.Float64),
+        ("futures_summary_mark_index_ratio", pl.Float64),
+        ("futures_summary_open_interest", pl.Float64),
+        ("futures_summary_volume", pl.Float64),
+        ("futures_summary_turnover", pl.Float64),
+        ("futures_summary_funding_rate", pl.Float64),
+        ("futures_summary_is_observed", pl.Boolean),
+        ("minutes_since_summary_observation", pl.Int64),
+    ]
+
+
+def _historical_volatility_optional_schema(pl: Any) -> list[tuple[str, Any]]:
+    return [
+        ("historical_volatility_reference", pl.Float64),
+        (
+            "historical_volatility_source_timestamp",
+            pl.Datetime(time_unit="us", time_zone="UTC"),
+        ),
+        ("historical_volatility_available", pl.Boolean),
+    ]
+
+
+GOLD_FRAME_PREPARATION_SPECS: dict[str, GoldFramePreparationSpec] = {
+    "spot_ohlcv": GoldFramePreparationSpec(
+        dataset_type="spot_ohlcv",
+        prepare=lambda pl, frame, symbol: prepare_spot_ohlcv_or_perp(pl, frame, "spot_ohlcv", symbol),
+        source_lineage="silver_spot_ohlcv",
+    ),
+    "perps_ohlcv": GoldFramePreparationSpec(
+        dataset_type="perps_ohlcv",
+        prepare=lambda pl, frame, symbol: prepare_spot_ohlcv_or_perp(pl, frame, "perp", symbol),
+        source_lineage="silver_perps_ohlcv",
+    ),
+    "open_interest_1m_feature": GoldFramePreparationSpec(
+        dataset_type="open_interest_1m_feature",
+        prepare=prepare_open_interest,
+        source_lineage="silver_open_interest_features",
+    ),
+    "funding_1m_feature": GoldFramePreparationSpec(
+        dataset_type="funding_1m_feature",
+        prepare=prepare_funding,
+        source_lineage="silver_funding_features",
+    ),
+    "perps_trades_1m_feature": GoldFramePreparationSpec(
+        dataset_type="perps_trades_1m_feature",
+        prepare=prepare_trades,
+        source_lineage="silver_perps_trade_features",
+    ),
+    "options_trades_1m_feature": GoldFramePreparationSpec(
+        dataset_type="options_trades_1m_feature",
+        prepare=prepare_options_trades,
+        source_lineage="silver_options_trade_features",
+    ),
+    "volatility_index_data_observed": GoldFramePreparationSpec(
+        dataset_type="volatility_index_data_observed",
+        prepare=prepare_volatility_index_data,
+        source_lineage="silver_volatility_observed",
+    ),
+    "volatility_index_1m_feature": GoldFramePreparationSpec(
+        dataset_type="volatility_index_1m_feature",
+        prepare=prepare_volatility_index_feature,
+        source_lineage="silver_volatility_features",
+    ),
+    "iv_rv_1m_feature": GoldFramePreparationSpec(
+        dataset_type="iv_rv_1m_feature",
+        prepare=prepare_iv_rv,
+        source_lineage="silver_iv_rv_features",
+    ),
+    "index_price_1m_feature": GoldFramePreparationSpec(
+        dataset_type="index_price_1m_feature",
+        prepare=prepare_index_price,
+        source_lineage="silver_index_price_features",
+        optional_nullable_schema=_index_price_optional_schema,
+    ),
+    "futures_summary_1m_feature": GoldFramePreparationSpec(
+        dataset_type="futures_summary_1m_feature",
+        prepare=prepare_futures_summary,
+        source_lineage="silver_futures_summary_features",
+        optional_nullable_schema=_futures_summary_optional_schema,
+    ),
+    "realized_volatility_1m_feature": GoldFramePreparationSpec(
+        dataset_type="realized_volatility_1m_feature",
+        prepare=prepare_realized_volatility,
+        source_lineage="silver_realized_volatility_features",
+    ),
+    "options_surface_1m_feature": GoldFramePreparationSpec(
+        dataset_type="options_surface_1m_feature",
+        prepare=prepare_options_surface,
+        source_lineage="silver_options_surface_features",
+        optional_nullable_schema=_options_surface_optional_schema,
+    ),
+    "perps_l2_1m_feature": GoldFramePreparationSpec(
+        dataset_type="perps_l2_1m_feature",
+        prepare=prepare_perps_l2_feature,
+        source_lineage="silver_perps_l2_features",
+        optional_nullable_schema=_perps_l2_optional_schema,
+    ),
+    "options_l2_1m_feature": GoldFramePreparationSpec(
+        dataset_type="options_l2_1m_feature",
+        prepare=prepare_options_l2_feature,
+        source_lineage="silver_options_l2_features",
+        optional_nullable_schema=_options_l2_optional_schema,
+    ),
+    "historical_volatility_observed": GoldFramePreparationSpec(
+        dataset_type="historical_volatility_observed",
+        prepare=prepare_historical_volatility,
+        source_lineage="silver_historical_volatility_observed",
+        optional_nullable_schema=_historical_volatility_optional_schema,
+    ),
+    "gold_l2_m1": GoldFramePreparationSpec(
+        dataset_type="gold_l2_m1",
+        prepare=prepare_l2,
+        source_lineage="gold_l2_micro",
+    ),
+}
+
+
+def gold_frame_preparation_specs() -> dict[str, GoldFramePreparationSpec]:
+    """Return registered Gold frame preparation contracts keyed by source dataset type."""
+
+    return dict(GOLD_FRAME_PREPARATION_SPECS)
+
+
 def optional_feature_schema(pl: Any, dataset_type: str) -> list[tuple[str, Any]]:
     """Return stable nullable Gold columns for one optional Silver source."""
 
-    schemas: dict[str, list[tuple[str, Any]]] = {
-        "perps_l2_1m_feature": [
-            *[
-                (f"perps_l2_{name}", pl.Float64)
-                for name in (
-                    "best_bid_price",
-                    "best_ask_price",
-                    "mid_price",
-                    "spread",
-                    "top_bid_size",
-                    "top_ask_size",
-                    "top_of_book_imbalance",
-                    "bid_depth_10bps",
-                    "ask_depth_10bps",
-                    "bid_depth_50bps",
-                    "ask_depth_50bps",
-                    "quote_age_seconds",
-                )
-            ],
-            ("perps_l2_quote_available", pl.Boolean),
-            ("perps_l2_stale_quote", pl.Boolean),
-            ("perps_l2_minutes_since_observation", pl.Int64),
-            ("perps_l2_as_of", pl.Datetime(time_unit="us", time_zone="UTC")),
-            ("perps_l2_live_snapshot_derived", pl.Boolean),
-        ],
-        "options_l2_1m_feature": [
-            ("options_l2_contract_count", pl.Int64),
-            ("options_l2_quote_coverage_ratio", pl.Float64),
-            ("options_l2_stale_quote_ratio", pl.Float64),
-            ("options_l2_median_spread", pl.Float64),
-            ("options_l2_top_bid_depth", pl.Float64),
-            ("options_l2_top_ask_depth", pl.Float64),
-            ("options_l2_bid_depth_10bps", pl.Float64),
-            ("options_l2_ask_depth_10bps", pl.Float64),
-            ("options_l2_bid_depth_50bps", pl.Float64),
-            ("options_l2_ask_depth_50bps", pl.Float64),
-            ("options_l2_max_quote_age_seconds", pl.Float64),
-            ("options_l2_as_of", pl.Datetime(time_unit="us", time_zone="UTC")),
-            ("options_l2_live_snapshot_derived", pl.Boolean),
-        ],
-        "options_surface_1m_feature": [
-            ("options_surface_atm_iv", pl.Float64),
-            ("options_surface_short_dated_iv", pl.Float64),
-            ("options_surface_skew", pl.Float64),
-            ("options_surface_term_structure", pl.Float64),
-            ("options_surface_put_call_iv_spread", pl.Float64),
-            ("options_surface_contract_count", pl.Int64),
-            ("options_surface_fresh_quote_count", pl.Int64),
-            ("options_surface_stale_quote_count", pl.Int64),
-            ("options_surface_max_quote_age_seconds", pl.Float64),
-            ("options_surface_quote_coverage_ratio", pl.Float64),
-        ],
-        "index_price_1m_feature": [
-            ("index_price", pl.Float64),
-            ("index_price_is_observed", pl.Boolean),
-            ("minutes_since_index_price_observation", pl.Int64),
-        ],
-        "futures_summary_1m_feature": [
-            ("futures_summary_instrument_type", pl.Utf8),
-            ("futures_summary_mark_price", pl.Float64),
-            ("futures_summary_index_price", pl.Float64),
-            ("futures_summary_mark_index_spread", pl.Float64),
-            ("futures_summary_mark_index_ratio", pl.Float64),
-            ("futures_summary_open_interest", pl.Float64),
-            ("futures_summary_volume", pl.Float64),
-            ("futures_summary_turnover", pl.Float64),
-            ("futures_summary_funding_rate", pl.Float64),
-            ("futures_summary_is_observed", pl.Boolean),
-            ("minutes_since_summary_observation", pl.Int64),
-        ],
-        "historical_volatility_observed": [
-            ("historical_volatility_reference", pl.Float64),
-            (
-                "historical_volatility_source_timestamp",
-                pl.Datetime(time_unit="us", time_zone="UTC"),
-            ),
-            ("historical_volatility_available", pl.Boolean),
-        ],
-    }
     try:
-        return schemas[dataset_type]
+        spec = GOLD_FRAME_PREPARATION_SPECS[dataset_type]
     except KeyError as exc:
         raise ValueError(f"Unsupported optional Gold dataset_type: {dataset_type}") from exc
+    if spec.optional_nullable_schema is None:
+        raise ValueError(f"Unsupported optional Gold dataset_type: {dataset_type}")
+    return spec.optional_nullable_schema(pl)
 
 
 def strategy_feature_lookbacks() -> dict[str, str]:
@@ -1130,29 +1267,10 @@ def prepare_dataset_frame(pl: Any, dataset_type: str, frame: Any, symbol: str) -
         ValueError: If the dataset type is not part of the Gold source contract.
     """
 
-    dataset_preparers: dict[str, Any] = {
-        "spot_ohlcv": lambda: prepare_spot_ohlcv_or_perp(pl, frame, "spot_ohlcv", symbol),
-        "perps_ohlcv": lambda: prepare_spot_ohlcv_or_perp(pl, frame, "perp", symbol),
-        "open_interest_1m_feature": lambda: prepare_open_interest(pl, frame, symbol),
-        "funding_1m_feature": lambda: prepare_funding(pl, frame, symbol),
-        "perps_trades_1m_feature": lambda: prepare_trades(pl, frame, symbol),
-        "options_trades_1m_feature": lambda: prepare_options_trades(pl, frame, symbol),
-        "volatility_index_data_observed": lambda: prepare_volatility_index_data(pl, frame, symbol),
-        "volatility_index_1m_feature": lambda: prepare_volatility_index_feature(pl, frame, symbol),
-        "iv_rv_1m_feature": lambda: prepare_iv_rv(pl, frame, symbol),
-        "index_price_1m_feature": lambda: prepare_index_price(pl, frame, symbol),
-        "futures_summary_1m_feature": lambda: prepare_futures_summary(pl, frame, symbol),
-        "realized_volatility_1m_feature": lambda: prepare_realized_volatility(pl, frame, symbol),
-        "options_surface_1m_feature": lambda: prepare_options_surface(pl, frame, symbol),
-        "perps_l2_1m_feature": lambda: prepare_perps_l2_feature(pl, frame, symbol),
-        "options_l2_1m_feature": lambda: prepare_options_l2_feature(pl, frame, symbol),
-        "historical_volatility_observed": lambda: prepare_historical_volatility(pl, frame, symbol),
-        "gold_l2_m1": lambda: prepare_l2(pl, frame, symbol),
-    }
-    preparer = dataset_preparers.get(dataset_type)
-    if preparer is None:
+    spec = GOLD_FRAME_PREPARATION_SPECS.get(dataset_type)
+    if spec is None:
         raise ValueError(f"Unsupported dataset_type for preparation: {dataset_type}")
-    return preparer()
+    return spec.prepare(pl, frame, symbol)
 
 
 def build_minute_grid(pl: Any, prepared: list[Any], exchange: str, symbol: str) -> Any:
