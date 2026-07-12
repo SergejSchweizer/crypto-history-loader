@@ -592,7 +592,7 @@ datasets are fetched and transformed by this repository.
 
 ### PR-19: Silver Materialization Audit And Build Manifest
 
-Status: Merge-ready - PR #79: https://github.com/SergejSchweizer/crypto-history-loader/pull/79
+Status: Done - PR #79: https://github.com/SergejSchweizer/crypto-history-loader/pull/79
 
 Branch: `codex/pr19-silver-materialization-audit`
 
@@ -621,7 +621,7 @@ Acceptance:
 
 ### PR-20: Volatility Index Silver Materialization
 
-Status: Merge-ready - PR #80: https://github.com/SergejSchweizer/crypto-history-loader/pull/80
+Status: Done - PR #80: https://github.com/SergejSchweizer/crypto-history-loader/pull/80
 
 Branch: `codex/pr20-volatility-silver-materialization`
 
@@ -643,7 +643,7 @@ Acceptance:
 
 ### PR-21: Realized Volatility And IV/RV Silver Materialization
 
-Status: Merge-ready - PR #81: https://github.com/SergejSchweizer/crypto-history-loader/pull/81
+Status: Done - PR #81: https://github.com/SergejSchweizer/crypto-history-loader/pull/81
 
 Branch: `codex/pr21-rv-iv-rv-silver-materialization`
 
@@ -666,7 +666,7 @@ Acceptance:
 
 ### PR-22: Index Price And Futures Summary Silver Materialization
 
-Status: Merge-ready - PR #83: https://github.com/SergejSchweizer/crypto-history-loader/pull/83
+Status: Done - PR #92: https://github.com/SergejSchweizer/crypto-history-loader/pull/92
 
 Branch: `codex/pr22-index-futures-silver-materialization`
 
@@ -687,7 +687,7 @@ Acceptance:
 
 ### PR-23: Options Ticker Silver Materialization
 
-Status: Merge-ready - PR #84: https://github.com/SergejSchweizer/crypto-history-loader/pull/84
+Status: Done - PR #93: https://github.com/SergejSchweizer/crypto-history-loader/pull/93
 
 Branch: `codex/pr23-options-ticker-silver-materialization`
 
@@ -709,7 +709,7 @@ Acceptance:
 
 ### PR-24: Options Surface Silver Materialization
 
-Status: Merge-ready - PR #94: https://github.com/SergejSchweizer/crypto-history-loader/pull/94
+Status: Done - PR #94: https://github.com/SergejSchweizer/crypto-history-loader/pull/94
 
 Branch: `codex/pr24-options-surface-silver-materialization`
 
@@ -730,7 +730,7 @@ Acceptance:
 
 ### PR-25: Perpetual L2 Silver Materialization
 
-Status: Merge-ready - PR #95: https://github.com/SergejSchweizer/crypto-history-loader/pull/95
+Status: Done - PR #95: https://github.com/SergejSchweizer/crypto-history-loader/pull/95
 
 Branch: `codex/pr25-perps-l2-silver-materialization`
 
@@ -751,7 +751,7 @@ Acceptance:
 
 ### PR-26: Options L2 Silver Materialization
 
-Status: Merge-ready - PR #96: https://github.com/SergejSchweizer/crypto-history-loader/pull/96
+Status: Done - PR #96: https://github.com/SergejSchweizer/crypto-history-loader/pull/96
 
 Branch: `codex/pr26-options-l2-silver-materialization`
 
@@ -771,7 +771,7 @@ Acceptance:
 
 ### PR-27: Recent Trade Snapshot Silver Materialization
 
-Status: Merge-ready - PR #97: https://github.com/SergejSchweizer/crypto-history-loader/pull/97
+Status: Done - PR #97: https://github.com/SergejSchweizer/crypto-history-loader/pull/97
 
 Branch: `codex/pr27-recent-trades-silver-materialization`
 
@@ -792,7 +792,7 @@ Acceptance:
 
 ### PR-28: Instrument Metadata Silver Materialization
 
-Status: Merge-ready - PR #98: https://github.com/SergejSchweizer/crypto-history-loader/pull/98
+Status: Done - PR #98: https://github.com/SergejSchweizer/crypto-history-loader/pull/98
 
 Branch: `codex/pr28-instrument-metadata-silver-materialization`
 
@@ -813,7 +813,7 @@ Acceptance:
 
 ### PR-29: Historical Silver Backfill And Reconciliation
 
-Status: Merge-ready - PR #99: https://github.com/SergejSchweizer/crypto-history-loader/pull/99
+Status: Done - PR #99: https://github.com/SergejSchweizer/crypto-history-loader/pull/99
 
 Branch: `codex/pr29-silver-backfill-reconciliation`
 
@@ -836,7 +836,7 @@ Acceptance:
 
 ### PR-30: Historical Gold IV/RV Feature Dataset
 
-Status: Merge-ready - PR #100: https://github.com/SergejSchweizer/crypto-history-loader/pull/100
+Status: Done - PR #100: https://github.com/SergejSchweizer/crypto-history-loader/pull/100
 
 Branch: `codex/pr30-historical-gold-iv-rv`
 
@@ -858,7 +858,7 @@ Acceptance:
 
 ### PR-31: Historical Gold Regime Features
 
-Status: Merge-ready - PR #101: https://github.com/SergejSchweizer/crypto-history-loader/pull/101; PR #103: https://github.com/SergejSchweizer/crypto-history-loader/pull/103
+Status: Done - PR #101: https://github.com/SergejSchweizer/crypto-history-loader/pull/101; PR #103: https://github.com/SergejSchweizer/crypto-history-loader/pull/103
 
 Branch: `codex/pr31-historical-gold-regime-features`
 
@@ -879,7 +879,7 @@ Acceptance:
 
 ### PR-32: Historical Strategy Feature Families
 
-Status: Merge-ready - PR #104: https://github.com/SergejSchweizer/crypto-history-loader/pull/104; PR #105: https://github.com/SergejSchweizer/crypto-history-loader/pull/105
+Status: Done - PR #104: https://github.com/SergejSchweizer/crypto-history-loader/pull/104; PR #105: https://github.com/SergejSchweizer/crypto-history-loader/pull/105
 
 Branch: `codex/pr32-historical-strategy-features`
 
@@ -900,7 +900,7 @@ Acceptance:
 
 ### PR-33: Historical Prediction Targets And Regime Labels
 
-Status: Merge-ready - PR #106: https://github.com/SergejSchweizer/crypto-history-loader/pull/106
+Status: Done - PR #106: https://github.com/SergejSchweizer/crypto-history-loader/pull/106
 
 Branch: `codex/pr33-historical-targets-labels`
 
@@ -921,7 +921,7 @@ Acceptance:
 
 ### PR-34: Live-Origin Gold Feature Contract
 
-Status: Merge-ready - PR #107: https://github.com/SergejSchweizer/crypto-history-loader/pull/107; PR #108: https://github.com/SergejSchweizer/crypto-history-loader/pull/108
+Status: Done - PR #107: https://github.com/SergejSchweizer/crypto-history-loader/pull/107; PR #108: https://github.com/SergejSchweizer/crypto-history-loader/pull/108
 
 Branch: `codex/pr34-live-gold-feature-contract`
 
@@ -945,7 +945,7 @@ Acceptance:
 
 ### PR-35: Historical Full Gold Dataset
 
-Status: Merge-ready - PR #110: https://github.com/SergejSchweizer/crypto-history-loader/pull/110
+Status: Done - PR #110: https://github.com/SergejSchweizer/crypto-history-loader/pull/110
 
 Branch: `codex/pr35-historical-full-gold-dataset`
 
@@ -990,7 +990,7 @@ Acceptance:
 
 ### PR-36: Live Full Gold Dataset
 
-Status: Merge-ready - PR #112: https://github.com/SergejSchweizer/crypto-history-loader/pull/112
+Status: Done - PR #112: https://github.com/SergejSchweizer/crypto-history-loader/pull/112
 
 Branch: `codex/pr36-live-full-gold-dataset`
 
@@ -1027,7 +1027,7 @@ Acceptance:
 
 ### PR-37: Gold Inventory Documentation And Release Gate
 
-Status: Merge-ready
+Status: Done - PR #114: https://github.com/SergejSchweizer/crypto-history-loader/pull/114
 
 Branch: `codex/pr37-gold-inventory-contract-gate`
 
@@ -1049,7 +1049,7 @@ Acceptance:
 
 ### PR-38: Fixed Gold Dataset Retention
 
-Status: In progress - PR #113: https://github.com/SergejSchweizer/crypto-history-loader/pull/113
+Status: Done - PR #113: https://github.com/SergejSchweizer/crypto-history-loader/pull/113
 
 Branch: `codex/gold-retention-three-versions`
 
