@@ -10,9 +10,9 @@ from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, cast
 
+from application.dataset_contracts import supported_gold_dataset_ids
 from application.services.gold_service import (
     GOLD_RETENTION_KEEP_VERSIONS,
-    SUPPORTED_GOLD_DATASET_IDS,
     build_gold_for_symbol,
     discover_gold_symbols,
     discover_gold_symbols_for_dataset,
@@ -36,7 +36,11 @@ def add_gold_build_parser(subparsers: Any) -> None:
     )
     parser.add_argument("--exchange", choices=["deribit"], default="deribit")
     parser.add_argument("--symbols", nargs="+", help="Optional symbol list; auto-discovered when omitted")
-    parser.add_argument("--dataset-id", help="Gold dataset identifier (when omitted, build all supported datasets)")
+    parser.add_argument(
+        "--dataset-id",
+        choices=list(supported_gold_dataset_ids()),
+        help="Gold dataset identifier (when omitted, build all supported datasets)",
+    )
     parser.add_argument("--dataset-version", default="v1.0.0", help="Semantic dataset version")
     parser.add_argument(
         "--auto-version", action="store_true", help="Auto-increment semantic version from prior manifests"
@@ -81,7 +85,7 @@ def _resolve_gold_symbols(
 def _resolve_dataset_ids(dataset_id: str | None) -> list[str]:
     """Return dataset-id schedule for gold build."""
 
-    return [dataset_id] if dataset_id else sorted(SUPPORTED_GOLD_DATASET_IDS)
+    return [dataset_id] if dataset_id else list(supported_gold_dataset_ids())
 
 
 def _validate_version_args(*, auto_version: bool, dataset_version: str, version_base: str) -> None:

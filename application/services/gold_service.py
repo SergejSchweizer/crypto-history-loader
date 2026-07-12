@@ -15,6 +15,7 @@ from application.dataset_contracts import (
     FULL_MARKET_GOLD_REQUIREMENTS,
     GOLD_DATASET_CONTRACTS,
     gold_dataset_contract,
+    supported_gold_dataset_ids,
 )
 from application.services import (
     feature_metadata_service,
@@ -34,7 +35,7 @@ _FULL_MARKET_REQUIREMENTS: list[tuple[str, str]] = [
 GOLD_DATASET_SPECS: dict[str, dict[str, object]] = {
     dataset_id: contract.legacy_spec() for dataset_id, contract in GOLD_DATASET_CONTRACTS.items()
 }
-SUPPORTED_GOLD_DATASET_IDS = set(GOLD_DATASET_SPECS.keys())
+SUPPORTED_GOLD_DATASET_IDS = set(supported_gold_dataset_ids())
 GOLD_RETENTION_KEEP_VERSIONS = 3
 _parse_semver = gold_versioning.parse_semver
 _format_semver = gold_versioning.format_semver

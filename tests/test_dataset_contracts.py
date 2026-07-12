@@ -10,8 +10,13 @@ from application.dataset_contracts import (
     BRONZE_TO_SILVER_DATASETS,
     GOLD_DATASET_CONTRACTS,
     SILVER_DATASET_CONTRACTS,
+    SILVER_LIVE_ORIGIN_BUILD_DATASETS,
     gold_dataset_contract,
     silver_dataset_contract,
+    supported_bronze_backed_silver_build_ids,
+    supported_gold_dataset_ids,
+    supported_live_origin_silver_build_ids,
+    supported_silver_build_ids,
 )
 from application.services import gold_service, silver_service
 
@@ -93,6 +98,21 @@ def test_gold_contracts_are_service_compatible() -> None:
         ]
         assert gold_service._dataset_includes_l2(dataset_id) is contract.include_l2
         assert gold_service.GOLD_DATASET_SPECS[dataset_id] == contract.legacy_spec()
+
+
+def test_supported_dataset_helpers_are_contract_driven_and_stable() -> None:
+    """Canonical build-choice helpers should be sorted and backed by dataset contracts."""
+
+    assert supported_bronze_backed_silver_build_ids() == tuple(sorted(BRONZE_TO_SILVER_DATASETS))
+    assert supported_live_origin_silver_build_ids() == tuple(sorted(SILVER_LIVE_ORIGIN_BUILD_DATASETS))
+    assert supported_silver_build_ids() == tuple(
+        sorted({*BRONZE_TO_SILVER_DATASETS, *SILVER_LIVE_ORIGIN_BUILD_DATASETS})
+    )
+    assert supported_gold_dataset_ids() == tuple(sorted(GOLD_DATASET_CONTRACTS))
+
+    for outputs in (*BRONZE_TO_SILVER_DATASETS.values(), *SILVER_LIVE_ORIGIN_BUILD_DATASETS.values()):
+        assert outputs
+        assert set(outputs) <= set(SILVER_DATASET_CONTRACTS)
 
 
 def test_contract_lookup_rejects_unknown_dataset_names() -> None:

@@ -10,6 +10,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Any, Literal, cast
 
+from application.dataset_contracts import supported_silver_build_ids
 from application.services.silver_service import (
     SilverBuildReport,
     build_funding_1m_feature_for_symbol,
@@ -148,7 +149,7 @@ SILVER_BUILD_SPECS: dict[str, SilverBuildSpec] = {
     ),
 }
 
-SILVER_BUILD_DATASETS: tuple[str, ...] = tuple(SILVER_BUILD_SPECS)
+SILVER_BUILD_DATASETS: tuple[str, ...] = supported_silver_build_ids()
 DEFAULT_SILVER_BUILD_DATASETS: tuple[str, ...] = (
     "spot_ohlcv",
     "perps_ohlcv",

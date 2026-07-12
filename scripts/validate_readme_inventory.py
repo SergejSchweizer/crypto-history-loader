@@ -7,7 +7,7 @@ import re
 import sys
 from pathlib import Path
 
-from application.dataset_contracts import GOLD_DATASET_CONTRACTS
+from application.dataset_contracts import supported_gold_dataset_ids
 from application.services.dataset_inventory import build_dataset_inventory, inventory_to_markdown
 
 GOLD_DATASET_RE = re.compile(r"`(gold\.[a-z0-9_.]+)`")
@@ -32,7 +32,7 @@ def readme_gold_dataset_ids(readme_path: Path) -> set[str]:
 def contracted_gold_dataset_ids() -> set[str]:
     """Return Gold dataset IDs declared by the typed contract registry."""
 
-    return set(GOLD_DATASET_CONTRACTS)
+    return set(supported_gold_dataset_ids())
 
 
 def validate_readme_inventory(
