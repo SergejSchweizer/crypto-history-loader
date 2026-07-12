@@ -18,6 +18,7 @@ REQUIRED_GATE_COMMANDS = (
     "ty check",
     "lint-imports --config .importlinter",
     "python scripts/validate_config_with_pydantic.py --config config.yaml",
+    "python scripts/validate_readme_inventory.py",
     "python scripts/validate_conventional_commit.py",
     "pytest",
 )
@@ -86,6 +87,7 @@ def test_make_check_runs_required_quality_gates() -> None:
         "ty",
         "imports",
         "config-check",
+        "readme-inventory-check",
         "conventional-commit",
         "test",
     } <= check_deps

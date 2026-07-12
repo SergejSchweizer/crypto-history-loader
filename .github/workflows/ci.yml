@@ -55,6 +55,9 @@ jobs:
       - name: Validate config schema
         run: uv run python scripts/validate_config_with_pydantic.py --config config.yaml
 
+      - name: Validate README inventory
+        run: uv run python scripts/validate_readme_inventory.py
+
       - name: Validate PR title
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
@@ -105,6 +108,9 @@ jobs:
 
       - name: Validate config schema
         run: uv run python scripts/validate_config_with_pydantic.py --config config.yaml
+
+      - name: Validate README inventory
+        run: uv run python scripts/validate_readme_inventory.py
 
       - name: Validate latest commit title
         run: uv run python scripts/validate_conventional_commit.py --latest

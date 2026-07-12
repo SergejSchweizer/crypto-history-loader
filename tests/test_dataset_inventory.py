@@ -130,6 +130,10 @@ def test_inventory_renders_stable_json_and_markdown(tmp_path: Path) -> None:
     assert '`{"expected_days":0' in markdown
     assert "`iv_rv_1m_feature`" in markdown
     assert "`gold.market.regime_features.m1`" in markdown
+    live_full = next(row for row in rows if row.layer == "gold" and row.dataset == "gold.live.full.m1")
+    history_full = next(row for row in rows if row.layer == "gold" and row.dataset == "gold.market.history_full.m1")
+    assert live_full.origin_repository == "crypto-live-loader"
+    assert history_full.origin_repository == "crypto-history-loader"
 
 
 def test_inventory_command_writes_explicit_output_only(tmp_path: Path) -> None:

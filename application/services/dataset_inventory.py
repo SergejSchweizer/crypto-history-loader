@@ -138,7 +138,7 @@ def build_dataset_inventory(
                 layer="gold",
                 dataset=dataset,
                 state="materialized" if files else "not_materialized",
-                origin_repository="crypto-history-loader",
+                origin_repository=_origin_for_dataset(dataset),
                 physical_dataset=dataset if files else None,
                 files=files,
                 timestamp_hint=gold_contract.timestamp_column,
@@ -435,6 +435,8 @@ def _partition_value(path: Path, key: str) -> str | None:
 
 
 def _origin_for_dataset(dataset: str) -> str:
+    if dataset.startswith("gold.live."):
+        return "crypto-live-loader"
     if "snapshot" in dataset or dataset in {"recent_trade_snapshot_1m"}:
         return "crypto-live-loader"
     return "crypto-history-loader"
