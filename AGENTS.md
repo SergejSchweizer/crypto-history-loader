@@ -330,6 +330,8 @@ Applies to day-to-day agent execution flow for implementation, debugging, and de
 - [MUST] Pursue backlog PRs as stacked PRs: preserve their declared order, base each follow-up
   backlog branch on the preceding backlog branch until it merges, and restack downstream branches
   after upstream merges.
+- [MUST] Every backlog PR entry must record the linked GitHub pull request URL and the exact `git status --short`
+  output captured for that PR's handoff or publication state.
 - [MUST] Before starting a task, run `git status`, `git branch --show-current`, `git fetch origin`, `git checkout main`, and `git pull --ff-only origin main`.
 - [MUST] If the working tree is not clean before starting, stop and report changed files.
 - [MUST] Do not overwrite, delete, stash, reset, or otherwise discard user changes unless explicitly instructed.
