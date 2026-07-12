@@ -36,6 +36,11 @@ repos:
         entry: uv run python scripts/validate_config_with_pydantic.py --config config.yaml
         language: system
         pass_filenames: false
+      - id: readme-inventory
+        name: readme-inventory
+        entry: uv run python scripts/validate_readme_inventory.py
+        language: system
+        pass_filenames: false
       - id: conventional-commit
         name: conventional-commit
         entry: uv run python scripts/validate_conventional_commit.py --message-file

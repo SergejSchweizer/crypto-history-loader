@@ -813,7 +813,7 @@ Acceptance:
 
 ### PR-29: Historical Silver Backfill And Reconciliation
 
-Status: In progress - PR #99: https://github.com/SergejSchweizer/crypto-history-loader/pull/99
+Status: Merge-ready - PR #99: https://github.com/SergejSchweizer/crypto-history-loader/pull/99
 
 Branch: `codex/pr29-silver-backfill-reconciliation`
 
@@ -836,7 +836,7 @@ Acceptance:
 
 ### PR-30: Historical Gold IV/RV Feature Dataset
 
-Status: In progress - PR #100: https://github.com/SergejSchweizer/crypto-history-loader/pull/100
+Status: Merge-ready - PR #100: https://github.com/SergejSchweizer/crypto-history-loader/pull/100
 
 Branch: `codex/pr30-historical-gold-iv-rv`
 
@@ -858,7 +858,7 @@ Acceptance:
 
 ### PR-31: Historical Gold Regime Features
 
-Status: In progress - PR #101: https://github.com/SergejSchweizer/crypto-history-loader/pull/101; PR #103: https://github.com/SergejSchweizer/crypto-history-loader/pull/103
+Status: Merge-ready - PR #101: https://github.com/SergejSchweizer/crypto-history-loader/pull/101; PR #103: https://github.com/SergejSchweizer/crypto-history-loader/pull/103
 
 Branch: `codex/pr31-historical-gold-regime-features`
 
@@ -879,7 +879,7 @@ Acceptance:
 
 ### PR-32: Historical Strategy Feature Families
 
-Status: In progress - PR #104: https://github.com/SergejSchweizer/crypto-history-loader/pull/104; PR #105: https://github.com/SergejSchweizer/crypto-history-loader/pull/105
+Status: Merge-ready - PR #104: https://github.com/SergejSchweizer/crypto-history-loader/pull/104; PR #105: https://github.com/SergejSchweizer/crypto-history-loader/pull/105
 
 Branch: `codex/pr32-historical-strategy-features`
 
@@ -900,7 +900,7 @@ Acceptance:
 
 ### PR-33: Historical Prediction Targets And Regime Labels
 
-Status: In progress - PR #106: https://github.com/SergejSchweizer/crypto-history-loader/pull/106
+Status: Merge-ready - PR #106: https://github.com/SergejSchweizer/crypto-history-loader/pull/106
 
 Branch: `codex/pr33-historical-targets-labels`
 
@@ -921,7 +921,7 @@ Acceptance:
 
 ### PR-34: Live-Origin Gold Feature Contract
 
-Status: In progress - PR #107: https://github.com/SergejSchweizer/crypto-history-loader/pull/107; PR #108: https://github.com/SergejSchweizer/crypto-history-loader/pull/108
+Status: Merge-ready - PR #107: https://github.com/SergejSchweizer/crypto-history-loader/pull/107; PR #108: https://github.com/SergejSchweizer/crypto-history-loader/pull/108
 
 Branch: `codex/pr34-live-gold-feature-contract`
 
@@ -932,8 +932,10 @@ Expose live-loader index, surface, L2, trade, and metadata data through feature 
 historical inference inputs.
 
 Scope:
-- Add `gold.live.volatility_features.m1`, `gold.live.microstructure_features.m1`,
-  `gold.live.regime_features.m1`, and `gold.live.instrument_universe.d1`.
+- Add `gold.live.volatility_features.m1` and `gold.live.microstructure_features.m1` as explicit live-origin
+  feature contracts.
+- Keep future live regime and instrument-universe additions as extensions of the canonical
+  `gold.live.full.m1` endpoint rather than separate primary Gold endpoints.
 - Preserve live source lineage, `as_of`, freshness, coverage, and availability flags.
 - Do not backfill live data with historical values inside a live dataset.
 
@@ -943,7 +945,7 @@ Acceptance:
 
 ### PR-35: Historical Full Gold Dataset
 
-Status: In progress - PR #110: https://github.com/SergejSchweizer/crypto-history-loader/pull/110
+Status: Merge-ready - PR #110: https://github.com/SergejSchweizer/crypto-history-loader/pull/110
 
 Branch: `codex/pr35-historical-full-gold-dataset`
 
@@ -988,7 +990,7 @@ Acceptance:
 
 ### PR-36: Live Full Gold Dataset
 
-Status: In progress - PR #112: https://github.com/SergejSchweizer/crypto-history-loader/pull/112
+Status: Merge-ready - PR #112: https://github.com/SergejSchweizer/crypto-history-loader/pull/112
 
 Branch: `codex/pr36-live-full-gold-dataset`
 
@@ -1025,9 +1027,9 @@ Acceptance:
 
 ### PR-37: Gold Inventory Documentation And Release Gate
 
-Status: Planned
+Status: Merge-ready
 
-Branch: `codex/pr37-gold-silver-documentation-gate`
+Branch: `codex/pr37-gold-inventory-contract-gate`
 
 Depends on: PR-29, PR-33, PR-34, PR-35, PR-36
 
