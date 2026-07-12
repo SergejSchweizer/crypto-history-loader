@@ -265,6 +265,12 @@ def _prediction_target_definitions(dataset_id: str) -> dict[str, object]:
     return {}
 
 
+def _origin_repository(dataset_id: str) -> str:
+    if dataset_id.startswith("gold.live."):
+        return "crypto-live-loader"
+    return "crypto-history-loader"
+
+
 def _add_strategy_feature_families(pl: Any, frame: Any, dataset_id: str) -> Any:
     if dataset_id in {"gold.market.regime_features.m1", "gold.market.history_full.m1"}:
         return gold_frames.add_strategy_feature_families(pl, frame)
@@ -500,6 +506,7 @@ def build_gold_for_symbol(
         "version_bump_level": version_bump_level,
         "version_bump_reason": version_bump_reason,
         "previous_version": previous_version,
+        "origin_repository": _origin_repository(dataset_id),
         "exchange": exchange,
         "symbol": symbol,
         "build_date_utc": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),

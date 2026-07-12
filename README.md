@@ -650,7 +650,7 @@ but downstream training and inference workflows should target the two full datas
 Contracts without physical Gold artifacts are `gold.market.history_full.m1`, `gold.market.iv_rv.m1`,
 `gold.market.index_price.m1`, `gold.market.futures_summary.m1`, `gold.market.regime_features.m1`,
 `gold.market.prediction_targets.m1`, `gold.live.volatility_features.m1`,
-`gold.live.microstructure_features.m1`, and `gold.hybrid.full_l2.m1`. The existing
+`gold.live.microstructure_features.m1`, `gold.live.full.m1`, and `gold.hybrid.full_l2.m1`. The existing
 `gold.market.full.m1` must not be treated as an IV/RV-ready dataset until those feature columns and
 manifests are rebuilt.
 
@@ -760,6 +760,22 @@ uv run python main.py gold-build \
 aggregates option-book rows into `options_l2_*` coverage and depth fields, records per-source
 `*_as_of` and `*_live_snapshot_derived` lineage, and leaves missing live source minutes null.
 
+Live full Gold contract:
+
+```bash
+uv run python main.py gold-build \
+  --silver-root lake/silver \
+  --gold-root lake/gold \
+  --exchange deribit \
+  --dataset-id gold.live.full.m1 \
+  --symbols BTC ETH
+```
+
+`gold.live.full.m1` is the canonical live Gold dataset. It combines live volatility-index,
+perpetual-L2, and options-L2 feature families into one inference table, records
+`origin_repository=crypto-live-loader` in the manifest, keeps optional live index/futures/option
+surface features nullable, and never fills live gaps from historical datasets.
+
 Inventory:
 
 ```bash
@@ -817,7 +833,7 @@ Gold retention policy:
 Available Gold dataset IDs:
 
 - Canonical historical dataset: `gold.market.history_full.m1` (contract; not yet physically materialized)
-- Canonical live dataset: `gold.live.full.m1` (planned)
+- Canonical live dataset: `gold.live.full.m1` (contract; not yet physically materialized)
 - `gold.market.perps_trades.m1` (`perps_trades` flow only)
 - `gold.market.options_trades.m1` (`options_trades` flow only)
 - `gold.market.core.m1`
@@ -830,6 +846,7 @@ Available Gold dataset IDs:
 - `gold.market.prediction_targets.m1` (contract; not yet physically materialized)
 - `gold.live.volatility_features.m1` (contract; not yet physically materialized)
 - `gold.live.microstructure_features.m1` (contract; not yet physically materialized)
+- `gold.live.full.m1` (contract; not yet physically materialized)
 - `gold.hybrid.full_l2.m1` (contract; not yet physically materialized)
 
 ## 5.4 Quality Checks
