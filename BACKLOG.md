@@ -1078,15 +1078,21 @@ idempotent, and behavior-preserving; each PR must keep existing public commands 
 
 ### PR-39: Silver Build Registry Extraction
 
-Status: Planned
+Status: In review - PR #120: https://github.com/SergejSchweizer/crypto-history-loader/pull/120
 
-PR: Pending - add the GitHub pull request URL when published.
+PR: https://github.com/SergejSchweizer/crypto-history-loader/pull/120
 
 Branch: `codex/pr39-silver-build-registry`
 
 Depends on: PR-38
 
 Planning `git status --short`:
+
+```text
+clean
+```
+
+Publication `git status --short`:
 
 ```text
 clean
