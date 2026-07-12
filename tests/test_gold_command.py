@@ -11,6 +11,28 @@ from api.commands import gold as gold_cmd
 from application.dataset_contracts import supported_gold_dataset_ids
 
 
+def gold_args(
+    *, retention_keep_versions: int = 3, maxprocesses: int = 4, no_json_output: bool = False
+) -> argparse.Namespace:
+    """Build the minimal argparse namespace used by gold-build command tests."""
+
+    return argparse.Namespace(
+        silver_root="lake/silver",
+        gold_root="lake/gold",
+        l2_root="remote_l2_m1_features",
+        exchange="deribit",
+        dataset_id="gold.market.full.m1",
+        dataset_version="v1.0.0",
+        auto_version=False,
+        version_base="v1.0.0",
+        symbols=None,
+        l2_validation_mode="strict",
+        retention_keep_versions=retention_keep_versions,
+        maxprocesses=maxprocesses,
+        no_json_output=no_json_output,
+    )
+
+
 def test_resolve_dataset_ids_returns_single_when_explicit() -> None:
     assert gold_cmd._resolve_dataset_ids("gold.market.full.m1") == ["gold.market.full.m1"]
     assert gold_cmd._resolve_dataset_ids("gold.market.history_full.m1") == ["gold.market.history_full.m1"]
@@ -96,20 +118,7 @@ def test_run_gold_build_uses_helpers_and_emits_reports(
 
     monkeypatch.setattr(gold_cmd, "build_gold_for_symbol", _build_gold_for_symbol)
 
-    args = argparse.Namespace(
-        silver_root="lake/silver",
-        gold_root="lake/gold",
-        l2_root="remote_l2_m1_features",
-        exchange="deribit",
-        dataset_id="gold.market.full.m1",
-        dataset_version="v1.0.0",
-        auto_version=False,
-        version_base="v1.0.0",
-        symbols=None,
-        l2_validation_mode="strict",
-        retention_keep_versions=3,
-        no_json_output=False,
-    )
+    args = gold_args()
     gold_cmd.run_gold_build(args=args, logger=logging.getLogger("test"))
     payload = capsys.readouterr().out
     assert "gold.market.full.m1" in payload
@@ -130,20 +139,7 @@ def test_run_gold_build_skips_symbol_on_value_error(
 
     monkeypatch.setattr(gold_cmd, "build_gold_for_symbol", _raise_for_build)
 
-    args = argparse.Namespace(
-        silver_root="lake/silver",
-        gold_root="lake/gold",
-        l2_root="remote_l2_m1_features",
-        exchange="deribit",
-        dataset_id="gold.market.full.m1",
-        dataset_version="v1.0.0",
-        auto_version=False,
-        version_base="v1.0.0",
-        symbols=None,
-        l2_validation_mode="strict",
-        retention_keep_versions=3,
-        no_json_output=False,
-    )
+    args = gold_args()
     with caplog.at_level(logging.INFO):
         gold_cmd.run_gold_build(args=args, logger=logging.getLogger("test"))
     payload = capsys.readouterr().out
@@ -155,59 +151,19 @@ def test_run_gold_build_skips_symbol_on_value_error(
 
 
 def test_run_gold_build_rejects_invalid_retention_keep_versions() -> None:
-    args = argparse.Namespace(
-        silver_root="lake/silver",
-        gold_root="lake/gold",
-        l2_root="remote_l2_m1_features",
-        exchange="deribit",
-        dataset_id="gold.market.full.m1",
-        dataset_version="v1.0.0",
-        auto_version=False,
-        version_base="v1.0.0",
-        symbols=None,
-        l2_validation_mode="strict",
-        retention_keep_versions=0,
-        no_json_output=True,
-    )
+    args = gold_args(retention_keep_versions=0, no_json_output=True)
     with pytest.raises(ValueError, match="retention-keep-versions"):
         gold_cmd.run_gold_build(args=args, logger=logging.getLogger("test"))
 
 
 def test_run_gold_build_rejects_non_fixed_retention_keep_versions() -> None:
-    args = argparse.Namespace(
-        silver_root="lake/silver",
-        gold_root="lake/gold",
-        l2_root="remote_l2_m1_features",
-        exchange="deribit",
-        dataset_id="gold.market.full.m1",
-        dataset_version="v1.0.0",
-        auto_version=False,
-        version_base="v1.0.0",
-        symbols=None,
-        l2_validation_mode="strict",
-        retention_keep_versions=4,
-        no_json_output=True,
-    )
+    args = gold_args(retention_keep_versions=4, no_json_output=True)
     with pytest.raises(ValueError, match="fixed at 3 versions"):
         gold_cmd.run_gold_build(args=args, logger=logging.getLogger("test"))
 
 
 def test_run_gold_build_rejects_invalid_maxprocesses() -> None:
-    args = argparse.Namespace(
-        silver_root="lake/silver",
-        gold_root="lake/gold",
-        l2_root="remote_l2_m1_features",
-        exchange="deribit",
-        dataset_id="gold.market.full.m1",
-        dataset_version="v1.0.0",
-        auto_version=False,
-        version_base="v1.0.0",
-        symbols=None,
-        l2_validation_mode="strict",
-        retention_keep_versions=3,
-        maxprocesses=0,
-        no_json_output=True,
-    )
+    args = gold_args(maxprocesses=0, no_json_output=True)
 
     with pytest.raises(ValueError, match="maxprocesses"):
         gold_cmd.run_gold_build(args=args, logger=logging.getLogger("test"))
