@@ -1158,15 +1158,21 @@ Acceptance:
 
 ### PR-41: Gold Frame Preparation Registry
 
-Status: Planned
+Status: In review - PR #122: https://github.com/SergejSchweizer/crypto-history-loader/pull/122
 
-PR: Pending - add the GitHub pull request URL when published.
+PR: https://github.com/SergejSchweizer/crypto-history-loader/pull/122
 
 Branch: `codex/pr41-gold-frame-preparation-registry`
 
 Depends on: PR-40
 
 Planning `git status --short`:
+
+```text
+clean
+```
+
+Publication `git status --short`:
 
 ```text
 clean
