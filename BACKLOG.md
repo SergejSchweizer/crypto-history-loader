@@ -1045,6 +1045,28 @@ Acceptance:
 - Final stack run executes the full quality suite, `coverage run -m pytest`, and `coverage report`.
 - `main` is clean after merge and all stacked branches are deleted only after their commits are reachable from `main`.
 
+### PR-38: Fixed Gold Dataset Retention
+
+Status: In progress - PR #113: https://github.com/SergejSchweizer/crypto-history-loader/pull/113
+
+Branch: `codex/gold-retention-three-versions`
+
+Depends on: PR-36
+
+Goal:
+Keep Gold storage bounded and deterministic by retaining exactly the latest three artifact versions for each
+`dataset_id/exchange/symbol` lineage.
+
+Scope:
+- Enforce a fixed Gold retention window of three versions in the Gold build service.
+- Keep the legacy `--retention-keep-versions` CLI argument parseable, but reject any value other than `3`.
+- Update README retention policy and focused regression tests.
+
+Acceptance:
+- Gold pruning always runs with a retention window of `3`.
+- CLI/config/direct service callers fail clearly when they request any other retention window.
+- Backlog and README describe fixed Gold retention.
+
 ## Completion Definition
 
 The stack is complete when:

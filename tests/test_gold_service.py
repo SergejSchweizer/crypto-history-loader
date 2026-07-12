@@ -22,6 +22,7 @@ from application.services.gold_service import (
     build_gold_for_symbol,
     discover_gold_symbols,
     normalize_symbol,
+    validate_gold_retention_keep_versions,
 )
 
 pl = pytest.importorskip("polars")
@@ -37,6 +38,12 @@ def test_parse_and_bump_semver() -> None:
         _parse_semver("1.2.3")
     with pytest.raises(ValueError, match="Unsupported semver bump level"):
         _bump_semver("v1.2.3", "x")
+
+
+def test_validate_gold_retention_keep_versions_is_fixed_to_three() -> None:
+    assert validate_gold_retention_keep_versions(3) == 3
+    with pytest.raises(ValueError, match="fixed at 3 versions"):
+        validate_gold_retention_keep_versions(4)
 
 
 def test_contract_bump_level_branches() -> None:

@@ -35,6 +35,7 @@ GOLD_DATASET_SPECS: dict[str, dict[str, object]] = {
     dataset_id: contract.legacy_spec() for dataset_id, contract in GOLD_DATASET_CONTRACTS.items()
 }
 SUPPORTED_GOLD_DATASET_IDS = set(GOLD_DATASET_SPECS.keys())
+GOLD_RETENTION_KEEP_VERSIONS = 3
 _parse_semver = gold_versioning.parse_semver
 _format_semver = gold_versioning.format_semver
 _bump_semver = gold_versioning.bump_semver
@@ -43,6 +44,17 @@ _extract_feature_set_version = gold_versioning.extract_feature_set_version
 _prune_gold_versions = gold_versioning.prune_gold_versions
 _prune_gold_artifacts = gold_versioning.prune_gold_artifacts
 _contract_bump_level = gold_versioning.contract_bump_level
+
+
+def validate_gold_retention_keep_versions(keep_last_versions: int) -> int:
+    """Return the fixed Gold retention window or fail on unsupported values."""
+
+    if keep_last_versions != GOLD_RETENTION_KEEP_VERSIONS:
+        raise ValueError(
+            "--retention-keep-versions is fixed at "
+            f"{GOLD_RETENTION_KEEP_VERSIONS} versions; received {keep_last_versions}"
+        )
+    return GOLD_RETENTION_KEEP_VERSIONS
 
 
 def _require_polars() -> Any:
@@ -348,6 +360,7 @@ def build_gold_for_symbol(
     When ``l2_root`` is omitted, L2 lookup falls back to ``gold_root`` for backward compatibility.
     """
 
+    keep_last_versions = validate_gold_retention_keep_versions(keep_last_versions)
     pl = _require_polars()
     symbol = normalize_symbol(symbol)
     required = _dataset_requirements(dataset_id)
