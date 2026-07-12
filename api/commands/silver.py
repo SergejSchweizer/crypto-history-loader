@@ -7,7 +7,8 @@ import json
 import logging
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, cast
+from dataclasses import dataclass
+from typing import Any, Literal, cast
 
 from application.services.silver_service import (
     SilverBuildReport,
@@ -54,15 +55,109 @@ from application.services.silver_service import (
 from application.services.silver_sidecars import write_monthly_sidecars
 from ingestion.funding import DERIBIT_FUNDING_NATIVE_INTERVAL
 
-_MARKET_DISCOVERY_CONFIG: dict[str, tuple[str, str, str]] = {
-    "perps_ohlcv": ("perps_ohlcv", "perp", "1m"),
-    "funding": ("funding", "perp", DERIBIT_FUNDING_NATIVE_INTERVAL),
-    "open_interest": ("open_interest", "perp", "1m"),
-    "perps_trades": ("perps_trades", "perp", "tick"),
-    "options_trades": ("options_trades", "option", "tick"),
-    "volatility_index_data": ("volatility_index_data", "perp", "1m"),
-    "historical_volatility": ("historical_volatility", "perp", "1m"),
+SilverDiscoveryKind = Literal[
+    "bronze",
+    "volatility_snapshot",
+    "realized_volatility",
+    "iv_rv",
+    "index_price",
+    "futures_summary",
+    "options_ticker",
+    "options_instrument_ticker",
+    "options_surface",
+    "perps_l2",
+    "options_l2",
+    "recent_trade",
+    "instrument_metadata",
+]
+
+
+@dataclass(frozen=True)
+class SilverBuildSpec:
+    """Declarative routing contract for one ``silver-build`` dataset choice."""
+
+    dataset: str
+    discovery: SilverDiscoveryKind
+    handler_key: str | None = None
+    bronze_dataset: str | None = None
+    bronze_instrument: str | None = None
+    bronze_timeframe: str | None = None
+
+
+SILVER_BUILD_SPECS: dict[str, SilverBuildSpec] = {
+    "spot_ohlcv": SilverBuildSpec(dataset="spot_ohlcv", discovery="bronze"),
+    "perps_ohlcv": SilverBuildSpec(
+        dataset="perps_ohlcv", discovery="bronze", bronze_dataset="perps_ohlcv", bronze_instrument="perp"
+    ),
+    "open_interest": SilverBuildSpec(
+        dataset="open_interest", discovery="bronze", bronze_dataset="open_interest", bronze_instrument="perp"
+    ),
+    "funding": SilverBuildSpec(
+        dataset="funding",
+        discovery="bronze",
+        bronze_dataset="funding",
+        bronze_instrument="perp",
+        bronze_timeframe=DERIBIT_FUNDING_NATIVE_INTERVAL,
+    ),
+    "perps_trades": SilverBuildSpec(
+        dataset="perps_trades",
+        discovery="bronze",
+        bronze_dataset="perps_trades",
+        bronze_instrument="perp",
+        bronze_timeframe="tick",
+    ),
+    "options_trades": SilverBuildSpec(
+        dataset="options_trades",
+        discovery="bronze",
+        bronze_dataset="options_trades",
+        bronze_instrument="option",
+        bronze_timeframe="tick",
+    ),
+    "volatility_index_data": SilverBuildSpec(
+        dataset="volatility_index_data",
+        discovery="bronze",
+        bronze_dataset="volatility_index_data",
+        bronze_instrument="perp",
+    ),
+    "volatility_index_snapshot_1m": SilverBuildSpec(
+        dataset="volatility_index_snapshot_1m", discovery="volatility_snapshot"
+    ),
+    "realized_volatility": SilverBuildSpec(dataset="realized_volatility", discovery="realized_volatility"),
+    "iv_rv": SilverBuildSpec(dataset="iv_rv", discovery="iv_rv"),
+    "index_price_snapshot_1m": SilverBuildSpec(dataset="index_price_snapshot_1m", discovery="index_price"),
+    "futures_summary_snapshot_1m": SilverBuildSpec(dataset="futures_summary_snapshot_1m", discovery="futures_summary"),
+    "options_ticker_snapshot_1m": SilverBuildSpec(dataset="options_ticker_snapshot_1m", discovery="options_ticker"),
+    "options_instrument_ticker_snapshot_1m": SilverBuildSpec(
+        dataset="options_instrument_ticker_snapshot_1m", discovery="options_instrument_ticker"
+    ),
+    "options_surface_1m_feature": SilverBuildSpec(dataset="options_surface_1m_feature", discovery="options_surface"),
+    "perps_l2_snapshot_1m": SilverBuildSpec(dataset="perps_l2_snapshot_1m", discovery="perps_l2"),
+    "options_l2_snapshot_1m": SilverBuildSpec(dataset="options_l2_snapshot_1m", discovery="options_l2"),
+    "recent_trade_snapshot_1m": SilverBuildSpec(dataset="recent_trade_snapshot_1m", discovery="recent_trade"),
+    "instrument_metadata_snapshot_daily": SilverBuildSpec(
+        dataset="instrument_metadata_snapshot_daily", discovery="instrument_metadata"
+    ),
+    "futures_instrument_metadata_snapshot_daily": SilverBuildSpec(
+        dataset="futures_instrument_metadata_snapshot_daily", discovery="instrument_metadata"
+    ),
+    "historical_volatility": SilverBuildSpec(
+        dataset="historical_volatility",
+        discovery="bronze",
+        bronze_dataset="historical_volatility",
+        bronze_instrument="perp",
+    ),
 }
+
+SILVER_BUILD_DATASETS: tuple[str, ...] = tuple(SILVER_BUILD_SPECS)
+DEFAULT_SILVER_BUILD_DATASETS: tuple[str, ...] = (
+    "spot_ohlcv",
+    "perps_ohlcv",
+    "open_interest",
+    "funding",
+    "perps_trades",
+    "options_trades",
+    "volatility_index_data",
+)
 
 
 def add_silver_build_parser(subparsers: Any) -> None:
@@ -75,38 +170,8 @@ def add_silver_build_parser(subparsers: Any) -> None:
     parser.add_argument(
         "--dataset",
         nargs="+",
-        choices=[
-            "spot_ohlcv",
-            "perps_ohlcv",
-            "open_interest",
-            "funding",
-            "perps_trades",
-            "options_trades",
-            "volatility_index_data",
-            "volatility_index_snapshot_1m",
-            "realized_volatility",
-            "iv_rv",
-            "index_price_snapshot_1m",
-            "futures_summary_snapshot_1m",
-            "options_ticker_snapshot_1m",
-            "options_instrument_ticker_snapshot_1m",
-            "options_surface_1m_feature",
-            "perps_l2_snapshot_1m",
-            "options_l2_snapshot_1m",
-            "recent_trade_snapshot_1m",
-            "instrument_metadata_snapshot_daily",
-            "futures_instrument_metadata_snapshot_daily",
-            "historical_volatility",
-        ],
-        default=[
-            "spot_ohlcv",
-            "perps_ohlcv",
-            "open_interest",
-            "funding",
-            "perps_trades",
-            "options_trades",
-            "volatility_index_data",
-        ],
+        choices=list(SILVER_BUILD_DATASETS),
+        default=list(DEFAULT_SILVER_BUILD_DATASETS),
     )
     parser.add_argument("--symbols", nargs="+", help="Optional symbol list; auto-discovered when omitted")
     parser.add_argument("--timeframe", default="1m", help="Timeframe to process (default: 1m)")
@@ -587,13 +652,95 @@ def run_silver_build(args: argparse.Namespace, logger: logging.Logger) -> None:
         "historical_volatility": _run_historical_volatility,
     }
 
-    def _discovery_params_for_market(market: str, default_timeframe: str) -> tuple[str, str, str]:
-        configured = _MARKET_DISCOVERY_CONFIG.get(market)
-        if configured is None:
-            return market, market, default_timeframe
-        bronze_dataset, bronze_instrument, configured_timeframe = configured
-        discovery_timeframe = default_timeframe if configured_timeframe == "1m" else configured_timeframe
-        return bronze_dataset, bronze_instrument, discovery_timeframe
+    def _discover_effective_symbols(market: str, spec: SilverBuildSpec) -> list[str]:
+        symbols = cast(list[str] | None, args.symbols)
+        if symbols is not None:
+            return symbols
+        if spec.discovery == "volatility_snapshot":
+            return discover_volatility_snapshot_symbols(
+                bronze_root=bronze_root,
+                dataset_type="volatility_index_snapshot_1m",
+                exchange=exchange,
+            )
+        if spec.discovery == "realized_volatility":
+            return discover_realized_volatility_symbols(
+                silver_root=silver_root,
+                exchange=exchange,
+                timeframe=timeframe,
+            )
+        if spec.discovery == "iv_rv":
+            return discover_iv_rv_symbols(
+                silver_root=silver_root,
+                exchange=exchange,
+                timeframe=timeframe,
+            )
+        if spec.discovery == "index_price":
+            return discover_index_price_symbols(
+                bronze_root=bronze_root,
+                exchange=exchange,
+                dataset_type="index_price_snapshot_1m",
+            )
+        if spec.discovery == "futures_summary":
+            return discover_futures_summary_symbols(
+                bronze_root=bronze_root,
+                exchange=exchange,
+                dataset_type="futures_summary_snapshot_1m",
+            )
+        if spec.discovery == "options_ticker":
+            return discover_options_ticker_symbols(
+                bronze_root=bronze_root,
+                exchange=exchange,
+                dataset_type="options_ticker_snapshot_1m",
+            )
+        if spec.discovery == "options_instrument_ticker":
+            return discover_options_instrument_ticker_symbols(
+                bronze_root=bronze_root,
+                exchange=exchange,
+                dataset_type="options_instrument_ticker_snapshot_1m",
+            )
+        if spec.discovery == "options_surface":
+            return discover_options_surface_symbols(
+                silver_root=silver_root,
+                exchange=exchange,
+                timeframe=timeframe,
+            )
+        if spec.discovery == "perps_l2":
+            return discover_l2_symbols(
+                bronze_root=bronze_root,
+                exchange=exchange,
+                dataset_type="perps_l2_snapshot_1m",
+                instrument_type="perp",
+            )
+        if spec.discovery == "options_l2":
+            return discover_l2_symbols(
+                bronze_root=bronze_root,
+                exchange=exchange,
+                dataset_type="options_l2_snapshot_1m",
+                instrument_type="option",
+            )
+        if spec.discovery == "recent_trade":
+            return discover_recent_trade_symbols(
+                bronze_root=bronze_root,
+                exchange=exchange,
+            )
+        if spec.discovery == "instrument_metadata":
+            return discover_instrument_metadata_symbols(
+                bronze_root=bronze_root,
+                exchange=exchange,
+                dataset_type=market,
+            )
+
+        bronze_dataset = spec.bronze_dataset or market
+        bronze_instrument = spec.bronze_instrument or market
+        configured_timeframe = spec.bronze_timeframe or timeframe
+        discovery_timeframe = timeframe if configured_timeframe == "1m" else configured_timeframe
+        return discover_symbols(
+            bronze_root=bronze_root,
+            market=bronze_dataset,
+            exchange=exchange,
+            timeframe=discovery_timeframe,
+            instrument_type=bronze_instrument,
+        )
 
     selected = getattr(args, "dataset", getattr(args, "market", None))
     if selected is None:
@@ -616,94 +763,8 @@ def run_silver_build(args: argparse.Namespace, logger: logging.Logger) -> None:
         return _job
 
     for market in cast(list[str], selected):
-        symbols = cast(list[str] | None, args.symbols)
-        bronze_dataset, bronze_instrument, discovery_timeframe = _discovery_params_for_market(market, timeframe)
-        if symbols is not None:
-            effective_symbols = symbols
-        elif market == "volatility_index_snapshot_1m":
-            effective_symbols = discover_volatility_snapshot_symbols(
-                bronze_root=bronze_root,
-                dataset_type="volatility_index_snapshot_1m",
-                exchange=exchange,
-            )
-        elif market == "realized_volatility":
-            effective_symbols = discover_realized_volatility_symbols(
-                silver_root=silver_root,
-                exchange=exchange,
-                timeframe=timeframe,
-            )
-        elif market == "iv_rv":
-            effective_symbols = discover_iv_rv_symbols(
-                silver_root=silver_root,
-                exchange=exchange,
-                timeframe=timeframe,
-            )
-        elif market == "index_price_snapshot_1m":
-            effective_symbols = discover_index_price_symbols(
-                bronze_root=bronze_root,
-                exchange=exchange,
-                dataset_type="index_price_snapshot_1m",
-            )
-        elif market == "futures_summary_snapshot_1m":
-            effective_symbols = discover_futures_summary_symbols(
-                bronze_root=bronze_root,
-                exchange=exchange,
-                dataset_type="futures_summary_snapshot_1m",
-            )
-        elif market == "options_ticker_snapshot_1m":
-            effective_symbols = discover_options_ticker_symbols(
-                bronze_root=bronze_root,
-                exchange=exchange,
-                dataset_type="options_ticker_snapshot_1m",
-            )
-        elif market == "options_instrument_ticker_snapshot_1m":
-            effective_symbols = discover_options_instrument_ticker_symbols(
-                bronze_root=bronze_root,
-                exchange=exchange,
-                dataset_type="options_instrument_ticker_snapshot_1m",
-            )
-        elif market == "options_surface_1m_feature":
-            effective_symbols = discover_options_surface_symbols(
-                silver_root=silver_root,
-                exchange=exchange,
-                timeframe=timeframe,
-            )
-        elif market == "perps_l2_snapshot_1m":
-            effective_symbols = discover_l2_symbols(
-                bronze_root=bronze_root,
-                exchange=exchange,
-                dataset_type="perps_l2_snapshot_1m",
-                instrument_type="perp",
-            )
-        elif market == "options_l2_snapshot_1m":
-            effective_symbols = discover_l2_symbols(
-                bronze_root=bronze_root,
-                exchange=exchange,
-                dataset_type="options_l2_snapshot_1m",
-                instrument_type="option",
-            )
-        elif market == "recent_trade_snapshot_1m":
-            effective_symbols = discover_recent_trade_symbols(
-                bronze_root=bronze_root,
-                exchange=exchange,
-            )
-        elif market in {
-            "instrument_metadata_snapshot_daily",
-            "futures_instrument_metadata_snapshot_daily",
-        }:
-            effective_symbols = discover_instrument_metadata_symbols(
-                bronze_root=bronze_root,
-                exchange=exchange,
-                dataset_type=market,
-            )
-        else:
-            effective_symbols = discover_symbols(
-                bronze_root=bronze_root,
-                market=bronze_dataset,
-                exchange=exchange,
-                timeframe=discovery_timeframe,
-                instrument_type=bronze_instrument,
-            )
+        spec = SILVER_BUILD_SPECS[market]
+        effective_symbols = _discover_effective_symbols(market, spec)
         logger.info("Silver build schedule market=%s symbols=%s timeframe=%s", market, effective_symbols, timeframe)
         handler = market_handlers.get(market)
         for symbol in effective_symbols:
