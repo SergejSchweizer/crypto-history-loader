@@ -1117,15 +1117,21 @@ Acceptance:
 
 ### PR-40: Shared Silver Monthly IO And Report Kernel
 
-Status: Planned
+Status: In review - PR #121: https://github.com/SergejSchweizer/crypto-history-loader/pull/121
 
-PR: Pending - add the GitHub pull request URL when published.
+PR: https://github.com/SergejSchweizer/crypto-history-loader/pull/121
 
 Branch: `codex/pr40-silver-monthly-io-kernel`
 
 Depends on: PR-39
 
 Planning `git status --short`:
+
+```text
+clean
+```
+
+Publication `git status --short`:
 
 ```text
 clean

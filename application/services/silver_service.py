@@ -158,6 +158,70 @@ class SilverBuildReport:
         }
 
 
+@dataclass
+class SilverMonthlyBuildAccumulator:
+    """Collect stable monthly Silver build counters before creating a report."""
+
+    dataset: str
+    exchange: str
+    symbol: str
+    timeframe: str
+    months: list[str]
+    columns: list[str]
+    rows_in: int = 0
+    rows_out: int = 0
+    duplicates_removed: int = 0
+    invalid_rows: int = 0
+    null_price_rows: int = 0
+    min_timestamp: datetime | None = None
+    max_timestamp: datetime | None = None
+
+    def record_month(
+        self,
+        *,
+        rows_in: int,
+        rows_out: int,
+        duplicates_removed: int = 0,
+        invalid_rows: int = 0,
+        null_price_rows: int = 0,
+        min_timestamp: datetime | None = None,
+        max_timestamp: datetime | None = None,
+    ) -> None:
+        """Add one processed month's deterministic counters to the aggregate."""
+
+        self.rows_in += rows_in
+        self.rows_out += rows_out
+        self.duplicates_removed += duplicates_removed
+        self.invalid_rows += invalid_rows
+        self.null_price_rows += null_price_rows
+        if min_timestamp is not None and (self.min_timestamp is None or min_timestamp < self.min_timestamp):
+            self.min_timestamp = min_timestamp
+        if max_timestamp is not None and (self.max_timestamp is None or max_timestamp > self.max_timestamp):
+            self.max_timestamp = max_timestamp
+
+    def to_report(self) -> SilverBuildReport:
+        """Return the public Silver build report shape used by callers."""
+
+        return SilverBuildReport(
+            dataset=self.dataset,
+            exchange=self.exchange,
+            symbol=self.symbol,
+            timeframe=self.timeframe,
+            period_start=self.months[0] if self.months else None,
+            period_end=self.months[-1] if self.months else None,
+            months_processed=self.months,
+            rows_in=self.rows_in,
+            rows_out=self.rows_out,
+            duplicates_removed=self.duplicates_removed,
+            invalid_ohlc_rows=self.invalid_rows,
+            null_price_rows=self.null_price_rows,
+            min_timestamp=_iso_utc(self.min_timestamp),
+            max_timestamp=_iso_utc(self.max_timestamp),
+            symbols=[self.symbol],
+            columns=self.columns,
+        )
+
+
 def _silver_month_path(
     silver_root: str,
     market: str,
@@ -340,13 +404,14 @@ def build_silver_for_symbol(
         symbol=symbol,
         timeframe=timeframe,
     )
-    agg_rows_in = 0
-    agg_rows_out = 0
-    agg_duplicates_removed = 0
-    agg_invalid_ohlc_rows = 0
-    agg_null_price_rows = 0
-    min_timestamp: datetime | None = None
-    max_timestamp: datetime | None = None
+    accumulator = SilverMonthlyBuildAccumulator(
+        dataset=f"{market}_1m",
+        exchange=exchange,
+        symbol=symbol,
+        timeframe=timeframe,
+        months=months,
+        columns=SILVER_OHLCV_COLUMNS,
+    )
 
     for month in months:
         files = _bronze_month_files(
@@ -403,36 +468,17 @@ def build_silver_for_symbol(
 
         month_min = deduped.select(pl.col("open_time").min()).item()
         month_max = deduped.select(pl.col("open_time").max()).item()
-        if isinstance(month_min, datetime) and (min_timestamp is None or month_min < min_timestamp):
-            min_timestamp = month_min
-        if isinstance(month_max, datetime) and (max_timestamp is None or month_max > max_timestamp):
-            max_timestamp = month_max
+        accumulator.record_month(
+            rows_in=rows_in,
+            rows_out=deduped.height,
+            duplicates_removed=int(duplicates_removed),
+            invalid_rows=int(invalid_ohlc_rows),
+            null_price_rows=int(null_price_rows),
+            min_timestamp=month_min if isinstance(month_min, datetime) else None,
+            max_timestamp=month_max if isinstance(month_max, datetime) else None,
+        )
 
-        agg_rows_in += rows_in
-        agg_rows_out += deduped.height
-        agg_duplicates_removed += int(duplicates_removed)
-        agg_invalid_ohlc_rows += int(invalid_ohlc_rows)
-        agg_null_price_rows += int(null_price_rows)
-
-    report = SilverBuildReport(
-        dataset=f"{market}_1m",
-        exchange=exchange,
-        symbol=symbol,
-        timeframe=timeframe,
-        period_start=months[0] if months else None,
-        period_end=months[-1] if months else None,
-        months_processed=months,
-        rows_in=agg_rows_in,
-        rows_out=agg_rows_out,
-        duplicates_removed=agg_duplicates_removed,
-        invalid_ohlc_rows=agg_invalid_ohlc_rows,
-        null_price_rows=agg_null_price_rows,
-        min_timestamp=_iso_utc(min_timestamp),
-        max_timestamp=_iso_utc(max_timestamp),
-        symbols=[symbol],
-        columns=SILVER_OHLCV_COLUMNS,
-    )
-    return report
+    return accumulator.to_report()
 
 
 def build_funding_observed_for_symbol(
@@ -570,10 +616,14 @@ def build_perps_trades_1m_feature_for_symbol(
             if path.parent.name.startswith("month=")
         }
     )
-    agg_rows_in = 0
-    agg_rows_out = 0
-    min_timestamp: datetime | None = None
-    max_timestamp: datetime | None = None
+    accumulator = SilverMonthlyBuildAccumulator(
+        dataset=output_dataset_type,
+        exchange=exchange,
+        symbol=symbol,
+        timeframe="1m",
+        months=months,
+        columns=SILVER_TRADES_M1_FEATURE_COLUMNS,
+    )
 
     for month in months:
         year = month.split("-", 1)[0]
@@ -600,32 +650,14 @@ def build_perps_trades_1m_feature_for_symbol(
 
         month_min = feature.select(pl.col("timestamp_m1").min()).item()
         month_max = feature.select(pl.col("timestamp_m1").max()).item()
-        if isinstance(month_min, datetime) and (min_timestamp is None or month_min < min_timestamp):
-            min_timestamp = month_min
-        if isinstance(month_max, datetime) and (max_timestamp is None or month_max > max_timestamp):
-            max_timestamp = month_max
+        accumulator.record_month(
+            rows_in=rows_in,
+            rows_out=feature.height,
+            min_timestamp=month_min if isinstance(month_min, datetime) else None,
+            max_timestamp=month_max if isinstance(month_max, datetime) else None,
+        )
 
-        agg_rows_in += rows_in
-        agg_rows_out += feature.height
-
-    return SilverBuildReport(
-        dataset=output_dataset_type,
-        exchange=exchange,
-        symbol=symbol,
-        timeframe="1m",
-        period_start=months[0] if months else None,
-        period_end=months[-1] if months else None,
-        months_processed=months,
-        rows_in=agg_rows_in,
-        rows_out=agg_rows_out,
-        duplicates_removed=0,
-        invalid_ohlc_rows=0,
-        null_price_rows=0,
-        min_timestamp=_iso_utc(min_timestamp),
-        max_timestamp=_iso_utc(max_timestamp),
-        symbols=[symbol],
-        columns=SILVER_TRADES_M1_FEATURE_COLUMNS,
-    )
+    return accumulator.to_report()
 
 
 def build_perps_trades_observed_for_symbol(
@@ -650,12 +682,14 @@ def build_perps_trades_observed_for_symbol(
         timeframe=timeframe,
         instrument_type=instrument_type,
     )
-    agg_rows_in = 0
-    agg_rows_out = 0
-    agg_duplicates_removed = 0
-    agg_invalid_rows = 0
-    min_timestamp: datetime | None = None
-    max_timestamp: datetime | None = None
+    accumulator = SilverMonthlyBuildAccumulator(
+        dataset=output_dataset_type,
+        exchange=exchange,
+        symbol=symbol,
+        timeframe=timeframe,
+        months=months,
+        columns=SILVER_TRADES_OBSERVED_COLUMNS,
+    )
 
     for month in months:
         files = _bronze_month_files(
@@ -688,34 +722,16 @@ def build_perps_trades_observed_for_symbol(
 
         month_min = observed.select(pl.col("trade_time").min()).item()
         month_max = observed.select(pl.col("trade_time").max()).item()
-        if isinstance(month_min, datetime) and (min_timestamp is None or month_min < min_timestamp):
-            min_timestamp = month_min
-        if isinstance(month_max, datetime) and (max_timestamp is None or month_max > max_timestamp):
-            max_timestamp = month_max
+        accumulator.record_month(
+            rows_in=rows_in,
+            rows_out=observed.height,
+            duplicates_removed=int(duplicates_removed),
+            invalid_rows=int(invalid_rows),
+            min_timestamp=month_min if isinstance(month_min, datetime) else None,
+            max_timestamp=month_max if isinstance(month_max, datetime) else None,
+        )
 
-        agg_rows_in += rows_in
-        agg_rows_out += observed.height
-        agg_duplicates_removed += int(duplicates_removed)
-        agg_invalid_rows += int(invalid_rows)
-
-    return SilverBuildReport(
-        dataset=output_dataset_type,
-        exchange=exchange,
-        symbol=symbol,
-        timeframe=timeframe,
-        period_start=months[0] if months else None,
-        period_end=months[-1] if months else None,
-        months_processed=months,
-        rows_in=agg_rows_in,
-        rows_out=agg_rows_out,
-        duplicates_removed=agg_duplicates_removed,
-        invalid_ohlc_rows=agg_invalid_rows,
-        null_price_rows=0,
-        min_timestamp=_iso_utc(min_timestamp),
-        max_timestamp=_iso_utc(max_timestamp),
-        symbols=[symbol],
-        columns=SILVER_TRADES_OBSERVED_COLUMNS,
-    )
+    return accumulator.to_report()
 
 
 def build_volatility_observed_for_symbol(
