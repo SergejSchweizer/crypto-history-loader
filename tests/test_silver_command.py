@@ -9,6 +9,25 @@ import pytest
 
 from api.commands import silver as silver_cmd
 from application.dataset_contracts import supported_silver_build_ids
+from application.services.silver_service import SilverBuildReport
+
+
+def silver_args(*, market: list[str], symbols: list[str] | None = None, maxprocesses: int = 1) -> argparse.Namespace:
+    """Build the minimal argparse namespace used by silver-build command tests."""
+
+    return argparse.Namespace(
+        bronze_root="lake/bronze",
+        silver_root="lake/silver",
+        exchange="deribit",
+        market=market,
+        dataset=market,
+        symbols=symbols,
+        timeframe="1m",
+        manifest=False,
+        plot=False,
+        maxprocesses=maxprocesses,
+        no_json_output=True,
+    )
 
 
 def test_silver_build_registry_covers_all_parser_datasets() -> None:
@@ -20,8 +39,8 @@ def test_silver_build_registry_covers_all_parser_datasets() -> None:
 
 
 def test_run_silver_build_uses_native_funding_timeframe_for_symbol_discovery(
-    monkeypatch,
-) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     captured: list[tuple[str, str]] = []
 
     def fake_discover_symbols(
@@ -60,25 +79,15 @@ def test_run_silver_build_uses_native_funding_timeframe_for_symbol_discovery(
     )
     monkeypatch.setattr(silver_cmd, "write_monthly_sidecars", lambda **kwargs: ([], []))
 
-    args = argparse.Namespace(
-        bronze_root="lake/bronze",
-        silver_root="lake/silver",
-        exchange="deribit",
-        market=["funding"],
-        symbols=None,
-        timeframe="1m",
-        manifest=False,
-        plot=False,
-        no_json_output=True,
-    )
+    args = silver_args(market=["funding"])
     silver_cmd.run_silver_build(args=args, logger=logging.getLogger("test"))
 
     assert captured == [("funding", "8h")]
 
 
 def test_run_silver_build_uses_tick_timeframe_for_trades_discovery(
-    monkeypatch,
-) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     captured: list[tuple[str, str]] = []
     built: list[tuple[str, str]] = []
 
@@ -95,7 +104,7 @@ def test_run_silver_build_uses_tick_timeframe_for_trades_discovery(
             return ["BTC-PERPETUAL"]
         return []
 
-    def fake_build_trades(**kwargs: object) -> silver_cmd.SilverBuildReport:
+    def fake_build_trades(**kwargs: object) -> SilverBuildReport:
         built.append((str(kwargs["symbol"]), str(kwargs.get("timeframe", kwargs.get("observed_timeframe", "")))))
         return _report("perps_trades_1m_feature")
 
@@ -104,17 +113,7 @@ def test_run_silver_build_uses_tick_timeframe_for_trades_discovery(
     monkeypatch.setattr(silver_cmd, "build_perps_trades_1m_feature_for_symbol", fake_build_trades)
     monkeypatch.setattr(silver_cmd, "write_monthly_sidecars", lambda **kwargs: ([], []))
 
-    args = argparse.Namespace(
-        bronze_root="lake/bronze",
-        silver_root="lake/silver",
-        exchange="deribit",
-        market=["perps_trades"],
-        symbols=None,
-        timeframe="1m",
-        manifest=False,
-        plot=False,
-        no_json_output=True,
-    )
+    args = silver_args(market=["perps_trades"])
     silver_cmd.run_silver_build(args=args, logger=logging.getLogger("test"))
 
     assert captured == [("perps_trades", "tick")]
@@ -122,8 +121,8 @@ def test_run_silver_build_uses_tick_timeframe_for_trades_discovery(
 
 
 def test_run_silver_build_uses_tick_timeframe_for_options_trades_discovery(
-    monkeypatch,
-) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     captured: list[tuple[str, str, str | None]] = []
     built: list[str] = []
 
@@ -140,11 +139,11 @@ def test_run_silver_build_uses_tick_timeframe_for_options_trades_discovery(
             return ["BTC"]
         return []
 
-    def fake_build_perps_trades_observed(**kwargs: object) -> silver_cmd.SilverBuildReport:
+    def fake_build_perps_trades_observed(**kwargs: object) -> SilverBuildReport:
         built.append(str(kwargs.get("output_dataset_type", "missing")))
         return _report("options_trades_observed")
 
-    def fake_build_trades_feature(**kwargs: object) -> silver_cmd.SilverBuildReport:
+    def fake_build_trades_feature(**kwargs: object) -> SilverBuildReport:
         built.append(str(kwargs.get("output_dataset_type", "missing")))
         return _report("options_trades_1m_feature")
 
@@ -153,17 +152,7 @@ def test_run_silver_build_uses_tick_timeframe_for_options_trades_discovery(
     monkeypatch.setattr(silver_cmd, "build_perps_trades_1m_feature_for_symbol", fake_build_trades_feature)
     monkeypatch.setattr(silver_cmd, "write_monthly_sidecars", lambda **kwargs: ([], []))
 
-    args = argparse.Namespace(
-        bronze_root="lake/bronze",
-        silver_root="lake/silver",
-        exchange="deribit",
-        market=["options_trades"],
-        symbols=None,
-        timeframe="1m",
-        manifest=False,
-        plot=False,
-        no_json_output=True,
-    )
+    args = silver_args(market=["options_trades"])
     silver_cmd.run_silver_build(args=args, logger=logging.getLogger("test"))
 
     assert captured == [("options_trades", "tick", "option")]
@@ -171,8 +160,8 @@ def test_run_silver_build_uses_tick_timeframe_for_options_trades_discovery(
 
 
 def test_run_silver_build_volatility_index_data_builds_observed_and_feature(
-    monkeypatch,
-) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     built: list[tuple[str, str]] = []
 
     def fake_discover_symbols(
@@ -187,11 +176,11 @@ def test_run_silver_build_volatility_index_data_builds_observed_and_feature(
             return ["SOL"]
         return []
 
-    def fake_build_observed(**kwargs: object) -> silver_cmd.SilverBuildReport:
+    def fake_build_observed(**kwargs: object) -> SilverBuildReport:
         built.append(("observed", str(kwargs["symbol"])))
         return _report("volatility_index_data_observed")
 
-    def fake_build_feature(**kwargs: object) -> silver_cmd.SilverBuildReport:
+    def fake_build_feature(**kwargs: object) -> SilverBuildReport:
         built.append(("feature", str(kwargs["symbol"])))
         return _report("volatility_index_1m_feature")
 
@@ -200,18 +189,7 @@ def test_run_silver_build_volatility_index_data_builds_observed_and_feature(
     monkeypatch.setattr(silver_cmd, "build_volatility_index_1m_feature_for_symbol", fake_build_feature)
     monkeypatch.setattr(silver_cmd, "write_monthly_sidecars", lambda **kwargs: ([], []))
 
-    args = argparse.Namespace(
-        bronze_root="lake/bronze",
-        silver_root="lake/silver",
-        exchange="deribit",
-        market=["volatility_index_data"],
-        symbols=None,
-        timeframe="1m",
-        manifest=False,
-        plot=False,
-        maxprocesses=1,
-        no_json_output=True,
-    )
+    args = silver_args(market=["volatility_index_data"])
 
     silver_cmd.run_silver_build(args=args, logger=logging.getLogger("test"))
 
@@ -219,19 +197,19 @@ def test_run_silver_build_volatility_index_data_builds_observed_and_feature(
 
 
 def test_run_silver_build_realized_volatility_builds_iv_rv_feature(
-    monkeypatch,
-) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     built: list[tuple[str, str]] = []
 
     def fake_discover_realized_symbols(*, silver_root: str, exchange: str, timeframe: str) -> list[str]:
         del silver_root, exchange, timeframe
         return ["BTC"]
 
-    def fake_build_rv(**kwargs: object) -> silver_cmd.SilverBuildReport:
+    def fake_build_rv(**kwargs: object) -> SilverBuildReport:
         built.append(("rv", str(kwargs["symbol"])))
         return _report("realized_volatility_1m_feature")
 
-    def fake_build_iv_rv(**kwargs: object) -> silver_cmd.SilverBuildReport:
+    def fake_build_iv_rv(**kwargs: object) -> SilverBuildReport:
         built.append(("iv_rv", str(kwargs["symbol"])))
         return _report("iv_rv_1m_feature")
 
@@ -240,18 +218,7 @@ def test_run_silver_build_realized_volatility_builds_iv_rv_feature(
     monkeypatch.setattr(silver_cmd, "build_iv_rv_1m_feature_for_symbol", fake_build_iv_rv)
     monkeypatch.setattr(silver_cmd, "write_monthly_sidecars", lambda **kwargs: ([], []))
 
-    args = argparse.Namespace(
-        bronze_root="lake/bronze",
-        silver_root="lake/silver",
-        exchange="deribit",
-        market=["realized_volatility"],
-        symbols=None,
-        timeframe="1m",
-        manifest=False,
-        plot=False,
-        maxprocesses=1,
-        no_json_output=True,
-    )
+    args = silver_args(market=["realized_volatility"])
 
     silver_cmd.run_silver_build(args=args, logger=logging.getLogger("test"))
 
@@ -259,8 +226,8 @@ def test_run_silver_build_realized_volatility_builds_iv_rv_feature(
 
 
 def test_run_silver_build_index_price_builds_observed_and_feature(
-    monkeypatch,
-) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     discovered: list[tuple[str, str, str]] = []
     built: list[tuple[str, str]] = []
 
@@ -268,11 +235,11 @@ def test_run_silver_build_index_price_builds_observed_and_feature(
         discovered.append((bronze_root, exchange, dataset_type))
         return ["BTC"]
 
-    def fake_build_observed(**kwargs: object) -> silver_cmd.SilverBuildReport:
+    def fake_build_observed(**kwargs: object) -> SilverBuildReport:
         built.append(("observed", str(kwargs["symbol"])))
         return _report("index_price_snapshot_1m_observed")
 
-    def fake_build_feature(**kwargs: object) -> silver_cmd.SilverBuildReport:
+    def fake_build_feature(**kwargs: object) -> SilverBuildReport:
         built.append(("feature", str(kwargs["symbol"])))
         return _report("index_price_1m_feature")
 
@@ -281,18 +248,7 @@ def test_run_silver_build_index_price_builds_observed_and_feature(
     monkeypatch.setattr(silver_cmd, "build_index_price_1m_feature_for_symbol", fake_build_feature)
     monkeypatch.setattr(silver_cmd, "write_monthly_sidecars", lambda **kwargs: ([], []))
 
-    args = argparse.Namespace(
-        bronze_root="lake/bronze",
-        silver_root="lake/silver",
-        exchange="deribit",
-        market=["index_price_snapshot_1m"],
-        symbols=None,
-        timeframe="1m",
-        manifest=False,
-        plot=False,
-        maxprocesses=1,
-        no_json_output=True,
-    )
+    args = silver_args(market=["index_price_snapshot_1m"])
 
     silver_cmd.run_silver_build(args=args, logger=logging.getLogger("test"))
 
@@ -301,8 +257,8 @@ def test_run_silver_build_index_price_builds_observed_and_feature(
 
 
 def test_run_silver_build_futures_summary_builds_observed_and_feature(
-    monkeypatch,
-) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     discovered: list[tuple[str, str, str]] = []
     built: list[tuple[str, str]] = []
 
@@ -310,11 +266,11 @@ def test_run_silver_build_futures_summary_builds_observed_and_feature(
         discovered.append((bronze_root, exchange, dataset_type))
         return ["ETH"]
 
-    def fake_build_observed(**kwargs: object) -> silver_cmd.SilverBuildReport:
+    def fake_build_observed(**kwargs: object) -> SilverBuildReport:
         built.append(("observed", str(kwargs["symbol"])))
         return _report("futures_summary_snapshot_1m_observed")
 
-    def fake_build_feature(**kwargs: object) -> silver_cmd.SilverBuildReport:
+    def fake_build_feature(**kwargs: object) -> SilverBuildReport:
         built.append(("feature", str(kwargs["symbol"])))
         return _report("futures_summary_1m_feature")
 
@@ -323,18 +279,7 @@ def test_run_silver_build_futures_summary_builds_observed_and_feature(
     monkeypatch.setattr(silver_cmd, "build_futures_summary_1m_feature_for_symbol", fake_build_feature)
     monkeypatch.setattr(silver_cmd, "write_monthly_sidecars", lambda **kwargs: ([], []))
 
-    args = argparse.Namespace(
-        bronze_root="lake/bronze",
-        silver_root="lake/silver",
-        exchange="deribit",
-        market=["futures_summary_snapshot_1m"],
-        symbols=None,
-        timeframe="1m",
-        manifest=False,
-        plot=False,
-        maxprocesses=1,
-        no_json_output=True,
-    )
+    args = silver_args(market=["futures_summary_snapshot_1m"])
 
     silver_cmd.run_silver_build(args=args, logger=logging.getLogger("test"))
 
@@ -342,7 +287,7 @@ def test_run_silver_build_futures_summary_builds_observed_and_feature(
     assert built == [("observed", "ETH"), ("feature", "ETH")]
 
 
-def test_run_silver_build_routes_options_ticker_dataset(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+def test_run_silver_build_routes_options_ticker_dataset(monkeypatch: pytest.MonkeyPatch) -> None:
     discovered: list[tuple[str, str, str]] = []
     built: list[tuple[str, str]] = []
 
@@ -350,7 +295,7 @@ def test_run_silver_build_routes_options_ticker_dataset(monkeypatch) -> None:  #
         discovered.append((bronze_root, exchange, dataset_type))
         return ["BTC"]
 
-    def fake_build_options_ticker(**kwargs: object) -> silver_cmd.SilverBuildReport:
+    def fake_build_options_ticker(**kwargs: object) -> SilverBuildReport:
         built.append((str(kwargs["symbol"]), str(kwargs["timeframe"])))
         return _report("options_ticker_snapshot_1m_observed")
 
@@ -358,18 +303,7 @@ def test_run_silver_build_routes_options_ticker_dataset(monkeypatch) -> None:  #
     monkeypatch.setattr(silver_cmd, "build_options_ticker_observed_for_symbol", fake_build_options_ticker)
     monkeypatch.setattr(silver_cmd, "write_monthly_sidecars", lambda **kwargs: ([], []))
 
-    args = argparse.Namespace(
-        bronze_root="lake/bronze",
-        silver_root="lake/silver",
-        exchange="deribit",
-        market=["options_ticker_snapshot_1m"],
-        symbols=None,
-        timeframe="1m",
-        manifest=False,
-        plot=False,
-        maxprocesses=1,
-        no_json_output=True,
-    )
+    args = silver_args(market=["options_ticker_snapshot_1m"])
 
     silver_cmd.run_silver_build(args=args, logger=logging.getLogger("test"))
 
@@ -377,7 +311,7 @@ def test_run_silver_build_routes_options_ticker_dataset(monkeypatch) -> None:  #
     assert built == [("BTC", "1m")]
 
 
-def test_run_silver_build_routes_options_instrument_ticker_dataset(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+def test_run_silver_build_routes_options_instrument_ticker_dataset(monkeypatch: pytest.MonkeyPatch) -> None:
     discovered: list[tuple[str, str, str]] = []
     built: list[tuple[str, str]] = []
 
@@ -387,7 +321,7 @@ def test_run_silver_build_routes_options_instrument_ticker_dataset(monkeypatch) 
         discovered.append((bronze_root, exchange, dataset_type))
         return ["BTC"]
 
-    def fake_build_options_instrument_ticker(**kwargs: object) -> silver_cmd.SilverBuildReport:
+    def fake_build_options_instrument_ticker(**kwargs: object) -> SilverBuildReport:
         built.append((str(kwargs["symbol"]), str(kwargs["timeframe"])))
         return _report("options_instrument_ticker_snapshot_1m_observed")
 
@@ -403,18 +337,7 @@ def test_run_silver_build_routes_options_instrument_ticker_dataset(monkeypatch) 
     )
     monkeypatch.setattr(silver_cmd, "write_monthly_sidecars", lambda **kwargs: ([], []))
 
-    args = argparse.Namespace(
-        bronze_root="lake/bronze",
-        silver_root="lake/silver",
-        exchange="deribit",
-        market=["options_instrument_ticker_snapshot_1m"],
-        symbols=None,
-        timeframe="1m",
-        manifest=False,
-        plot=False,
-        maxprocesses=1,
-        no_json_output=True,
-    )
+    args = silver_args(market=["options_instrument_ticker_snapshot_1m"])
 
     silver_cmd.run_silver_build(args=args, logger=logging.getLogger("test"))
 
@@ -422,7 +345,7 @@ def test_run_silver_build_routes_options_instrument_ticker_dataset(monkeypatch) 
     assert built == [("BTC", "1m")]
 
 
-def test_run_silver_build_routes_options_surface_feature(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+def test_run_silver_build_routes_options_surface_feature(monkeypatch: pytest.MonkeyPatch) -> None:
     discovered: list[tuple[str, str, str]] = []
     built: list[str] = []
 
@@ -430,25 +353,14 @@ def test_run_silver_build_routes_options_surface_feature(monkeypatch) -> None:  
         discovered.append((silver_root, exchange, timeframe))
         return ["ETH"]
 
-    def fake_build_options_surface(**kwargs: object) -> silver_cmd.SilverBuildReport:
+    def fake_build_options_surface(**kwargs: object) -> SilverBuildReport:
         built.append(str(kwargs["symbol"]))
         return _report("options_surface_1m_feature")
 
     monkeypatch.setattr(silver_cmd, "discover_options_surface_symbols", fake_discover_options_surface_symbols)
     monkeypatch.setattr(silver_cmd, "build_options_surface_1m_feature_for_symbol", fake_build_options_surface)
     monkeypatch.setattr(silver_cmd, "write_monthly_sidecars", lambda **kwargs: ([], []))
-    args = argparse.Namespace(
-        bronze_root="lake/bronze",
-        silver_root="lake/silver",
-        exchange="deribit",
-        market=["options_surface_1m_feature"],
-        symbols=None,
-        timeframe="1m",
-        manifest=False,
-        plot=False,
-        maxprocesses=1,
-        no_json_output=True,
-    )
+    args = silver_args(market=["options_surface_1m_feature"])
 
     silver_cmd.run_silver_build(args=args, logger=logging.getLogger("test"))
 
@@ -456,7 +368,7 @@ def test_run_silver_build_routes_options_surface_feature(monkeypatch) -> None:  
     assert built == ["ETH"]
 
 
-def test_run_silver_build_routes_perps_l2_dataset(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+def test_run_silver_build_routes_perps_l2_dataset(monkeypatch: pytest.MonkeyPatch) -> None:
     discovered: list[tuple[str, str]] = []
     built: list[tuple[str, str]] = []
 
@@ -464,11 +376,11 @@ def test_run_silver_build_routes_perps_l2_dataset(monkeypatch) -> None:  # type:
         discovered.append((str(kwargs["dataset_type"]), str(kwargs["instrument_type"])))
         return ["BTC-PERPETUAL"]
 
-    def fake_build_observed(**kwargs: object) -> silver_cmd.SilverBuildReport:
+    def fake_build_observed(**kwargs: object) -> SilverBuildReport:
         built.append(("observed", str(kwargs["symbol"])))
         return _report("perps_l2_snapshot_1m_observed")
 
-    def fake_build_feature(**kwargs: object) -> silver_cmd.SilverBuildReport:
+    def fake_build_feature(**kwargs: object) -> SilverBuildReport:
         built.append(("feature", str(kwargs["symbol"])))
         return _report("perps_l2_1m_feature")
 
@@ -476,18 +388,7 @@ def test_run_silver_build_routes_perps_l2_dataset(monkeypatch) -> None:  # type:
     monkeypatch.setattr(silver_cmd, "build_perps_l2_observed_for_symbol", fake_build_observed)
     monkeypatch.setattr(silver_cmd, "build_perps_l2_1m_feature_for_symbol", fake_build_feature)
     monkeypatch.setattr(silver_cmd, "write_monthly_sidecars", lambda **kwargs: ([], []))
-    args = argparse.Namespace(
-        bronze_root="lake/bronze",
-        silver_root="lake/silver",
-        exchange="deribit",
-        market=["perps_l2_snapshot_1m"],
-        symbols=None,
-        timeframe="1m",
-        manifest=False,
-        plot=False,
-        maxprocesses=1,
-        no_json_output=True,
-    )
+    args = silver_args(market=["perps_l2_snapshot_1m"])
 
     silver_cmd.run_silver_build(args=args, logger=logging.getLogger("test"))
 
@@ -495,7 +396,7 @@ def test_run_silver_build_routes_perps_l2_dataset(monkeypatch) -> None:  # type:
     assert built == [("observed", "BTC-PERPETUAL"), ("feature", "BTC-PERPETUAL")]
 
 
-def test_run_silver_build_routes_options_l2_dataset(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+def test_run_silver_build_routes_options_l2_dataset(monkeypatch: pytest.MonkeyPatch) -> None:
     discovered: list[tuple[str, str]] = []
     built: list[tuple[str, str]] = []
 
@@ -503,11 +404,11 @@ def test_run_silver_build_routes_options_l2_dataset(monkeypatch) -> None:  # typ
         discovered.append((str(kwargs["dataset_type"]), str(kwargs["instrument_type"])))
         return ["BTC"]
 
-    def fake_build_observed(**kwargs: object) -> silver_cmd.SilverBuildReport:
+    def fake_build_observed(**kwargs: object) -> SilverBuildReport:
         built.append(("observed", str(kwargs["symbol"])))
         return _report("options_l2_snapshot_1m_observed")
 
-    def fake_build_feature(**kwargs: object) -> silver_cmd.SilverBuildReport:
+    def fake_build_feature(**kwargs: object) -> SilverBuildReport:
         built.append(("feature", str(kwargs["symbol"])))
         return _report("options_l2_1m_feature")
 
@@ -515,18 +416,7 @@ def test_run_silver_build_routes_options_l2_dataset(monkeypatch) -> None:  # typ
     monkeypatch.setattr(silver_cmd, "build_options_l2_observed_for_symbol", fake_build_observed)
     monkeypatch.setattr(silver_cmd, "build_options_l2_1m_feature_for_symbol", fake_build_feature)
     monkeypatch.setattr(silver_cmd, "write_monthly_sidecars", lambda **kwargs: ([], []))
-    args = argparse.Namespace(
-        bronze_root="lake/bronze",
-        silver_root="lake/silver",
-        exchange="deribit",
-        market=["options_l2_snapshot_1m"],
-        symbols=None,
-        timeframe="1m",
-        manifest=False,
-        plot=False,
-        maxprocesses=1,
-        no_json_output=True,
-    )
+    args = silver_args(market=["options_l2_snapshot_1m"])
 
     silver_cmd.run_silver_build(args=args, logger=logging.getLogger("test"))
 
@@ -534,7 +424,7 @@ def test_run_silver_build_routes_options_l2_dataset(monkeypatch) -> None:  # typ
     assert built == [("observed", "BTC"), ("feature", "BTC")]
 
 
-def test_run_silver_build_routes_recent_trade_snapshot(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+def test_run_silver_build_routes_recent_trade_snapshot(monkeypatch: pytest.MonkeyPatch) -> None:
     discovered: list[tuple[str, str]] = []
     built: list[tuple[str, str]] = []
 
@@ -542,25 +432,14 @@ def test_run_silver_build_routes_recent_trade_snapshot(monkeypatch) -> None:  # 
         discovered.append((str(kwargs["bronze_root"]), str(kwargs["exchange"])))
         return ["BTC"]
 
-    def fake_build_recent(**kwargs: object) -> silver_cmd.SilverBuildReport:
+    def fake_build_recent(**kwargs: object) -> SilverBuildReport:
         built.append((str(kwargs["symbol"]), str(kwargs["timeframe"])))
         return _report("recent_trade_snapshot_1m_observed")
 
     monkeypatch.setattr(silver_cmd, "discover_recent_trade_symbols", fake_discover_recent_trade_symbols)
     monkeypatch.setattr(silver_cmd, "build_recent_trade_snapshot_observed_for_symbol", fake_build_recent)
     monkeypatch.setattr(silver_cmd, "write_monthly_sidecars", lambda **kwargs: ([], []))
-    args = argparse.Namespace(
-        bronze_root="lake/bronze",
-        silver_root="lake/silver",
-        exchange="deribit",
-        market=["recent_trade_snapshot_1m"],
-        symbols=None,
-        timeframe="1m",
-        manifest=False,
-        plot=False,
-        maxprocesses=1,
-        no_json_output=True,
-    )
+    args = silver_args(market=["recent_trade_snapshot_1m"])
 
     silver_cmd.run_silver_build(args=args, logger=logging.getLogger("test"))
 
@@ -568,7 +447,7 @@ def test_run_silver_build_routes_recent_trade_snapshot(monkeypatch) -> None:  # 
     assert built == [("BTC", "tick")]
 
 
-def test_run_silver_build_routes_both_metadata_families(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+def test_run_silver_build_routes_both_metadata_families(monkeypatch: pytest.MonkeyPatch) -> None:
     discovered: list[str] = []
     built: list[str] = []
 
@@ -576,11 +455,11 @@ def test_run_silver_build_routes_both_metadata_families(monkeypatch) -> None:  #
         discovered.append(str(kwargs["dataset_type"]))
         return ["BTC"]
 
-    def fake_build_options(**kwargs: object) -> silver_cmd.SilverBuildReport:
+    def fake_build_options(**kwargs: object) -> SilverBuildReport:
         built.append("options")
         return _report("instrument_metadata_snapshot_daily_observed")
 
-    def fake_build_futures(**kwargs: object) -> silver_cmd.SilverBuildReport:
+    def fake_build_futures(**kwargs: object) -> SilverBuildReport:
         built.append("futures")
         return _report("futures_instrument_metadata_snapshot_daily_observed")
 
@@ -588,20 +467,11 @@ def test_run_silver_build_routes_both_metadata_families(monkeypatch) -> None:  #
     monkeypatch.setattr(silver_cmd, "build_instrument_metadata_observed_for_symbol", fake_build_options)
     monkeypatch.setattr(silver_cmd, "build_futures_instrument_metadata_observed_for_symbol", fake_build_futures)
     monkeypatch.setattr(silver_cmd, "write_monthly_sidecars", lambda **kwargs: ([], []))
-    args = argparse.Namespace(
-        bronze_root="lake/bronze",
-        silver_root="lake/silver",
-        exchange="deribit",
+    args = silver_args(
         market=[
             "instrument_metadata_snapshot_daily",
             "futures_instrument_metadata_snapshot_daily",
-        ],
-        symbols=None,
-        timeframe="1m",
-        manifest=False,
-        plot=False,
-        maxprocesses=1,
-        no_json_output=True,
+        ]
     )
 
     silver_cmd.run_silver_build(args=args, logger=logging.getLogger("test"))
@@ -613,7 +483,7 @@ def test_run_silver_build_routes_both_metadata_families(monkeypatch) -> None:  #
     assert built == ["options", "futures"]
 
 
-def test_run_silver_build_routes_historical_volatility(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+def test_run_silver_build_routes_historical_volatility(monkeypatch: pytest.MonkeyPatch) -> None:
     discovered: list[tuple[str, str, str]] = []
     built: list[str] = []
 
@@ -628,25 +498,14 @@ def test_run_silver_build_routes_historical_volatility(monkeypatch) -> None:  # 
         discovered.append((market, str(instrument_type), timeframe))
         return ["BTC"]
 
-    def fake_build(**kwargs: object) -> silver_cmd.SilverBuildReport:
+    def fake_build(**kwargs: object) -> SilverBuildReport:
         built.append(str(kwargs["symbol"]))
         return _report("historical_volatility_observed")
 
     monkeypatch.setattr(silver_cmd, "discover_symbols", fake_discover_symbols)
     monkeypatch.setattr(silver_cmd, "build_historical_volatility_observed_for_symbol", fake_build)
     monkeypatch.setattr(silver_cmd, "write_monthly_sidecars", lambda **kwargs: ([], []))
-    args = argparse.Namespace(
-        bronze_root="lake/bronze",
-        silver_root="lake/silver",
-        exchange="deribit",
-        market=["historical_volatility"],
-        symbols=None,
-        timeframe="1m",
-        manifest=False,
-        plot=False,
-        maxprocesses=1,
-        no_json_output=True,
-    )
+    args = silver_args(market=["historical_volatility"])
 
     silver_cmd.run_silver_build(args=args, logger=logging.getLogger("test"))
 
@@ -655,25 +514,14 @@ def test_run_silver_build_routes_historical_volatility(monkeypatch) -> None:  # 
 
 
 def test_run_silver_build_rejects_invalid_maxprocesses() -> None:
-    args = argparse.Namespace(
-        bronze_root="lake/bronze",
-        silver_root="lake/silver",
-        exchange="deribit",
-        market=["spot_ohlcv"],
-        symbols=["BTC"],
-        timeframe="1m",
-        manifest=False,
-        plot=False,
-        maxprocesses=0,
-        no_json_output=True,
-    )
+    args = silver_args(market=["spot_ohlcv"], symbols=["BTC"], maxprocesses=0)
 
     with pytest.raises(ValueError, match="maxprocesses"):
         silver_cmd.run_silver_build(args=args, logger=logging.getLogger("test"))
 
 
-def _report(dataset: str) -> silver_cmd.SilverBuildReport:
-    return silver_cmd.SilverBuildReport(
+def _report(dataset: str) -> SilverBuildReport:
+    return SilverBuildReport(
         dataset=dataset,
         exchange="deribit",
         symbol="BTC-PERPETUAL",
