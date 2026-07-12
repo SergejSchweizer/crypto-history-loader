@@ -117,7 +117,7 @@ recent_trade_snapshot_1m
 
 ### PR-01: Silver Contract Registry Baseline
 
-Status: Done
+Status: Done - PR #58: https://github.com/SergejSchweizer/crypto-history-loader/pull/58
 
 Branch: `codex/pr01-silver-contract-registry-baseline`
 
@@ -143,7 +143,7 @@ Acceptance:
 
 ### PR-02: Silver Naming Compatibility For OHLCV
 
-Status: Done
+Status: Done - PR #59: https://github.com/SergejSchweizer/crypto-history-loader/pull/59
 
 Branch: `codex/pr02-silver-ohlcv-naming-compat`
 
@@ -165,7 +165,7 @@ Acceptance:
 
 ### PR-03: Volatility Index OHLC Bronze To Silver
 
-Status: Done
+Status: Done - PR #60: https://github.com/SergejSchweizer/crypto-history-loader/pull/60
 
 Branch: `codex/pr03-volatility-index-ohlc-silver`
 
@@ -198,7 +198,7 @@ Acceptance:
 
 ### PR-04: Live Volatility Snapshot To Canonical IV Silver
 
-Status: Done
+Status: Done - PR #61: https://github.com/SergejSchweizer/crypto-history-loader/pull/61
 
 Branch: `codex/pr04-volatility-snapshot-silver`
 
@@ -223,7 +223,7 @@ Acceptance:
 
 ### PR-05: IV Feature Layer For Regime Research
 
-Status: Done
+Status: Done - PR #62: https://github.com/SergejSchweizer/crypto-history-loader/pull/62
 
 Branch: `codex/pr05-iv-index-feature-layer`
 
@@ -251,7 +251,7 @@ Acceptance:
 
 ### PR-06: RV Feature Layer From Spot And Perps OHLCV
 
-Status: Done
+Status: Done - PR #63: https://github.com/SergejSchweizer/crypto-history-loader/pull/63
 
 Branch: `codex/pr06-rv-feature-layer`
 
@@ -277,7 +277,7 @@ Acceptance:
 
 ### PR-07: IV/RV Spread Feature Dataset
 
-Status: Done
+Status: Done - PR #64: https://github.com/SergejSchweizer/crypto-history-loader/pull/64
 
 Branch: `codex/pr07-iv-rv-spread-feature`
 
@@ -304,7 +304,7 @@ Acceptance:
 
 ### PR-08: Index Price Snapshot Silver
 
-Status: Done
+Status: Done - PR #65: https://github.com/SergejSchweizer/crypto-history-loader/pull/65
 
 Branch: `codex/pr08-index-price-snapshot-silver`
 
@@ -326,7 +326,7 @@ Acceptance:
 
 ### PR-09: Futures Summary Snapshot Silver
 
-Status: Done
+Status: Done - PR #66: https://github.com/SergejSchweizer/crypto-history-loader/pull/66
 
 Branch: `codex/pr09-futures-summary-silver`
 
@@ -352,7 +352,7 @@ Acceptance:
 
 ### PR-10: Options Ticker Snapshot Silver
 
-Status: Done
+Status: Done - PR #67: https://github.com/SergejSchweizer/crypto-history-loader/pull/67
 
 Branch: `codex/pr10-options-ticker-silver`
 
@@ -378,7 +378,7 @@ Acceptance:
 
 ### PR-11: Options Instrument Ticker Snapshot Silver
 
-Status: Done
+Status: Done - PR #68: https://github.com/SergejSchweizer/crypto-history-loader/pull/68
 
 Branch: `codex/pr11-options-instrument-ticker-silver`
 
@@ -399,7 +399,7 @@ Acceptance:
 
 ### PR-12: Option Surface 1m Feature
 
-Status: Done
+Status: Done - PR #69: https://github.com/SergejSchweizer/crypto-history-loader/pull/69
 
 Branch: `codex/pr12-option-surface-feature`
 
@@ -426,7 +426,7 @@ Acceptance:
 
 ### PR-13: Perps L2 Snapshot Silver
 
-Status: Done
+Status: Done - PR #70: https://github.com/SergejSchweizer/crypto-history-loader/pull/70
 
 Branch: `codex/pr13-perps-l2-silver`
 
@@ -453,7 +453,7 @@ Acceptance:
 
 ### PR-14: Options L2 Snapshot Silver
 
-Status: Done
+Status: Done - PR #71: https://github.com/SergejSchweizer/crypto-history-loader/pull/71
 
 Branch: `codex/pr14-options-l2-silver`
 
@@ -479,7 +479,7 @@ Acceptance:
 
 ### PR-15: Recent Trade Snapshot Silver
 
-Status: Done
+Status: Done - PR #72: https://github.com/SergejSchweizer/crypto-history-loader/pull/72
 
 Branch: `codex/pr15-recent-trade-snapshot-silver`
 
@@ -500,7 +500,7 @@ Acceptance:
 
 ### PR-16: Instrument Metadata Silver
 
-Status: Done
+Status: Done - PR #73: https://github.com/SergejSchweizer/crypto-history-loader/pull/73
 
 Branch: `codex/pr16-instrument-metadata-silver`
 
@@ -530,7 +530,7 @@ Acceptance:
 
 ### PR-17: Historical Volatility Silver
 
-Status: Done
+Status: Done - PR #74: https://github.com/SergejSchweizer/crypto-history-loader/pull/74
 
 Branch: `codex/pr17-historical-volatility-silver`
 
@@ -551,7 +551,7 @@ Acceptance:
 
 ### PR-18: Gold Contract Update For Regime Feature Set
 
-Status: Done
+Status: Done - PR #77: https://github.com/SergejSchweizer/crypto-history-loader/pull/77
 
 Branch: `codex/pr18-gold-regime-feature-contract`
 
@@ -666,7 +666,7 @@ Acceptance:
 
 ### PR-22: Index Price And Futures Summary Silver Materialization
 
-Status: Done - PR #92: https://github.com/SergejSchweizer/crypto-history-loader/pull/92
+Status: Done - PR #83: https://github.com/SergejSchweizer/crypto-history-loader/pull/83; PR #92: https://github.com/SergejSchweizer/crypto-history-loader/pull/92
 
 Branch: `codex/pr22-index-futures-silver-materialization`
 
@@ -687,7 +687,7 @@ Acceptance:
 
 ### PR-23: Options Ticker Silver Materialization
 
-Status: Done - PR #93: https://github.com/SergejSchweizer/crypto-history-loader/pull/93
+Status: Done - PR #84: https://github.com/SergejSchweizer/crypto-history-loader/pull/84; PR #93: https://github.com/SergejSchweizer/crypto-history-loader/pull/93
 
 Branch: `codex/pr23-options-ticker-silver-materialization`
 
@@ -709,7 +709,7 @@ Acceptance:
 
 ### PR-24: Options Surface Silver Materialization
 
-Status: Done - PR #94: https://github.com/SergejSchweizer/crypto-history-loader/pull/94
+Status: Done - PR #85: https://github.com/SergejSchweizer/crypto-history-loader/pull/85; PR #94: https://github.com/SergejSchweizer/crypto-history-loader/pull/94
 
 Branch: `codex/pr24-options-surface-silver-materialization`
 
@@ -730,7 +730,7 @@ Acceptance:
 
 ### PR-25: Perpetual L2 Silver Materialization
 
-Status: Done - PR #95: https://github.com/SergejSchweizer/crypto-history-loader/pull/95
+Status: Done - PR #86: https://github.com/SergejSchweizer/crypto-history-loader/pull/86; PR #95: https://github.com/SergejSchweizer/crypto-history-loader/pull/95
 
 Branch: `codex/pr25-perps-l2-silver-materialization`
 
@@ -751,7 +751,7 @@ Acceptance:
 
 ### PR-26: Options L2 Silver Materialization
 
-Status: Done - PR #96: https://github.com/SergejSchweizer/crypto-history-loader/pull/96
+Status: Done - PR #87: https://github.com/SergejSchweizer/crypto-history-loader/pull/87; PR #96: https://github.com/SergejSchweizer/crypto-history-loader/pull/96
 
 Branch: `codex/pr26-options-l2-silver-materialization`
 
@@ -771,7 +771,7 @@ Acceptance:
 
 ### PR-27: Recent Trade Snapshot Silver Materialization
 
-Status: Done - PR #97: https://github.com/SergejSchweizer/crypto-history-loader/pull/97
+Status: Done - PR #88: https://github.com/SergejSchweizer/crypto-history-loader/pull/88; PR #97: https://github.com/SergejSchweizer/crypto-history-loader/pull/97
 
 Branch: `codex/pr27-recent-trades-silver-materialization`
 
