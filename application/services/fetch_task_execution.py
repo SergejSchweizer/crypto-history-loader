@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from datetime import UTC, datetime
-from typing import Any, TypeVar, cast
+from typing import Any, cast
 
 from application.dto import (
     CandleFetchResultDTO,
@@ -23,9 +23,6 @@ from ingestion.funding import FundingPoint
 from ingestion.open_interest import OpenInterestPoint
 from ingestion.spot_ohlcv import Exchange, Market, SpotCandle
 from ingestion.volatility import VolatilityPoint
-
-TRow = TypeVar("TRow")
-TTask = TypeVar("TTask")
 
 
 def fetch_candle_tasks_sequential(
@@ -358,7 +355,7 @@ def fetch_volatility_tasks_sequential(
     return VolatilityFetchResultDTO(rows=task_results, errors=task_errors)
 
 
-def _store_standard_success(
+def _store_standard_success[TTask, TRow](
     *,
     task: TTask,
     rows: list[TRow],

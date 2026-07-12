@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import TypeVar
 
 from application.services.fetch_history_rows import (
     fetch_bootstrap_history_rows_with_start_bound,
@@ -11,10 +10,8 @@ from application.services.fetch_history_rows import (
 )
 from application.services.fetch_range_planning import day_windows_in_random_order
 
-TRow = TypeVar("TRow")
 
-
-def fetch_bounded_daily_rows(
+def fetch_bounded_daily_rows[TRow](
     *,
     start_open_ms_bound: int,
     end_open_ms: int,
@@ -32,7 +29,7 @@ def fetch_bounded_daily_rows(
     )
 
 
-def fetch_bootstrap_history_rows(
+def fetch_bootstrap_history_rows[TRow](
     *,
     history_fetcher: Callable[..., list[TRow]],
     fetch_kwargs: dict[str, object],

@@ -8,9 +8,7 @@ import threading
 import time
 from collections.abc import Callable
 from datetime import UTC, datetime
-from typing import TypeVar, cast
-
-TResult = TypeVar("TResult")
+from typing import cast
 
 
 class ResultQueueProtocol:
@@ -38,7 +36,7 @@ def timeout_worker(
         result_queue.put(("err", (exc.__class__.__name__, str(exc))))
 
 
-def run_with_optional_timeout(
+def run_with_optional_timeout[TResult](
     fn: Callable[..., TResult],
     *,
     timeout_s: float | None,
@@ -121,7 +119,7 @@ def run_with_optional_timeout(
         result_queue.join_thread()
 
 
-def run_with_optional_history_chunk(
+def run_with_optional_history_chunk[TResult](
     *,
     runner: Callable[..., TResult],
     fn: Callable[..., TResult],

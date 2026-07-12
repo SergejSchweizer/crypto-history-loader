@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal, cast
+from typing import Literal
 
 from ingestion.spot_ohlcv import Exchange, Market
 from ingestion.trades import TradeMarket
@@ -57,7 +57,8 @@ class DatasetTask:
 
         if self.market not in {"spot_ohlcv", "perp"}:
             raise ValueError(f"Dataset task '{self.dataset_type}' is not an OHLCV task")
-        return (self.exchange, cast(Market, self.market), self.symbol, self.timeframe)
+        market: Market = "spot_ohlcv" if self.market == "spot_ohlcv" else "perp"
+        return (self.exchange, market, self.symbol, self.timeframe)
 
     def interval_tuple(self) -> tuple[Exchange, str, str]:
         """Convert an interval task to the exchange/symbol/timeframe tuple contract."""

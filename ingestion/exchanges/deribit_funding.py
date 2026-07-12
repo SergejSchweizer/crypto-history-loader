@@ -20,7 +20,7 @@ def _to_float_or_default(value: object, default: float) -> float:
         return default
     try:
         return float(cast(Any, value))
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return default
 
 

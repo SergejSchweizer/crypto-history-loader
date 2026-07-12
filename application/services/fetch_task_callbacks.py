@@ -3,13 +3,9 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import TypeVar
-
-TTask = TypeVar("TTask")
-TRow = TypeVar("TRow")
 
 
-def bind_task_chunk_callback(
+def bind_task_chunk_callback[TTask, TRow](
     task: TTask,
     on_task_chunk: Callable[[TTask, list[TRow]], None] | None,
 ) -> Callable[[list[TRow]], None] | None:

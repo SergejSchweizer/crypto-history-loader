@@ -74,6 +74,6 @@ def _resolve_builder_commit(value: object) -> str:
             text=True,
             timeout=5,
         )
-    except (OSError, subprocess.SubprocessError):
+    except OSError, subprocess.SubprocessError:
         return "unknown"
     return result.stdout.strip() or "unknown"

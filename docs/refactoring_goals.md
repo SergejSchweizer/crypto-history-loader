@@ -21,7 +21,7 @@ Existing safety net:
 - Import-linter currently enforces forbidden dependency contracts for `application -> api`, `ingestion -> api`,
   `ingestion -> application`, `ingestion.exchanges -> application`, and `api -> ingestion.lake*` persistence
   internals, plus an acyclic root-package contract.
-- Repository tooling currently targets Python 3.11 and Pyright standard mode.
+- Repository tooling currently targets Python 3.14 and Pyright standard mode.
 - CI, pre-commit, `make check`, and `tests/test_quality_gate_contract.py` now assert the same core quality-gate
   sequence: Ruff lint/format, Mypy, Pyright, Ty, import-linter, config validation, and pytest.
 - Coverage enforcement is configured in `pyproject.toml` under `[tool.coverage.report]`; the current enforced minimum
