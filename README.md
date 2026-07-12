@@ -627,6 +627,14 @@ Exact variables for the missing Silver contracts:
 Historical Gold artifacts are built by this repository. Live Gold artifacts have lineage paths under
 `/home/vcs/git/crypto-live-loader`; this is recorded in the transform-state JSON files.
 
+The Gold layer is organized around two canonical model-ready datasets:
+
+- `gold.market.history_full.m1` for historical data produced by `crypto-history-loader`
+- `gold.live.full.m1` for live-origin data produced from `crypto-live-loader` inputs
+
+Narrower Gold dataset IDs remain available as internal building blocks and compatibility outputs,
+but downstream training and inference workflows should target the two full datasets.
+
 | Origin | Gold dataset | Physical period / missing days | Variables |
 |---|---|---|---|
 | Historical | `gold.market.core.m1` | BTC 2018-08-14..2026-06-25, ETH 2019-03-14..2026-06-25, SOL 2022-04-29..2026-06-25; 0 | `timestamp_m1`, `exchange`, `symbol`, `spot_open_price`, `spot_high_price`, `spot_low_price`, `spot_close_price`, `spot_volume`, `perp_open_price`, `perp_high_price`, `perp_low_price`, `perp_close_price`, `perp_volume` |
@@ -639,7 +647,7 @@ Historical Gold artifacts are built by this repository. Live Gold artifacts have
 | Live | `option_surface_m1` | BTC/ETH/SOL on 2026-05-24 only; 0 within that day | `schema_version`, `dataset_type`, `ts_minute`, `month`, `exchange`, `instrument_type`, `currency`, `expiry_date`, `term_days`, `term_bucket`, `atm_iv`, `atm_strike`, `atm_moneyness`, `iv_near_atm_call`, `iv_near_atm_put`, `open_interest_sum`, `volume_sum`, `contract_count`, `valid_surface_contract_count`, `surface_coverage_ratio`, `skew_slope`, `smile_curvature`, `rr25`, `bf25` |
 | Live | `instrument_metadata_daily_summary` | Aggregate 2026-05-25..2026-06-07; 0 | `schema_version`, `dataset_type`, `exchange`, `snapshot_date`, `kind`, `base_currency`, `instrument_count`, `active_instrument_count`, `option_instrument_count`, `mean_strike` |
 
-Contracts without physical Gold artifacts are `gold.market.iv_rv.m1`,
+Contracts without physical Gold artifacts are `gold.market.history_full.m1`, `gold.market.iv_rv.m1`,
 `gold.market.index_price.m1`, `gold.market.futures_summary.m1`, `gold.market.regime_features.m1`,
 `gold.market.prediction_targets.m1`, `gold.live.volatility_features.m1`,
 `gold.live.microstructure_features.m1`, and `gold.hybrid.full_l2.m1`. The existing
@@ -697,8 +705,13 @@ uv run python main.py gold-build \
   --gold-root lake/gold \
   --exchange deribit \
   --maxprocesses 4 \
-  --dataset-id gold.market.full.m1
+  --dataset-id gold.market.history_full.m1
 ```
+
+`gold.market.history_full.m1` is the canonical historical Gold dataset. It joins historical
+spot/perpetual OHLCV, funding, open interest, trades, realized volatility, and IV/RV features on
+the minute grid, keeps optional historical references nullable, emits trailing strategy features,
+and excludes forward-looking targets and labels.
 
 Regime research Gold contract (optional Silver sources may be absent):
 
@@ -803,6 +816,8 @@ Gold retention policy:
 
 Available Gold dataset IDs:
 
+- Canonical historical dataset: `gold.market.history_full.m1` (contract; not yet physically materialized)
+- Canonical live dataset: `gold.live.full.m1` (planned)
 - `gold.market.perps_trades.m1` (`perps_trades` flow only)
 - `gold.market.options_trades.m1` (`options_trades` flow only)
 - `gold.market.core.m1`
