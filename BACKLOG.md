@@ -1069,6 +1069,185 @@ Acceptance:
 - CLI/config/direct service callers fail clearly when they request any other retention window.
 - Backlog and README describe fixed Gold retention.
 
+## Refactor Hardening Stack
+
+The 2026-07-12 repository rescan found five refactor issues that create the largest future maintenance risk:
+handwritten Silver command routing, duplicated Silver monthly IO/report plumbing, a broad Gold frame-preparation
+module, repeated dataset/config/CLI lists, and oversized monkeypatch-heavy tests. The following stack is atomic,
+idempotent, and behavior-preserving; each PR must keep existing public commands and dataset contracts compatible.
+
+### PR-39: Silver Build Registry Extraction
+
+Status: Planned
+
+PR: Pending - add the GitHub pull request URL when published.
+
+Branch: `codex/pr39-silver-build-registry`
+
+Depends on: PR-38
+
+Planning `git status --short`:
+
+```text
+clean
+```
+
+Goal:
+Replace the handwritten `silver-build` handler/discovery cascade in `api/commands/silver.py` with a typed dataset
+build registry that keeps dataset choices, discovery, builder functions, output dataset names, and sidecar reporting
+in one inspectable contract.
+
+Scope:
+- Add a typed `SilverBuildSpec` registry in the application layer or a command-adjacent module with no new storage side effects.
+- Move per-dataset discovery selection and handler wiring out of the long `run_silver_build` branch cascade.
+- Keep current CLI arguments, JSON output shape, logging fields, and sidecar behavior unchanged.
+- Add focused route tests that compare every existing dataset choice against exactly one registry entry.
+
+Acceptance:
+- `silver-build --dataset ...` schedules the same jobs and reports as before for every current dataset.
+- Adding a Silver dataset requires one registry entry plus tests, not edits to multiple `elif` chains.
+- Re-running the same command with unchanged inputs is idempotent and produces the same target paths and report metadata.
+- `git status --short` and the PR URL are recorded in this backlog entry before handoff.
+
+### PR-40: Shared Silver Monthly IO And Report Kernel
+
+Status: Planned
+
+PR: Pending - add the GitHub pull request URL when published.
+
+Branch: `codex/pr40-silver-monthly-io-kernel`
+
+Depends on: PR-39
+
+Planning `git status --short`:
+
+```text
+clean
+```
+
+Goal:
+Extract the repeated Silver monthly read, deterministic write, timestamp-span, duplicate-count, and
+`SilverBuildReport` aggregation patterns from `application/services/silver_service.py` and the `silver_*` builders
+into one reusable monthly build kernel.
+
+Scope:
+- Define a typed monthly build result object that owns rows in/out, duplicate counts, invalid counts, timestamp span,
+  months processed, output columns, and target path.
+- Move shared parquet path creation, month iteration, report aggregation, and UTC formatting behind explicit helpers.
+- Migrate OHLCV and one existing observed/feature pair first; leave adapters for the remaining builders to preserve behavior.
+- Keep all existing dataset paths, partition names, row ordering, and deduplication keys stable.
+
+Acceptance:
+- Focused Silver service tests prove migrated datasets write byte-equivalent schemas and identical report fields.
+- Existing public builder functions remain import-compatible for CLI and tests.
+- The new kernel has no wall-clock dependency except caller-supplied cutoffs already present in existing builders.
+- Re-running the same monthly build is idempotent and rewrites only the same deterministic target files.
+- `git status --short` and the PR URL are recorded in this backlog entry before handoff.
+
+### PR-41: Gold Frame Preparation Registry
+
+Status: Planned
+
+PR: Pending - add the GitHub pull request URL when published.
+
+Branch: `codex/pr41-gold-frame-preparation-registry`
+
+Depends on: PR-40
+
+Planning `git status --short`:
+
+```text
+clean
+```
+
+Goal:
+Split `application/services/gold_frames.py` into a registry-driven frame-preparation layer so dataset-specific
+select/cast/prefix rules, optional schemas, live lineage fields, strategy feature lookbacks, and prediction target
+definitions are explicit and independently testable.
+
+Scope:
+- Introduce typed preparation specs mapping Silver dataset types to prepare functions, required columns, output columns,
+  optional nullable schema, and source lineage semantics.
+- Move optional feature schema definitions next to their corresponding prepare specs.
+- Keep `prepare_dataset_frame`, strategy feature, and prediction-target public entrypoints compatible during migration.
+- Add tests that every Gold contract requirement has a registered preparation path or documented explicit exception.
+
+Acceptance:
+- Gold builds emit the same column order for `gold.market.history_full.m1`, `gold.market.regime_features.m1`,
+  `gold.live.volatility_features.m1`, `gold.live.microstructure_features.m1`, and `gold.live.full.m1`.
+- Optional source gaps still produce stable nullable columns and do not expand required grids.
+- The registry makes unsupported dataset types fail with one deterministic error message.
+- Re-running a Gold build with the same Silver inputs remains idempotent, including manifest hashes and version pruning.
+- `git status --short` and the PR URL are recorded in this backlog entry before handoff.
+
+### PR-42: Contract-Driven Dataset Lists And Command Choices
+
+Status: Planned
+
+PR: Pending - add the GitHub pull request URL when published.
+
+Branch: `codex/pr42-contract-driven-dataset-lists`
+
+Depends on: PR-41
+
+Planning `git status --short`:
+
+```text
+clean
+```
+
+Goal:
+Remove dataset-list drift by deriving CLI choices, complete-run command validation, inventory expectations, and docs
+checks from the typed dataset contracts and build registries instead of maintaining repeated literal lists.
+
+Scope:
+- Add contract helpers for supported Bronze-backed Silver build IDs, live-origin Silver build IDs, and supported Gold IDs.
+- Make `silver-build` and `gold-build` parser choices consume these helpers without changing accepted command values.
+- Update parser/config compatibility tests to assert config lists are subsets of contract-derived supported IDs.
+- Update README/backlog inventory validators to rely on the same canonical helper where practical.
+
+Acceptance:
+- A new dataset cannot be added to contracts without either appearing in command choices or being explicitly marked as
+  non-buildable with a test-covered reason.
+- Complete medallion command validation fails on missing or stale dataset IDs without duplicating the full list in tests.
+- Existing `config.yaml` and documented complete-run commands remain valid.
+- The refactor is idempotent: canonical helpers return sorted stable sequences and do not read local lake state.
+- `git status --short` and the PR URL are recorded in this backlog entry before handoff.
+
+### PR-43: Typed Test Fixture And Command Harness Consolidation
+
+Status: Planned
+
+PR: Pending - add the GitHub pull request URL when published.
+
+Branch: `codex/pr43-typed-test-command-harness`
+
+Depends on: PR-42
+
+Planning `git status --short`:
+
+```text
+clean
+```
+
+Goal:
+Reduce regression risk in the largest monkeypatch-heavy test modules by introducing typed fixtures and command harnesses
+for Silver routing, Gold frame builds, fetch services, and parquet fixture construction.
+
+Scope:
+- Add reusable typed fixture builders for Silver reports, Gold parquet inputs, Bronze parquet partitions, and command args.
+- Replace repeated `# type: ignore[no-untyped-def]` monkeypatch patterns in `tests/test_silver_command.py`,
+  `tests/test_gold_service.py`, and the largest fetch-service tests with typed local helpers.
+- Keep test behavior and assertions equivalent while reducing dependency on private compatibility wrappers.
+- Document fixture ownership in test module docstrings or a small test helper README if needed.
+
+Acceptance:
+- Targeted Silver command, Gold service, and fetch-service tests pass with fewer untyped test ignores.
+- Fixture helpers are deterministic, do not touch network resources, and write only under pytest `tmp_path` roots.
+- Command tests assert behavior through public CLI/service surfaces wherever practical.
+- The final stacked PR runs the complete configured quality suite plus coverage before merge readiness.
+- `git status --short` and the PR URL are recorded in this backlog entry before handoff.
+
 ## Completion Definition
 
 The stack is complete when:
