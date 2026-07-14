@@ -713,6 +713,10 @@ spot/perpetual OHLCV, funding, open interest, trades, realized volatility, and I
 the minute grid, keeps optional historical references nullable, emits trailing strategy features,
 and excludes forward-looking targets and labels.
 
+IV/RV comparison metrics in `iv_rv_1m_feature` are calculated only on the common
+`timestamp_m1/exchange/symbol` intersection of IV and realized-volatility rows. Source-only rows do
+not create spread, ratio, z-score, percentile, or correlation-like comparison values.
+
 Regime research Gold contract (optional Silver sources may be absent):
 
 ```bash
