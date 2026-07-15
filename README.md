@@ -574,14 +574,14 @@ schemas, including lineage and payload fields.
 
 ### 4.7.2 Silver: physical status and exact contract variables
 
-The following ten Silver datasets are physically present. The remaining contracted Silver outputs are
+The following eighteen Silver datasets are physically present. The remaining contracted Silver outputs are
 listed as missing and must be materialized by the backlog stack. Exact contract definitions are also
 maintained in [`application/dataset_contracts.py`](application/dataset_contracts.py).
 
 | Silver dataset | Physical period / missing days | Contract variables |
 |---|---|---|
 | `spot_ohlcv` | BTC/ETH 2023-04-24..2026-06-25, SOL 2024-02-27..2026-06-25; 0 per series | `schema_version`, `dataset_type`, `exchange`, `symbol`, `instrument_type`, `event_time`, `ingested_at`, `run_id`, `source_endpoint`, `open_time`, `close_time`, `timeframe`, `open_price`, `high_price`, `low_price`, `close_price`, `volume`, `quote_volume`, `trade_count`, `origin_payload` |
-| `perp` (legacy `perps_ohlcv`) | BTC 2018-08-14..2026-06-25, ETH 2019-03-14..2026-06-25, SOL 2022-04-29..2026-06-25; 0 | Same OHLCV variables as `spot_ohlcv` |
+| `perps_ohlcv` | BTC 2018-08-14..2026-06-25, ETH 2019-03-14..2026-06-25, SOL 2022-04-29..2026-06-25; 0 per series | Same OHLCV variables as `spot_ohlcv` |
 | `funding_observed` | BTC/ETH 2019-04-30..2026-06-24, SOL 2022-03-16..2026-06-24; 0 | `funding_time`, `exchange`, `symbol`, `base_asset`, `instrument_type`, `funding_rate`, `funding_interval_hours`, `ingested_at_min`, `ingested_at_max`, `source_row_count`, `silver_built_at`, `data_quality_status` |
 | `funding_1m_feature` | BTC/ETH 2019-04-01..2026-06-24, SOL 2022-03-01..2026-06-24; 0 | `timestamp`, `exchange`, `symbol`, `funding_rate_last_known`, `funding_observed_at`, `minutes_since_funding`, `is_funding_observation_minute`, `funding_data_available` |
 | `open_interest_observed` | BTC 2018-08-15..2026-06-24, ETH 2019-03-15..2026-06-24, SOL 2022-03-16..2026-06-24; 0 | `timestamp`, `exchange`, `symbol`, `open_interest`, `open_interest_source_timestamp`, `ingested_at`, `source_endpoint` |
@@ -590,19 +590,25 @@ maintained in [`application/dataset_contracts.py`](application/dataset_contracts
 | `perps_trades_1m_feature` | Same source spans; BTC 1,717 missing, ETH 1,939 missing, SOL 0 | `timestamp_m1`, `exchange`, `symbol`, `instrument_type`, `open_price`, `high_price`, `low_price`, `close_price`, `volume`, `quote_volume`, `trade_count`, `buy_volume`, `sell_volume`, `buy_trade_count`, `sell_trade_count`, `buy_volume_share` |
 | `options_trades_observed` | BTC 2018-08-14..2026-06-25, ETH 2019-03-21..2026-06-11: 184 missing, SOL 2022-05-04..2022-12-30; 0/184/0 | Same observed trade variables as `perps_trades_observed` |
 | `options_trades_1m_feature` | Same source spans; BTC 0, ETH 184, SOL 0 | Same 1m trade-feature variables as `perps_trades_1m_feature` |
+| `volatility_index_data_observed` | BTC/ETH 2026-04-24..2026-05-25, SOL 2022-11-07..2022-11-25; 0 per series | `timestamp`, `exchange`, `symbol`, `instrument_type`, `dataset_type`, `volatility_value`, `volatility_open`, `volatility_high`, `volatility_low`, `volatility_close`, `volatility_source_timestamp`, `ingested_at`, `source_endpoint` |
+| `volatility_index_1m_feature` | BTC/ETH 2026-04-24..2026-05-25, SOL 2022-11-07..2022-11-25; 0 per series | `timestamp_m1`, `exchange`, `symbol`, `iv_open`, `iv_high`, `iv_low`, `iv_close`, `iv_range`, `iv_return_1m`, `iv_change_5m`, `iv_change_15m`, `iv_change_1h`, `iv_zscore_1d`, `iv_zscore_7d`, `iv_percentile_30d`, `iv_source_dataset`, `iv_source_timestamp`, `minutes_since_iv_observation`, `iv_data_available` |
+| `realized_volatility_1m_feature` | BTC 2018-08-14..2026-06-25, ETH 2019-03-14..2026-06-25, SOL 2022-04-29..2026-06-25; 0 per series | `timestamp_m1`, `exchange`, `symbol`, `rv_5m`, `rv_15m`, `rv_1h`, `rv_4h`, `rv_1d`, `parkinson_rv_1h`, `jump_proxy`, `spot_available`, `perps_available` |
+| `iv_rv_1m_feature` | BTC/ETH 2026-04-24..2026-05-25, SOL 2022-11-07..2022-11-25; 0 per series | `timestamp_m1`, `exchange`, `symbol`, `iv_minus_rv_1h`, `iv_minus_rv_1d`, `iv_rv_ratio_1h`, `iv_rv_ratio_1d`, `iv_rv_zscore_1d`, `iv_rv_percentile_30d`, `minutes_since_iv_observation`, `minutes_since_rv_observation`, `iv_available`, `rv_available` |
+| `perps_l2_snapshot_1m_observed` | BTC/ETH/SOL perpetuals 2026-05-05..2026-07-14; 0 per series | `timestamp`, `exchange`, `symbol`, `instrument_type`, `instrument_name`, `underlying`, `expiry`, `strike`, `option_type`, `best_bid_price`, `best_bid_size`, `best_ask_price`, `best_ask_size`, `bids`, `asks`, `ingested_at`, `source_endpoint` |
+| `perps_l2_1m_feature` | BTC/ETH/SOL perpetuals 2026-05-05..2026-07-14; 0 per series | `timestamp_m1`, `exchange`, `symbol`, `instrument_type`, `instrument_name`, `underlying`, `expiry`, `strike`, `option_type`, `best_bid_price`, `best_ask_price`, `mid_price`, `spread`, `top_bid_size`, `top_ask_size`, `top_of_book_imbalance`, `bid_depth_10bps`, `ask_depth_10bps`, `bid_depth_50bps`, `ask_depth_50bps`, `quote_available`, `quote_age_seconds`, `stale_quote`, `minutes_since_l2_observation` |
+| `options_l2_snapshot_1m_observed` | BTC/ETH options 2026-07-03..2026-07-14; 0 per series; SOL produced 0 valid rows | Same observed L2 variables as `perps_l2_snapshot_1m_observed` |
+| `options_l2_1m_feature` | BTC/ETH options 2026-07-03..2026-07-14; 0 per series; SOL produced 0 valid rows | Same 1m L2 feature variables as `perps_l2_1m_feature` |
 
-Missing contracted Silver datasets: `volatility_index_data_observed`,
-`volatility_index_1m_observed`, `volatility_index_snapshot_1m_observed`, `volatility_index_1m_feature`,
-`realized_volatility_1m_feature`, `iv_rv_1m_feature`, `index_price_snapshot_1m_observed`,
-`index_price_1m_feature`, `futures_summary_snapshot_1m_observed`, `futures_summary_1m_feature`,
-`options_ticker_snapshot_1m_observed`, `options_instrument_ticker_snapshot_1m_observed`,
-`options_surface_1m_feature`, `perps_l2_snapshot_1m_observed`, `perps_l2_1m_feature`,
-`options_l2_snapshot_1m_observed`, `options_l2_1m_feature`, `recent_trade_snapshot_1m_observed`,
-`instrument_metadata_snapshot_daily_observed`, `futures_instrument_metadata_snapshot_daily_observed`, and
-`historical_volatility_observed`. Their exact variables are the corresponding contract `output_columns`.
+Missing contracted Silver datasets: `futures_instrument_metadata_snapshot_daily_observed`,
+`futures_summary_1m_feature`, `futures_summary_snapshot_1m_observed`, `historical_volatility_observed`,
+`index_price_1m_feature`, `index_price_snapshot_1m_observed`,
+`instrument_metadata_snapshot_daily_observed`, `options_instrument_ticker_snapshot_1m_observed`,
+`options_surface_1m_feature`, `options_ticker_snapshot_1m_observed`,
+`recent_trade_snapshot_1m_observed`, `volatility_index_1m_observed`, and
+`volatility_index_snapshot_1m_observed`. Their exact variables are the corresponding contract `output_columns`.
 They currently have no physical Silver period and therefore no observed/missing-day count.
 
-Exact variables for the missing Silver contracts:
+Exact variables for advanced Silver contracts:
 
 | Dataset | Variables |
 |---|---|
@@ -642,17 +648,17 @@ but downstream training and inference workflows should target the two full datas
 | Historical | `gold.market.perps_trades.m1` | BTC 2018-08-14..2026-06-11, ETH 2019-03-14..2026-05-29, SOL 2022-04-29..2022-12-30; 0 in Gold artifact | `timestamp_m1`, `exchange`, `symbol`, `trades_open_price`, `trades_high_price`, `trades_low_price`, `trades_close_price`, `trades_volume`, `trades_quote_volume`, `trades_trade_count`, `trades_buy_volume`, `trades_sell_volume`, `trades_buy_trade_count`, `trades_sell_trade_count`, `trades_buy_volume_share` |
 | Historical | `gold.market.options_trades.m1` | BTC 2018-08-14..2026-06-25, ETH 2019-03-21..2026-06-11, SOL 2022-05-04..2022-12-30; 0 | Same trade variables with `option_trades_` prefix |
 | Historical | `gold.market.full.m1` | BTC 2018-08-01..2026-06-25, ETH 2019-03-01..2026-06-25, SOL 2022-03-01..2026-06-25; 0 | Core plus OI flags, funding features, perp trade features, and option trade features; no IV/RV or regime variables |
+| Historical | `gold.market.history_full.m1` | BTC 2026-05-01..2026-06-25, ETH 2026-05-01..2026-06-25, SOL 2022-11-07..2026-06-25; 0 | Full historical IV/RV-ready contract: OHLCV, funding, open interest, trade-flow features, IV/RV features, optional historical volatility, index, futures summary, options surface, L2 context, and strategy feature families |
+| Live | `gold.live.full.m1` | BTC/ETH 2026-05-01..2026-07-14; 0 per series; SOL not materialized because options L2 produced 0 valid feature rows | Live full contract: volatility-index features, perp L2 features, option L2 features, and optional index, futures summary, and options surface features |
 | Live | `index_price_m1_features` | BTC/ETH/SOL 2026-05-24..2026-06-07; 0 | `schema_version`, `dataset_type`, `exchange`, `index_name`, `ts_minute`, `snapshot_count`, `price_open`, `price_high`, `price_low`, `price_close`, `price_mean`, `log_return_1m_mean` |
 | Live | `l2_m1_features` | BTC/ETH/SOL 2026-05-05..2026-06-07; 0 | `ts_minute`, `exchange`, `symbol`, `instrument_type`, `depth`, `feature_set_version`, `snapshot_count`, `coverage_ratio`, `first_snapshot_ts`, `last_snapshot_ts`, `is_complete_minute`, `quality_flags`, mid/microprice OHLC statistics, spreads, imbalance, bid/ask depth, book pressure, mark/index/OI/funding fields |
 | Live | `option_surface_m1` | BTC/ETH/SOL on 2026-05-24 only; 0 within that day | `schema_version`, `dataset_type`, `ts_minute`, `month`, `exchange`, `instrument_type`, `currency`, `expiry_date`, `term_days`, `term_bucket`, `atm_iv`, `atm_strike`, `atm_moneyness`, `iv_near_atm_call`, `iv_near_atm_put`, `open_interest_sum`, `volume_sum`, `contract_count`, `valid_surface_contract_count`, `surface_coverage_ratio`, `skew_slope`, `smile_curvature`, `rr25`, `bf25` |
 | Live | `instrument_metadata_daily_summary` | Aggregate 2026-05-25..2026-06-07; 0 | `schema_version`, `dataset_type`, `exchange`, `snapshot_date`, `kind`, `base_currency`, `instrument_count`, `active_instrument_count`, `option_instrument_count`, `mean_strike` |
 
-Contracts without physical Gold artifacts are `gold.market.history_full.m1`, `gold.market.iv_rv.m1`,
-`gold.market.index_price.m1`, `gold.market.futures_summary.m1`, `gold.market.regime_features.m1`,
-`gold.market.prediction_targets.m1`, `gold.live.volatility_features.m1`,
-`gold.live.microstructure_features.m1`, `gold.live.full.m1`, and `gold.hybrid.full_l2.m1`. The existing
-`gold.market.full.m1` must not be treated as an IV/RV-ready dataset until those feature columns and
-manifests are rebuilt.
+Contracts without physical Gold artifacts are `gold.hybrid.full_l2.m1`,
+`gold.live.microstructure_features.m1`, `gold.live.volatility_features.m1`,
+`gold.market.futures_summary.m1`, `gold.market.index_price.m1`, `gold.market.iv_rv.m1`,
+`gold.market.prediction_targets.m1`, and `gold.market.regime_features.m1`.
 
 # 5. Example Commands
 
@@ -662,11 +668,31 @@ manifests are rebuilt.
 uv run python scripts/run_medallion_pipeline.py --config config.yaml
 ```
 
-Runs `bronze-build -> silver-build -> gold-build` using `medallion-pipeline` settings from
-`config.yaml`, enforces single-run locking via `.run/full-pipeline.lock`, and writes a shared
-append-only pipeline log. The configured code path supports volatility-index OHLC fields, but the
-physical inventory in section 4.7 is authoritative: existing Gold artifacts must be rebuilt before
-they can be considered IV/RV-ready.
+Runs `metadata -> bronze-build -> silver-build -> gold-build` using `medallion-pipeline` settings
+from `config.yaml`, enforces single-run locking via `.run/full-pipeline.lock`, and writes a shared
+append-only pipeline log. The metadata step fetches the EODHD ISIN reference dataset when
+`EODHD_API_TOKEN` is present and skips cleanly when the token is absent. The configured code path
+supports volatility-index OHLC fields, but the physical inventory in section 4.7 is authoritative
+for which Gold artifacts are IV/RV-ready.
+
+EODHD ISIN reference data can also be refreshed directly:
+
+```bash
+EODHD_API_TOKEN=... uv run python scripts/fetch_eodhd_isins.py --config config.yaml
+```
+
+The fetcher writes `lake/reference/eodhd_isins/eodhd_isins.csv` and
+`lake/reference/eodhd_isins/eodhd_isins.json`, logs to `.logs/eodhd-isin-fetch.log`, and uses
+`.run/eodhd-isin-fetch.lock` for cron-safe single-run execution. Full coverage calls the active
+EODHD exchange symbol list and the delisted-only variant, then writes one deduplicated ISIN mapping
+per `isin/exchange/code`.
+
+Cron should export the token before the medallion run, for example:
+
+```cron
+EODHD_API_TOKEN=...
+17 * * * * cd /home/vcs/git/crypto-history-loader && uv run python scripts/run_medallion_pipeline.py --config config.yaml
+```
 
 ## 5.2 Layer Commands
 
@@ -835,8 +861,8 @@ Gold retention policy:
 
 Available Gold dataset IDs:
 
-- Canonical historical dataset: `gold.market.history_full.m1` (contract; not yet physically materialized)
-- Canonical live dataset: `gold.live.full.m1` (contract; not yet physically materialized)
+- Canonical historical dataset: `gold.market.history_full.m1` (physically materialized for BTC/ETH/SOL)
+- Canonical live dataset: `gold.live.full.m1` (physically materialized for BTC/ETH; SOL blocked by invalid options-L2 source rows)
 - `gold.market.perps_trades.m1` (`perps_trades` flow only)
 - `gold.market.options_trades.m1` (`options_trades` flow only)
 - `gold.market.core.m1`
@@ -849,7 +875,6 @@ Available Gold dataset IDs:
 - `gold.market.prediction_targets.m1` (contract; not yet physically materialized)
 - `gold.live.volatility_features.m1` (contract; not yet physically materialized)
 - `gold.live.microstructure_features.m1` (contract; not yet physically materialized)
-- `gold.live.full.m1` (contract; not yet physically materialized)
 - `gold.hybrid.full_l2.m1` (contract; not yet physically materialized)
 
 ## 5.4 Quality Checks
