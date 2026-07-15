@@ -65,7 +65,7 @@ def test_repo_config_medallion_pipeline_contract() -> None:
     order = pipeline_cfg.get("execution_order")
     assert isinstance(order, list) and order, "medallion-pipeline.execution_order must be a non-empty list"
 
-    allowed = {"bronze", "silver", "gold"}
+    allowed = {"metadata", "bronze", "silver", "gold"}
     unknown = [str(name) for name in order if str(name) not in allowed]
     assert not unknown, f"Unsupported medallion-pipeline layer(s): {unknown}"
 
@@ -75,10 +75,13 @@ def test_repo_config_medallion_pipeline_contract() -> None:
         assert isinstance(layer_cfg, dict), f"medallion-pipeline.{layer_name} must be a mapping"
         if not bool(layer_cfg.get("enabled", True)):
             continue
-        command = layer_cfg.get("command")
-        assert isinstance(command, str) and command.strip(), f"medallion-pipeline.{layer_name}.command is required"
         cli_args = layer_cfg.get("cli_args", [])
         assert isinstance(cli_args, list), f"medallion-pipeline.{layer_name}.cli_args must be a list"
+        script = layer_cfg.get("script")
+        command = layer_cfg.get("command")
+        assert isinstance(script, str) and script.strip() or isinstance(command, str) and command.strip(), (
+            f"medallion-pipeline.{layer_name}.command or script is required"
+        )
 
 
 def test_repo_config_builds_pipeline_steps() -> None:
