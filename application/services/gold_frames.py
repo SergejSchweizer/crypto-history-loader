@@ -305,6 +305,18 @@ def prepare_spot_ohlcv_or_perp(pl: Any, frame: Any, prefix: str, symbol: str) ->
 def prepare_open_interest(pl: Any, frame: Any, symbol: str) -> Any:
     """Prepare open-interest features for the Gold join contract."""
 
+    observed_col = "open_interest_is_observed" if "open_interest_is_observed" in frame.columns else "oi_is_observed"
+    ffill_col = "open_interest_is_ffill" if "open_interest_is_ffill" in frame.columns else "oi_is_ffill"
+    minutes_col = (
+        "minutes_since_open_interest_observation"
+        if "minutes_since_open_interest_observation" in frame.columns
+        else "minutes_since_oi_observation"
+    )
+    lag_col = (
+        "open_interest_observation_lag_sec"
+        if "open_interest_observation_lag_sec" in frame.columns
+        else "oi_observation_lag_sec"
+    )
     return (
         frame.with_columns(
             [
@@ -318,10 +330,10 @@ def prepare_open_interest(pl: Any, frame: Any, symbol: str) -> Any:
                 "exchange",
                 "symbol",
                 pl.col("open_interest").cast(pl.Float64).alias("open_interest_open_interest"),
-                pl.col("open_interest_is_observed").cast(pl.Boolean),
-                pl.col("open_interest_is_ffill").cast(pl.Boolean),
-                pl.col("minutes_since_open_interest_observation").cast(pl.Int64),
-                pl.col("open_interest_observation_lag_sec").cast(pl.Int64),
+                pl.col(observed_col).cast(pl.Boolean).alias("open_interest_is_observed"),
+                pl.col(ffill_col).cast(pl.Boolean).alias("open_interest_is_ffill"),
+                pl.col(minutes_col).cast(pl.Int64).alias("minutes_since_open_interest_observation"),
+                pl.col(lag_col).cast(pl.Int64).alias("open_interest_observation_lag_sec"),
             ]
         )
         .sort("timestamp_m1")

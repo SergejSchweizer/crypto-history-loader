@@ -27,8 +27,25 @@ bronze-build:
   save_parquet_lake: true
   no_json_output: true
 
+eodhd-isin-fetch:
+  enabled: true
+  api_token_env: EODHD_API_TOKEN
+  output_csv: lake/reference/eodhd_isins/eodhd_isins.csv
+  manifest_json: lake/reference/eodhd_isins/eodhd_isins.json
+  exchanges: []
+  include_delisted: true
+  skip_without_token: true
+  timeout_s: 60
+  sleep_s: 0.2
+  no_json_output: true
+
 medallion-pipeline:
-  execution_order: [bronze, silver, gold]
+  execution_order: [metadata, bronze, silver, gold]
+  metadata:
+    enabled: true
+    script: scripts/fetch_eodhd_isins.py
+    cli_args:
+      - --no-json-output
   bronze:
     enabled: true
     command: bronze-build

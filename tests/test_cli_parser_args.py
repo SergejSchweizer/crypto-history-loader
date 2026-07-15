@@ -121,6 +121,10 @@ def test_medallion_pipeline_cli_args_in_config_are_parser_compatible() -> None:
         assert isinstance(layer_cfg, dict), f"medallion-pipeline.{layer} must be a mapping"
         if not bool(layer_cfg.get("enabled", True)):
             continue
+        if layer_cfg.get("script"):
+            cli_args = layer_cfg.get("cli_args", [])
+            assert isinstance(cli_args, list), f"medallion-pipeline.{layer}.cli_args must be a list"
+            continue
         command = layer_cfg.get("command")
         assert isinstance(command, str) and command.strip(), f"medallion-pipeline.{layer}.command is required"
         cli_args = layer_cfg.get("cli_args", [])
