@@ -3,7 +3,7 @@
 This backlog is the source of truth for stacked, atomic PRs that bring every Bronze dataset into a
 contracted Silver representation suitable for IV/RV and regime-change research.
 
-Last updated: 2026-07-12
+Last updated: 2026-07-16
 
 ## Policy
 
@@ -1276,6 +1276,508 @@ Acceptance:
 - Fixture helpers are deterministic, do not touch network resources, and write only under pytest `tmp_path` roots.
 - Command tests assert behavior through public CLI/service surfaces wherever practical.
 - The final stacked PR runs the complete configured quality suite plus coverage before merge readiness.
+- `git status --short` and the PR URL are recorded in this backlog entry before handoff.
+
+## Refactor Architecture Stack
+
+This stack captures the next three highest-value refactor topics after rereading the repository on 2026-07-16:
+
+1. Bronze loader boundary cleanup.
+2. Silver builder registry and monthly IO consolidation.
+3. Gold frame preparation split with stronger contracts and typing.
+
+The stack is intentionally ordered from operational boundary risk to downstream feature correctness. Each PR must
+preserve existing CLI behavior, public dataset names, partition layouts, report fields, manifest hashes, and
+backward-compatible reads unless a later PR explicitly documents a migration.
+
+### PR-44: Bronze Build Request And Result Contracts
+
+Status: Planned
+
+PR: TBD
+
+Branch: `codex/pr44-bronze-build-contracts`
+
+Depends on: PR-43
+
+Planning `git status --short`:
+
+```text
+clean
+```
+
+Publication `git status --short`:
+
+```text
+TBD
+```
+
+Goal:
+Introduce typed Bronze build input and output contracts so the CLI, compatibility wrappers, runtime services,
+checkpoint handling, and fetch execution no longer exchange implicit mutable module state.
+
+Scope:
+- Add `BronzeBuildRequest`, `BronzeRuntimeContext`, `BronzeDatasetSelection`, and `BronzeBuildResult` types in the
+  application layer.
+- Keep existing command-line flags, default values, debug behavior, JSON output shape, lock paths, checkpoint keys,
+  and Bronze write locations unchanged.
+- Add conversion helpers from parsed CLI args to `BronzeBuildRequest` without moving execution logic yet.
+- Add focused tests proving current CLI argument combinations produce deterministic request objects.
+- Document every field that is wall-clock-sensitive, config-derived, environment-derived, or dataset-derived.
+
+Out of scope:
+- Do not remove compatibility wrappers yet.
+- Do not change fetch execution order, retry behavior, checkpoint writes, or lake writes.
+- Do not change public command names or aliases.
+
+Acceptance:
+- The same current Bronze CLI invocations build equivalent requests across repeated runs when config and args match.
+- Tests cover at least default loader execution, explicit dataset selection, explicit time bounds, symbol filters,
+  debug behavior, dry-run/report-only behavior where supported, and config/env override precedence.
+- New contracts are fully typed and do not import `api`.
+- `api` depends on the contracts; application contracts do not depend on CLI parser internals.
+- Existing Bronze tests continue to pass without updating lake fixtures.
+- `git status --short` and the PR URL are recorded in this backlog entry before handoff.
+
+### PR-45: Bronze Runtime Adapter Without Module-Global Mutation
+
+Status: Planned
+
+PR: TBD
+
+Branch: `codex/pr45-bronze-runtime-adapter`
+
+Depends on: PR-44
+
+Planning `git status --short`:
+
+```text
+clean
+```
+
+Publication `git status --short`:
+
+```text
+TBD
+```
+
+Goal:
+Replace CLI-to-loader module-global synchronization with an explicit runtime adapter while preserving the old
+test-facing compatibility surface during the transition.
+
+Scope:
+- Introduce a `BronzeRuntimeAdapter` or equivalent typed dependency object that carries runtime bounds, fetch hooks,
+  clock hooks, config aliases, lock policy, and checkpoint policy.
+- Route `api/cli.py` and `api/commands/loader.py` through the adapter instead of mutating imported module globals.
+- Keep existing private compatibility functions importable for tests, but make them delegate to the adapter.
+- Remove or shrink direct synchronization helpers that copy values between CLI and loader modules.
+- Add regression tests that monkeypatch the old compatibility surface and prove behavior is still preserved.
+
+Out of scope:
+- Do not split the main build workflow yet.
+- Do not change task planning, checkpoint semantics, or persistence behavior.
+- Do not change logs except for adding deterministic adapter-identification fields where useful.
+
+Acceptance:
+- There is one explicit runtime object per command invocation.
+- Parallel or repeated command invocations in the same Python process do not share mutable runtime overrides except
+  through explicitly passed dependencies.
+- Existing CLI and loader compatibility tests pass.
+- New tests prove old monkeypatch entrypoints still route to the new adapter.
+- No application-layer module imports `api`.
+- `git status --short` and the PR URL are recorded in this backlog entry before handoff.
+
+### PR-46: Bronze Workflow Stage Split
+
+Status: Planned
+
+PR: TBD
+
+Branch: `codex/pr46-bronze-workflow-stages`
+
+Depends on: PR-45
+
+Planning `git status --short`:
+
+```text
+clean
+```
+
+Publication `git status --short`:
+
+```text
+TBD
+```
+
+Goal:
+Split the Bronze build workflow into deterministic stages with explicit inputs and outputs so checkpointing,
+locking, planning, execution, persistence, and reporting can be tested independently.
+
+Scope:
+- Extract stage functions or small services for:
+  - request validation and normalization
+  - lock acquisition plan
+  - checkpoint hydration
+  - fetch task planning
+  - task execution
+  - incremental persistence
+  - final checkpoint/report construction
+- Define stage result types with stable ordering and explicit side-effect ownership.
+- Keep the existing top-level command workflow as a thin coordinator.
+- Add tests for each stage using deterministic in-memory or `tmp_path` fixtures.
+- Preserve all existing Bronze report fields and JSON output.
+
+Out of scope:
+- Do not introduce a new scheduler.
+- Do not change concurrency defaults.
+- Do not change lake partition layout, dedup keys, checkpoint keys, or raw record schema.
+
+Acceptance:
+- A no-network stage-level test can validate task planning from a fixed request/config pair.
+- A no-network stage-level test can validate checkpoint decisions from fixed checkpoint inputs.
+- The full Bronze command still writes the same deterministic target paths for the same inputs.
+- Failure handling remains observable and does not silently swallow fetch, checkpoint, or persistence errors.
+- The top-level workflow becomes a coordinator over named stage contracts rather than a monolithic implementation.
+- `git status --short` and the PR URL are recorded in this backlog entry before handoff.
+
+### PR-47: Bronze Compatibility Wrapper Retirement Plan
+
+Status: Planned
+
+PR: TBD
+
+Branch: `codex/pr47-bronze-compat-retirement`
+
+Depends on: PR-46
+
+Planning `git status --short`:
+
+```text
+clean
+```
+
+Publication `git status --short`:
+
+```text
+TBD
+```
+
+Goal:
+Retire or quarantine the legacy Bronze monkeypatch and private-wrapper surface after the new request, adapter, and
+stage contracts are covered by tests.
+
+Scope:
+- Inventory every compatibility wrapper and private import used by Bronze CLI, loader, and tests.
+- Move unavoidable compatibility shims into one clearly named module with deprecation notes and tests.
+- Update tests to prefer public request/adapter/stage contracts where practical.
+- Remove stale wrappers that no test or production path uses.
+- Add a regression test that fails if new Bronze code imports private helpers from API modules.
+
+Out of scope:
+- Do not break documented public CLI commands.
+- Do not remove compatibility that is still needed for stable tests unless the tests are migrated in the same PR.
+- Do not alter Bronze dataset behavior.
+
+Acceptance:
+- Remaining compatibility code is isolated and documented with owner, reason, and removal condition.
+- New Bronze tests target public application contracts instead of module-global monkeypatching wherever practical.
+- Import-boundary checks still pass.
+- The final Bronze refactor state is deterministic under repeated in-process command execution.
+- `git status --short` and the PR URL are recorded in this backlog entry before handoff.
+
+### PR-48: Silver Builder Spec Completeness Audit
+
+Status: Planned
+
+PR: TBD
+
+Branch: `codex/pr48-silver-builder-spec-audit`
+
+Depends on: PR-47
+
+Planning `git status --short`:
+
+```text
+clean
+```
+
+Publication `git status --short`:
+
+```text
+TBD
+```
+
+Goal:
+Audit the existing Silver build registry and monthly IO kernel against every supported Silver dataset so the next
+registry consolidation PRs can be mechanical and behavior-preserving.
+
+Scope:
+- Create or update tests proving every CLI-supported Silver dataset has exactly one builder spec or an explicit
+  documented non-buildable reason.
+- Record for each spec: source dataset family, input root policy, discovery function, build function, output dataset
+  contract, sidecar/report policy, timestamp column, dedup keys, and stable sort keys.
+- Add missing spec metadata without moving transformation code.
+- Add a deterministic fixture that compares documented spec metadata to contract helpers.
+
+Out of scope:
+- Do not rewrite individual Silver builders yet.
+- Do not change report output, partition paths, column order, or schema.
+- Do not add new Silver datasets.
+
+Acceptance:
+- A single test can list all supported Silver build specs in stable sorted order.
+- A new dataset cannot be exposed through CLI choices without a spec completeness test update.
+- Every spec declares deterministic output path, sorting, and deduplication semantics.
+- Existing Silver build behavior remains unchanged.
+- `git status --short` and the PR URL are recorded in this backlog entry before handoff.
+
+### PR-49: Silver Service Coordinator Extraction
+
+Status: Planned
+
+PR: TBD
+
+Branch: `codex/pr49-silver-service-coordinator`
+
+Depends on: PR-48
+
+Planning `git status --short`:
+
+```text
+clean
+```
+
+Publication `git status --short`:
+
+```text
+TBD
+```
+
+Goal:
+Turn the large Silver service module into a coordinator over explicit builder specs and shared monthly IO helpers,
+without changing any dataset transformation semantics.
+
+Scope:
+- Move shared path, month-discovery, write, report, and manifest utilities behind focused helper modules.
+- Keep per-dataset transformation functions import-compatible during migration.
+- Replace long handwritten dispatch paths with spec-driven coordinator calls where PR-39 left transitional code.
+- Add characterization tests for representative OHLCV, observed, feature, snapshot, and metadata datasets.
+- Keep all output columns and report fields stable.
+
+Out of scope:
+- Do not optimize performance yet.
+- Do not change row ordering except to preserve documented stable sort keys.
+- Do not remove compatibility aliases that are still imported by tests or commands.
+
+Acceptance:
+- `silver-build --dataset ...` resolves every current dataset through the same coordinator path.
+- The coordinator has no dataset-specific branches except documented exceptional cases.
+- Existing public builder functions either delegate to the coordinator or are explicitly documented as legacy adapters.
+- Re-running the same build with unchanged inputs rewrites the same deterministic output files and report metadata.
+- `git status --short` and the PR URL are recorded in this backlog entry before handoff.
+
+### PR-50: Silver Dataset Builder Module Boundaries
+
+Status: Planned
+
+PR: TBD
+
+Branch: `codex/pr50-silver-builder-boundaries`
+
+Depends on: PR-49
+
+Planning `git status --short`:
+
+```text
+clean
+```
+
+Publication `git status --short`:
+
+```text
+TBD
+```
+
+Goal:
+Move dataset-specific Silver transformation logic into cohesive builder modules with explicit contracts, leaving
+shared IO, discovery, and reporting in reusable infrastructure helpers.
+
+Scope:
+- Group builders by source/semantic family:
+  - OHLCV
+  - funding/open-interest
+  - trades
+  - volatility/index
+  - futures/options snapshots
+  - L2/orderbook
+  - metadata
+- Each builder module declares its accepted input columns, output columns, dedup keys, timestamp semantics, and
+  missing-data handling.
+- Add focused tests per family using minimal deterministic parquet fixtures.
+- Keep the registry as the only place that wires builder modules to CLI-exposed dataset names.
+
+Out of scope:
+- Do not introduce new feature definitions.
+- Do not change Silver contract names.
+- Do not change Gold requirements.
+
+Acceptance:
+- `application/services/silver_service.py` no longer owns dataset-specific transformation details.
+- Builder modules have explicit public entrypoints and typed return reports.
+- Tests fail deterministically if a builder emits columns outside its declared contract.
+- Import-linter still enforces application/API/ingestion boundaries.
+- `git status --short` and the PR URL are recorded in this backlog entry before handoff.
+
+### PR-51: Gold Source Preparation Module Split
+
+Status: Planned
+
+PR: TBD
+
+Branch: `codex/pr51-gold-source-preparation-split`
+
+Depends on: PR-50
+
+Planning `git status --short`:
+
+```text
+clean
+```
+
+Publication `git status --short`:
+
+```text
+TBD
+```
+
+Goal:
+Split Gold frame preparation into source-specific modules so source normalization, optional columns, lineage handling,
+and exact-time alignment rules are explicit and testable.
+
+Scope:
+- Extract source preparation logic into modules such as:
+  - `gold/source_preparation.py`
+  - `gold/optional_sources.py`
+  - `gold/source_specs.py`
+- Define typed `GoldSourceSpec` objects for required and optional sources.
+- Preserve existing `prepare_dataset_frame` compatibility by delegating to the new spec registry.
+- Add tests proving required and optional sources keep existing column order, nullability, prefixing, and lineage fields.
+- Add tests that unsupported source dataset types fail with one deterministic error message.
+
+Out of scope:
+- Do not change Gold feature definitions, target definitions, version retention, or manifest behavior.
+- Do not change Silver input contract requirements.
+- Do not remove public Gold service entrypoints.
+
+Acceptance:
+- Every Gold contract source requirement has one registered source preparation spec or a documented exception.
+- Optional source gaps still create stable nullable columns without expanding the required time grid.
+- Existing Gold build tests continue to pass.
+- `gold_frames.py` becomes smaller and no longer owns all source-specific preparation logic.
+- `git status --short` and the PR URL are recorded in this backlog entry before handoff.
+
+### PR-52: Gold Feature And Target Family Split
+
+Status: Planned
+
+PR: TBD
+
+Branch: `codex/pr52-gold-feature-target-split`
+
+Depends on: PR-51
+
+Planning `git status --short`:
+
+```text
+clean
+```
+
+Publication `git status --short`:
+
+```text
+TBD
+```
+
+Goal:
+Separate Gold reusable market-state features from prediction targets and labels so leakage-sensitive logic has clear
+module boundaries and focused tests.
+
+Scope:
+- Extract feature construction into modules such as:
+  - `gold/strategy_features.py`
+  - `gold/regime_features.py`
+  - `gold/microstructure_features.py`
+- Extract prediction targets and labels into `gold/prediction_targets.py`.
+- Keep feature and target functions pure with explicit input columns, output columns, lookback/lookahead windows,
+  null policy, and timestamp alignment policy.
+- Add tests that target columns are never included in reusable feature-only Gold datasets.
+- Add tests that lookahead-dependent target logic is isolated from feature construction.
+
+Out of scope:
+- Do not change feature math unless an existing test proves a bug.
+- Do not add new model labels.
+- Do not change Gold dataset IDs.
+
+Acceptance:
+- Feature-only Gold datasets do not import target-building modules.
+- Target-building modules declare lookahead windows and output labels explicitly.
+- Existing Gold output schemas remain stable.
+- Leakage prevention is enforced by tests rather than comments only.
+- `git status --short` and the PR URL are recorded in this backlog entry before handoff.
+
+### PR-53: Gold Typing And Pyright Suppression Reduction
+
+Status: Planned
+
+PR: TBD
+
+Branch: `codex/pr53-gold-typing-pyright-cleanup`
+
+Depends on: PR-52
+
+Planning `git status --short`:
+
+```text
+clean
+```
+
+Publication `git status --short`:
+
+```text
+TBD
+```
+
+Goal:
+Reduce broad Gold type suppressions by introducing typed frame aliases, small DTOs, and local helper protocols where
+Polars-heavy code crosses contract boundaries.
+
+Scope:
+- Replace file-wide or broad unknown-type suppressions in Gold service modules with local typed helper wrappers where
+  practical.
+- Add typed aliases or protocols for prepared source frames, joined Gold frames, feature frames, target frames, and
+  build reports.
+- Keep public Gold service signatures explicit and import-compatible.
+- Add focused type-check tests or CI-covered examples for representative Gold build paths.
+- Document remaining unavoidable Polars typing gaps with precise local comments.
+
+Out of scope:
+- Do not attempt to type every internal Polars expression if it creates noisy casts without boundary value.
+- Do not relax pyright, mypy, ruff, coverage, or import-linter configuration.
+- Do not change Gold runtime behavior.
+
+Acceptance:
+- Broad Gold module suppressions are removed or materially narrowed.
+- Public Gold service functions have explicit parameter and return types.
+- Type-checking remains at least as strict as before.
+- Gold tests and import-boundary checks pass.
+- This final PR in the refactor architecture stack runs the complete configured quality suite:
+  - `ruff check .`
+  - `ruff format --check .`
+  - `pyright`
+  - `pytest -q`
+  - `coverage run -m pytest`
+  - `coverage report`
+  - import-linter/schema validation commands if configured in this repository
 - `git status --short` and the PR URL are recorded in this backlog entry before handoff.
 
 ## Completion Definition
