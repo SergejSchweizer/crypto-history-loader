@@ -13,14 +13,6 @@ from api.commands import loader as loader_cmd
 from api.commands import stats as stats_cmd
 from api.commands.gold import add_gold_build_parser, run_gold_build
 from api.commands.inventory import add_dataset_inventory_parser, run_dataset_inventory
-from api.commands.isin_modules import (
-    add_isin_module_parsers,
-    run_bivariate_statistics_command,
-    run_fetch_all_isins,
-    run_metadata_filter_command,
-    run_univariate_filter_command,
-    run_univariate_statistics_command,
-)
 from api.commands.loader import add_bronze_build_parser
 from api.commands.silver import add_silver_build_parser, run_silver_build
 from api.commands.stats import add_export_descriptive_stats_parser, run_export_descriptive_stats
@@ -152,7 +144,6 @@ def build_parser() -> argparse.ArgumentParser:
     add_silver_build_parser(subparsers)
     add_gold_build_parser(subparsers)
     add_dataset_inventory_parser(subparsers)
-    add_isin_module_parsers(subparsers)
     add_list_spot_ohlcv_timeframes_parser(subparsers)
     add_export_descriptive_stats_parser(subparsers)
 
@@ -317,18 +308,6 @@ def main() -> None:
         args._invoked_via_cli = True
         _sync_loader_runtime_overrides()
         loader_cmd.run_bronze_build(args=args, logger=logger)
-    elif args.command == "fetch-all-isins":
-        exit_code = run_fetch_all_isins(args=args, logger=logger)
-        if exit_code:
-            raise SystemExit(exit_code)
-    elif args.command == "metadata-filter":
-        run_metadata_filter_command(args=args, logger=logger)
-    elif args.command == "univariate-statistics":
-        run_univariate_statistics_command(args=args, logger=logger)
-    elif args.command == "univariate-filter":
-        run_univariate_filter_command(args=args, logger=logger)
-    elif args.command == "bivariate-statistics":
-        run_bivariate_statistics_command(args=args, logger=logger)
     elif args.command == "silver-build":
         run_silver_build(args=args, logger=logger)
     elif args.command == "gold-build":

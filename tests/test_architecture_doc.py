@@ -26,10 +26,5 @@ def test_architecture_doc_mentions_enforced_boundaries_and_contracts() -> None:
         "application/dataset_contracts.py",
         "config.yaml",
         "lake/bronze -> lake/silver -> lake/gold",
-        "fetch_all_isins",
-        "metadata_filter",
-        "univariate_statistics",
-        "univariate_filter",
-        "bivariate_statistics",
     ):
         assert expected in text

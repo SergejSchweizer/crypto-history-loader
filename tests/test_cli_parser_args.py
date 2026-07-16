@@ -92,40 +92,6 @@ EXPECTED_MEDALLION_SILVER_DATASETS = set(supported_silver_build_ids())
             {"instrument_types": ["spot_ohlcv"]},
         ),
         (["export-descriptive-stats", "--no-json-output"], {"no_json_output": True}),
-        (["fetch-all-isins", "--no-json-output"], {"no_json_output": True}),
-        (["fetch-all-isins", "--exchange-codes", "US", "XETRA"], {"exchange_codes": ["US", "XETRA"]}),
-        (
-            ["metadata-filter", "--where", "exchange=US", "type=ETF"],
-            {"where": ["exchange=US", "type=ETF"]},
-        ),
-        (
-            ["metadata-filter", "--all-isins-csv", "lake/reference/all_isins/all_isins.csv"],
-            {"all_isins_csv": "lake/reference/all_isins/all_isins.csv"},
-        ),
-        (
-            ["univariate-statistics", "--prices-csv", "prices.csv", "--price-column", "close"],
-            {"prices_csv": "prices.csv", "price_column": "close"},
-        ),
-        (
-            ["univariate-filter", "--where", "sharpe>0", "max_drawdown>-0.2"],
-            {"where": ["sharpe>0", "max_drawdown>-0.2"]},
-        ),
-        (
-            ["bivariate-statistics", "--selection-csv", "selection.csv", "--prices-csv", "prices.csv"],
-            {"selection_csv": "selection.csv", "prices_csv": "prices.csv"},
-        ),
-        (
-            [
-                "bivariate-statistics",
-                "--selection-csv",
-                "selection.csv",
-                "--prices-csv",
-                "prices.csv",
-                "--min-overlap",
-                "90",
-            ],
-            {"min_overlap": 90},
-        ),
     ],
 )
 def test_cli_argument_parsing_individual_arguments(argv: list[str], expected: dict[str, object]) -> None:
@@ -154,10 +120,6 @@ def test_medallion_pipeline_cli_args_in_config_are_parser_compatible() -> None:
         layer_cfg = pipeline_cfg.get(str(layer))
         assert isinstance(layer_cfg, dict), f"medallion-pipeline.{layer} must be a mapping"
         if not bool(layer_cfg.get("enabled", True)):
-            continue
-        if layer_cfg.get("script"):
-            cli_args = layer_cfg.get("cli_args", [])
-            assert isinstance(cli_args, list), f"medallion-pipeline.{layer}.cli_args must be a list"
             continue
         command = layer_cfg.get("command")
         assert isinstance(command, str) and command.strip(), f"medallion-pipeline.{layer}.command is required"
