@@ -51,6 +51,7 @@ class FetchConfig:
 
     enabled: bool
     token_env: str
+    secret_config: Path
     output_csv: Path
     manifest_json: Path
     exchanges: tuple[str, ...]
@@ -189,6 +190,11 @@ def build_fetch_config(args: argparse.Namespace, *, repo_root: Path, config_data
         default=Path(".run/eodhd-isin-fetch.lock"),
         repo_root=repo_root,
     )
+    secret_config = _resolve_path(
+        cfg.get("secret_config"),
+        default=Path(".secrets/eodhd.yaml"),
+        repo_root=repo_root,
+    )
     exchanges = (
         tuple(code.strip().upper() for code in args.exchange_codes if code.strip())
         if args.exchange_codes
@@ -201,6 +207,7 @@ def build_fetch_config(args: argparse.Namespace, *, repo_root: Path, config_data
     return FetchConfig(
         enabled=_bool_value(cfg.get("enabled"), default=True),
         token_env=str(cfg.get("api_token_env", "EODHD_API_TOKEN")).strip() or "EODHD_API_TOKEN",
+        secret_config=secret_config.resolve(),
         output_csv=output_csv.resolve(),
         manifest_json=manifest_json.resolve(),
         exchanges=exchanges,
@@ -211,6 +218,46 @@ def build_fetch_config(args: argparse.Namespace, *, repo_root: Path, config_data
         lock_file=lock_file.resolve(),
         no_json_output=args.no_json_output or _bool_value(cfg.get("no_json_output"), default=False),
     )
+
+
+def _api_token_from_mapping(config_data: dict[str, Any]) -> str:
+    """Read an EODHD API token from a local secret config mapping."""
+
+    for key in ("api_key", "api_token"):
+        value = config_data.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+
+    section = config_data.get(DEFAULT_CONFIG_SECTION)
+    if isinstance(section, dict):
+        for key in ("api_key", "api_token"):
+            value = section.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+
+    eodhd_section = config_data.get("eodhd")
+    if isinstance(eodhd_section, dict):
+        for key in ("api_key", "api_token"):
+            value = eodhd_section.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+
+    return ""
+
+
+def read_api_token(config: FetchConfig) -> tuple[str, str]:
+    """Read the EODHD API token from local secret config first, then environment fallback."""
+
+    if config.secret_config.exists():
+        token = _api_token_from_mapping(_load_yaml(config.secret_config))
+        if token:
+            return token, str(config.secret_config)
+
+    env_token = os.environ.get(config.token_env, "").strip()
+    if env_token:
+        return env_token, config.token_env
+
+    return "", f"{config.secret_config} or {config.token_env}"
 
 
 def _request_json(path: str, params: dict[str, str], timeout_s: float) -> Any:
@@ -418,9 +465,9 @@ def main() -> int:
         logger.info("EODHD ISIN fetch disabled by config")
         return 0
 
-    api_token = os.environ.get(config.token_env, "").strip()
+    api_token, token_source = read_api_token(config)
     if not api_token:
-        message = f"Missing EODHD API token env var: {config.token_env}"
+        message = f"Missing EODHD API token in {token_source}"
         if config.skip_without_token:
             logger.warning("%s; skipping EODHD ISIN fetch", message)
             return 0
@@ -433,7 +480,10 @@ def main() -> int:
             return 1
         fetched_at_utc = _utc_now()
         logger.info(
-            "EODHD ISIN fetch started output=%s include_delisted=%s", config.output_csv, config.include_delisted
+            "EODHD ISIN fetch started output=%s include_delisted=%s token_source=%s",
+            config.output_csv,
+            config.include_delisted,
+            token_source,
         )
         rows = fetch_isin_rows(config, api_token=api_token, fetched_at_utc=fetched_at_utc, logger=logger)
         manifest = write_outputs(config, rows=rows, fetched_at_utc=fetched_at_utc)
