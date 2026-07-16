@@ -1292,9 +1292,7 @@ backward-compatible reads unless a later PR explicitly documents a migration.
 
 ### PR-44: Bronze Build Request And Result Contracts
 
-Status: Planned
-
-PR: TBD
+Status: Done - PR #134: https://github.com/SergejSchweizer/crypto-history-loader/pull/134
 
 Branch: `codex/pr44-bronze-build-contracts`
 
@@ -1309,7 +1307,8 @@ clean
 Publication `git status --short`:
 
 ```text
-TBD
+?? application/bronze_contracts.py
+?? tests/test_bronze_contracts.py
 ```
 
 Goal:
