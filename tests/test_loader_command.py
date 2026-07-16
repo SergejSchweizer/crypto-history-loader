@@ -12,10 +12,30 @@ from typing import Any, cast
 import pytest
 
 from api.commands import loader as loader_cmd
+from api.commands.loader_execution import FetchAllTaskGroupsResult
 from application.dto import CandleFetchTaskDTO, PersistResultDTO, TradeFetchTaskDTO
 from application.services.bronze_runtime_service import BronzeRuntimeBoundsContext
 from ingestion.spot_ohlcv import SpotCandle
 from ingestion.trades import OptionTradeTick, TradeTick
+
+
+def _empty_fetch_result(
+    candle_results: dict[tuple[str, str, str, str], list[object]] | None = None,
+) -> FetchAllTaskGroupsResult:
+    """Build a stage-execution result with all groups empty except an optional candle override."""
+
+    return FetchAllTaskGroupsResult(
+        candle_results=candle_results or {},
+        candle_errors={},
+        open_interest_results={},
+        open_interest_errors={},
+        funding_results={},
+        funding_errors={},
+        volatility_results={},
+        volatility_errors={},
+        trade_results={},
+        trade_errors={},
+    )
 
 
 def test_run_bronze_build_emits_manifest_and_plot_file_lists(tmp_path: Path, monkeypatch, capsys) -> None:  # type: ignore[no-untyped-def]
@@ -62,17 +82,17 @@ def test_run_bronze_build_emits_manifest_and_plot_file_lists(tmp_path: Path, mon
                 CandleFetchTaskDTO(exchange="deribit", market="spot_ohlcv", symbol="BTCUSDT", timeframe="1m"),
                 [candle],
             )
-        return (
-            {("deribit", "spot_ohlcv", "BTCUSDT", "1m"): [candle]},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
+        return FetchAllTaskGroupsResult(
+            candle_results={("deribit", "spot_ohlcv", "BTCUSDT", "1m"): [candle]},
+            candle_errors={},
+            open_interest_results={},
+            open_interest_errors={},
+            funding_results={},
+            funding_errors={},
+            volatility_results={},
+            volatility_errors={},
+            trade_results={},
+            trade_errors={},
         )
 
     monkeypatch.setattr(loader_cmd, "SingleInstanceLock", _NoopLock)
@@ -156,15 +176,17 @@ def test_run_bronze_build_persists_trade_chunks_incrementally(
         assert callable(callback)
         cast(Any, callback)(TradeFetchTaskDTO(exchange="deribit", market="perp", symbol="BTC"), [perp_tick])
         cast(Any, callback)(TradeFetchTaskDTO(exchange="deribit", market="option", symbol="BTC"), [option_tick])
-        return (
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {("deribit", "perp", "BTC"): [perp_tick], ("deribit", "option", "BTC"): [option_tick]},
-            {},
+        return FetchAllTaskGroupsResult(
+            candle_results={},
+            candle_errors={},
+            open_interest_results={},
+            open_interest_errors={},
+            funding_results={},
+            funding_errors={},
+            volatility_results={},
+            volatility_errors={},
+            trade_results={("deribit", "perp", "BTC"): [perp_tick], ("deribit", "option", "BTC"): [option_tick]},
+            trade_errors={},
         )
 
     def _fake_persist_loader_outputs_dto(**kwargs: object) -> PersistResultDTO:
@@ -289,7 +311,7 @@ def test_run_bronze_build_drops_invalid_symbols_before_scheduling(monkeypatch) -
         scheduled_candle_tasks.extend(cast(Any, kwargs["candle_tasks"]))
         scheduled_open_interest_tasks.extend(cast(Any, kwargs["open_interest_tasks"]))
         scheduled_funding_tasks.extend(cast(Any, kwargs["funding_tasks"]))
-        return ({}, {}, {}, {}, {}, {}, {}, {}, {}, {})
+        return _empty_fetch_result()
 
     monkeypatch.setattr(loader_cmd, "SingleInstanceLock", _NoopLock)
     monkeypatch.setattr(loader_cmd, "_fetch_all_task_groups", _fake_fetch_all_task_groups)
@@ -354,7 +376,7 @@ def test_run_bronze_build_still_routes_through_monkeypatched_compat_bounds_funct
         return fake_context
 
     def _fake_fetch_all_task_groups(**kwargs: object):  # type: ignore[no-untyped-def]
-        return ({}, {}, {}, {}, {}, {}, {}, {}, {}, {})
+        return _empty_fetch_result()
 
     monkeypatch.setattr(loader_cmd, "SingleInstanceLock", _NoopLock)
     monkeypatch.setattr(loader_cmd, "_configure_bronze_start_bounds", _fake_configure_bronze_start_bounds)
@@ -426,7 +448,7 @@ def test_run_bronze_build_uses_symbols_for_trade_tasks(monkeypatch) -> None:  # 
 
     def _fake_fetch_all_task_groups(**kwargs: object):  # type: ignore[no-untyped-def]
         scheduled_trade_tasks.extend(cast(Any, kwargs["trade_tasks"]))
-        return ({}, {}, {}, {}, {}, {}, {}, {}, {}, {})
+        return _empty_fetch_result()
 
     monkeypatch.setattr(loader_cmd, "SingleInstanceLock", _NoopLock)
     monkeypatch.setattr(loader_cmd, "_fetch_all_task_groups", _fake_fetch_all_task_groups)
@@ -546,7 +568,7 @@ def test_run_bronze_build_resumes_from_checkpoint_and_clears_on_success(
         candle_tasks = cast(list[tuple[str, str, str, str]], kwargs["candle_tasks"])
         scheduled.extend(candle_tasks)
         rows = {task: [] for task in candle_tasks}
-        return (rows, {}, {}, {}, {}, {}, {}, {}, {}, {})
+        return _empty_fetch_result(candle_results=rows)
 
     monkeypatch.setattr(loader_cmd, "_fetch_all_task_groups", _fake_fetch_all_task_groups)
 

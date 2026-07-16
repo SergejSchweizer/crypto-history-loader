@@ -257,32 +257,16 @@ def run_bronze_build(
                     else None,
                 ),
             )
-            if len(fetch_results) == 8:
-                (
-                    task_results,
-                    task_errors,
-                    open_interest_results,
-                    open_interest_errors,
-                    funding_results,
-                    funding_errors,
-                    trade_results,
-                    trade_errors,
-                ) = fetch_results
-                volatility_index_data_results = {}
-                volatility_index_data_errors = {}
-            else:
-                (
-                    task_results,
-                    task_errors,
-                    open_interest_results,
-                    open_interest_errors,
-                    funding_results,
-                    funding_errors,
-                    volatility_index_data_results,
-                    volatility_index_data_errors,
-                    trade_results,
-                    trade_errors,
-                ) = fetch_results
+            task_results = fetch_results.candle_results
+            task_errors = fetch_results.candle_errors
+            open_interest_results = fetch_results.open_interest_results
+            open_interest_errors = fetch_results.open_interest_errors
+            funding_results = fetch_results.funding_results
+            funding_errors = fetch_results.funding_errors
+            volatility_index_data_results = fetch_results.volatility_results
+            volatility_index_data_errors = fetch_results.volatility_errors
+            trade_results = fetch_results.trade_results
+            trade_errors = fetch_results.trade_errors
             for key in task_results:
                 _mark_checkpoint_complete("candle", key)
             for open_interest_key in open_interest_results:

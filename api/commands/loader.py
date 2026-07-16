@@ -18,6 +18,7 @@ from api.commands.loader_dataset_handlers import (
     populate_trades_output,
     populate_volatility_output,
 )
+from api.commands.loader_execution import FetchAllTaskGroupsResult
 from api.commands.loader_execution import fetch_all_task_groups as fetch_all_task_groups_execution
 from api.commands.loader_fetchers import BronzeSymbolFetchDependencies
 from api.commands.loader_workflow import BronzeWorkflowDependencies
@@ -448,70 +449,43 @@ def _fetch_all_task_groups(
     on_funding_task_chunk: Callable[[FundingFetchTaskDTO, list[FundingPoint]], None] | None = None,
     on_volatility_index_data_task_chunk: Callable[[VolatilityFetchTaskDTO, list[VolatilityPoint]], None] | None = None,
     on_trade_task_chunk: Callable[[TradeFetchTaskDTO, list[TradeTick | OptionTradeTick]], None] | None = None,
-) -> tuple[
-    dict[tuple[Exchange, Market, str, str], list[SpotCandle]],
-    dict[tuple[Exchange, Market, str, str], str],
-    dict[tuple[Exchange, str, str], list[OpenInterestPoint]],
-    dict[tuple[Exchange, str, str], str],
-    dict[tuple[Exchange, str, str], list[FundingPoint]],
-    dict[tuple[Exchange, str, str], str],
-    dict[tuple[Exchange, str, str], list[VolatilityPoint]],
-    dict[tuple[Exchange, str, str], str],
-    dict[tuple[Exchange, TradeMarket, str], list[TradeTick | OptionTradeTick]],
-    dict[tuple[Exchange, TradeMarket, str], str],
-]:
+) -> FetchAllTaskGroupsResult:
     """Fetch task groups sequentially across dataset types."""
 
-    return cast(
-        tuple[
-            dict[tuple[Exchange, Market, str, str], list[SpotCandle]],
-            dict[tuple[Exchange, Market, str, str], str],
-            dict[tuple[Exchange, str, str], list[OpenInterestPoint]],
-            dict[tuple[Exchange, str, str], str],
-            dict[tuple[Exchange, str, str], list[FundingPoint]],
-            dict[tuple[Exchange, str, str], str],
-            dict[tuple[Exchange, str, str], list[VolatilityPoint]],
-            dict[tuple[Exchange, str, str], str],
-            dict[tuple[Exchange, TradeMarket, str], list[TradeTick | OptionTradeTick]],
-            dict[tuple[Exchange, TradeMarket, str], str],
-        ],
-        fetch_all_task_groups_execution(
-            candle_tasks=cast(list[tuple[str, str, str, str]], candle_tasks),
-            open_interest_tasks=cast(list[tuple[str, str, str]], open_interest_tasks),
-            funding_tasks=cast(list[tuple[str, str, str]], funding_tasks),
-            volatility_tasks=cast(list[tuple[str, str, str]], volatility_index_data_tasks),
-            trade_tasks=cast(list[tuple[str, str, str]] | None, trade_tasks),
-            lake_root=lake_root,
-            candle_concurrency=candle_concurrency,
-            open_interest_concurrency=open_interest_concurrency,
-            funding_concurrency=funding_concurrency,
-            volatility_concurrency=volatility_concurrency,
-            trade_concurrency=trade_concurrency,
-            logger=logger,
-            fetch_candles_fn=cast(Callable[..., object], _fetch_candle_tasks_parallel),
-            fetch_open_interest_fn=cast(Callable[..., object], _fetch_open_interest_tasks_parallel),
-            fetch_funding_fn=cast(Callable[..., object], _fetch_funding_tasks_parallel),
-            fetch_volatility_fn=cast(Callable[..., object], _fetch_volatility_index_data_tasks_parallel),
-            fetch_trades_fn=cast(Callable[..., object], _fetch_trade_tasks_parallel),
-            on_candle_task_complete=cast(Callable[[object, list[object]], None] | None, on_candle_task_complete),
-            on_open_interest_task_complete=cast(
-                Callable[[object, list[object]], None] | None, on_open_interest_task_complete
-            ),
-            on_funding_task_complete=cast(Callable[[object, list[object]], None] | None, on_funding_task_complete),
-            on_volatility_task_complete=cast(
-                Callable[[object, list[object]], None] | None, on_volatility_index_data_task_complete
-            ),
-            on_trade_task_complete=cast(Callable[[object, list[object]], None] | None, on_trade_task_complete),
-            on_candle_task_chunk=cast(Callable[[object, list[object]], None] | None, on_candle_task_chunk),
-            on_open_interest_task_chunk=cast(
-                Callable[[object, list[object]], None] | None, on_open_interest_task_chunk
-            ),
-            on_funding_task_chunk=cast(Callable[[object, list[object]], None] | None, on_funding_task_chunk),
-            on_volatility_task_chunk=cast(
-                Callable[[object, list[object]], None] | None, on_volatility_index_data_task_chunk
-            ),
-            on_trade_task_chunk=cast(Callable[[object, list[object]], None] | None, on_trade_task_chunk),
+    return fetch_all_task_groups_execution(
+        candle_tasks=cast(list[tuple[str, str, str, str]], candle_tasks),
+        open_interest_tasks=cast(list[tuple[str, str, str]], open_interest_tasks),
+        funding_tasks=cast(list[tuple[str, str, str]], funding_tasks),
+        volatility_tasks=cast(list[tuple[str, str, str]], volatility_index_data_tasks),
+        trade_tasks=cast(list[tuple[str, str, str]] | None, trade_tasks),
+        lake_root=lake_root,
+        candle_concurrency=candle_concurrency,
+        open_interest_concurrency=open_interest_concurrency,
+        funding_concurrency=funding_concurrency,
+        volatility_concurrency=volatility_concurrency,
+        trade_concurrency=trade_concurrency,
+        logger=logger,
+        fetch_candles_fn=cast(Callable[..., object], _fetch_candle_tasks_parallel),
+        fetch_open_interest_fn=cast(Callable[..., object], _fetch_open_interest_tasks_parallel),
+        fetch_funding_fn=cast(Callable[..., object], _fetch_funding_tasks_parallel),
+        fetch_volatility_fn=cast(Callable[..., object], _fetch_volatility_index_data_tasks_parallel),
+        fetch_trades_fn=cast(Callable[..., object], _fetch_trade_tasks_parallel),
+        on_candle_task_complete=cast(Callable[[object, list[object]], None] | None, on_candle_task_complete),
+        on_open_interest_task_complete=cast(
+            Callable[[object, list[object]], None] | None, on_open_interest_task_complete
         ),
+        on_funding_task_complete=cast(Callable[[object, list[object]], None] | None, on_funding_task_complete),
+        on_volatility_task_complete=cast(
+            Callable[[object, list[object]], None] | None, on_volatility_index_data_task_complete
+        ),
+        on_trade_task_complete=cast(Callable[[object, list[object]], None] | None, on_trade_task_complete),
+        on_candle_task_chunk=cast(Callable[[object, list[object]], None] | None, on_candle_task_chunk),
+        on_open_interest_task_chunk=cast(Callable[[object, list[object]], None] | None, on_open_interest_task_chunk),
+        on_funding_task_chunk=cast(Callable[[object, list[object]], None] | None, on_funding_task_chunk),
+        on_volatility_task_chunk=cast(
+            Callable[[object, list[object]], None] | None, on_volatility_index_data_task_chunk
+        ),
+        on_trade_task_chunk=cast(Callable[[object, list[object]], None] | None, on_trade_task_chunk),
     )
 
 

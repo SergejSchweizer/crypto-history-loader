@@ -7,28 +7,26 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import cast
 
-type FetchAllResult8 = tuple[
-    dict[tuple[str, str, str, str], list[object]],
-    dict[tuple[str, str, str, str], str],
-    dict[tuple[str, str, str], list[object]],
-    dict[tuple[str, str, str], str],
-    dict[tuple[str, str, str], list[object]],
-    dict[tuple[str, str, str], str],
-    dict[tuple[str, str, str], list[object]],
-    dict[tuple[str, str, str], str],
-]
-type FetchAllResult10 = tuple[
-    dict[tuple[str, str, str, str], list[object]],
-    dict[tuple[str, str, str, str], str],
-    dict[tuple[str, str, str], list[object]],
-    dict[tuple[str, str, str], str],
-    dict[tuple[str, str, str], list[object]],
-    dict[tuple[str, str, str], str],
-    dict[tuple[str, str, str], list[object]],
-    dict[tuple[str, str, str], str],
-    dict[tuple[str, str, str], list[object]],
-    dict[tuple[str, str, str], str],
-]
+
+@dataclass(frozen=True)
+class FetchAllTaskGroupsResult:
+    """Explicit, stably-ordered result of one execution-stage fetch pass.
+
+    Replaces the previous ``8``- or ``10``-tuple return shape (disambiguated by callers via
+    fragile ``len(...)`` checks) with a single named result type. ``volatility_results`` and
+    ``volatility_errors`` are empty dicts when no volatility fetcher was configured for the run.
+    """
+
+    candle_results: dict[tuple[str, str, str, str], list[object]]
+    candle_errors: dict[tuple[str, str, str, str], str]
+    open_interest_results: dict[tuple[str, str, str], list[object]]
+    open_interest_errors: dict[tuple[str, str, str], str]
+    funding_results: dict[tuple[str, str, str], list[object]]
+    funding_errors: dict[tuple[str, str, str], str]
+    volatility_results: dict[tuple[str, str, str], list[object]]
+    volatility_errors: dict[tuple[str, str, str], str]
+    trade_results: dict[tuple[str, str, str], list[object]]
+    trade_errors: dict[tuple[str, str, str], str]
 
 
 @dataclass(frozen=True)
@@ -98,7 +96,7 @@ def fetch_all_task_groups(
     on_funding_task_chunk: Callable[[object, list[object]], None] | None = None,
     on_volatility_task_chunk: Callable[[object, list[object]], None] | None = None,
     on_trade_task_chunk: Callable[[object, list[object]], None] | None = None,
-) -> FetchAllResult8 | FetchAllResult10:
+) -> FetchAllTaskGroupsResult:
     """Fetch all configured task groups sequentially."""
 
     task_results: dict[tuple[str, str, str, str], list[object]] = {}
@@ -186,26 +184,15 @@ def fetch_all_task_groups(
             trade_results.update(cast(dict[tuple[str, str, str], list[object]], rows))
             trade_errors.update(cast(dict[tuple[str, str, str], str], errors))
 
-    if include_volatility:
-        return (
-            task_results,
-            task_errors,
-            open_interest_results,
-            open_interest_errors,
-            funding_results,
-            funding_errors,
-            volatility_results,
-            volatility_errors,
-            trade_results,
-            trade_errors,
-        )
-    return (
-        task_results,
-        task_errors,
-        open_interest_results,
-        open_interest_errors,
-        funding_results,
-        funding_errors,
-        trade_results,
-        trade_errors,
+    return FetchAllTaskGroupsResult(
+        candle_results=task_results,
+        candle_errors=task_errors,
+        open_interest_results=open_interest_results,
+        open_interest_errors=open_interest_errors,
+        funding_results=funding_results,
+        funding_errors=funding_errors,
+        volatility_results=volatility_results,
+        volatility_errors=volatility_errors,
+        trade_results=trade_results,
+        trade_errors=trade_errors,
     )

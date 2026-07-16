@@ -7,7 +7,7 @@ from typing import Any, cast
 
 import pytest
 
-from api.commands.loader_execution import fetch_all_task_groups
+from api.commands.loader_execution import FetchAllTaskGroupsResult, fetch_all_task_groups
 
 
 def test_fetch_all_task_groups_dispatches_all_task_kinds() -> None:
@@ -37,16 +37,7 @@ def test_fetch_all_task_groups_dispatches_all_task_kinds() -> None:
         calls.append(("trade", dict(kwargs)))
         return ({("deribit", "perp", "BTC"): [4]}, {})
 
-    result: tuple[
-        dict[tuple[str, str, str, str], list[int]],
-        dict[tuple[str, str, str, str], str],
-        dict[tuple[str, str, str], list[int]],
-        dict[tuple[str, str, str], str],
-        dict[tuple[str, str, str], list[int]],
-        dict[tuple[str, str, str], str],
-        dict[tuple[str, str, str], list[int]],
-        dict[tuple[str, str, str], str],
-    ] = fetch_all_task_groups(
+    result: FetchAllTaskGroupsResult = fetch_all_task_groups(
         candle_tasks=[("deribit", "spot_ohlcv", "BTC", "1m")],
         open_interest_tasks=[("deribit", "BTC", "1m")],
         funding_tasks=[("deribit", "BTC", "1m")],
@@ -63,10 +54,10 @@ def test_fetch_all_task_groups_dispatches_all_task_kinds() -> None:
         fetch_trades_fn=_fetch_trades_fn,
     )
 
-    assert result[0] == {("deribit", "spot_ohlcv", "BTC", "1m"): [1]}
-    assert result[2] == {("deribit", "BTC", "1m"): [2]}
-    assert result[4] == {("deribit", "BTC", "1m"): [3]}
-    assert result[6] == {("deribit", "perp", "BTC"): [4]}
+    assert result.candle_results == {("deribit", "spot_ohlcv", "BTC", "1m"): [1]}
+    assert result.open_interest_results == {("deribit", "BTC", "1m"): [2]}
+    assert result.funding_results == {("deribit", "BTC", "1m"): [3]}
+    assert result.trade_results == {("deribit", "perp", "BTC"): [4]}
 
     call_map = {name: kwargs for name, kwargs in calls}
     assert cast(dict[str, Any], call_map["candle"])["tasks"] == [("deribit", "spot_ohlcv", "BTC", "1m")]
@@ -83,16 +74,7 @@ def test_fetch_all_task_groups_skips_empty_groups() -> None:
         calls.append("called")
         return ({}, {})
 
-    result: tuple[
-        dict[tuple[str, str, str, str], list[int]],
-        dict[tuple[str, str, str, str], str],
-        dict[tuple[str, str, str], list[int]],
-        dict[tuple[str, str, str], str],
-        dict[tuple[str, str, str], list[int]],
-        dict[tuple[str, str, str], str],
-        dict[tuple[str, str, str], list[int]],
-        dict[tuple[str, str, str], str],
-    ] = fetch_all_task_groups(
+    result: FetchAllTaskGroupsResult = fetch_all_task_groups(
         candle_tasks=[],
         open_interest_tasks=[],
         funding_tasks=[],
@@ -110,7 +92,18 @@ def test_fetch_all_task_groups_skips_empty_groups() -> None:
     )
 
     assert calls == []
-    assert result == ({}, {}, {}, {}, {}, {}, {}, {})
+    assert result == FetchAllTaskGroupsResult(
+        candle_results={},
+        candle_errors={},
+        open_interest_results={},
+        open_interest_errors={},
+        funding_results={},
+        funding_errors={},
+        volatility_results={},
+        volatility_errors={},
+        trade_results={},
+        trade_errors={},
+    )
 
 
 def test_fetch_all_task_groups_requires_volatility_fetcher_for_volatility_tasks() -> None:
