@@ -1392,9 +1392,9 @@ Acceptance:
 
 ### PR-46: Bronze Workflow Stage Split
 
-Status: Planned
+Status: Done - PR #137: https://github.com/SergejSchweizer/crypto-history-loader/pull/137
 
-PR: TBD
+PR: https://github.com/SergejSchweizer/crypto-history-loader/pull/137
 
 Branch: `codex/pr46-bronze-workflow-stages`
 
@@ -1409,8 +1409,23 @@ clean
 Publication `git status --short`:
 
 ```text
-TBD
+M  api/commands/loader.py
+M  api/commands/loader_execution.py
+M  api/commands/loader_workflow.py
+M  tests/test_loader_command.py
+M  tests/test_loader_execution.py
 ```
+
+Scope note: the Bronze build workflow was already substantially stage-split before this PR
+(`loader_planning.py`, `loader_checkpoint.py`, `loader_bounds.py`, `loader_execution.py`,
+`loader_output.py`, each with dedicated no-network stage-level tests, coordinated by
+`loader_workflow.py::run_bronze_build` via `BronzeWorkflowDependencies`). The remaining concrete
+gap this PR closes: `loader_execution.py::fetch_all_task_groups` returned a
+`FetchAllResult8 | FetchAllResult10` tuple union, disambiguated by the coordinator via a fragile
+`len(fetch_results) == 8` arity check (the 8-tuple branch was dead in production; only exercised by
+test doubles). Replaced with a single explicit, stably-ordered `FetchAllTaskGroupsResult` dataclass
+(10 named fields) always returned from the execution stage, removing the arity-sniffing branch from
+`run_bronze_build` entirely.
 
 Goal:
 Split the Bronze build workflow into deterministic stages with explicit inputs and outputs so checkpointing,
