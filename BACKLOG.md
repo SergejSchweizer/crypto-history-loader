@@ -1340,9 +1340,9 @@ Acceptance:
 
 ### PR-45: Bronze Runtime Adapter Without Module-Global Mutation
 
-Status: Planned
+Status: Done - PR #135: https://github.com/SergejSchweizer/crypto-history-loader/pull/135
 
-PR: TBD
+PR: https://github.com/SergejSchweizer/crypto-history-loader/pull/135
 
 Branch: `codex/pr45-bronze-runtime-adapter`
 
@@ -1357,7 +1357,11 @@ clean
 Publication `git status --short`:
 
 ```text
-TBD
+ M api/cli.py
+ M api/commands/loader.py
+ M application/services/bronze_runtime_service.py
+ M tests/test_bronze_runtime_service.py
+ M tests/test_loader_command.py
 ```
 
 Goal:

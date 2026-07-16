@@ -230,6 +230,55 @@ def build_bronze_runtime_bounds_context(
     )
 
 
+class BronzeRuntimeAdapter:
+    """Single explicit owner of the active Bronze runtime bounds context.
+
+    Replaces ad-hoc ``global`` reassignment of a bare module attribute in
+    ``api.commands.loader`` with one typed, testable object. Callers read the
+    active context through :attr:`context` and update it through
+    :meth:`configure`, so the mutation point is discoverable and centralized
+    instead of implicit module-global rebinding.
+    """
+
+    def __init__(self) -> None:
+        self._context = BronzeRuntimeBoundsContext(
+            tail_delta_only=False,
+            global_start_open_ms=None,
+            symbol_start_open_ms={},
+            exchange_symbol_start_open_ms={},
+        )
+
+    @property
+    def context(self) -> BronzeRuntimeBoundsContext:
+        """Return the currently active runtime bounds context."""
+
+        return self._context
+
+    @context.setter
+    def context(self, value: BronzeRuntimeBoundsContext) -> None:
+        self._context = value
+
+    def configure(
+        self,
+        *,
+        tail_delta_only: bool,
+        start_date: str | None,
+        symbol_start_dates: list[str] | None,
+        exchange_symbol_start_dates: list[str] | None,
+        logger: logging.Logger,
+    ) -> BronzeRuntimeBoundsContext:
+        """Rebuild and store the runtime bounds context from CLI/config args."""
+
+        self._context = build_bronze_runtime_bounds_context(
+            tail_delta_only=tail_delta_only,
+            start_date=start_date,
+            symbol_start_dates=symbol_start_dates,
+            exchange_symbol_start_dates=exchange_symbol_start_dates,
+            logger=logger,
+        )
+        return self._context
+
+
 def resolve_symbol_start_open_ms_bound(
     *,
     exchange: Exchange,

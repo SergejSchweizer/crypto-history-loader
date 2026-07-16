@@ -197,9 +197,9 @@ def test_run_bronze_build_persists_trade_chunks_incrementally(
 
 
 def test_exchange_symbol_start_dates_override_symbol_and_global_bounds() -> None:
-    original_context = loader_cmd._RUNTIME_BOUNDS_CONTEXT
+    original_context = loader_cmd._RUNTIME_ADAPTER.context
     try:
-        loader_cmd._RUNTIME_BOUNDS_CONTEXT = BronzeRuntimeBoundsContext(
+        loader_cmd._RUNTIME_ADAPTER.context = BronzeRuntimeBoundsContext(
             tail_delta_only=False,
             global_start_open_ms=1000,
             symbol_start_open_ms={"BTC": 2000},
@@ -208,13 +208,13 @@ def test_exchange_symbol_start_dates_override_symbol_and_global_bounds() -> None
         assert loader_cmd._symbol_start_open_ms_bound(exchange="deribit", symbol="BTCUSDT") == 3000
         assert loader_cmd._symbol_start_open_ms_bound(exchange="deribit", symbol="ETHUSDT") == 1000
     finally:
-        loader_cmd._RUNTIME_BOUNDS_CONTEXT = original_context
+        loader_cmd._RUNTIME_ADAPTER.context = original_context
 
 
 def test_global_start_date_is_not_widened_by_older_symbol_bounds() -> None:
-    original_context = loader_cmd._RUNTIME_BOUNDS_CONTEXT
+    original_context = loader_cmd._RUNTIME_ADAPTER.context
     try:
-        loader_cmd._RUNTIME_BOUNDS_CONTEXT = BronzeRuntimeBoundsContext(
+        loader_cmd._RUNTIME_ADAPTER.context = BronzeRuntimeBoundsContext(
             tail_delta_only=False,
             global_start_open_ms=3000,
             symbol_start_open_ms={"BTC": 1000},
@@ -222,13 +222,13 @@ def test_global_start_date_is_not_widened_by_older_symbol_bounds() -> None:
         )
         assert loader_cmd._symbol_start_open_ms_bound(exchange="deribit", symbol="BTCUSDT") == 3000
     finally:
-        loader_cmd._RUNTIME_BOUNDS_CONTEXT = original_context
+        loader_cmd._RUNTIME_ADAPTER.context = original_context
 
 
 def test_symbol_start_bound_caps_to_last_30_days_in_tail_mode() -> None:
-    original_context = loader_cmd._RUNTIME_BOUNDS_CONTEXT
+    original_context = loader_cmd._RUNTIME_ADAPTER.context
     try:
-        loader_cmd._RUNTIME_BOUNDS_CONTEXT = BronzeRuntimeBoundsContext(
+        loader_cmd._RUNTIME_ADAPTER.context = BronzeRuntimeBoundsContext(
             tail_delta_only=True,
             global_start_open_ms=None,
             symbol_start_open_ms={},
@@ -239,7 +239,7 @@ def test_symbol_start_bound_caps_to_last_30_days_in_tail_mode() -> None:
         assert isinstance(resolved, int)
         assert resolved >= rolling_30_days_ago_before_call_ms
     finally:
-        loader_cmd._RUNTIME_BOUNDS_CONTEXT = original_context
+        loader_cmd._RUNTIME_ADAPTER.context = original_context
 
 
 def test_parse_exchange_symbol_start_dates_parses_canonical_pairs() -> None:
@@ -256,18 +256,18 @@ def test_configure_bronze_start_bounds_sets_context() -> None:
     )
     logger = logging.getLogger("test_bronze_bounds")
 
-    original_context = loader_cmd._RUNTIME_BOUNDS_CONTEXT
+    original_context = loader_cmd._RUNTIME_ADAPTER.context
     try:
         loader_cmd._configure_bronze_start_bounds(args=args, logger=logger)
-        assert loader_cmd._RUNTIME_BOUNDS_CONTEXT.global_start_open_ms is None
-        assert loader_cmd._RUNTIME_BOUNDS_CONTEXT.symbol_start_open_ms["BTC"] == int(
+        assert loader_cmd._RUNTIME_ADAPTER.context.global_start_open_ms is None
+        assert loader_cmd._RUNTIME_ADAPTER.context.symbol_start_open_ms["BTC"] == int(
             datetime(2023, 4, 24, 0, 0, tzinfo=UTC).timestamp() * 1000
         )
-        assert loader_cmd._RUNTIME_BOUNDS_CONTEXT.exchange_symbol_start_open_ms["deribit:SOL"] == int(
+        assert loader_cmd._RUNTIME_ADAPTER.context.exchange_symbol_start_open_ms["deribit:SOL"] == int(
             datetime(2024, 2, 27, 0, 0, tzinfo=UTC).timestamp() * 1000
         )
     finally:
-        loader_cmd._RUNTIME_BOUNDS_CONTEXT = original_context
+        loader_cmd._RUNTIME_ADAPTER.context = original_context
 
 
 def test_run_bronze_build_drops_invalid_symbols_before_scheduling(monkeypatch) -> None:  # type: ignore[no-untyped-def]
@@ -313,6 +313,72 @@ def test_run_bronze_build_drops_invalid_symbols_before_scheduling(monkeypatch) -
     assert all(task[2] in {"BTC", "ETH"} for task in scheduled_candle_tasks)
     assert all(task[1] in {"BTC", "ETH"} for task in scheduled_open_interest_tasks)
     assert all(task[1] in {"BTC", "ETH"} for task in scheduled_funding_tasks)
+
+
+def test_run_bronze_build_still_routes_through_monkeypatched_compat_bounds_functions(
+    monkeypatch,
+) -> None:  # type: ignore[no-untyped-def]
+    """Old monkeypatch entrypoints for the bounds compat functions must keep working.
+
+    ``run_bronze_build`` resolves its ``BronzeWorkflowDependencies`` via
+    ``_bronze_workflow_dependencies()``, which reads ``_configure_bronze_start_bounds``
+    and ``_current_runtime_bounds_context`` by module-level name at call time. Tests
+    (and any external caller) that monkeypatch those names on ``loader_cmd`` directly
+    must still have their replacements take effect, proving the adapter refactor did
+    not close off the existing compatibility surface.
+    """
+
+    class _NoopLock:
+        def __init__(self, lock_path: str) -> None:
+            del lock_path
+
+        def __enter__(self) -> None:
+            return None
+
+        def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
+            del exc_type, exc, tb
+
+    configure_calls: list[argparse.Namespace] = []
+    fake_context = BronzeRuntimeBoundsContext(
+        tail_delta_only=True,
+        global_start_open_ms=None,
+        symbol_start_open_ms={},
+        exchange_symbol_start_open_ms={},
+    )
+
+    def _fake_configure_bronze_start_bounds(args: argparse.Namespace, logger: logging.Logger) -> None:
+        del logger
+        configure_calls.append(args)
+
+    def _fake_current_runtime_bounds_context() -> BronzeRuntimeBoundsContext:
+        return fake_context
+
+    def _fake_fetch_all_task_groups(**kwargs: object):  # type: ignore[no-untyped-def]
+        return ({}, {}, {}, {}, {}, {}, {}, {}, {}, {})
+
+    monkeypatch.setattr(loader_cmd, "SingleInstanceLock", _NoopLock)
+    monkeypatch.setattr(loader_cmd, "_configure_bronze_start_bounds", _fake_configure_bronze_start_bounds)
+    monkeypatch.setattr(loader_cmd, "_current_runtime_bounds_context", _fake_current_runtime_bounds_context)
+    monkeypatch.setattr(loader_cmd, "_fetch_all_task_groups", _fake_fetch_all_task_groups)
+    monkeypatch.setattr(loader_cmd, "ensure_bronze_sidecars", lambda **kwargs: [])
+
+    args = argparse.Namespace(
+        exchange="deribit",
+        exchanges=None,
+        market=["spot_ohlcv"],
+        symbols=["BTCUSDT"],
+        perp_trade_symbols=["BTC"],
+        options_trade_symbols=["BTC"],
+        save_parquet_lake=False,
+        lake_root="lake/bronze",
+        no_json_output=True,
+        tail_delta_only=True,
+    )
+    logger = logging.getLogger("test_compat_bounds_monkeypatch")
+    loader_cmd.run_bronze_build(args=args, logger=logger)
+
+    assert len(configure_calls) == 1
+    assert configure_calls[0] is args
 
 
 def test_run_bronze_build_raises_when_no_valid_symbols(monkeypatch) -> None:  # type: ignore[no-untyped-def]

@@ -106,7 +106,7 @@ def _sync_loader_runtime_overrides() -> None:
     loader_any.open_times_in_lake_by_dataset = open_times_in_lake_by_dataset
     loader_any.latest_open_time_in_lake = latest_open_time_in_lake
     loader_any.latest_open_time_in_lake_by_dataset = latest_open_time_in_lake_by_dataset
-    loader_any._RUNTIME_BOUNDS_CONTEXT = BronzeRuntimeBoundsContext(
+    loader_any._RUNTIME_ADAPTER.context = BronzeRuntimeBoundsContext(
         tail_delta_only=_TAIL_DELTA_ONLY,
         global_start_open_ms=_BRONZE_START_OPEN_MS,
         symbol_start_open_ms=_BRONZE_SYMBOL_START_OPEN_MS,

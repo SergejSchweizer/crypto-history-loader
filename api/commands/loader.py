@@ -36,8 +36,8 @@ from application.services.bronze_reporting_service import (
     trade_error_breakdown,
 )
 from application.services.bronze_runtime_service import (
+    BronzeRuntimeAdapter,
     BronzeRuntimeBoundsContext,
-    build_bronze_runtime_bounds_context,
     resolve_symbol_start_open_ms_bound,
 )
 from application.services.fetch_service import (
@@ -97,12 +97,7 @@ from ingestion.volatility import (
 OPEN_INTEREST_DATASET_TYPE = dataset_spec("open_interest").dataset_type
 
 
-_RUNTIME_BOUNDS_CONTEXT = BronzeRuntimeBoundsContext(
-    tail_delta_only=False,
-    global_start_open_ms=None,
-    symbol_start_open_ms={},
-    exchange_symbol_start_open_ms={},
-)
+_RUNTIME_ADAPTER = BronzeRuntimeAdapter()
 _last_closed_open_ms = last_closed_open_ms
 _missing_ranges_ms = missing_ranges_ms
 _serialize_candle = _loader_output_utils.serialize_candle
@@ -128,7 +123,7 @@ _parse_exchange_symbol_start_dates = _loader_compat.parse_exchange_symbol_start_
 def _current_runtime_bounds_context() -> BronzeRuntimeBoundsContext:
     """Return effective runtime bounds context with global fallback support."""
 
-    return _RUNTIME_BOUNDS_CONTEXT
+    return _RUNTIME_ADAPTER.context
 
 
 def add_bronze_build_parser(subparsers: Any) -> None:
@@ -281,10 +276,9 @@ def _symbol_start_open_ms_bound(exchange: Exchange, symbol: str) -> int | None:
 
 
 def _configure_bronze_start_bounds(args: argparse.Namespace, logger: logging.Logger) -> None:
-    """Initialize Bronze start-bound globals from CLI/config args and emit boundary logs."""
+    """Initialize Bronze start-bound adapter state from CLI/config args and emit boundary logs."""
 
-    global _RUNTIME_BOUNDS_CONTEXT
-    _RUNTIME_BOUNDS_CONTEXT = build_bronze_runtime_bounds_context(
+    _RUNTIME_ADAPTER.configure(
         tail_delta_only=bool(getattr(args, "tail_delta_only", False)),
         start_date=cast(str | None, getattr(args, "start_date", None)),
         symbol_start_dates=cast(list[str] | None, getattr(args, "symbol_start_dates", None)),
