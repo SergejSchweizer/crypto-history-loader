@@ -1,4 +1,4 @@
-"""Fetch EODHD exchange symbol ISIN reference data for cron ingestion."""
+"""Fetch the canonical all-ISIN reference dataset from EODHD."""
 
 from __future__ import annotations
 
@@ -28,7 +28,8 @@ except ModuleNotFoundError:
     from scripts.logging_utils import configure_logger
 
 EODHD_BASE_URL = "https://eodhd.com/api"
-DEFAULT_CONFIG_SECTION = "eodhd-isin-fetch"
+DEFAULT_CONFIG_SECTION = "fetch_all_isins"
+LEGACY_CONFIG_SECTION = "eodhd-isin-fetch"
 CSV_FIELDS = [
     "isin",
     "code",
@@ -105,7 +106,7 @@ def _load_yaml(path: Path) -> dict[str, Any]:
     """Load a YAML mapping from disk."""
 
     try:
-        import yaml
+        import yaml  # type: ignore[import-untyped]
     except ImportError as exc:
         raise RuntimeError("PyYAML is required to load EODHD ISIN fetch config.") from exc
 
@@ -118,9 +119,9 @@ def _load_yaml(path: Path) -> dict[str, Any]:
 
 
 def _section(config_data: dict[str, Any]) -> dict[str, Any]:
-    """Return the configured EODHD ISIN fetch section."""
+    """Return the configured canonical all-ISIN fetch section."""
 
-    raw = config_data.get(DEFAULT_CONFIG_SECTION, {})
+    raw = config_data.get(DEFAULT_CONFIG_SECTION, config_data.get(LEGACY_CONFIG_SECTION, {}))
     if raw is None:
         return {}
     if not isinstance(raw, dict):
@@ -177,17 +178,17 @@ def build_fetch_config(args: argparse.Namespace, *, repo_root: Path, config_data
     cfg = _section(config_data)
     output_csv = _resolve_path(
         args.output_csv or cfg.get("output_csv"),
-        default=Path("lake/reference/eodhd_isins/eodhd_isins.csv"),
+        default=Path("lake/reference/all_isins/all_isins.csv"),
         repo_root=repo_root,
     )
     manifest_json = _resolve_path(
         args.manifest_json or cfg.get("manifest_json"),
-        default=Path("lake/reference/eodhd_isins/eodhd_isins.json"),
+        default=Path("lake/reference/all_isins/all_isins.json"),
         repo_root=repo_root,
     )
     lock_file = _resolve_path(
         args.lock_file or cfg.get("lock_file"),
-        default=Path(".run/eodhd-isin-fetch.lock"),
+        default=Path(".run/fetch-all-isins.lock"),
         repo_root=repo_root,
     )
     secret_config = _resolve_path(
@@ -235,6 +236,13 @@ def _api_token_from_mapping(config_data: dict[str, Any]) -> str:
             if isinstance(value, str) and value.strip():
                 return value.strip()
 
+    legacy_section = config_data.get(LEGACY_CONFIG_SECTION)
+    if isinstance(legacy_section, dict):
+        for key in ("api_key", "api_token"):
+            value = legacy_section.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+
     eodhd_section = config_data.get("eodhd")
     if isinstance(eodhd_section, dict):
         for key in ("api_key", "api_token"):
@@ -264,7 +272,7 @@ def _request_json(path: str, params: dict[str, str], timeout_s: float) -> Any:
     """Fetch JSON from EODHD using stdlib networking only."""
 
     url = f"{EODHD_BASE_URL}{path}?{urlencode(params)}"
-    request = Request(url, headers={"User-Agent": "crypto-history-loader/eodhd-isin-fetch"})
+    request = Request(url, headers={"User-Agent": "crypto-history-loader/fetch-all-isins"})
     try:
         with urlopen(request, timeout=timeout_s) as response:
             charset = response.headers.get_content_charset("utf-8")
@@ -393,7 +401,7 @@ def write_outputs(config: FetchConfig, *, rows: Iterable[IsinRow], fetched_at_ut
     os.replace(temp_name, config.output_csv)
 
     manifest = {
-        "dataset": "eodhd_isin_reference",
+        "dataset": "all_isins",
         "source": "eodhd",
         "fetched_at_utc": fetched_at_utc,
         "row_count": len(rows_list),
@@ -427,10 +435,10 @@ def _locked(lock_file: Path) -> Iterator[bool]:
         os.close(fd)
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     """Parse CLI options."""
 
-    parser = argparse.ArgumentParser(description="Fetch EODHD ISIN reference data for all configured exchanges.")
+    parser = argparse.ArgumentParser(description="Fetch the canonical all-ISIN reference data from EODHD.")
     parser.add_argument("--config", default="config.yaml", help="Path to config.yaml")
     parser.add_argument("--output-csv", help="Output CSV path")
     parser.add_argument("--manifest-json", help="Output manifest JSON path")
@@ -448,16 +456,16 @@ def parse_args() -> argparse.Namespace:
     delisted.add_argument(
         "--no-include-delisted", action="store_false", dest="include_delisted", help="Fetch active tickers only"
     )
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     """Run the cron-safe EODHD ISIN reference fetch."""
 
-    args = parse_args()
+    args = parse_args(argv)
     config_path = Path(args.config).resolve()
     repo_root = config_path.parent
-    logger = configure_logger("eodhd-isin-fetch", config_path)
+    logger = configure_logger("fetch-all-isins", config_path)
     config_data = _load_yaml(config_path) if config_path.exists() else {}
     config = build_fetch_config(args, repo_root=repo_root, config_data=config_data)
 

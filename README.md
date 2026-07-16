@@ -668,24 +668,77 @@ Contracts without physical Gold artifacts are `gold.hybrid.full_l2.m1`,
 uv run python scripts/run_medallion_pipeline.py --config config.yaml
 ```
 
-Runs `metadata -> bronze-build -> silver-build -> gold-build` using `medallion-pipeline` settings
-from `config.yaml`, enforces single-run locking via `.run/full-pipeline.lock`, and writes a shared
-append-only pipeline log. The metadata step fetches the EODHD ISIN reference dataset when the
-local EODHD secret config is present and skips cleanly when the token is absent. The configured code path
-supports volatility-index OHLC fields, but the physical inventory in section 4.7 is authoritative
-for which Gold artifacts are IV/RV-ready.
+Runs the configured medallion jobs from `config.yaml`, enforces single-run locking via
+`.run/full-pipeline.lock`, and writes a shared append-only pipeline log. The configured metadata
+job calls the `fetch_all_isins` module through `fetch-all-isins`; Bronze, Silver, and Gold remain
+the crypto market-data materialization layers.
 
-EODHD ISIN reference data can also be refreshed directly:
+The ISIN research architecture is split into five modules:
 
-```bash
-uv run python scripts/fetch_eodhd_isins.py --config config.yaml
+```text
+fetch_all_isins
+  -> metadata_filter
+  -> univariate_statistics
+  -> univariate_filter
+  -> bivariate_statistics
 ```
 
-The fetcher writes `lake/reference/eodhd_isins/eodhd_isins.csv` and
-`lake/reference/eodhd_isins/eodhd_isins.json`, logs to `.logs/eodhd-isin-fetch.log`, and uses
-`.run/eodhd-isin-fetch.lock` for cron-safe single-run execution. Full coverage calls the active
-EODHD exchange symbol list and the delisted-only variant, then writes one deduplicated ISIN mapping
-per `isin/exchange/code`.
+`fetch_all_isins` is the only canonical source for the full ISIN universe. It refreshes the
+irregularly updated EODHD all-ISIN reference and writes one generic source dataset for all later
+steps:
+
+```bash
+uv run python main.py fetch-all-isins --no-json-output
+```
+
+It writes `lake/reference/all_isins/all_isins.csv` and
+`lake/reference/all_isins/all_isins.json`, logs to `.logs/fetch-all-isins.log`, and uses
+`.run/fetch-all-isins.lock` for cron-safe single-run execution. Full coverage calls the active
+EODHD exchange symbol list and the delisted-only variant, then writes one deduplicated mapping per
+`isin/exchange/code`.
+
+`metadata_filter` reads only `all_isins`, applies conjunctive metadata predicates, and stores a
+hash-addressable ISIN selection:
+
+```bash
+uv run python main.py metadata-filter \
+  --where exchange=US type=ETF currency=USD \
+  --selection-name us_etf_usd
+```
+
+Each selection writes `isins.csv` plus `manifest.json` under
+`lake/selections/metadata_filter/<selection_name>_<selection_hash>/`.
+
+`univariate_statistics` computes per-ISIN metrics from daily prices. Returns are daily log returns
+`ln(Px,t / Px,t-1)` from the configured price column, normally `adjusted_close`:
+
+```bash
+uv run python main.py univariate-statistics \
+  --prices-csv lake/prices/daily_prices.csv \
+  --price-column adjusted_close
+```
+
+The output includes observations, mean log return, volatility, CVaR, Sharpe, Sortino, skewness,
+maximum drawdown, and log-price slope.
+
+`univariate_filter` uses the same selection artifact shape as `metadata_filter`, but predicates are
+applied to the univariate metric table:
+
+```bash
+uv run python main.py univariate-filter \
+  --where sharpe>0 max_drawdown>-0.3 return_observations>=252 \
+  --selection-name liquid_positive_risk
+```
+
+`bivariate_statistics` computes pair metrics only for a previously selected ISIN list. It computes
+each unordered ISIN pair once and aligns both series on the intersection of daily return dates:
+
+```bash
+uv run python main.py bivariate-statistics \
+  --selection-csv lake/selections/univariate_filter/liquid_positive_risk_<hash>/isins.csv \
+  --prices-csv lake/prices/daily_prices.csv \
+  --min-overlap 252
+```
 
 Put the EODHD token into the local ignored secret config referenced by `config.yaml`:
 
