@@ -160,6 +160,42 @@ from `crypto-live-loader` inputs. Narrower Gold contracts remain available as in
 blocks and compatibility outputs, but downstream training and inference code should target the two
 canonical full datasets.
 
+## ISIN Research Module Flow
+
+The ISIN research workflow is a separate five-module architecture. Only this architecture should be
+documented for ISIN universe construction and pair-statistics workflows:
+
+```text
+fetch_all_isins
+  |
+  v
+metadata_filter
+  |
+  v
+univariate_statistics
+  |
+  v
+univariate_filter
+  |
+  v
+bivariate_statistics
+```
+
+Module contracts:
+
+| Module | Input | Output | Contract |
+|---|---|---|---|
+| `fetch_all_isins` | EODHD exchange symbol lists | `lake/reference/all_isins/all_isins.csv` plus manifest | The only canonical all-ISIN source. It is refreshed irregularly and remains generic for all later steps. |
+| `metadata_filter` | `all_isins.csv` | `lake/selections/metadata_filter/<selection_id>/isins.csv` plus manifest | Applies conjunctive metadata predicates. Every selection is named from predicates or an explicit name and hash-addressable. |
+| `univariate_statistics` | Daily ISIN prices | `lake/statistics/univariate_statistics.csv` plus manifest | Computes per-ISIN statistics from daily log returns `ln(Px,t / Px,t-1)`. |
+| `univariate_filter` | `univariate_statistics.csv` | `lake/selections/univariate_filter/<selection_id>/isins.csv` plus manifest | Applies conjunctive metric predicates and writes the same referencable selection shape as `metadata_filter`. |
+| `bivariate_statistics` | A persisted ISIN selection plus daily prices | `lake/statistics/bivariate_statistics.csv` plus manifest | Computes each unordered ISIN pair once, using only the date intersection of daily log returns. |
+
+Selection manifests must contain `selection_id`, `selection_name`, `selection_hash`,
+`source_csv`, `predicates`, `row_count`, and `isins_csv`. The selected ISIN list is always the
+durable handoff between modules; downstream modules must not reconstruct selections from ad hoc
+CLI history.
+
 `gold.market.history_full.m1` is the inference-safe historical full dataset. It joins historical
 spot, perpetual, funding, open-interest, trade, realized-volatility, and IV/RV feature families on
 the historical minute grid; optional historical reference, index, futures, option-surface, and L2

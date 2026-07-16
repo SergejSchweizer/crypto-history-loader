@@ -206,7 +206,7 @@ def test_read_api_token_prefers_secret_config_over_environment(tmp_path: Path, m
 def test_read_api_token_supports_nested_secret_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     module = _load_fetch_module()
     secret_config = tmp_path / "eodhd.yaml"
-    secret_config.write_text("eodhd-isin-fetch:\n  api_key: nested-token\n", encoding="utf-8")
+    secret_config.write_text("fetch_all_isins:\n  api_key: nested-token\n", encoding="utf-8")
     monkeypatch.delenv("EODHD_API_TOKEN", raising=False)
     config = module.FetchConfig(
         enabled=True,

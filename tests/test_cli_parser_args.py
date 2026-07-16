@@ -92,6 +92,40 @@ EXPECTED_MEDALLION_SILVER_DATASETS = set(supported_silver_build_ids())
             {"instrument_types": ["spot_ohlcv"]},
         ),
         (["export-descriptive-stats", "--no-json-output"], {"no_json_output": True}),
+        (["fetch-all-isins", "--no-json-output"], {"no_json_output": True}),
+        (["fetch-all-isins", "--exchange-codes", "US", "XETRA"], {"exchange_codes": ["US", "XETRA"]}),
+        (
+            ["metadata-filter", "--where", "exchange=US", "type=ETF"],
+            {"where": ["exchange=US", "type=ETF"]},
+        ),
+        (
+            ["metadata-filter", "--all-isins-csv", "lake/reference/all_isins/all_isins.csv"],
+            {"all_isins_csv": "lake/reference/all_isins/all_isins.csv"},
+        ),
+        (
+            ["univariate-statistics", "--prices-csv", "prices.csv", "--price-column", "close"],
+            {"prices_csv": "prices.csv", "price_column": "close"},
+        ),
+        (
+            ["univariate-filter", "--where", "sharpe>0", "max_drawdown>-0.2"],
+            {"where": ["sharpe>0", "max_drawdown>-0.2"]},
+        ),
+        (
+            ["bivariate-statistics", "--selection-csv", "selection.csv", "--prices-csv", "prices.csv"],
+            {"selection_csv": "selection.csv", "prices_csv": "prices.csv"},
+        ),
+        (
+            [
+                "bivariate-statistics",
+                "--selection-csv",
+                "selection.csv",
+                "--prices-csv",
+                "prices.csv",
+                "--min-overlap",
+                "90",
+            ],
+            {"min_overlap": 90},
+        ),
     ],
 )
 def test_cli_argument_parsing_individual_arguments(argv: list[str], expected: dict[str, object]) -> None:
