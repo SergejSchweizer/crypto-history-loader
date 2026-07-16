@@ -110,35 +110,6 @@ def test_validate_or_filter_l2_quality_strict_and_lenient_modes() -> None:
     assert audit == {"l2_invalid_rows_found": 1, "l2_invalid_rows_dropped": 1}
 
 
-def test_prepare_open_interest_accepts_oi_prefixed_silver_columns() -> None:
-    frame = pl.DataFrame(
-        {
-            "timestamp_m1": [datetime(2026, 5, 1, 0, 0, tzinfo=UTC)],
-            "exchange": ["deribit"],
-            "symbol": ["BTC"],
-            "open_interest": [100.0],
-            "oi_is_observed": [True],
-            "oi_is_ffill": [False],
-            "minutes_since_oi_observation": [0],
-            "oi_observation_lag_sec": [0],
-        }
-    )
-
-    prepared = gold_frames.prepare_open_interest(pl, frame, "BTC")
-
-    assert prepared.columns == [
-        "timestamp_m1",
-        "exchange",
-        "symbol",
-        "open_interest_open_interest",
-        "open_interest_is_observed",
-        "open_interest_is_ffill",
-        "minutes_since_open_interest_observation",
-        "open_interest_observation_lag_sec",
-    ]
-    assert prepared.select("open_interest_is_observed").item() is True
-
-
 def test_prepare_dataset_frame_and_minute_grid() -> None:
     timestamps = [
         datetime(2024, 1, 1, 0, 0, tzinfo=UTC),

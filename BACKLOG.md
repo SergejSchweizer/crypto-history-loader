@@ -298,8 +298,8 @@ Scope:
 - Do not create target labels.
 
 Acceptance:
-- Missing IV for SOL does not create IV/RV comparison rows and is never filled from BTC/ETH.
-- Tests cover timestamp-intersection behavior.
+- Missing IV for SOL is represented explicitly, not silently filled from BTC/ETH.
+- Tests cover partial data availability.
 - Gold includes this dataset only when requirements are satisfied or explicitly optional.
 
 ### PR-08: Index Price Snapshot Silver
@@ -661,7 +661,7 @@ Scope:
 Acceptance:
 - Contract variables include RV windows, Parkinson RV, jump proxy, IV-RV spreads/ratios, z-score,
   percentile, and availability flags.
-- Tests prove no future timestamps enter a rolling value and IV/RV metrics use only common source timestamps.
+- Tests prove no future timestamps enter a rolling value and partial source availability remains explicit.
 - Targeted tests cover RV windows, IV/RV joins, and timestamp alignment.
 
 ### PR-22: Index Price And Futures Summary Silver Materialization
@@ -1277,46 +1277,6 @@ Acceptance:
 - Command tests assert behavior through public CLI/service surfaces wherever practical.
 - The final stacked PR runs the complete configured quality suite plus coverage before merge readiness.
 - `git status --short` and the PR URL are recorded in this backlog entry before handoff.
-
-### PR-44: IV/RV Metric Date Intersection
-
-Status: In progress - PR #128: https://github.com/SergejSchweizer/crypto-history-loader/pull/128
-
-PR: https://github.com/SergejSchweizer/crypto-history-loader/pull/128
-
-Branch: `codex/metrics-date-intersection`
-
-Depends on: PR-43
-
-Planning `git status --short`:
-
-```text
- M README.md
- M application/services/silver_iv_rv.py
- M tests/test_silver_iv_rv.py
-```
-
-Publication `git status --short`:
-
-```text
-clean
-```
-
-Goal:
-Calculate IV/RV comparison metrics only on timestamps where both IV and realized-volatility source rows exist for
-the same `timestamp_m1/exchange/symbol` key.
-
-Scope:
-- Restrict IV/RV symbol discovery to symbols with both source datasets.
-- Restrict IV/RV month scheduling to months present in both source datasets.
-- Build spread, ratio, z-score, percentile, and correlation-like comparison metrics from the inner timestamp
-  intersection instead of source unions with null-side rows.
-- Update README and regression tests for the intersection contract.
-
-Acceptance:
-- RV-only or IV-only source rows do not create `iv_rv_1m_feature` comparison rows.
-- Tests prove mismatched timestamps are excluded and only common timestamps are written.
-- The PR URL and publication `git status --short` are recorded before handoff.
 
 ## Completion Definition
 

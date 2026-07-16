@@ -37,14 +37,13 @@ def _write_feature_file(
     pl.DataFrame([dict(row) for row in rows]).write_parquet(target)
 
 
-def test_build_iv_rv_feature_uses_only_common_source_timestamps(tmp_path: Path) -> None:
-    """IV/RV comparison metrics should be calculated only on the IV/RV timestamp intersection."""
+def test_build_iv_rv_feature_keeps_missing_iv_explicit(tmp_path: Path) -> None:
+    """SOL rows with RV but no IV should remain present with explicit availability flags."""
 
     silver = tmp_path / "silver"
     month = "2026-06"
     t0 = datetime(2026, 6, 12, 0, 0, tzinfo=UTC)
     t1 = datetime(2026, 6, 12, 0, 1, tzinfo=UTC)
-    t2 = datetime(2026, 6, 12, 0, 2, tzinfo=UTC)
 
     _write_feature_file(
         silver,
@@ -77,7 +76,7 @@ def test_build_iv_rv_feature_uses_only_common_source_timestamps(tmp_path: Path) 
         month=month,
         rows=[
             {"timestamp_m1": t0, "exchange": "deribit", "symbol": "BTC", "rv_1h": 10.0, "rv_1d": 20.0},
-            {"timestamp_m1": t2, "exchange": "deribit", "symbol": "BTC", "rv_1h": 11.0, "rv_1d": 22.0},
+            {"timestamp_m1": t1, "exchange": "deribit", "symbol": "BTC", "rv_1h": 11.0, "rv_1d": 22.0},
         ],
     )
     _write_feature_file(
@@ -91,13 +90,13 @@ def test_build_iv_rv_feature_uses_only_common_source_timestamps(tmp_path: Path) 
         ],
     )
 
-    assert discover_iv_rv_symbols(silver_root=str(silver), exchange="deribit") == ["BTC"]
+    assert discover_iv_rv_symbols(silver_root=str(silver), exchange="deribit") == ["BTC", "SOL"]
 
     btc_report = build_iv_rv_1m_feature_for_symbol(silver_root=str(silver), exchange="deribit", symbol="BTC")
     sol_report = build_iv_rv_1m_feature_for_symbol(silver_root=str(silver), exchange="deribit", symbol="SOL")
 
-    assert btc_report.rows_out == 1
-    assert sol_report.rows_out == 0
+    assert btc_report.rows_out == 2
+    assert sol_report.rows_out == 1
     btc = pl.read_parquet(
         silver
         / "dataset_type=iv_rv_1m_feature"
@@ -108,7 +107,7 @@ def test_build_iv_rv_feature_uses_only_common_source_timestamps(tmp_path: Path) 
         / "month=2026-06"
         / "BTC-2026-06.parquet"
     )
-    sol_path = (
+    sol = pl.read_parquet(
         silver
         / "dataset_type=iv_rv_1m_feature"
         / "exchange=deribit"
@@ -120,9 +119,13 @@ def test_build_iv_rv_feature_uses_only_common_source_timestamps(tmp_path: Path) 
     )
 
     assert btc.columns == SILVER_IV_RV_FEATURE_COLUMNS
-    assert btc["timestamp_m1"].to_list() == [t0]
-    assert btc["iv_minus_rv_1h"].to_list() == [50.0]
-    assert btc["iv_rv_ratio_1h"].to_list() == [6.0]
-    assert btc["iv_available"].to_list() == [True]
-    assert btc["rv_available"].to_list() == [True]
-    assert not sol_path.exists()
+    assert btc["iv_minus_rv_1h"].to_list() == [50.0, 55.0]
+    assert btc["iv_rv_ratio_1h"].to_list() == [6.0, 6.0]
+    assert btc["iv_available"].to_list() == [True, True]
+    assert btc["rv_available"].to_list() == [True, True]
+    assert sol.columns == SILVER_IV_RV_FEATURE_COLUMNS
+    assert sol["symbol"].to_list() == ["SOL"]
+    assert sol["iv_minus_rv_1h"].to_list() == [None]
+    assert sol["iv_rv_ratio_1h"].to_list() == [None]
+    assert sol["iv_available"].to_list() == [False]
+    assert sol["rv_available"].to_list() == [True]

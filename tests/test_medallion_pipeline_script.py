@@ -69,32 +69,6 @@ def test_build_steps_adds_volatility_to_silver_dataset_args(tmp_path: Path) -> N
     assert "volatility_index_data" in steps[0].args
 
 
-def test_build_steps_supports_script_metadata_step(tmp_path: Path) -> None:
-    module = _load_pipeline_module()
-    main_path = tmp_path / "main.py"
-    main_path.write_text("print('ok')\n", encoding="utf-8")
-    config_path = tmp_path / "config.yaml"
-    config_path.write_text("x: 1\n", encoding="utf-8")
-    script_path = tmp_path / "scripts" / "fetch_eodhd_isins.py"
-    script_path.parent.mkdir()
-    script_path.write_text("print('metadata')\n", encoding="utf-8")
-    cfg = {
-        "medallion-pipeline": {
-            "execution_order": ["metadata", "bronze"],
-            "metadata": {
-                "enabled": True,
-                "script": "scripts/fetch_eodhd_isins.py",
-                "cli_args": ["--no-json-output"],
-            },
-            "bronze": {"enabled": False, "command": "bronze-build", "cli_args": []},
-        }
-    }
-    steps = module._build_steps(main_path=main_path, config_path=config_path, config_data=cfg)
-    assert len(steps) == 1
-    assert steps[0].name == "metadata"
-    assert steps[0].args == [str(script_path.resolve()), "--config", str(config_path), "--no-json-output"]
-
-
 def test_build_steps_bronze_inherits_symbol_start_bounds_from_bronze_config(tmp_path: Path) -> None:
     module = _load_pipeline_module()
     main_path = tmp_path / "main.py"
@@ -210,7 +184,7 @@ def test_build_steps_layer_validation_errors(tmp_path: Path) -> None:
         module._build_steps(main_path=main_path, config_path=config_path, config_data=bad_layer)
 
     bad_cmd = {"medallion-pipeline": {"execution_order": ["bronze"], "bronze": {"enabled": True, "cli_args": []}}}
-    with pytest.raises(ValueError, match="command or script is required"):
+    with pytest.raises(ValueError, match="command is required"):
         module._build_steps(main_path=main_path, config_path=config_path, config_data=bad_cmd)
 
     bad_args = {

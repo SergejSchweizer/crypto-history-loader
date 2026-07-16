@@ -1,4 +1,4 @@
-"""Run metadata, Bronze, Silver, and Gold builders sequentially for cron automation."""
+"""Run Bronze, Silver, and Gold builders sequentially for cron automation."""
 
 from __future__ import annotations
 
@@ -69,7 +69,7 @@ def _build_steps(*, main_path: Path, config_path: Path, config_data: dict[str, A
     if not isinstance(order_raw, list) or not order_raw:
         raise ValueError("medallion-pipeline.execution_order must be a non-empty list")
     execution_order = [str(name).strip() for name in order_raw if str(name).strip()]
-    valid_layers = {"metadata", "bronze", "silver", "gold"}
+    valid_layers = {"bronze", "silver", "gold"}
     invalid = [name for name in execution_order if name not in valid_layers]
     if invalid:
         raise ValueError(
@@ -85,27 +85,14 @@ def _build_steps(*, main_path: Path, config_path: Path, config_data: dict[str, A
         if not enabled:
             continue
 
+        command = str(layer_cfg.get("command", "")).strip()
+        if not command:
+            raise ValueError(f"medallion-pipeline.{layer_name}.command is required")
+
         cli_args_raw = layer_cfg.get("cli_args", [])
         if not isinstance(cli_args_raw, list):
             raise ValueError(f"medallion-pipeline.{layer_name}.cli_args must be a list")
         cli_args = [str(token) for token in cli_args_raw]
-
-        script = str(layer_cfg.get("script", "")).strip()
-        command = str(layer_cfg.get("command", "")).strip()
-        if script:
-            script_path = Path(script)
-            if not script_path.is_absolute():
-                script_path = main_path.parent / script_path
-            steps.append(
-                PipelineStep(
-                    name=layer_name, args=[str(script_path.resolve()), "--config", str(config_path), *cli_args]
-                )
-            )
-            continue
-
-        if not command:
-            raise ValueError(f"medallion-pipeline.{layer_name}.command or script is required")
-
         if layer_name == "bronze" and command == "bronze-build":
             cli_args = _apply_bronze_start_defaults(cli_args=cli_args, config_data=config_data)
             cli_args = _ensure_volatility_dataset_arg(cli_args)
@@ -259,7 +246,7 @@ def parse_args() -> argparse.Namespace:
     repo_root = _default_repo_root()
     default_lock_file = repo_root / ".run" / "full-pipeline.lock"
 
-    parser = argparse.ArgumentParser(description="Run metadata, bronze, silver, and gold builders as one pipeline.")
+    parser = argparse.ArgumentParser(description="Run bronze, silver, and gold builders as one pipeline.")
     parser.add_argument("--repo-root", default=str(repo_root), help="Repository root path")
     parser.add_argument("--config", default=str(repo_root / "config.yaml"), help="Path to config.yaml")
     parser.add_argument("--python-bin", default=sys.executable, help="Python executable used for builder commands")

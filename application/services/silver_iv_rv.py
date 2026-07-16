@@ -53,20 +53,18 @@ def discover_iv_rv_symbols(
     exchange: str,
     timeframe: str = "1m",
 ) -> list[str]:
-    """Discover symbols that have both IV and RV feature inputs."""
+    """Discover symbols that have IV or RV feature inputs."""
 
-    symbols_by_dataset: list[set[str]] = []
+    symbols: set[str] = set()
     for dataset_type in ("volatility_index_1m_feature", "realized_volatility_1m_feature"):
         root = Path(silver_root) / f"dataset_type={dataset_type}" / f"exchange={exchange}"
-        symbols: set[str] = set()
         if not root.exists():
-            return []
+            continue
         for path in root.glob(f"symbol=*/timeframe={timeframe}"):
             symbol_segment = path.parent.name
             if symbol_segment.startswith("symbol="):
                 symbols.add(symbol_segment.split("=", 1)[1].strip().upper())
-        symbols_by_dataset.append(symbols)
-    return sorted(set.intersection(*symbols_by_dataset)) if symbols_by_dataset else []
+    return sorted(symbols)
 
 
 def _dataset_root(
@@ -193,7 +191,7 @@ def build_iv_rv_1m_feature_for_symbol(
         symbol=normalized_symbol,
         timeframe=timeframe,
     )
-    months = sorted(_discover_months(iv_root) & _discover_months(rv_root))
+    months = sorted(_discover_months(iv_root) | _discover_months(rv_root))
     agg_rows_in = 0
     agg_rows_out = 0
     min_timestamp: datetime | None = None
@@ -228,11 +226,29 @@ def build_iv_rv_1m_feature_for_symbol(
             if rv_path is not None
             else None
         )
-        if iv is None or rv is None:
+        if iv is None and rv is None:
             continue
-        assert iv is not None and rv is not None
-        agg_rows_in += iv.height + rv.height
-        frame = iv.join(rv, on=["timestamp_m1", "exchange", "symbol"], how="inner")
+        agg_rows_in += (iv.height if iv is not None else 0) + (rv.height if rv is not None else 0)
+        if iv is None:
+            if rv is None:
+                continue
+            frame = rv.with_columns(
+                [
+                    pl.lit(None, dtype=pl.Float64).alias("iv_close"),
+                    pl.lit(None, dtype=pl.Int64).alias("minutes_since_iv_observation"),
+                ]
+            )
+        elif rv is None:
+            frame = iv.with_columns(
+                [
+                    pl.lit(None, dtype=pl.Float64).alias("rv_1h"),
+                    pl.lit(None, dtype=pl.Float64).alias("rv_1d"),
+                ]
+            )
+        else:
+            frame = iv.join(rv, on=["timestamp_m1", "exchange", "symbol"], how="full", coalesce=True)
+        if frame is None:
+            continue
         feature = (
             frame.with_columns(
                 [
