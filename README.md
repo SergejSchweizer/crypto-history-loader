@@ -670,15 +670,15 @@ uv run python scripts/run_medallion_pipeline.py --config config.yaml
 
 Runs `metadata -> bronze-build -> silver-build -> gold-build` using `medallion-pipeline` settings
 from `config.yaml`, enforces single-run locking via `.run/full-pipeline.lock`, and writes a shared
-append-only pipeline log. The metadata step fetches the EODHD ISIN reference dataset when
-`EODHD_API_TOKEN` is present and skips cleanly when the token is absent. The configured code path
+append-only pipeline log. The metadata step fetches the EODHD ISIN reference dataset when the
+local EODHD secret config is present and skips cleanly when the token is absent. The configured code path
 supports volatility-index OHLC fields, but the physical inventory in section 4.7 is authoritative
 for which Gold artifacts are IV/RV-ready.
 
 EODHD ISIN reference data can also be refreshed directly:
 
 ```bash
-EODHD_API_TOKEN=... uv run python scripts/fetch_eodhd_isins.py --config config.yaml
+uv run python scripts/fetch_eodhd_isins.py --config config.yaml
 ```
 
 The fetcher writes `lake/reference/eodhd_isins/eodhd_isins.csv` and
@@ -687,10 +687,18 @@ The fetcher writes `lake/reference/eodhd_isins/eodhd_isins.csv` and
 EODHD exchange symbol list and the delisted-only variant, then writes one deduplicated ISIN mapping
 per `isin/exchange/code`.
 
-Cron should export the token before the medallion run, for example:
+Put the EODHD token into the local ignored secret config referenced by `config.yaml`:
+
+```yaml
+api_key: "..."
+```
+
+The default path is `.secrets/eodhd.yaml`. Environment variable `EODHD_API_TOKEN` remains a fallback
+for existing deployments, but the local secret config is preferred.
+
+Cron can call the medallion runner directly:
 
 ```cron
-EODHD_API_TOKEN=...
 17 * * * * cd /home/vcs/git/crypto-history-loader && uv run python scripts/run_medallion_pipeline.py --config config.yaml
 ```
 

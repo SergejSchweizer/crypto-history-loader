@@ -29,6 +29,7 @@ bronze-build:
 
 eodhd-isin-fetch:
   enabled: true
+  secret_config: .secrets/eodhd.yaml
   api_token_env: EODHD_API_TOKEN
   output_csv: lake/reference/eodhd_isins/eodhd_isins.csv
   manifest_json: lake/reference/eodhd_isins/eodhd_isins.json

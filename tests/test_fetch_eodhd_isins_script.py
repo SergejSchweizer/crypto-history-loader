@@ -8,6 +8,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 
 def _load_fetch_module() -> Any:
     script_path = Path(__file__).resolve().parents[1] / "scripts" / "fetch_eodhd_isins.py"
@@ -24,6 +26,7 @@ def test_fetch_isin_rows_fetches_active_and_delisted_without_duplicate(tmp_path:
     config = module.FetchConfig(
         enabled=True,
         token_env="EODHD_API_TOKEN",
+        secret_config=tmp_path / "eodhd.yaml",
         output_csv=tmp_path / "eodhd_isins.csv",
         manifest_json=tmp_path / "eodhd_isins.json",
         exchanges=("US",),
@@ -102,6 +105,7 @@ def test_fetch_isin_rows_loads_exchange_list_when_exchanges_are_not_configured(t
     config = module.FetchConfig(
         enabled=True,
         token_env="EODHD_API_TOKEN",
+        secret_config=tmp_path / "eodhd.yaml",
         output_csv=tmp_path / "eodhd_isins.csv",
         manifest_json=tmp_path / "eodhd_isins.json",
         exchanges=(),
@@ -143,6 +147,7 @@ def test_write_outputs_creates_csv_and_manifest(tmp_path: Path) -> None:
     config = module.FetchConfig(
         enabled=True,
         token_env="EODHD_API_TOKEN",
+        secret_config=tmp_path / "eodhd.yaml",
         output_csv=tmp_path / "ref" / "eodhd_isins.csv",
         manifest_json=tmp_path / "ref" / "eodhd_isins.json",
         exchanges=("US",),
@@ -173,3 +178,49 @@ def test_write_outputs_creates_csv_and_manifest(tmp_path: Path) -> None:
     assert csv_rows[0]["isin"] == "US0000000001"
     assert manifest["row_count"] == 1
     assert config.manifest_json.exists()
+
+
+def test_read_api_token_prefers_secret_config_over_environment(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    module = _load_fetch_module()
+    secret_config = tmp_path / "eodhd.yaml"
+    secret_config.write_text("api_key: config-token\n", encoding="utf-8")
+    monkeypatch.setenv("EODHD_API_TOKEN", "env-token")
+    config = module.FetchConfig(
+        enabled=True,
+        token_env="EODHD_API_TOKEN",
+        secret_config=secret_config,
+        output_csv=tmp_path / "eodhd_isins.csv",
+        manifest_json=tmp_path / "eodhd_isins.json",
+        exchanges=("US",),
+        include_delisted=True,
+        skip_without_token=True,
+        timeout_s=1.0,
+        sleep_s=0.0,
+        lock_file=tmp_path / "fetch.lock",
+        no_json_output=True,
+    )
+
+    assert module.read_api_token(config) == ("config-token", str(secret_config))
+
+
+def test_read_api_token_supports_nested_secret_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    module = _load_fetch_module()
+    secret_config = tmp_path / "eodhd.yaml"
+    secret_config.write_text("eodhd-isin-fetch:\n  api_key: nested-token\n", encoding="utf-8")
+    monkeypatch.delenv("EODHD_API_TOKEN", raising=False)
+    config = module.FetchConfig(
+        enabled=True,
+        token_env="EODHD_API_TOKEN",
+        secret_config=secret_config,
+        output_csv=tmp_path / "eodhd_isins.csv",
+        manifest_json=tmp_path / "eodhd_isins.json",
+        exchanges=("US",),
+        include_delisted=True,
+        skip_without_token=True,
+        timeout_s=1.0,
+        sleep_s=0.0,
+        lock_file=tmp_path / "fetch.lock",
+        no_json_output=True,
+    )
+
+    assert module.read_api_token(config) == ("nested-token", str(secret_config))
