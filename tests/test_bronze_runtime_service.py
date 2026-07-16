@@ -115,6 +115,51 @@ def test_build_bronze_runtime_bounds_context_parses_start_bounds() -> None:
     assert context.exchange_symbol_start_open_ms["deribit:SOL"] == runtime.parse_start_date_to_open_ms("2024-02-27")
 
 
+def test_bronze_runtime_adapter_defaults_to_disabled_bounds() -> None:
+    adapter = runtime.BronzeRuntimeAdapter()
+
+    assert adapter.context == runtime.BronzeRuntimeBoundsContext(
+        tail_delta_only=False,
+        global_start_open_ms=None,
+        symbol_start_open_ms={},
+        exchange_symbol_start_open_ms={},
+    )
+
+
+def test_bronze_runtime_adapter_configure_rebuilds_and_stores_context() -> None:
+    adapter = runtime.BronzeRuntimeAdapter()
+
+    returned = adapter.configure(
+        tail_delta_only=True,
+        start_date="2023-04-24",
+        symbol_start_dates=["BTCUSDT=2023-04-25"],
+        exchange_symbol_start_dates=["DERIBIT:SOL=2024-02-27"],
+        logger=logging.getLogger("test"),
+    )
+
+    assert returned is adapter.context
+    assert adapter.context.tail_delta_only is True
+    assert adapter.context.global_start_open_ms == runtime.parse_start_date_to_open_ms("2023-04-24")
+    assert adapter.context.symbol_start_open_ms["BTC"] == runtime.parse_start_date_to_open_ms("2023-04-25")
+    assert adapter.context.exchange_symbol_start_open_ms["deribit:SOL"] == runtime.parse_start_date_to_open_ms(
+        "2024-02-27"
+    )
+
+
+def test_bronze_runtime_adapter_context_setter_replaces_active_context() -> None:
+    adapter = runtime.BronzeRuntimeAdapter()
+    replacement = runtime.BronzeRuntimeBoundsContext(
+        tail_delta_only=True,
+        global_start_open_ms=5000,
+        symbol_start_open_ms={"BTC": 6000},
+        exchange_symbol_start_open_ms={},
+    )
+
+    adapter.context = replacement
+
+    assert adapter.context is replacement
+
+
 def test_resolve_symbol_start_open_ms_bound_applies_specific_and_tail_bounds() -> None:
     context = runtime.BronzeRuntimeBoundsContext(
         tail_delta_only=False,
