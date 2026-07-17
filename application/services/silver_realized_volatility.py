@@ -9,6 +9,21 @@ from typing import Any, Protocol
 
 from application.dataset_contracts import SILVER_REALIZED_VOLATILITY_FEATURE_COLUMNS
 
+# QC-01: canonical annualization basis for crypto calendar-time volatility (365
+# calendar days per year, expressed in minutes) shared by every annualized RV field.
+_ANNUALIZATION_MINUTES_PER_YEAR = 365 * 24 * 60
+
+# QC-01: raw RV window -> window length in minutes, used to scale each raw
+# (non-annualized) RV window into an annualized volatility percentage point.
+_RV_WINDOW_MINUTES = {
+    "rv_5m": 5,
+    "rv_15m": 15,
+    "rv_1h": 60,
+    "rv_4h": 240,
+    "rv_1d": 1440,
+    "rv_30d": 30 * 1440,
+}
+
 
 class SilverReportFactory(Protocol):
     """Factory contract for constructing Silver build reports."""
@@ -179,6 +194,20 @@ def _rolling_zscore_expr(pl: Any, column: str, window_size: str) -> Any:
     return pl.when(rolling_std > 0.0).then((pl.col(column) - rolling_mean) / rolling_std).otherwise(None)
 
 
+def _annualized_pct_expr(pl: Any, raw_column: str, window_minutes: int) -> Any:
+    """Scale a raw (non-annualized) RV window into an annualized percentage point.
+
+    QC-01: ``raw_column`` holds ``sqrt(sum(log_return^2))`` over ``window_minutes``
+    of 1-minute observations, a non-annualized decimal volatility estimate. Scaling
+    by ``sqrt(minutes_per_year / window_minutes)`` converts it to the same
+    annualization basis and unit (percentage points) as the implied-volatility
+    index, so it can be safely subtracted from or divided into IV values.
+    """
+
+    scale = (_ANNUALIZATION_MINUTES_PER_YEAR / window_minutes) ** 0.5 * 100.0
+    return pl.col(raw_column) * scale
+
+
 def build_realized_volatility_1m_feature_for_symbol(
     *,
     silver_root: str,
@@ -268,36 +297,46 @@ def build_realized_volatility_1m_feature_for_symbol(
             ]
         ).sort(["exchange", "symbol", "timestamp_m1"])
         previous_close = pl.col("rv_close").shift(1).over(["exchange", "symbol"])
-        frame = frame.with_columns(
-            pl.when((pl.col("rv_close") > 0.0) & (previous_close > 0.0))
-            .then((pl.col("rv_close") / previous_close).log())
-            .otherwise(None)
-            .alias("log_return")
-        ).with_columns(
-            [
-                _rolling_rv_expr(pl, "5m").alias("rv_5m"),
-                _rolling_rv_expr(pl, "15m").alias("rv_15m"),
-                _rolling_rv_expr(pl, "1h").alias("rv_1h"),
-                _rolling_rv_expr(pl, "4h").alias("rv_4h"),
-                _rolling_rv_expr(pl, "1d").alias("rv_1d"),
-                (
+        frame = (
+            frame.with_columns(
+                pl.when((pl.col("rv_close") > 0.0) & (previous_close > 0.0))
+                .then((pl.col("rv_close") / previous_close).log())
+                .otherwise(None)
+                .alias("log_return")
+            )
+            .with_columns(
+                [
+                    _rolling_rv_expr(pl, "5m").alias("rv_5m"),
+                    _rolling_rv_expr(pl, "15m").alias("rv_15m"),
+                    _rolling_rv_expr(pl, "1h").alias("rv_1h"),
+                    _rolling_rv_expr(pl, "4h").alias("rv_4h"),
+                    _rolling_rv_expr(pl, "1d").alias("rv_1d"),
+                    _rolling_rv_expr(pl, "30d").alias("rv_30d"),
                     (
-                        (pl.col("rv_high") / pl.col("rv_low"))
-                        .log()
-                        .pow(2)
-                        .rolling_sum_by(
-                            "timestamp_m1",
-                            window_size="1h",
-                            min_samples=1,
+                        (
+                            (pl.col("rv_high") / pl.col("rv_low"))
+                            .log()
+                            .pow(2)
+                            .rolling_sum_by(
+                                "timestamp_m1",
+                                window_size="1h",
+                                min_samples=1,
+                            )
                         )
+                        / (4.0 * 0.6931471805599453)
                     )
-                    / (4.0 * 0.6931471805599453)
-                )
-                .over(["exchange", "symbol"])
-                .sqrt()
-                .alias("parkinson_rv_1h"),
-                _rolling_zscore_expr(pl, "log_return", "1d").abs().alias("jump_proxy"),
-            ]
+                    .over(["exchange", "symbol"])
+                    .sqrt()
+                    .alias("parkinson_rv_1h"),
+                    _rolling_zscore_expr(pl, "log_return", "1d").abs().alias("jump_proxy"),
+                ]
+            )
+            .with_columns(
+                [
+                    _annualized_pct_expr(pl, raw_column, window_minutes).alias(f"{raw_column}_annualized_pct")
+                    for raw_column, window_minutes in _RV_WINDOW_MINUTES.items()
+                ]
+            )
         )
         feature = frame.select(SILVER_REALIZED_VOLATILITY_FEATURE_COLUMNS)
 

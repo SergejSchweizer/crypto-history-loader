@@ -57,6 +57,7 @@ def test_build_iv_rv_feature_keeps_missing_iv_explicit(tmp_path: Path) -> None:
                 "exchange": "deribit",
                 "symbol": "BTC",
                 "iv_close": 60.0,
+                "iv_30d_annualized_pct": 60.0,
                 "minutes_since_iv_observation": 0,
             },
             {
@@ -64,6 +65,7 @@ def test_build_iv_rv_feature_keeps_missing_iv_explicit(tmp_path: Path) -> None:
                 "exchange": "deribit",
                 "symbol": "BTC",
                 "iv_close": 66.0,
+                "iv_30d_annualized_pct": 66.0,
                 "minutes_since_iv_observation": 0,
             },
         ],
@@ -75,8 +77,22 @@ def test_build_iv_rv_feature_keeps_missing_iv_explicit(tmp_path: Path) -> None:
         symbol="BTC",
         month=month,
         rows=[
-            {"timestamp_m1": t0, "exchange": "deribit", "symbol": "BTC", "rv_1h": 10.0, "rv_1d": 20.0},
-            {"timestamp_m1": t1, "exchange": "deribit", "symbol": "BTC", "rv_1h": 11.0, "rv_1d": 22.0},
+            {
+                "timestamp_m1": t0,
+                "exchange": "deribit",
+                "symbol": "BTC",
+                "rv_1h": 0.01,
+                "rv_1d": 0.02,
+                "rv_30d_annualized_pct": 45.0,
+            },
+            {
+                "timestamp_m1": t1,
+                "exchange": "deribit",
+                "symbol": "BTC",
+                "rv_1h": 0.011,
+                "rv_1d": 0.022,
+                "rv_30d_annualized_pct": 48.0,
+            },
         ],
     )
     _write_feature_file(
@@ -86,7 +102,14 @@ def test_build_iv_rv_feature_keeps_missing_iv_explicit(tmp_path: Path) -> None:
         symbol="SOL",
         month=month,
         rows=[
-            {"timestamp_m1": t0, "exchange": "deribit", "symbol": "SOL", "rv_1h": 5.0, "rv_1d": 7.0},
+            {
+                "timestamp_m1": t0,
+                "exchange": "deribit",
+                "symbol": "SOL",
+                "rv_1h": 0.005,
+                "rv_1d": 0.007,
+                "rv_30d_annualized_pct": 30.0,
+            },
         ],
     )
 
@@ -119,13 +142,78 @@ def test_build_iv_rv_feature_keeps_missing_iv_explicit(tmp_path: Path) -> None:
     )
 
     assert btc.columns == SILVER_IV_RV_FEATURE_COLUMNS
-    assert btc["iv_minus_rv_1h"].to_list() == [50.0, 55.0]
-    assert btc["iv_rv_ratio_1h"].to_list() == [6.0, 6.0]
+    assert btc["iv_minus_rv_1h"].to_list() == [pytest.approx(59.99), pytest.approx(65.989)]
+    assert btc["iv_rv_ratio_1h"].to_list() == [pytest.approx(6000.0), pytest.approx(6000.0)]
+    assert btc["iv_rv_spread_30d_pct"].to_list() == [pytest.approx(15.0), pytest.approx(18.0)]
+    assert btc["iv_rv_ratio_30d"].to_list() == [pytest.approx(60.0 / 45.0), pytest.approx(66.0 / 48.0)]
     assert btc["iv_available"].to_list() == [True, True]
     assert btc["rv_available"].to_list() == [True, True]
     assert sol.columns == SILVER_IV_RV_FEATURE_COLUMNS
     assert sol["symbol"].to_list() == ["SOL"]
     assert sol["iv_minus_rv_1h"].to_list() == [None]
     assert sol["iv_rv_ratio_1h"].to_list() == [None]
+    assert sol["iv_rv_spread_30d_pct"].to_list() == [None]
+    assert sol["iv_rv_ratio_30d"].to_list() == [None]
     assert sol["iv_available"].to_list() == [False]
     assert sol["rv_available"].to_list() == [True]
+
+
+def test_build_iv_rv_feature_ratio_30d_is_none_when_rv_30d_annualized_is_zero(tmp_path: Path) -> None:
+    """QC-01: a zero (not missing) 30d annualized RV denominator must null the ratio, not divide by zero."""
+
+    silver = tmp_path / "silver"
+    month = "2026-06"
+    t0 = datetime(2026, 6, 12, 0, 0, tzinfo=UTC)
+
+    _write_feature_file(
+        silver,
+        dataset_type="volatility_index_1m_feature",
+        exchange="deribit",
+        symbol="ETH",
+        month=month,
+        rows=[
+            {
+                "timestamp_m1": t0,
+                "exchange": "deribit",
+                "symbol": "ETH",
+                "iv_close": 50.0,
+                "iv_30d_annualized_pct": 50.0,
+                "minutes_since_iv_observation": 0,
+            },
+        ],
+    )
+    _write_feature_file(
+        silver,
+        dataset_type="realized_volatility_1m_feature",
+        exchange="deribit",
+        symbol="ETH",
+        month=month,
+        rows=[
+            {
+                "timestamp_m1": t0,
+                "exchange": "deribit",
+                "symbol": "ETH",
+                "rv_1h": 0.0,
+                "rv_1d": 0.0,
+                "rv_30d_annualized_pct": 0.0,
+            },
+        ],
+    )
+
+    build_iv_rv_1m_feature_for_symbol(silver_root=str(silver), exchange="deribit", symbol="ETH")
+
+    eth = pl.read_parquet(
+        silver
+        / "dataset_type=iv_rv_1m_feature"
+        / "exchange=deribit"
+        / "symbol=ETH"
+        / "timeframe=1m"
+        / "year=2026"
+        / "month=2026-06"
+        / "ETH-2026-06.parquet"
+    )
+
+    assert eth["iv_rv_spread_30d_pct"].to_list() == [pytest.approx(50.0)]
+    assert eth["iv_rv_ratio_30d"].to_list() == [None]
+    assert eth["iv_rv_ratio_1h"].to_list() == [None]
+    assert eth["iv_rv_ratio_1d"].to_list() == [None]

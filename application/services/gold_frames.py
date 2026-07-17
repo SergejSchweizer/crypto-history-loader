@@ -473,6 +473,9 @@ def prepare_volatility_index_feature(pl: Any, frame: Any, symbol: str) -> Any:
                 pl.col("iv_zscore_1d").cast(pl.Float64),
                 pl.col("iv_zscore_7d").cast(pl.Float64),
                 pl.col("iv_percentile_30d").cast(pl.Float64),
+                # QC-01: annualized, 30-day-horizon alias of `iv_close` used for
+                # unit-safe IV/RV comparisons.
+                pl.col("iv_30d_annualized_pct").cast(pl.Float64),
                 pl.col("iv_source_dataset").cast(pl.Utf8),
                 pl.col("iv_source_timestamp"),
                 pl.col("minutes_since_iv_observation").cast(pl.Int64),
@@ -500,10 +503,16 @@ def prepare_iv_rv(pl: Any, frame: Any, symbol: str) -> Any:
                 "timestamp_m1",
                 "exchange",
                 "symbol",
+                # Deprecated (QC-01): mix an annualized IV percentage-point index
+                # with non-annualized, sub-30-day RV; kept for backward compatibility.
                 pl.col("iv_minus_rv_1h").cast(pl.Float64),
                 pl.col("iv_minus_rv_1d").cast(pl.Float64),
                 pl.col("iv_rv_ratio_1h").cast(pl.Float64),
                 pl.col("iv_rv_ratio_1d").cast(pl.Float64),
+                # QC-01: unit- and horizon-compatible comparison (both sides
+                # annualized volatility percentage points over a 30-day horizon).
+                pl.col("iv_rv_spread_30d_pct").cast(pl.Float64),
+                pl.col("iv_rv_ratio_30d").cast(pl.Float64),
                 pl.col("iv_rv_zscore_1d").cast(pl.Float64),
                 pl.col("iv_rv_percentile_30d").cast(pl.Float64),
                 pl.col("minutes_since_iv_observation").cast(pl.Int64),
@@ -592,6 +601,16 @@ def prepare_realized_volatility(pl: Any, frame: Any, symbol: str) -> Any:
                 pl.col("rv_1h").cast(pl.Float64),
                 pl.col("rv_4h").cast(pl.Float64),
                 pl.col("rv_1d").cast(pl.Float64),
+                # QC-01: annualized-percentage-point siblings of the raw RV windows
+                # above (365-day annualization basis), suitable for direct
+                # comparison against `iv_close` / `iv_30d_annualized_pct`.
+                pl.col("rv_5m_annualized_pct").cast(pl.Float64),
+                pl.col("rv_15m_annualized_pct").cast(pl.Float64),
+                pl.col("rv_1h_annualized_pct").cast(pl.Float64),
+                pl.col("rv_4h_annualized_pct").cast(pl.Float64),
+                pl.col("rv_1d_annualized_pct").cast(pl.Float64),
+                pl.col("rv_30d").cast(pl.Float64),
+                pl.col("rv_30d_annualized_pct").cast(pl.Float64),
                 pl.col("parkinson_rv_1h").cast(pl.Float64),
                 pl.col("jump_proxy").cast(pl.Float64),
                 pl.col("spot_available").cast(pl.Boolean),

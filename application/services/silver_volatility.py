@@ -519,6 +519,11 @@ def build_volatility_index_1m_feature_for_symbol(
                 .then((pl.col("iv_close") / previous_close).log())
                 .otherwise(None)
                 .alias("iv_return_1m"),
+                # QC-01: Deribit's volatility index is constructed as an annualized,
+                # 30-day implied-volatility measure already expressed in percentage
+                # points. This alias exposes that unit/horizon explicitly so IV/RV
+                # comparisons never need to guess `iv_close` semantics.
+                pl.col("iv_close").alias("iv_30d_annualized_pct"),
                 _rolling_zscore_expr(pl, "1d").alias("iv_zscore_1d"),
                 _rolling_zscore_expr(pl, "7d").alias("iv_zscore_7d"),
                 pl.lit(0, dtype=pl.Int64).alias("minutes_since_iv_observation"),

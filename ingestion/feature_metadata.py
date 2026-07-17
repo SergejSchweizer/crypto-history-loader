@@ -22,6 +22,9 @@ def feature_source_dataset(column_name: str) -> str:
         "iv_high",
         "iv_low",
         "iv_close",
+        # QC-01: annualized 30d-horizon alias of `iv_close`; must resolve to the
+        # same source dataset, not the generic `iv_` -> iv_rv_1m_feature fallback.
+        "iv_30d_annualized_pct",
         "iv_range",
         "iv_return_1m",
         "iv_change_5m",
