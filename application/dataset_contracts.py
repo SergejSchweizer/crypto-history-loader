@@ -769,6 +769,7 @@ LIVE_MICROSTRUCTURE_GOLD_REQUIREMENTS = (
 
 LIVE_FULL_GOLD_REQUIREMENTS = (
     GoldSourceRequirement("volatility_index_1m_feature", "1m"),
+    GoldSourceRequirement("iv_rv_1m_feature", "1m"),
     GoldSourceRequirement("perps_l2_1m_feature", "1m"),
     GoldSourceRequirement("options_l2_1m_feature", "1m"),
 )

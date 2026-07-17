@@ -74,6 +74,33 @@ def _write_volatility_feature(silver: Path, timestamps: list[datetime]) -> None:
     )
 
 
+def _write_iv_rv_feature(silver: Path, timestamps: list[datetime]) -> None:
+    _write_silver(
+        silver,
+        dataset_type="iv_rv_1m_feature",
+        symbol="BTC",
+        timeframe="1m",
+        rows=[
+            {
+                "timestamp_m1": timestamp,
+                "exchange": "deribit",
+                "symbol": "BTC",
+                "iv_minus_rv_1h": 5.0 + index,
+                "iv_minus_rv_1d": 3.0 + index,
+                "iv_rv_ratio_1h": 1.2 + index,
+                "iv_rv_ratio_1d": 1.1 + index,
+                "iv_rv_zscore_1d": 0.5 + index,
+                "iv_rv_percentile_30d": 0.7 + index,
+                "minutes_since_iv_observation": 0,
+                "minutes_since_rv_observation": 0,
+                "iv_available": True,
+                "rv_available": True,
+            }
+            for index, timestamp in enumerate(timestamps)
+        ],
+    )
+
+
 def test_live_full_gold_combines_live_origin_features_without_historical_fill(tmp_path: Path) -> None:
     """The live full dataset should be one inference table from live-loader-derived inputs."""
 
@@ -81,6 +108,7 @@ def test_live_full_gold_combines_live_origin_features_without_historical_fill(tm
     t2 = t0 + timedelta(minutes=2)
     silver = tmp_path / "silver"
     _write_volatility_feature(silver, [t0, t2])
+    _write_iv_rv_feature(silver, [t0, t2])
     _write_silver(
         silver,
         dataset_type="perps_l2_1m_feature",
@@ -114,6 +142,8 @@ def test_live_full_gold_combines_live_origin_features_without_historical_fill(tm
 
     assert live_full.height == 3
     assert live_full["iv_close"].to_list() == [50.5, None, 51.5]
+    assert live_full["iv_minus_rv_1h"].to_list() == [5.0, None, 6.0]
+    assert live_full["iv_rv_ratio_1h"].to_list() == [1.2, None, 2.2]
     assert live_full["perps_l2_mid_price"].to_list() == [100.0, None, 100.0]
     assert live_full["options_l2_contract_count"].to_list() == [2, None, None]
     assert live_full["live_snapshot_derived"].to_list() == [True, None, True]
@@ -126,6 +156,7 @@ def test_live_full_gold_combines_live_origin_features_without_historical_fill(tm
     assert manifest["origin_repository"] == "crypto-live-loader"
     assert manifest["required_source_datasets"] == [
         "volatility_index_1m_feature",
+        "iv_rv_1m_feature",
         "perps_l2_1m_feature",
         "options_l2_1m_feature",
     ]
@@ -135,6 +166,7 @@ def test_live_full_gold_combines_live_origin_features_without_historical_fill(tm
         "options_surface_1m_feature",
     ]
     assert manifest["missing_value_count_by_column"]["iv_close"] == 1
+    assert manifest["missing_value_count_by_column"]["iv_minus_rv_1h"] == 1
     assert manifest["missing_value_count_by_column"]["options_l2_contract_count"] == 2
 
 
@@ -144,6 +176,7 @@ def test_live_full_gold_contract_declares_live_sources() -> None:
     contract = gold_dataset_contract("gold.live.full.m1")
     assert [requirement.dataset_type for requirement in contract.requirements] == [
         "volatility_index_1m_feature",
+        "iv_rv_1m_feature",
         "perps_l2_1m_feature",
         "options_l2_1m_feature",
     ]

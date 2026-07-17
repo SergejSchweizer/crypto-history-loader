@@ -775,7 +775,7 @@ uv run python main.py gold-build \
 ```
 
 `gold.live.full.m1` is the canonical live Gold dataset. It combines live volatility-index,
-perpetual-L2, and options-L2 feature families into one inference table, records
+IV/RV, perpetual-L2, and options-L2 feature families into one inference table, records
 `origin_repository=crypto-live-loader` in the manifest, keeps optional live index/futures/option
 surface features nullable, and never fills live gaps from historical datasets.
 

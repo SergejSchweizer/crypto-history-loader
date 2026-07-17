@@ -995,6 +995,7 @@ Scope:
 - Add `gold.live.full.m1` as the complete live feature join.
 - Required live sources:
   - `volatility_index_1m_feature`
+  - `iv_rv_1m_feature`
   - `perps_l2_1m_feature`
   - `options_l2_1m_feature`
 - Optional live Silver sources remain nullable with explicit availability/freshness fields:

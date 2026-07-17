@@ -198,9 +198,10 @@ and option quote coverage remain explicit so live consumers can filter stale or 
 without hidden fills.
 
 `gold.live.full.m1` is the canonical live full dataset. It combines live volatility-index features,
-perpetual L2 features, and option L2 aggregates into one inference table, marks the manifest origin
-as `crypto-live-loader`, and keeps optional live index, futures-summary, and option-surface
-features nullable. Missing live minutes stay null and are never backfilled from historical data.
+live IV/RV features, perpetual L2 features, and option L2 aggregates into one inference table,
+marks the manifest origin as `crypto-live-loader`, and keeps optional live index, futures-summary,
+and option-surface features nullable. Missing live minutes stay null and are never backfilled from
+historical data.
 
 ## Runtime And Side Effects
 
