@@ -154,6 +154,18 @@ source timestamp as an auxiliary reference. It accepts only finite, non-negative
 not resample or emit any internally computed `rv_*` field; `realized_volatility_1m_feature`
 remains the separately owned realized-volatility calculation.
 
+`volatility_index_1m_feature.iv_close` is Deribit's DVOL-style implied-volatility index: an
+annualized, 30-day-horizon measure already expressed in percentage points, aliased explicitly as
+`iv_30d_annualized_pct`. `realized_volatility_1m_feature`'s raw `rv_*` windows are non-annualized
+`sqrt(sum(log_return^2))` estimates over their window; each has an annualized-percentage-point
+sibling (for example `rv_30d_annualized_pct`) computed against a shared 365-day annualization
+basis. Only annualized, horizon-matched fields (`iv_30d_annualized_pct` against
+`rv_30d_annualized_pct`) are financially comparable; `iv_rv_1m_feature` exposes this as
+`iv_rv_spread_30d_pct` and `iv_rv_ratio_30d`. The legacy `iv_minus_rv_1h`, `iv_minus_rv_1d`,
+`iv_rv_ratio_1h`, and `iv_rv_ratio_1d` columns mix an annualized IV index with non-annualized,
+sub-30-day RV and remain only for backward compatibility with existing persisted artifacts; new
+consumers should prefer the annualized 30-day comparison.
+
 The Gold layer has two canonical model-ready endpoints: `gold.market.history_full.m1` for
 historical data produced by this repository, and `gold.live.full.m1` for live-origin data produced
 from `crypto-live-loader` inputs. Narrower Gold contracts remain available as internal building

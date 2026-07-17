@@ -125,3 +125,78 @@ def test_build_realized_volatility_uses_trailing_ohlcv_windows(tmp_path: Path) -
         (log(105.0 / 100.0) ** 2 + log(110.0 / 105.0) ** 2 + log(120.0 / 110.0) ** 2) ** 0.5
     )
     assert written["jump_proxy"].to_list()[0] is None
+
+
+def test_annualized_rv_matches_hand_calculated_reference(tmp_path: Path) -> None:
+    """QC-01: *_annualized_pct fields must scale the raw RV by the documented 365-day basis."""
+
+    silver = tmp_path / "silver"
+    month = "2026-06"
+    timestamps = [
+        datetime(2026, 6, 12, 0, 0, tzinfo=UTC),
+        datetime(2026, 6, 12, 0, 5, tzinfo=UTC),
+    ]
+    closes = [100.0, 105.0]
+    rows = []
+    for index, timestamp in enumerate(timestamps):
+        close = closes[index]
+        rows.append(
+            {
+                "schema_version": "v1",
+                "dataset_type": "spot_ohlcv",
+                "exchange": "deribit",
+                "symbol": "BTC_USDC",
+                "instrument_type": "spot_ohlcv",
+                "event_time": timestamp,
+                "ingested_at": timestamp,
+                "run_id": f"r{index}",
+                "source_endpoint": "public_get_tradingview_chart_data",
+                "open_time": timestamp,
+                "close_time": timestamp,
+                "timeframe": "1m",
+                "open_price": close - 1.0,
+                "high_price": close + 1.0,
+                "low_price": close - 2.0,
+                "close_price": close,
+                "volume": 1.0,
+                "quote_volume": 1.0,
+                "trade_count": 1,
+                "origin_payload": "{}",
+            }
+        )
+    _write_silver_ohlcv_file(
+        silver,
+        dataset_type="spot_ohlcv",
+        exchange="deribit",
+        symbol="BTC_USDC",
+        month=month,
+        rows=rows,
+    )
+
+    report = build_realized_volatility_1m_feature_for_symbol(
+        silver_root=str(silver),
+        exchange="deribit",
+        symbol="BTC",
+    )
+    assert report.rows_out == 2
+    output_path = (
+        silver
+        / "dataset_type=realized_volatility_1m_feature"
+        / "exchange=deribit"
+        / "symbol=BTC"
+        / "timeframe=1m"
+        / "year=2026"
+        / "month=2026-06"
+        / "BTC-2026-06.parquet"
+    )
+    written = pl.read_parquet(output_path)
+
+    raw_rv_5m = abs(log(105.0 / 100.0))
+    minutes_per_year = 365 * 24 * 60
+    expected_annualized_pct = raw_rv_5m * (minutes_per_year / 5) ** 0.5 * 100.0
+
+    assert written["rv_5m"].to_list()[1] == pytest.approx(raw_rv_5m)
+    assert written["rv_5m_annualized_pct"].to_list()[1] == pytest.approx(expected_annualized_pct)
+    # Null raw RV (insufficient trailing history) must stay null once annualized.
+    assert written["rv_5m"].to_list()[0] is None
+    assert written["rv_5m_annualized_pct"].to_list()[0] is None

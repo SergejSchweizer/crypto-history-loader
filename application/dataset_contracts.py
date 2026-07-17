@@ -181,6 +181,11 @@ SILVER_VOLATILITY_FEATURE_COLUMNS = [
     "iv_zscore_1d",
     "iv_zscore_7d",
     "iv_percentile_30d",
+    # QC-01: Deribit's DVOL-style volatility index is already an annualized, 30-day
+    # implied-volatility measure in percentage points. This alias makes that unit and
+    # horizon explicit so downstream IV/RV comparisons never need to guess the
+    # semantics of `iv_close`.
+    "iv_30d_annualized_pct",
     "iv_source_dataset",
     "iv_source_timestamp",
     "minutes_since_iv_observation",
@@ -380,6 +385,17 @@ SILVER_REALIZED_VOLATILITY_FEATURE_COLUMNS = [
     "rv_1h",
     "rv_4h",
     "rv_1d",
+    # QC-01: raw RV windows above are non-annualized sqrt(sum(log_return^2));
+    # the *_annualized_pct siblings below are the unit-safe, annualized-percentage-
+    # point equivalents (365-day annualization basis) suitable for direct comparison
+    # against `iv_close` / `iv_30d_annualized_pct`.
+    "rv_5m_annualized_pct",
+    "rv_15m_annualized_pct",
+    "rv_1h_annualized_pct",
+    "rv_4h_annualized_pct",
+    "rv_1d_annualized_pct",
+    "rv_30d",
+    "rv_30d_annualized_pct",
     "parkinson_rv_1h",
     "jump_proxy",
     "spot_available",
@@ -389,10 +405,18 @@ SILVER_IV_RV_FEATURE_COLUMNS = [
     "timestamp_m1",
     "exchange",
     "symbol",
+    # Deprecated (QC-01): these mix an annualized IV percentage-point index with a
+    # non-annualized, sub-30-day-horizon RV estimate. Units and horizons are
+    # incompatible; kept unchanged for backward compatibility with existing
+    # persisted artifacts. Prefer `iv_rv_spread_30d_pct` / `iv_rv_ratio_30d`.
     "iv_minus_rv_1h",
     "iv_minus_rv_1d",
     "iv_rv_ratio_1h",
     "iv_rv_ratio_1d",
+    # QC-01: unit- and horizon-compatible comparison, both sides annualized
+    # volatility percentage points over a 30-day horizon.
+    "iv_rv_spread_30d_pct",
+    "iv_rv_ratio_30d",
     "iv_rv_zscore_1d",
     "iv_rv_percentile_30d",
     "minutes_since_iv_observation",

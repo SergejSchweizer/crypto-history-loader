@@ -207,6 +207,9 @@ def build_iv_rv_1m_feature_for_symbol(
                     "exchange",
                     "symbol",
                     "iv_close",
+                    # QC-01: annualized, 30-day-horizon IV alias used for the
+                    # unit-safe spread/ratio below.
+                    "iv_30d_annualized_pct",
                     "minutes_since_iv_observation",
                 ]
             )
@@ -221,6 +224,9 @@ def build_iv_rv_1m_feature_for_symbol(
                     "symbol",
                     "rv_1h",
                     "rv_1d",
+                    # QC-01: annualized, 30-day-horizon RV used for the unit-safe
+                    # spread/ratio below.
+                    "rv_30d_annualized_pct",
                 ]
             )
             if rv_path is not None
@@ -235,6 +241,7 @@ def build_iv_rv_1m_feature_for_symbol(
             frame = rv.with_columns(
                 [
                     pl.lit(None, dtype=pl.Float64).alias("iv_close"),
+                    pl.lit(None, dtype=pl.Float64).alias("iv_30d_annualized_pct"),
                     pl.lit(None, dtype=pl.Int64).alias("minutes_since_iv_observation"),
                 ]
             )
@@ -243,6 +250,7 @@ def build_iv_rv_1m_feature_for_symbol(
                 [
                     pl.lit(None, dtype=pl.Float64).alias("rv_1h"),
                     pl.lit(None, dtype=pl.Float64).alias("rv_1d"),
+                    pl.lit(None, dtype=pl.Float64).alias("rv_30d_annualized_pct"),
                 ]
             )
         else:
@@ -265,6 +273,9 @@ def build_iv_rv_1m_feature_for_symbol(
             )
             .with_columns(
                 [
+                    # Deprecated (QC-01): mixes annualized IV percentage points with
+                    # non-annualized, sub-30-day RV; kept unchanged for backward
+                    # compatibility with existing persisted artifacts.
                     (pl.col("iv_close") - pl.col("rv_1h")).alias("iv_minus_rv_1h"),
                     (pl.col("iv_close") - pl.col("rv_1d")).alias("iv_minus_rv_1d"),
                     pl.when(pl.col("rv_1h") > 0.0)
@@ -275,6 +286,14 @@ def build_iv_rv_1m_feature_for_symbol(
                     .then(pl.col("iv_close") / pl.col("rv_1d"))
                     .otherwise(None)
                     .alias("iv_rv_ratio_1d"),
+                    # QC-01: unit- and horizon-compatible comparison. Both sides are
+                    # annualized volatility percentage points over a 30-day horizon,
+                    # so subtraction and division are financially interpretable.
+                    (pl.col("iv_30d_annualized_pct") - pl.col("rv_30d_annualized_pct")).alias("iv_rv_spread_30d_pct"),
+                    pl.when(pl.col("rv_30d_annualized_pct") > 0.0)
+                    .then(pl.col("iv_30d_annualized_pct") / pl.col("rv_30d_annualized_pct"))
+                    .otherwise(None)
+                    .alias("iv_rv_ratio_30d"),
                 ]
             )
             .sort(["exchange", "symbol", "timestamp_m1"])

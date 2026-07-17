@@ -1293,11 +1293,37 @@ Priority order:
 
 Priority: P0 - data correctness blocker
 
-Status: Planned
+Status: Done - PR #140: https://github.com/SergejSchweizer/crypto-history-loader/pull/140
 
 Branch: `codex/qc01-normalize-iv-rv-semantics`
 
 Depends on: none
+
+Planning `git status --short`:
+
+```text
+clean
+```
+
+Publication `git status --short`:
+
+```text
+ M ARCHITECTURE.md
+ M BACKLOG.md
+ M README.md
+ M application/dataset_contracts.py
+ M application/services/gold_frames.py
+ M application/services/silver_iv_rv.py
+ M application/services/silver_realized_volatility.py
+ M application/services/silver_volatility.py
+ M ingestion/feature_metadata.py
+ M tests/test_gold_live_full.py
+ M tests/test_gold_live_volatility.py
+ M tests/test_gold_regime_features.py
+ M tests/test_gold_service.py
+ M tests/test_silver_iv_rv.py
+ M tests/test_silver_realized_volatility.py
+```
 
 Problem:
 `volatility_index_1m_feature.iv_close` represents an annualized implied-volatility index in percentage points,
@@ -1526,6 +1552,15 @@ research or model training treats the outputs as corrected: rebuild affected Sil
 rebuild dependent Gold datasets; publish schema or feature-set version changes; compare old and corrected
 distributions; document expected discontinuities; verify no reusable feature dataset contains forward-looking
 labels; record the effective corrected-data start/version in manifests.
+
+QC-01 rebuild note: QC-01 adds new columns (`iv_30d_annualized_pct`; `rv_5m_annualized_pct`,
+`rv_15m_annualized_pct`, `rv_1h_annualized_pct`, `rv_4h_annualized_pct`, `rv_1d_annualized_pct`, `rv_30d`,
+`rv_30d_annualized_pct`; `iv_rv_spread_30d_pct`, `iv_rv_ratio_30d`) without deleting or recomputing any
+existing column, so previously materialized `volatility_index_1m_feature`, `realized_volatility_1m_feature`,
+and `iv_rv_1m_feature` Silver artifacts must be rebuilt to backfill the new columns before Gold contracts that
+select those columns (`gold.market.regime_features.m1`, `gold.live.volatility_features.m1`) can expose them;
+existing legacy columns (`iv_minus_rv_1h`, `iv_minus_rv_1d`, `iv_rv_ratio_1h`, `iv_rv_ratio_1d`) are unchanged
+and require no rebuild for consumers that only read those fields.
 
 ## Refactor Architecture Stack
 
