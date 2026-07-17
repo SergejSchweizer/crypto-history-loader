@@ -3,7 +3,7 @@
 This backlog is the source of truth for stacked, atomic PRs that bring every Bronze dataset into a
 contracted Silver representation suitable for IV/RV and regime-change research.
 
-Last updated: 2026-07-16
+Last updated: 2026-07-17
 
 ## Policy
 
@@ -952,12 +952,12 @@ Branch: `codex/pr35-historical-full-gold-dataset`
 Depends on: PR-33
 
 Goal:
-Create one point-in-time historical Gold dataset that joins every available historical-origin Silver/Gold
-feature family into a single model-ready table for offline IV/RV, regime-change, momentum, trend, and
-mean-reversion research.
+Create one historical Gold dataset that joins every raw historical dataset family fetched by
+`crypto-history-loader` into Bronze. Research-derived IV/RV, volatility, L2, index, futures-summary,
+option-surface, strategy, target, and label features stay in narrower Gold contracts.
 
 Scope:
-- Add `gold.market.history_full.m1` as the complete historical feature join.
+- Add `gold.market.history_full.m1` as the complete raw-history join.
 - Required historical sources:
   - `spot_ohlcv`
   - `perps_ohlcv`
@@ -965,19 +965,10 @@ Scope:
   - `open_interest_1m_feature`
   - `perps_trades_1m_feature`
   - `options_trades_1m_feature`
-  - `realized_volatility_1m_feature`
-  - `iv_rv_1m_feature`
-- Optional historical sources stay nullable with availability flags:
-  - `historical_volatility_observed`
-  - `index_price_1m_feature`
-  - `futures_summary_1m_feature`
-  - `options_surface_1m_feature`
-  - `perps_l2_1m_feature`
-  - `options_l2_1m_feature`
-- Reuse the existing regime/strategy feature builders where semantics overlap with the historical full
-  dataset.
-- Keep target columns out of the default inference-safe feature view; labelled training output remains the
-  separate `gold.market.prediction_targets.m1` dataset.
+- Build the Gold minute grid from the union of those historical source timestamps.
+- Keep missing source values nullable; do not shrink the dataset to a date intersection.
+- Keep realized-volatility, IV/RV, volatility-index, L2, index, futures-summary, option-surface,
+  strategy, target, and label columns out of this dataset.
 - Update complete-run commands, parser compatibility tests, and README inventory docs.
 
 Acceptance:

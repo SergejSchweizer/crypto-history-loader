@@ -758,17 +758,6 @@ HISTORY_FULL_GOLD_REQUIREMENTS = (
     GoldSourceRequirement("open_interest_1m_feature", "1m"),
     GoldSourceRequirement("perps_trades_1m_feature", "1m"),
     GoldSourceRequirement("options_trades_1m_feature", "1m"),
-    GoldSourceRequirement("realized_volatility_1m_feature", "1m"),
-    GoldSourceRequirement("iv_rv_1m_feature", "1m"),
-)
-
-HISTORY_FULL_GOLD_OPTIONAL_REQUIREMENTS = (
-    GoldSourceRequirement("historical_volatility_observed", "1m"),
-    GoldSourceRequirement("index_price_1m_feature", "1m"),
-    GoldSourceRequirement("futures_summary_1m_feature", "1m"),
-    GoldSourceRequirement("options_surface_1m_feature", "1m"),
-    GoldSourceRequirement("perps_l2_1m_feature", "1m"),
-    GoldSourceRequirement("options_l2_1m_feature", "1m"),
 )
 
 LIVE_VOLATILITY_GOLD_REQUIREMENTS = (GoldSourceRequirement("volatility_index_1m_feature", "1m"),)
@@ -852,7 +841,6 @@ GOLD_DATASET_CONTRACTS: dict[str, GoldDatasetContract] = {
     "gold.market.history_full.m1": GoldDatasetContract(
         dataset_id="gold.market.history_full.m1",
         requirements=HISTORY_FULL_GOLD_REQUIREMENTS,
-        optional_requirements=HISTORY_FULL_GOLD_OPTIONAL_REQUIREMENTS,
         include_l2=False,
     ),
     "gold.live.volatility_features.m1": GoldDatasetContract(

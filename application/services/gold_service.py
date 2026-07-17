@@ -267,7 +267,7 @@ def _optional_feature_schema(pl: Any, dataset_type: str) -> list[tuple[str, Any]
 
 
 def _strategy_feature_lookbacks(dataset_id: str) -> dict[str, str]:
-    if dataset_id in {"gold.market.regime_features.m1", "gold.market.history_full.m1"}:
+    if dataset_id == "gold.market.regime_features.m1":
         return gold_frames.strategy_feature_lookbacks()
     return {}
 
@@ -285,7 +285,7 @@ def _origin_repository(dataset_id: str) -> str:
 
 
 def _add_strategy_feature_families(pl: Any, frame: Any, dataset_id: str) -> Any:
-    if dataset_id in {"gold.market.regime_features.m1", "gold.market.history_full.m1"}:
+    if dataset_id == "gold.market.regime_features.m1":
         return gold_frames.add_strategy_feature_families(pl, frame)
     return frame
 

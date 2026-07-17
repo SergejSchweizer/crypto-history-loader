@@ -160,11 +160,13 @@ from `crypto-live-loader` inputs. Narrower Gold contracts remain available as in
 blocks and compatibility outputs, but downstream training and inference code should target the two
 canonical full datasets.
 
-`gold.market.history_full.m1` is the inference-safe historical full dataset. It joins historical
-spot, perpetual, funding, open-interest, trade, realized-volatility, and IV/RV feature families on
-the historical minute grid; optional historical reference, index, futures, option-surface, and L2
-sources stay nullable with explicit availability in the manifest. Strategy feature families are
-trailing state variables, and forward-looking `target_*` or `label_*` columns are excluded.
+`gold.market.history_full.m1` is the full historical dataset for data this repository actually
+fetches into Bronze. It joins only spot OHLCV, perpetual OHLCV, open interest, funding,
+perpetual-trade, and option-trade families through their Silver representations on the historical
+minute grid. The grid covers the union of those historical source timestamps; missing source values
+stay null. Realized-volatility, IV/RV, volatility-index, L2, index, futures-summary,
+option-surface, strategy, target, and label columns belong to narrower research-facing Gold
+contracts, not to `gold.market.history_full.m1`.
 
 `gold.market.regime_features.m1` owns the research-facing IV/RV regime contract. Its minute grid
 is determined only by required spot, perpetual, funding, open-interest, realized-volatility, and

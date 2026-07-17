@@ -10,7 +10,7 @@ import pytest
 
 from application.dataset_contracts import gold_dataset_contract
 from application.services.gold_service import build_gold_for_symbol
-from tests.test_gold_regime_features import _write_required_sources_for_timestamps, _write_silver
+from tests.test_gold_regime_features import _write_silver
 
 pl = pytest.importorskip("polars")
 
@@ -51,13 +51,79 @@ def _write_trade_features(silver: Path, timestamps: list[datetime]) -> None:
         )
 
 
-def test_history_full_gold_joins_historical_sources_without_targets(tmp_path: Path) -> None:
-    """The historical full dataset should be the inference-safe full historical feature table."""
+def _write_raw_history_sources(silver: Path, timestamps: list[datetime]) -> None:
+    """Write only the Silver outputs backed by raw Bronze datasets fetched by this repository."""
 
-    timestamps = [datetime(2026, 5, 1, 0, minute, tzinfo=UTC) for minute in range(20)]
-    silver = tmp_path / "silver"
-    _write_required_sources_for_timestamps(silver, timestamps)
+    spot_timestamps = timestamps[1:]
+    for dataset_type, symbol, source_timestamps, scale in (
+        ("spot_ohlcv", "BTC_USDC", spot_timestamps, 1.0),
+        ("perps_ohlcv", "BTC-PERPETUAL", timestamps, 10.0),
+    ):
+        _write_silver(
+            silver,
+            dataset_type=dataset_type,
+            symbol=symbol,
+            timeframe="1m",
+            rows=[
+                {
+                    "open_time": timestamp,
+                    "exchange": "deribit",
+                    "symbol": "BTC",
+                    "open_price": scale + index,
+                    "high_price": scale + index + 1.0,
+                    "low_price": scale + index - 0.5,
+                    "close_price": scale + index + 0.5,
+                    "volume": 100.0 + index,
+                }
+                for index, timestamp in enumerate(source_timestamps)
+            ],
+        )
+    _write_silver(
+        silver,
+        dataset_type="funding_1m_feature",
+        symbol="BTC-PERPETUAL",
+        timeframe="1m",
+        rows=[
+            {
+                "timestamp": timestamp,
+                "exchange": "deribit",
+                "symbol": "BTC-PERPETUAL",
+                "funding_rate_last_known": 0.001,
+                "minutes_since_funding": index,
+                "is_funding_observation_minute": index == 0,
+                "funding_data_available": True,
+            }
+            for index, timestamp in enumerate(timestamps)
+        ],
+    )
+    _write_silver(
+        silver,
+        dataset_type="open_interest_1m_feature",
+        symbol="BTC-PERPETUAL",
+        timeframe="1m",
+        rows=[
+            {
+                "timestamp_m1": timestamp,
+                "exchange": "deribit",
+                "symbol": "BTC-PERPETUAL",
+                "open_interest": 1000.0 + index,
+                "open_interest_is_observed": True,
+                "open_interest_is_ffill": False,
+                "minutes_since_open_interest_observation": 0,
+                "open_interest_observation_lag_sec": 0,
+            }
+            for index, timestamp in enumerate(timestamps)
+        ],
+    )
     _write_trade_features(silver, timestamps)
+
+
+def test_history_full_gold_joins_historical_sources_without_targets(tmp_path: Path) -> None:
+    """The historical full dataset should contain only raw-Bronze-backed historical families."""
+
+    timestamps = [datetime(2026, 5, 1, 0, minute, tzinfo=UTC) for minute in range(2)]
+    silver = tmp_path / "silver"
+    _write_raw_history_sources(silver, timestamps)
 
     report = build_gold_for_symbol(
         silver_root=str(silver),
@@ -69,18 +135,19 @@ def test_history_full_gold_joins_historical_sources_without_targets(tmp_path: Pa
     history_full = pl.read_parquet(report.parquet_path).sort("timestamp_m1")
     manifest = _manifest(report.manifest_path)
 
-    assert history_full.height == 20
+    assert history_full.height == 2
+    assert history_full["timestamp_m1"].to_list() == timestamps
     assert "spot_ohlcv_close_price" in history_full.columns
     assert "perp_close_price" in history_full.columns
     assert "funding_rate_last_known" in history_full.columns
     assert "open_interest_open_interest" in history_full.columns
     assert "trades_close_price" in history_full.columns
     assert "options_trades_close_price" in history_full.columns
-    assert "rv_1h" in history_full.columns
-    assert "iv_minus_rv_1h" in history_full.columns
-    assert "strategy_momentum_log_return_1m" in history_full.columns
-    assert "historical_volatility_reference" in history_full.columns
-    assert history_full["historical_volatility_reference"].null_count() == history_full.height
+    assert "rv_1h" not in history_full.columns
+    assert "iv_minus_rv_1h" not in history_full.columns
+    assert "strategy_momentum_log_return_1m" not in history_full.columns
+    assert "historical_volatility_reference" not in history_full.columns
+    assert history_full["spot_ohlcv_close_price"].to_list()[0] is None
     assert not any(column.startswith(("target_", "label_")) for column in history_full.columns)
     assert manifest["dataset_id"] == "gold.market.history_full.m1"
     assert manifest["required_source_datasets"] == [
@@ -90,23 +157,11 @@ def test_history_full_gold_joins_historical_sources_without_targets(tmp_path: Pa
         "open_interest_1m_feature",
         "perps_trades_1m_feature",
         "options_trades_1m_feature",
-        "realized_volatility_1m_feature",
-        "iv_rv_1m_feature",
     ]
-    assert manifest["optional_source_datasets"] == [
-        "historical_volatility_observed",
-        "index_price_1m_feature",
-        "futures_summary_1m_feature",
-        "options_surface_1m_feature",
-        "perps_l2_1m_feature",
-        "options_l2_1m_feature",
-    ]
-    assert manifest["strategy_feature_lookbacks"]["strategy_momentum_log_return_1m"] == "1m"
+    assert manifest["optional_source_datasets"] == []
+    assert manifest["strategy_feature_lookbacks"] == {}
     assert manifest["prediction_target_definitions"] == {}
     assert manifest["feature_metadata"]["trades_close_price"]["source_dataset"] == "perps_trades_1m_feature"
-    assert manifest["feature_metadata"]["strategy_momentum_log_return_1m"]["source_dataset"] == (
-        "gold_strategy_features"
-    )
 
 
 def test_history_full_gold_contract_declares_canonical_historical_sources() -> None:
@@ -120,14 +175,5 @@ def test_history_full_gold_contract_declares_canonical_historical_sources() -> N
         "open_interest_1m_feature",
         "perps_trades_1m_feature",
         "options_trades_1m_feature",
-        "realized_volatility_1m_feature",
-        "iv_rv_1m_feature",
     ]
-    assert [requirement.dataset_type for requirement in contract.optional_requirements] == [
-        "historical_volatility_observed",
-        "index_price_1m_feature",
-        "futures_summary_1m_feature",
-        "options_surface_1m_feature",
-        "perps_l2_1m_feature",
-        "options_l2_1m_feature",
-    ]
+    assert contract.optional_requirements == ()

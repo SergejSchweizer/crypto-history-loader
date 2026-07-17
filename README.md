@@ -647,10 +647,10 @@ but downstream training and inference workflows should target the two full datas
 | Live | `option_surface_m1` | BTC/ETH/SOL on 2026-05-24 only; 0 within that day | `schema_version`, `dataset_type`, `ts_minute`, `month`, `exchange`, `instrument_type`, `currency`, `expiry_date`, `term_days`, `term_bucket`, `atm_iv`, `atm_strike`, `atm_moneyness`, `iv_near_atm_call`, `iv_near_atm_put`, `open_interest_sum`, `volume_sum`, `contract_count`, `valid_surface_contract_count`, `surface_coverage_ratio`, `skew_slope`, `smile_curvature`, `rr25`, `bf25` |
 | Live | `instrument_metadata_daily_summary` | Aggregate 2026-05-25..2026-06-07; 0 | `schema_version`, `dataset_type`, `exchange`, `snapshot_date`, `kind`, `base_currency`, `instrument_count`, `active_instrument_count`, `option_instrument_count`, `mean_strike` |
 
-Contracts without physical Gold artifacts are `gold.market.history_full.m1`, `gold.market.iv_rv.m1`,
-`gold.market.index_price.m1`, `gold.market.futures_summary.m1`, `gold.market.regime_features.m1`,
-`gold.market.prediction_targets.m1`, `gold.live.volatility_features.m1`,
-`gold.live.microstructure_features.m1`, `gold.live.full.m1`, and `gold.hybrid.full_l2.m1`. The existing
+Contracts without physical Gold artifacts are `gold.market.iv_rv.m1`, `gold.market.index_price.m1`,
+`gold.market.futures_summary.m1`, `gold.market.regime_features.m1`, `gold.market.prediction_targets.m1`,
+`gold.live.volatility_features.m1`, `gold.live.microstructure_features.m1`, `gold.live.full.m1`, and
+`gold.hybrid.full_l2.m1`. The existing
 `gold.market.full.m1` must not be treated as an IV/RV-ready dataset until those feature columns and
 manifests are rebuilt.
 
@@ -708,10 +708,13 @@ uv run python main.py gold-build \
   --dataset-id gold.market.history_full.m1
 ```
 
-`gold.market.history_full.m1` is the canonical historical Gold dataset. It joins historical
-spot/perpetual OHLCV, funding, open interest, trades, realized volatility, and IV/RV features on
-the minute grid, keeps optional historical references nullable, emits trailing strategy features,
-and excludes forward-looking targets and labels.
+`gold.market.history_full.m1` is the canonical historical Gold dataset for data fetched into
+Bronze by `crypto-history-loader`. It joins spot OHLCV, perpetual OHLCV, funding, open interest,
+perpetual trades, and option trades through their Silver representations on the union of their
+historical minute timestamps. Missing source values remain null; the dataset is not cut to a date
+intersection. Realized-volatility, IV/RV, volatility-index, L2, index, futures-summary,
+option-surface, strategy, target, and label columns belong to narrower research-facing Gold
+contracts.
 
 Regime research Gold contract (optional Silver sources may be absent):
 
@@ -831,7 +834,7 @@ Gold retention policy:
 
 Available Gold dataset IDs:
 
-- Canonical historical dataset: `gold.market.history_full.m1` (contract; not yet physically materialized)
+- Canonical historical dataset: `gold.market.history_full.m1`
 - Canonical live dataset: `gold.live.full.m1` (contract; not yet physically materialized)
 - `gold.market.perps_trades.m1` (`perps_trades` flow only)
 - `gold.market.options_trades.m1` (`options_trades` flow only)
