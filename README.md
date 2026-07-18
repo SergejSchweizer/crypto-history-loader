@@ -891,6 +891,8 @@ Operational notes:
 
 - `pytest` coverage and parallel execution defaults are configured in `pyproject.toml`; xdist uses logical CPU workers capped at 4 with load-scope distribution.
 - Pre-commit enforces the same logical quality-gate path used in CI.
+- GitHub Actions shards `pytest` across four deterministic test-file shards for PRs and main/merge-queue runs.
+  The required check names stay stable through final `pr-quality` and `main-quality` aggregator jobs.
 - Commit messages and PR titles must follow Conventional Commits, for example
   `docs: update README missing day snapshot` or `feat(gold): add live full dataset contract`.
 - `uv run python scripts/update_project_history_docs.py` remains the maintenance command for

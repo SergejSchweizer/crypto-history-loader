@@ -35,6 +35,17 @@ def _normalized_commands(values: list[str]) -> list[str]:
     return [re.sub(r"\s+", " ", value).strip() for value in values]
 
 
+def _job_run_commands(ci: dict[str, Any], *, prefix: str) -> list[str]:
+    commands: list[str] = []
+    for job_name, job in ci["jobs"].items():
+        if not str(job_name).startswith(prefix):
+            continue
+        commands.extend(str(step["run"]) for step in job.get("steps", []) if "run" in step)
+    return _normalized_commands(
+        [command.removeprefix("uv run --extra dev ").removeprefix("uv run ") for command in commands]
+    )
+
+
 def test_pre_commit_and_ci_include_same_required_quality_gates() -> None:
     """Keep local pre-commit and CI quality gates aligned."""
 
@@ -48,27 +59,21 @@ def test_pre_commit_and_ci_include_same_required_quality_gates() -> None:
             for hook in repo["hooks"]
         ]
     )
-    pr_ci_steps = _normalized_commands(
-        [
-            str(step["run"]).removeprefix("uv run --extra dev ").removeprefix("uv run ")
-            for step in ci["jobs"]["pr-quality"]["steps"]
-            if "run" in step
-        ]
-    )
-    main_ci_steps = _normalized_commands(
-        [
-            str(step["run"]).removeprefix("uv run --extra dev ").removeprefix("uv run ")
-            for step in ci["jobs"]["main-quality"]["steps"]
-            if "run" in step
-        ]
-    )
+    pr_ci_steps = _job_run_commands(ci, prefix="pr-")
+    main_ci_steps = _job_run_commands(ci, prefix="main-")
 
     for command in REQUIRED_GATE_COMMANDS:
         assert any(command in entry for entry in hook_entries), f"pre-commit missing gate: {command}"
         assert any(command in step for step in pr_ci_steps), f"pr-quality missing gate: {command}"
         assert any(command in step for step in main_ci_steps), f"main-quality missing gate: {command}"
 
-    assert any("pytest --cov --cov-report=term-missing" in step for step in main_ci_steps)
+    assert ci["jobs"]["pr-pytest-shard"]["strategy"]["matrix"]["shard"] == [1, 2, 3, 4]
+    assert ci["jobs"]["main-pytest-shard"]["strategy"]["matrix"]["shard"] == [1, 2, 3, 4]
+    assert ci["jobs"]["pr-quality"]["needs"] == ["pr-static-quality", "pr-pytest-shard"]
+    assert ci["jobs"]["main-quality"]["needs"] == ["main-static-quality", "main-pytest-shard"]
+    assert any("--cov=application --cov=ingestion --cov=api" in step for step in main_ci_steps)
+    assert any("coverage combine coverage-shards" in step for step in main_ci_steps)
+    assert any("coverage report" in step for step in main_ci_steps)
 
 
 def test_make_check_runs_required_quality_gates() -> None:

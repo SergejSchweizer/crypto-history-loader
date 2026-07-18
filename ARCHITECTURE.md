@@ -264,8 +264,11 @@ python scripts/validate_conventional_commit.py
 pytest
 ```
 
-`Makefile` exposes the same logical sequence through `make check`. Coverage enforcement is
-configured in `pyproject.toml`.
+`Makefile` exposes the same logical sequence through `make check`. GitHub Actions runs pytest in
+four deterministic test-file shards and keeps the branch-protection contexts stable with final
+`pr-quality` and `main-quality` aggregator jobs. Coverage enforcement is configured in
+`pyproject.toml`; main and merge-queue runs combine coverage data from all test shards before
+reporting.
 
 GitHub repository gates are managed through `scripts/github/apply_quality_gates.sh`, which uses
 `gh api` to configure server-side repository settings. The script is the durable configuration
