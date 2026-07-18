@@ -19,6 +19,7 @@ class _Report:
     symbol: str
     timeframe: str
     months_processed: list[str]
+    calculation_lookback_days: int | None = None
 
 
 def test_write_monthly_sidecars_writes_manifest_from_parquet(tmp_path: Path) -> None:
@@ -69,3 +70,4 @@ def test_write_monthly_sidecars_writes_manifest_from_parquet(tmp_path: Path) -> 
     assert payload["dataset"] == "perps_ohlcv_1m"
     assert payload["source_silver_datasets"]["perps_ohlcv_1m"]["source_symbols"] == ["BTC"]
     assert payload["feature_metadata"]["close_price"]["source_exchange"] == "deribit"
+    assert payload["quantitative_feature_semantics"] == {}

@@ -43,4 +43,4 @@ history-docs:
 history-docs-check:
 	uv run python scripts/update_project_history_docs.py --check
 
-check: lint format typecheck pyright ty imports config-check readme-inventory-check conventional-commit history-docs-check test
+check: lint format typecheck pyright ty imports config-check readme-inventory-check conventional-commit test

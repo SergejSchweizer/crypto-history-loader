@@ -10,6 +10,17 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from application.dataset_contracts import SILVER_IV_RV_FEATURE_COLUMNS
+from application.services.silver_monthly_lookback import (
+    lookback_month_keys,
+    month_end_exclusive,
+    month_start,
+)
+
+# QC-02: widest rolling window used by this builder (`iv_rv_percentile_30d`), in
+# days. Every month is calculated on a buffered frame that includes this much prior
+# context so the rolling z-score and percentile are not reset by monthly storage
+# partition boundaries.
+_REQUIRED_LOOKBACK_DAYS = 30
 
 
 class SilverReportFactory(Protocol):
@@ -34,6 +45,7 @@ class SilverReportFactory(Protocol):
         max_timestamp: str | None,
         symbols: list[str],
         columns: list[str],
+        calculation_lookback_days: int | None = None,
     ) -> object: ...
 
 
@@ -148,6 +160,82 @@ def _rolling_percentile_30d(feature: Any, column: str) -> list[float | None]:
     return ranks
 
 
+def _read_iv_rv_month(
+    pl: Any,
+    *,
+    iv_root: Path,
+    rv_root: Path,
+    month: str,
+    symbol: str,
+) -> tuple[Any | None, int]:
+    """Read and join one month of IV and RV rows.
+
+    Returns the joined frame (or ``None`` if neither source has this month) and the
+    raw row count before joining, used for Silver build reporting.
+    """
+
+    iv_path = _month_file(iv_root, month, symbol)
+    rv_path = _month_file(rv_root, month, symbol)
+    iv = (
+        pl.read_parquet(iv_path).select(
+            [
+                "timestamp_m1",
+                "exchange",
+                "symbol",
+                "iv_close",
+                # QC-01: annualized, 30-day-horizon IV alias used for the
+                # unit-safe spread/ratio below.
+                "iv_30d_annualized_pct",
+                "minutes_since_iv_observation",
+            ]
+        )
+        if iv_path is not None
+        else None
+    )
+    rv = None
+    if rv_path is not None:
+        rv_frame = pl.read_parquet(rv_path)
+        if "canonical_rv_source" not in rv_frame.columns:
+            rv_frame = rv_frame.with_columns(pl.lit(None, dtype=pl.Utf8).alias("canonical_rv_source"))
+        rv = rv_frame.select(
+            [
+                "timestamp_m1",
+                "exchange",
+                "symbol",
+                "canonical_rv_source",
+                "rv_1h",
+                "rv_1d",
+                # QC-01: annualized, 30-day-horizon RV used for the unit-safe
+                # spread/ratio below.
+                "rv_30d_annualized_pct",
+            ]
+        )
+    if iv is None and rv is None:
+        return None, 0
+    rows_in = (iv.height if iv is not None else 0) + (rv.height if rv is not None else 0)
+    if iv is None:
+        assert rv is not None
+        frame = rv.with_columns(
+            [
+                pl.lit(None, dtype=pl.Float64).alias("iv_close"),
+                pl.lit(None, dtype=pl.Float64).alias("iv_30d_annualized_pct"),
+                pl.lit(None, dtype=pl.Int64).alias("minutes_since_iv_observation"),
+            ]
+        )
+    elif rv is None:
+        frame = iv.with_columns(
+            [
+                pl.lit(None, dtype=pl.Utf8).alias("canonical_rv_source"),
+                pl.lit(None, dtype=pl.Float64).alias("rv_1h"),
+                pl.lit(None, dtype=pl.Float64).alias("rv_1d"),
+                pl.lit(None, dtype=pl.Float64).alias("rv_30d_annualized_pct"),
+            ]
+        )
+    else:
+        frame = iv.join(rv, on=["timestamp_m1", "exchange", "symbol"], how="full", coalesce=True)
+    return frame, rows_in
+
+
 def build_iv_rv_1m_feature_for_symbol(
     *,
     silver_root: str,
@@ -196,73 +284,44 @@ def build_iv_rv_1m_feature_for_symbol(
     agg_rows_out = 0
     min_timestamp: datetime | None = None
     max_timestamp: datetime | None = None
+    # QC-02: cache joined month reads across iterations since lookback windows for
+    # consecutive target months overlap heavily.
+    month_cache: dict[str, Any] = {}
+    rows_in_cache: dict[str, int] = {}
+
+    def _cached_month(month_key: str) -> Any | None:
+        if month_key not in month_cache:
+            joined, rows_in = _read_iv_rv_month(
+                pl,
+                iv_root=iv_root,
+                rv_root=rv_root,
+                month=month_key,
+                symbol=normalized_symbol,
+            )
+            month_cache[month_key] = joined
+            rows_in_cache[month_key] = rows_in
+        return month_cache[month_key]
 
     for month in months:
-        iv_path = _month_file(iv_root, month, normalized_symbol)
-        rv_path = _month_file(rv_root, month, normalized_symbol)
-        iv = (
-            pl.read_parquet(iv_path).select(
-                [
-                    "timestamp_m1",
-                    "exchange",
-                    "symbol",
-                    "iv_close",
-                    # QC-01: annualized, 30-day-horizon IV alias used for the
-                    # unit-safe spread/ratio below.
-                    "iv_30d_annualized_pct",
-                    "minutes_since_iv_observation",
-                ]
-            )
-            if iv_path is not None
-            else None
-        )
-        rv = (
-            pl.read_parquet(rv_path).select(
-                [
-                    "timestamp_m1",
-                    "exchange",
-                    "symbol",
-                    "rv_1h",
-                    "rv_1d",
-                    # QC-01: annualized, 30-day-horizon RV used for the unit-safe
-                    # spread/ratio below.
-                    "rv_30d_annualized_pct",
-                ]
-            )
-            if rv_path is not None
-            else None
-        )
-        if iv is None and rv is None:
+        target_start = month_start(month)
+        target_end = month_end_exclusive(month)
+        calculation_keys = [*lookback_month_keys(month, lookback_days=_REQUIRED_LOOKBACK_DAYS), month]
+
+        buffered_frames = [month_frame for key in calculation_keys if (month_frame := _cached_month(key)) is not None]
+        if month not in month_cache or month_cache[month] is None:
             continue
-        agg_rows_in += (iv.height if iv is not None else 0) + (rv.height if rv is not None else 0)
-        if iv is None:
-            if rv is None:
-                continue
-            frame = rv.with_columns(
-                [
-                    pl.lit(None, dtype=pl.Float64).alias("iv_close"),
-                    pl.lit(None, dtype=pl.Float64).alias("iv_30d_annualized_pct"),
-                    pl.lit(None, dtype=pl.Int64).alias("minutes_since_iv_observation"),
-                ]
-            )
-        elif rv is None:
-            frame = iv.with_columns(
-                [
-                    pl.lit(None, dtype=pl.Float64).alias("rv_1h"),
-                    pl.lit(None, dtype=pl.Float64).alias("rv_1d"),
-                    pl.lit(None, dtype=pl.Float64).alias("rv_30d_annualized_pct"),
-                ]
-            )
-        else:
-            frame = iv.join(rv, on=["timestamp_m1", "exchange", "symbol"], how="full", coalesce=True)
-        if frame is None:
+        agg_rows_in += rows_in_cache[month]
+        if not buffered_frames:
             continue
+
+        frame = pl.concat(buffered_frames, how="vertical_relaxed").sort(["exchange", "symbol", "timestamp_m1"])
         feature = (
             frame.with_columns(
                 [
                     pl.col("timestamp_m1").cast(pl.Datetime(time_unit="us", time_zone="UTC")),
                     pl.col("exchange").cast(pl.Utf8).str.strip_chars().str.to_lowercase(),
                     pl.lit(normalized_symbol).alias("symbol"),
+                    pl.col("canonical_rv_source").cast(pl.Utf8),
                     pl.col("iv_close").is_not_null().alias("iv_available"),
                     (pl.col("rv_1h").is_not_null() | pl.col("rv_1d").is_not_null()).alias("rv_available"),
                     pl.when(pl.col("rv_1h").is_not_null())
@@ -301,6 +360,12 @@ def build_iv_rv_1m_feature_for_symbol(
         )
         feature = feature.with_columns(
             pl.Series("iv_rv_percentile_30d", _rolling_percentile_30d(feature, "iv_minus_rv_1d"))
+        )
+        # QC-02: the buffered frame spans the lookback window plus the target month
+        # so rolling functions above see the required trailing context; trim back to
+        # only the target month's rows before writing.
+        feature = feature.filter(
+            (pl.col("timestamp_m1") >= target_start) & (pl.col("timestamp_m1") < target_end)
         ).select(SILVER_IV_RV_FEATURE_COLUMNS)
 
         target = dependencies.silver_month_path(
@@ -339,4 +404,5 @@ def build_iv_rv_1m_feature_for_symbol(
         max_timestamp=dependencies.iso_utc(max_timestamp),
         symbols=[normalized_symbol],
         columns=SILVER_IV_RV_FEATURE_COLUMNS,
+        calculation_lookback_days=_REQUIRED_LOOKBACK_DAYS,
     )

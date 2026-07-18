@@ -158,6 +158,161 @@ def test_build_iv_rv_feature_keeps_missing_iv_explicit(tmp_path: Path) -> None:
     assert sol["rv_available"].to_list() == [True]
 
 
+def test_build_iv_rv_feature_preserves_rolling_state_across_month_boundary(tmp_path: Path) -> None:
+    """QC-02: the first minute of a month must see prior-month iv_rv_zscore_1d context."""
+
+    silver = tmp_path / "silver"
+    t_jan = datetime(2026, 1, 31, 23, 59, tzinfo=UTC)
+    t_feb = datetime(2026, 2, 1, 0, 0, tzinfo=UTC)
+
+    for month, timestamp, iv_close, rv_1d in (
+        ("2026-01", t_jan, 60.0, 0.02),
+        ("2026-02", t_feb, 66.0, 0.02),
+    ):
+        _write_feature_file(
+            silver,
+            dataset_type="volatility_index_1m_feature",
+            exchange="deribit",
+            symbol="BTC",
+            month=month,
+            rows=[
+                {
+                    "timestamp_m1": timestamp,
+                    "exchange": "deribit",
+                    "symbol": "BTC",
+                    "iv_close": iv_close,
+                    "iv_30d_annualized_pct": iv_close,
+                    "minutes_since_iv_observation": 0,
+                }
+            ],
+        )
+        _write_feature_file(
+            silver,
+            dataset_type="realized_volatility_1m_feature",
+            exchange="deribit",
+            symbol="BTC",
+            month=month,
+            rows=[
+                {
+                    "timestamp_m1": timestamp,
+                    "exchange": "deribit",
+                    "symbol": "BTC",
+                    "rv_1h": 0.01,
+                    "rv_1d": rv_1d,
+                    "rv_30d_annualized_pct": 45.0,
+                }
+            ],
+        )
+
+    build_iv_rv_1m_feature_for_symbol(silver_root=str(silver), exchange="deribit", symbol="BTC")
+
+    january_output = pl.read_parquet(
+        silver
+        / "dataset_type=iv_rv_1m_feature"
+        / "exchange=deribit"
+        / "symbol=BTC"
+        / "timeframe=1m"
+        / "year=2026"
+        / "month=2026-01"
+        / "BTC-2026-01.parquet"
+    )
+    february_output = pl.read_parquet(
+        silver
+        / "dataset_type=iv_rv_1m_feature"
+        / "exchange=deribit"
+        / "symbol=BTC"
+        / "timeframe=1m"
+        / "year=2026"
+        / "month=2026-02"
+        / "BTC-2026-02.parquet"
+    )
+
+    # Storage-partition trimming: each month's output only contains its own rows.
+    assert january_output.height == 1
+    assert february_output.height == 1
+    # Without cross-month buffering `iv_rv_zscore_1d` would be null here because the
+    # rolling 1-day z-score needs at least two samples, and the January sample would
+    # live in a different monthly partition.
+    assert february_output["iv_rv_zscore_1d"].to_list()[0] is not None
+
+
+def test_build_iv_rv_feature_preserves_rolling_state_across_year_boundary(tmp_path: Path) -> None:
+    """QC-02: the first minute of a year must see prior-year iv_rv_zscore_1d context."""
+
+    silver = tmp_path / "silver"
+    t_dec = datetime(2025, 12, 31, 23, 59, tzinfo=UTC)
+    t_jan = datetime(2026, 1, 1, 0, 0, tzinfo=UTC)
+
+    for month, timestamp, iv_close, rv_1d in (
+        ("2025-12", t_dec, 60.0, 0.02),
+        ("2026-01", t_jan, 66.0, 0.02),
+    ):
+        _write_feature_file(
+            silver,
+            dataset_type="volatility_index_1m_feature",
+            exchange="deribit",
+            symbol="BTC",
+            month=month,
+            rows=[
+                {
+                    "timestamp_m1": timestamp,
+                    "exchange": "deribit",
+                    "symbol": "BTC",
+                    "iv_close": iv_close,
+                    "iv_30d_annualized_pct": iv_close,
+                    "minutes_since_iv_observation": 0,
+                }
+            ],
+        )
+        _write_feature_file(
+            silver,
+            dataset_type="realized_volatility_1m_feature",
+            exchange="deribit",
+            symbol="BTC",
+            month=month,
+            rows=[
+                {
+                    "timestamp_m1": timestamp,
+                    "exchange": "deribit",
+                    "symbol": "BTC",
+                    "rv_1h": 0.01,
+                    "rv_1d": rv_1d,
+                    "rv_30d_annualized_pct": 45.0,
+                }
+            ],
+        )
+
+    build_iv_rv_1m_feature_for_symbol(silver_root=str(silver), exchange="deribit", symbol="BTC")
+
+    december_output = pl.read_parquet(
+        silver
+        / "dataset_type=iv_rv_1m_feature"
+        / "exchange=deribit"
+        / "symbol=BTC"
+        / "timeframe=1m"
+        / "year=2025"
+        / "month=2025-12"
+        / "BTC-2025-12.parquet"
+    )
+    january_output = pl.read_parquet(
+        silver
+        / "dataset_type=iv_rv_1m_feature"
+        / "exchange=deribit"
+        / "symbol=BTC"
+        / "timeframe=1m"
+        / "year=2026"
+        / "month=2026-01"
+        / "BTC-2026-01.parquet"
+    )
+
+    assert december_output.height == 1
+    assert january_output.height == 1
+    # Without cross-year buffering `iv_rv_zscore_1d` would be null here because the
+    # rolling 1-day z-score needs at least two samples, and the December sample would
+    # live in a different calendar-year monthly partition.
+    assert january_output["iv_rv_zscore_1d"].to_list()[0] is not None
+
+
 def test_build_iv_rv_feature_ratio_30d_is_none_when_rv_30d_annualized_is_zero(tmp_path: Path) -> None:
     """QC-01: a zero (not missing) 30d annualized RV denominator must null the ratio, not divide by zero."""
 

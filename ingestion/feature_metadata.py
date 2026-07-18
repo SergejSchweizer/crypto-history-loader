@@ -57,9 +57,17 @@ def feature_source_dataset(column_name: str) -> str:
         return "gold_live_lineage"
     if column_name in {"iv_available", "rv_available"}:
         return "iv_rv_1m_feature"
-    if column_name in {"spot_available", "perps_available"}:
+    if column_name in {
+        "canonical_rv_source",
+        "canonical_rv_source_available",
+        "spot_available",
+        "perps_available",
+        "spot_perps_basis_available",
+    }:
         return "realized_volatility_1m_feature"
-    if column_name.startswith(("rv_", "parkinson_rv_", "jump_proxy")):
+    if column_name.startswith(("rv_", "spot_rv_", "perps_rv_", "spot_log_return", "perps_log_return")):
+        return "realized_volatility_1m_feature"
+    if column_name.startswith(("parkinson_rv_", "jump_proxy")):
         return "realized_volatility_1m_feature"
     if column_name.startswith(("iv_", "minutes_since_iv_", "minutes_since_rv_")):
         return "iv_rv_1m_feature"

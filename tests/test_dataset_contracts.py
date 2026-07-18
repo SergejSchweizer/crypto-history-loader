@@ -13,6 +13,7 @@ from application.dataset_contracts import (
     SILVER_LIVE_ORIGIN_BUILD_DATASETS,
     gold_dataset_contract,
     silver_dataset_contract,
+    silver_feature_semantics,
     supported_bronze_backed_silver_build_ids,
     supported_gold_dataset_ids,
     supported_live_origin_silver_build_ids,
@@ -123,3 +124,39 @@ def test_contract_lookup_rejects_unknown_dataset_names() -> None:
 
     with pytest.raises(ValueError, match="Unsupported dataset_id"):
         gold_dataset_contract("gold.unknown")
+
+
+def test_iv_rv_contract_semantics_are_unit_and_horizon_compatible() -> None:
+    """QC-04: unit-safe IV/RV comparisons must declare matching semantics."""
+
+    iv_semantics = silver_feature_semantics("volatility_index_1m_feature")
+    rv_semantics = silver_feature_semantics("realized_volatility_1m_feature")
+    iv_rv_semantics = silver_feature_semantics("iv_rv_1m_feature")
+
+    iv_30d = iv_semantics["iv_30d_annualized_pct"]
+    rv_30d = rv_semantics["rv_30d_annualized_pct"]
+    spread_30d = iv_rv_semantics["iv_rv_spread_30d_pct"]
+
+    for key in ("unit", "horizon", "annualized", "annualization_basis_days"):
+        assert iv_30d[key] == rv_30d[key]
+        assert spread_30d[key] == iv_30d[key]
+
+    assert rv_semantics["rv_1h"]["unit"] == "decimal_volatility"
+    assert rv_semantics["rv_1h"]["annualized"] is False
+    assert rv_semantics["rv_1h"]["horizon"] == "1h"
+    assert rv_semantics["rv_30d_annualized_pct"]["source_selection_policy"] == "canonical_rv_source"
+
+
+def test_realized_volatility_contract_declares_source_specific_semantics() -> None:
+    """QC-03/QC-04: source-specific RV fields must not inherit row-wise fallback semantics."""
+
+    rv_semantics = silver_feature_semantics("realized_volatility_1m_feature")
+
+    assert rv_semantics["canonical_rv_source"]["source_selection_policy"] == (
+        "perps_if_symbol_has_perps_else_spot_no_rowwise_fallback"
+    )
+    assert rv_semantics["spot_rv_1h"]["source_selection_policy"] == "spot_only"
+    assert rv_semantics["perps_rv_1h"]["source_selection_policy"] == "perps_only"
+    assert rv_semantics["spot_rv_1h"]["unit"] == rv_semantics["perps_rv_1h"]["unit"] == "decimal_volatility"
+    assert rv_semantics["spot_rv_1h_annualized_pct"]["unit"] == "percentage_points"
+    assert rv_semantics["spot_rv_1h_annualized_pct"]["annualized"] is True

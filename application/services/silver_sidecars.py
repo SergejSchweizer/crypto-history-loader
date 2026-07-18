@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol
 
+from application.dataset_contracts import silver_feature_semantics
 from application.services.feature_metadata_service import (
     feature_hash,
     feature_metadata,
@@ -33,6 +34,9 @@ class SilverSidecarReport(Protocol):
 
     @property
     def months_processed(self) -> list[str]: ...
+
+    @property
+    def calculation_lookback_days(self) -> int | None: ...
 
 
 def _require_polars() -> Any:
@@ -141,7 +145,9 @@ def write_monthly_sidecars(
                     }
                 },
                 "feature_metadata": feature_metadata(pl, frame_for_gold, report.exchange),
+                "quantitative_feature_semantics": silver_feature_semantics(report.dataset),
                 "plot_generated": plotted is not None,
+                "calculation_lookback_days": report.calculation_lookback_days,
             }
             manifest_path = parquet_path.with_suffix(".json")
             manifest_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")

@@ -11,6 +11,17 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from application.dataset_contracts import SILVER_VOLATILITY_FEATURE_COLUMNS, SILVER_VOLATILITY_OBSERVED_COLUMNS
+from application.services.silver_monthly_lookback import (
+    lookback_month_keys,
+    month_end_exclusive,
+    month_start,
+)
+
+# QC-02: widest rolling window used by this builder (`iv_percentile_30d`), in days.
+# Every month is calculated on a buffered frame that includes this much prior context
+# so rolling z-scores, percentiles, changes, and the previous close are not reset by
+# monthly storage partition boundaries.
+_REQUIRED_LOOKBACK_DAYS = 30
 
 
 class SilverReportFactory(Protocol):
@@ -35,6 +46,7 @@ class SilverReportFactory(Protocol):
         max_timestamp: str | None,
         symbols: list[str],
         columns: list[str],
+        calculation_lookback_days: int | None = None,
     ) -> object: ...
 
 
@@ -408,6 +420,61 @@ def _rolling_percentile_30d(feature: Any) -> list[float | None]:
     return ranks
 
 
+def _read_dedup_observed_month(
+    pl: Any,
+    *,
+    silver_root: str,
+    historical_dataset_type: str,
+    snapshot_dataset_type: str,
+    exchange: str,
+    symbol: str,
+    timeframe: str,
+    month: str,
+) -> tuple[Any | None, int]:
+    """Read, tag, and deduplicate one month of IV observed rows.
+
+    Returns the deduplicated frame (or ``None`` if no rows exist) and the raw
+    row count before deduplication, used for Silver build reporting.
+    """
+
+    inputs = []
+    for dataset_type, source_priority in (
+        (historical_dataset_type, 0),
+        (snapshot_dataset_type, 1),
+    ):
+        path = _observed_month_file(
+            silver_root=silver_root,
+            dataset_type=dataset_type,
+            exchange=exchange,
+            symbol=symbol,
+            timeframe=timeframe,
+            month=month,
+        )
+        if path.exists():
+            inputs.append(
+                pl.read_parquet(path).with_columns(
+                    [
+                        pl.lit(dataset_type).alias("iv_source_dataset"),
+                        pl.lit(source_priority).alias("_source_priority"),
+                    ]
+                )
+            )
+    if not inputs:
+        return None, 0
+
+    frame = pl.concat(inputs, how="vertical_relaxed")
+    rows_in = frame.height
+    if rows_in == 0:
+        return None, 0
+
+    selected = (
+        frame.sort(["timestamp", "_source_priority", "ingested_at"])
+        .unique(subset=["exchange", "symbol", "timestamp"], keep="last", maintain_order=True)
+        .sort(["exchange", "symbol", "timestamp"])
+    )
+    return selected, rows_in
+
+
 def build_volatility_index_1m_feature_for_symbol(
     *,
     silver_root: str,
@@ -462,44 +529,42 @@ def build_volatility_index_1m_feature_for_symbol(
     agg_duplicates_removed = 0
     min_timestamp: datetime | None = None
     max_timestamp: datetime | None = None
+    # QC-02: cache deduplicated month reads across iterations since lookback windows
+    # for consecutive target months overlap heavily.
+    month_cache: dict[str, Any] = {}
+    rows_in_cache: dict[str, int] = {}
 
-    for month in months:
-        inputs = []
-        for dataset_type, source_priority in (
-            (historical_dataset_type, 0),
-            (snapshot_dataset_type, 1),
-        ):
-            path = _observed_month_file(
+    def _cached_month(month_key: str) -> Any | None:
+        if month_key not in month_cache:
+            selected, rows_in = _read_dedup_observed_month(
+                pl,
                 silver_root=silver_root,
-                dataset_type=dataset_type,
+                historical_dataset_type=historical_dataset_type,
+                snapshot_dataset_type=snapshot_dataset_type,
                 exchange=exchange,
                 symbol=normalized_symbol,
                 timeframe=timeframe,
-                month=month,
+                month=month_key,
             )
-            if path.exists():
-                inputs.append(
-                    pl.read_parquet(path).with_columns(
-                        [
-                            pl.lit(dataset_type).alias("iv_source_dataset"),
-                            pl.lit(source_priority).alias("_source_priority"),
-                        ]
-                    )
-                )
-        if not inputs:
+            month_cache[month_key] = selected
+            rows_in_cache[month_key] = rows_in
+        return month_cache[month_key]
+
+    for month in months:
+        target_start = month_start(month)
+        target_end = month_end_exclusive(month)
+        calculation_keys = [*lookback_month_keys(month, lookback_days=_REQUIRED_LOOKBACK_DAYS), month]
+
+        buffered_frames = [month_frame for key in calculation_keys if (month_frame := _cached_month(key)) is not None]
+        target_selected = month_cache.get(month)
+        if target_selected is None:
+            continue
+        rows_in = rows_in_cache[month]
+        duplicates_removed = rows_in - target_selected.height
+        if not buffered_frames:
             continue
 
-        frame = pl.concat(inputs, how="vertical_relaxed")
-        rows_in = frame.height
-        if rows_in == 0:
-            continue
-
-        selected = (
-            frame.sort(["timestamp", "_source_priority", "ingested_at"])
-            .unique(subset=["exchange", "symbol", "timestamp"], keep="last", maintain_order=True)
-            .sort(["exchange", "symbol", "timestamp"])
-        )
-        duplicates_removed = rows_in - selected.height
+        selected = pl.concat(buffered_frames, how="vertical_relaxed").sort(["exchange", "symbol", "timestamp"])
         previous_close = pl.col("iv_close").shift(1).over(["exchange", "symbol"])
         feature = selected.with_columns(
             [
@@ -536,9 +601,13 @@ def build_volatility_index_1m_feature_for_symbol(
             (60, "iv_change_1h"),
         ):
             feature = _with_iv_change(pl, feature, minutes=minutes, output_column=output_column)
-        feature = feature.with_columns(pl.Series("iv_percentile_30d", _rolling_percentile_30d(feature))).select(
-            SILVER_VOLATILITY_FEATURE_COLUMNS
-        )
+        feature = feature.with_columns(pl.Series("iv_percentile_30d", _rolling_percentile_30d(feature)))
+        # QC-02: the buffered frame spans the lookback window plus the target month
+        # so rolling functions above see the required trailing context; trim back to
+        # only the target month's rows before writing.
+        feature = feature.filter(
+            (pl.col("timestamp_m1") >= target_start) & (pl.col("timestamp_m1") < target_end)
+        ).select(SILVER_VOLATILITY_FEATURE_COLUMNS)
 
         target = dependencies.silver_month_path(
             silver_root=silver_root,
@@ -579,6 +648,7 @@ def build_volatility_index_1m_feature_for_symbol(
         max_timestamp=dependencies.iso_utc(max_timestamp),
         symbols=[normalized_symbol],
         columns=SILVER_VOLATILITY_FEATURE_COLUMNS,
+        calculation_lookback_days=_REQUIRED_LOOKBACK_DAYS,
     )
 
 

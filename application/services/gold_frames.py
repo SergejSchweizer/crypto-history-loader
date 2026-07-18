@@ -491,6 +491,9 @@ def prepare_volatility_index_feature(pl: Any, frame: Any, symbol: str) -> Any:
 def prepare_iv_rv(pl: Any, frame: Any, symbol: str) -> Any:
     """Prepare IV/RV spread features for the Gold join contract."""
 
+    if "canonical_rv_source" not in frame.columns:
+        frame = frame.with_columns(pl.lit(None, dtype=pl.Utf8).alias("canonical_rv_source"))
+
     return (
         frame.with_columns(
             [
@@ -503,6 +506,7 @@ def prepare_iv_rv(pl: Any, frame: Any, symbol: str) -> Any:
                 "timestamp_m1",
                 "exchange",
                 "symbol",
+                pl.col("canonical_rv_source").cast(pl.Utf8),
                 # Deprecated (QC-01): mix an annualized IV percentage-point index
                 # with non-annualized, sub-30-day RV; kept for backward compatibility.
                 pl.col("iv_minus_rv_1h").cast(pl.Float64),
@@ -584,6 +588,44 @@ def prepare_futures_summary(pl: Any, frame: Any, symbol: str) -> Any:
 def prepare_realized_volatility(pl: Any, frame: Any, symbol: str) -> Any:
     """Prepare internally computed realized-volatility regime features."""
 
+    optional_float_columns = (
+        "spot_log_return",
+        "spot_rv_5m",
+        "spot_rv_15m",
+        "spot_rv_1h",
+        "spot_rv_4h",
+        "spot_rv_1d",
+        "spot_rv_30d",
+        "spot_rv_5m_annualized_pct",
+        "spot_rv_15m_annualized_pct",
+        "spot_rv_1h_annualized_pct",
+        "spot_rv_4h_annualized_pct",
+        "spot_rv_1d_annualized_pct",
+        "spot_rv_30d_annualized_pct",
+        "perps_log_return",
+        "perps_rv_5m",
+        "perps_rv_15m",
+        "perps_rv_1h",
+        "perps_rv_4h",
+        "perps_rv_1d",
+        "perps_rv_30d",
+        "perps_rv_5m_annualized_pct",
+        "perps_rv_15m_annualized_pct",
+        "perps_rv_1h_annualized_pct",
+        "perps_rv_4h_annualized_pct",
+        "perps_rv_1d_annualized_pct",
+        "perps_rv_30d_annualized_pct",
+    )
+    optional_boolean_columns = ("canonical_rv_source_available", "spot_perps_basis_available")
+    for column in optional_float_columns:
+        if column not in frame.columns:
+            frame = frame.with_columns(pl.lit(None, dtype=pl.Float64).alias(column))
+    for column in optional_boolean_columns:
+        if column not in frame.columns:
+            frame = frame.with_columns(pl.lit(None, dtype=pl.Boolean).alias(column))
+    if "canonical_rv_source" not in frame.columns:
+        frame = frame.with_columns(pl.lit(None, dtype=pl.Utf8).alias("canonical_rv_source"))
+
     return (
         frame.with_columns(
             [
@@ -596,6 +638,8 @@ def prepare_realized_volatility(pl: Any, frame: Any, symbol: str) -> Any:
                 "timestamp_m1",
                 "exchange",
                 "symbol",
+                pl.col("canonical_rv_source").cast(pl.Utf8),
+                pl.col("canonical_rv_source_available").cast(pl.Boolean),
                 pl.col("rv_5m").cast(pl.Float64),
                 pl.col("rv_15m").cast(pl.Float64),
                 pl.col("rv_1h").cast(pl.Float64),
@@ -611,10 +655,37 @@ def prepare_realized_volatility(pl: Any, frame: Any, symbol: str) -> Any:
                 pl.col("rv_1d_annualized_pct").cast(pl.Float64),
                 pl.col("rv_30d").cast(pl.Float64),
                 pl.col("rv_30d_annualized_pct").cast(pl.Float64),
+                pl.col("spot_log_return").cast(pl.Float64),
+                pl.col("spot_rv_5m").cast(pl.Float64),
+                pl.col("spot_rv_15m").cast(pl.Float64),
+                pl.col("spot_rv_1h").cast(pl.Float64),
+                pl.col("spot_rv_4h").cast(pl.Float64),
+                pl.col("spot_rv_1d").cast(pl.Float64),
+                pl.col("spot_rv_30d").cast(pl.Float64),
+                pl.col("spot_rv_5m_annualized_pct").cast(pl.Float64),
+                pl.col("spot_rv_15m_annualized_pct").cast(pl.Float64),
+                pl.col("spot_rv_1h_annualized_pct").cast(pl.Float64),
+                pl.col("spot_rv_4h_annualized_pct").cast(pl.Float64),
+                pl.col("spot_rv_1d_annualized_pct").cast(pl.Float64),
+                pl.col("spot_rv_30d_annualized_pct").cast(pl.Float64),
+                pl.col("perps_log_return").cast(pl.Float64),
+                pl.col("perps_rv_5m").cast(pl.Float64),
+                pl.col("perps_rv_15m").cast(pl.Float64),
+                pl.col("perps_rv_1h").cast(pl.Float64),
+                pl.col("perps_rv_4h").cast(pl.Float64),
+                pl.col("perps_rv_1d").cast(pl.Float64),
+                pl.col("perps_rv_30d").cast(pl.Float64),
+                pl.col("perps_rv_5m_annualized_pct").cast(pl.Float64),
+                pl.col("perps_rv_15m_annualized_pct").cast(pl.Float64),
+                pl.col("perps_rv_1h_annualized_pct").cast(pl.Float64),
+                pl.col("perps_rv_4h_annualized_pct").cast(pl.Float64),
+                pl.col("perps_rv_1d_annualized_pct").cast(pl.Float64),
+                pl.col("perps_rv_30d_annualized_pct").cast(pl.Float64),
                 pl.col("parkinson_rv_1h").cast(pl.Float64),
                 pl.col("jump_proxy").cast(pl.Float64),
                 pl.col("spot_available").cast(pl.Boolean),
                 pl.col("perps_available").cast(pl.Boolean),
+                pl.col("spot_perps_basis_available").cast(pl.Boolean),
             ]
         )
         .sort("timestamp_m1")

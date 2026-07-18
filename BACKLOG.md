@@ -1369,7 +1369,7 @@ Acceptance:
 
 Priority: P0 - data correctness blocker
 
-Status: Planned
+Status: Implemented - PR #141: https://github.com/SergejSchweizer/crypto-history-loader/pull/141
 
 Branch: `codex/qc02-cross-month-rolling-state`
 
@@ -1421,7 +1421,7 @@ Acceptance:
 
 Priority: P0 - data correctness blocker
 
-Status: Planned
+Status: Implemented - PR #141: https://github.com/SergejSchweizer/crypto-history-loader/pull/141
 
 Branch: `codex/qc03-separate-spot-perp-rv`
 
@@ -1465,7 +1465,7 @@ Acceptance:
 
 Priority: P1 - contract integrity
 
-Status: Planned
+Status: Implemented - PR #141: https://github.com/SergejSchweizer/crypto-history-loader/pull/141
 
 Branch: `codex/qc04-quant-semantic-contracts`
 
@@ -1494,7 +1494,7 @@ Acceptance:
 
 Priority: P1 - operational correctness
 
-Status: Planned
+Status: Implemented - PR #141: https://github.com/SergejSchweizer/crypto-history-loader/pull/141
 
 Branch: `codex/qc05-executable-doc-commands`
 
@@ -1520,7 +1520,7 @@ Acceptance:
 
 Priority: P2 - governance consistency
 
-Status: Planned
+Status: Implemented - PR #141: https://github.com/SergejSchweizer/crypto-history-loader/pull/141
 
 Branch: `codex/qc06-align-quality-gates`
 
