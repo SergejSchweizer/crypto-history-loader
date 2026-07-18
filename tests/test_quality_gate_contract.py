@@ -67,10 +67,24 @@ def test_pre_commit_and_ci_include_same_required_quality_gates() -> None:
         assert any(command in step for step in pr_ci_steps), f"pr-quality missing gate: {command}"
         assert any(command in step for step in main_ci_steps), f"main-quality missing gate: {command}"
 
-    assert ci["jobs"]["pr-pytest-shard"]["strategy"]["matrix"]["shard"] == [1, 2, 3, 4]
-    assert ci["jobs"]["main-pytest-shard"]["strategy"]["matrix"]["shard"] == [1, 2, 3, 4]
-    assert ci["jobs"]["pr-quality"]["needs"] == ["pr-static-quality", "pr-pytest-shard"]
-    assert ci["jobs"]["main-quality"]["needs"] == ["main-static-quality", "main-pytest-shard"]
+    assert ci["jobs"]["pr-unit-tests"]["strategy"]["matrix"]["shard"] == [1, 2, 3, 4]
+    assert ci["jobs"]["pr-integration-tests"]["strategy"]["matrix"]["shard"] == [1, 2, 3, 4]
+    assert ci["jobs"]["main-unit-tests"]["strategy"]["matrix"]["shard"] == [1, 2, 3, 4]
+    assert ci["jobs"]["main-integration-tests"]["strategy"]["matrix"]["shard"] == [1, 2, 3, 4]
+    assert ci["jobs"]["pr-quality"]["needs"] == [
+        "pr-lint-quality",
+        "pr-typing-quality",
+        "pr-unit-tests",
+        "pr-integration-tests",
+    ]
+    assert ci["jobs"]["main-quality"]["needs"] == [
+        "main-lint-quality",
+        "main-typing-quality",
+        "main-unit-tests",
+        "main-integration-tests",
+    ]
+    assert any("--suite unit" in step for step in pr_ci_steps)
+    assert any("--suite integration" in step for step in pr_ci_steps)
     assert any("--cov=application --cov=ingestion --cov=api" in step for step in main_ci_steps)
     assert any("coverage combine coverage-shards" in step for step in main_ci_steps)
     assert any("coverage report" in step for step in main_ci_steps)
