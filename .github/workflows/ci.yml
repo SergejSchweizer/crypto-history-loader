@@ -15,8 +15,8 @@ env:
   PYTEST_SHARD_COUNT: 4
 
 jobs:
-  pr-static-quality:
-    name: pr-static-quality
+  pr-lint-quality:
+    name: pr-lint-quality
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
 
@@ -45,15 +45,6 @@ jobs:
 
       - name: Ruff format
         run: uv run ruff format --check .
-
-      - name: Mypy
-        run: uv run mypy .
-
-      - name: Pyright
-        run: uv run pyright --level error
-
-      - name: Ty
-        run: uv run ty check .
 
       - name: Import architecture checks
         run: uv run lint-imports --config .importlinter
@@ -69,8 +60,42 @@ jobs:
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: uv run python scripts/validate_conventional_commit.py --title "$PR_TITLE"
 
-  pr-pytest-shard:
-    name: pr-pytest-shard-${{ matrix.shard }}
+  pr-typing-quality:
+    name: pr-typing-quality
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Install dependencies
+        run: uv sync --extra dev
+
+      - name: Mypy
+        run: uv run mypy .
+
+      - name: Pyright
+        run: uv run pyright --level error
+
+      - name: Ty
+        run: uv run ty check .
+
+  pr-unit-tests:
+    name: pr-unit-tests-${{ matrix.shard }}
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     strategy:
@@ -98,9 +123,48 @@ jobs:
       - name: Install dependencies
         run: uv sync --extra dev
 
-      - name: Pytest shard
+      - name: Unit test shard
         run: >
           uv run --extra dev python scripts/pytest_shard.py
+          --suite unit
+          --shard-index ${{ matrix.shard }}
+          --shard-count ${PYTEST_SHARD_COUNT}
+          --
+          -o addopts= -q -n logical --maxprocesses=4 --dist=loadscope --no-cov
+
+  pr-integration-tests:
+    name: pr-integration-tests-${{ matrix.shard }}
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Install dependencies
+        run: uv sync --extra dev
+
+      - name: Integration test shard
+        run: >
+          uv run --extra dev python scripts/pytest_shard.py
+          --suite integration
           --shard-index ${{ matrix.shard }}
           --shard-count ${PYTEST_SHARD_COUNT}
           --
@@ -111,24 +175,34 @@ jobs:
     if: always() && github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     needs:
-      - pr-static-quality
-      - pr-pytest-shard
+      - pr-lint-quality
+      - pr-typing-quality
+      - pr-unit-tests
+      - pr-integration-tests
 
     steps:
       - name: Verify PR quality gates
         run: |
-          if [[ "${{ needs.pr-static-quality.result }}" != "success" ]]; then
-            echo "pr-static-quality result: ${{ needs.pr-static-quality.result }}" >&2
+          if [[ "${{ needs.pr-lint-quality.result }}" != "success" ]]; then
+            echo "pr-lint-quality result: ${{ needs.pr-lint-quality.result }}" >&2
             exit 1
           fi
-          if [[ "${{ needs.pr-pytest-shard.result }}" != "success" ]]; then
-            echo "pr-pytest-shard result: ${{ needs.pr-pytest-shard.result }}" >&2
+          if [[ "${{ needs.pr-typing-quality.result }}" != "success" ]]; then
+            echo "pr-typing-quality result: ${{ needs.pr-typing-quality.result }}" >&2
             exit 1
           fi
-          echo "pr-quality passed: static gates and pytest shards succeeded"
+          if [[ "${{ needs.pr-unit-tests.result }}" != "success" ]]; then
+            echo "pr-unit-tests result: ${{ needs.pr-unit-tests.result }}" >&2
+            exit 1
+          fi
+          if [[ "${{ needs.pr-integration-tests.result }}" != "success" ]]; then
+            echo "pr-integration-tests result: ${{ needs.pr-integration-tests.result }}" >&2
+            exit 1
+          fi
+          echo "pr-quality passed: lint, typing, unit, and integration gates succeeded"
 
-  main-static-quality:
-    name: main-static-quality
+  main-lint-quality:
+    name: main-lint-quality
     if: github.event_name == 'push' || github.event_name == 'merge_group'
     runs-on: ubuntu-latest
 
@@ -158,15 +232,6 @@ jobs:
       - name: Ruff format
         run: uv run ruff format --check .
 
-      - name: Mypy
-        run: uv run mypy .
-
-      - name: Pyright
-        run: uv run pyright --level error
-
-      - name: Ty
-        run: uv run ty check .
-
       - name: Import architecture checks
         run: uv run lint-imports --config .importlinter
 
@@ -179,8 +244,42 @@ jobs:
       - name: Validate latest commit title
         run: uv run python scripts/validate_conventional_commit.py --latest
 
-  main-pytest-shard:
-    name: main-pytest-shard-${{ matrix.shard }}
+  main-typing-quality:
+    name: main-typing-quality
+    if: github.event_name == 'push' || github.event_name == 'merge_group'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Install dependencies
+        run: uv sync --extra dev
+
+      - name: Mypy
+        run: uv run mypy .
+
+      - name: Pyright
+        run: uv run pyright --level error
+
+      - name: Ty
+        run: uv run ty check .
+
+  main-unit-tests:
+    name: main-unit-tests-${{ matrix.shard }}
     if: github.event_name == 'push' || github.event_name == 'merge_group'
     runs-on: ubuntu-latest
     strategy:
@@ -208,9 +307,10 @@ jobs:
       - name: Install dependencies
         run: uv sync --extra dev
 
-      - name: Pytest shard with coverage
+      - name: Unit test shard with coverage
         run: >
           uv run --extra dev python scripts/pytest_shard.py
+          --suite unit
           --shard-index ${{ matrix.shard }}
           --shard-count ${PYTEST_SHARD_COUNT}
           --
@@ -220,12 +320,64 @@ jobs:
       - name: Prepare coverage artifact
         run: |
           mkdir -p coverage-artifacts
-          cp .coverage coverage-artifacts/.coverage.${{ matrix.shard }}
+          cp .coverage coverage-artifacts/.coverage.unit.${{ matrix.shard }}
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
         with:
-          name: coverage-shard-${{ matrix.shard }}
+          name: coverage-unit-${{ matrix.shard }}
+          path: coverage-artifacts/
+          if-no-files-found: error
+          include-hidden-files: true
+
+  main-integration-tests:
+    name: main-integration-tests-${{ matrix.shard }}
+    if: github.event_name == 'push' || github.event_name == 'merge_group'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Install dependencies
+        run: uv sync --extra dev
+
+      - name: Integration test shard with coverage
+        run: >
+          uv run --extra dev python scripts/pytest_shard.py
+          --suite integration
+          --shard-index ${{ matrix.shard }}
+          --shard-count ${PYTEST_SHARD_COUNT}
+          --
+          -o addopts= -q -n logical --maxprocesses=4 --dist=loadscope
+          --cov=application --cov=ingestion --cov=api --cov-report=
+
+      - name: Prepare coverage artifact
+        run: |
+          mkdir -p coverage-artifacts
+          cp .coverage coverage-artifacts/.coverage.integration.${{ matrix.shard }}
+
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-integration-${{ matrix.shard }}
           path: coverage-artifacts/
           if-no-files-found: error
           include-hidden-files: true
@@ -235,8 +387,10 @@ jobs:
     if: always() && (github.event_name == 'push' || github.event_name == 'merge_group')
     runs-on: ubuntu-latest
     needs:
-      - main-static-quality
-      - main-pytest-shard
+      - main-lint-quality
+      - main-typing-quality
+      - main-unit-tests
+      - main-integration-tests
 
     steps:
       - name: Checkout repository
@@ -260,19 +414,27 @@ jobs:
 
       - name: Verify main quality dependencies
         run: |
-          if [[ "${{ needs.main-static-quality.result }}" != "success" ]]; then
-            echo "main-static-quality result: ${{ needs.main-static-quality.result }}" >&2
+          if [[ "${{ needs.main-lint-quality.result }}" != "success" ]]; then
+            echo "main-lint-quality result: ${{ needs.main-lint-quality.result }}" >&2
             exit 1
           fi
-          if [[ "${{ needs.main-pytest-shard.result }}" != "success" ]]; then
-            echo "main-pytest-shard result: ${{ needs.main-pytest-shard.result }}" >&2
+          if [[ "${{ needs.main-typing-quality.result }}" != "success" ]]; then
+            echo "main-typing-quality result: ${{ needs.main-typing-quality.result }}" >&2
+            exit 1
+          fi
+          if [[ "${{ needs.main-unit-tests.result }}" != "success" ]]; then
+            echo "main-unit-tests result: ${{ needs.main-unit-tests.result }}" >&2
+            exit 1
+          fi
+          if [[ "${{ needs.main-integration-tests.result }}" != "success" ]]; then
+            echo "main-integration-tests result: ${{ needs.main-integration-tests.result }}" >&2
             exit 1
           fi
 
       - name: Download coverage artifacts
         uses: actions/download-artifact@v4
         with:
-          pattern: coverage-shard-*
+          pattern: coverage-*
           path: coverage-shards
           merge-multiple: true
 
