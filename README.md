@@ -199,7 +199,7 @@ Recommended permissions:
 ```bash
 uv run python main.py --debug bronze-build \
  --exchange deribit \
- --market spot_ohlcv perps_ohlcv open_interest funding perps_trades options_trades volatility_index_data \
+ --dataset spot_ohlcv perps_ohlcv open_interest funding perps_trades options_trades volatility_index_data \
  --symbols BTC ETH SOL \
  --full-gap-fill \
  --save-parquet-lake \
@@ -608,8 +608,8 @@ Exact variables for the missing Silver contracts:
 |---|---|
 | `volatility_index_data_observed`, `volatility_index_1m_observed`, `volatility_index_snapshot_1m_observed` | `timestamp`, `exchange`, `symbol`, `instrument_type`, `dataset_type`, `volatility_value`, `volatility_open`, `volatility_high`, `volatility_low`, `volatility_close`, `volatility_source_timestamp`, `ingested_at`, `source_endpoint` |
 | `volatility_index_1m_feature` | `timestamp_m1`, `exchange`, `symbol`, `iv_open`, `iv_high`, `iv_low`, `iv_close`, `iv_range`, `iv_return_1m`, `iv_change_5m`, `iv_change_15m`, `iv_change_1h`, `iv_zscore_1d`, `iv_zscore_7d`, `iv_percentile_30d`, `iv_30d_annualized_pct`, `iv_source_dataset`, `iv_source_timestamp`, `minutes_since_iv_observation`, `iv_data_available` |
-| `realized_volatility_1m_feature` | `timestamp_m1`, `exchange`, `symbol`, `rv_5m`, `rv_15m`, `rv_1h`, `rv_4h`, `rv_1d`, `rv_5m_annualized_pct`, `rv_15m_annualized_pct`, `rv_1h_annualized_pct`, `rv_4h_annualized_pct`, `rv_1d_annualized_pct`, `rv_30d`, `rv_30d_annualized_pct`, `parkinson_rv_1h`, `jump_proxy`, `spot_available`, `perps_available` |
-| `iv_rv_1m_feature` | `timestamp_m1`, `exchange`, `symbol`, `iv_minus_rv_1h` (deprecated, mixed units), `iv_minus_rv_1d` (deprecated, mixed units), `iv_rv_ratio_1h` (deprecated, mixed units), `iv_rv_ratio_1d` (deprecated, mixed units), `iv_rv_spread_30d_pct`, `iv_rv_ratio_30d`, `iv_rv_zscore_1d`, `iv_rv_percentile_30d`, `minutes_since_iv_observation`, `minutes_since_rv_observation`, `iv_available`, `rv_available` |
+| `realized_volatility_1m_feature` | `timestamp_m1`, `exchange`, `symbol`, `canonical_rv_source`, `canonical_rv_source_available`, `rv_5m`, `rv_15m`, `rv_1h`, `rv_4h`, `rv_1d`, `rv_5m_annualized_pct`, `rv_15m_annualized_pct`, `rv_1h_annualized_pct`, `rv_4h_annualized_pct`, `rv_1d_annualized_pct`, `rv_30d`, `rv_30d_annualized_pct`, `spot_log_return`, `spot_rv_5m`, `spot_rv_15m`, `spot_rv_1h`, `spot_rv_4h`, `spot_rv_1d`, `spot_rv_30d`, `spot_rv_5m_annualized_pct`, `spot_rv_15m_annualized_pct`, `spot_rv_1h_annualized_pct`, `spot_rv_4h_annualized_pct`, `spot_rv_1d_annualized_pct`, `spot_rv_30d_annualized_pct`, `perps_log_return`, `perps_rv_5m`, `perps_rv_15m`, `perps_rv_1h`, `perps_rv_4h`, `perps_rv_1d`, `perps_rv_30d`, `perps_rv_5m_annualized_pct`, `perps_rv_15m_annualized_pct`, `perps_rv_1h_annualized_pct`, `perps_rv_4h_annualized_pct`, `perps_rv_1d_annualized_pct`, `perps_rv_30d_annualized_pct`, `parkinson_rv_1h`, `jump_proxy`, `spot_available`, `perps_available`, `spot_perps_basis_available` |
+| `iv_rv_1m_feature` | `timestamp_m1`, `exchange`, `symbol`, `canonical_rv_source`, `iv_minus_rv_1h` (deprecated, mixed units), `iv_minus_rv_1d` (deprecated, mixed units), `iv_rv_ratio_1h` (deprecated, mixed units), `iv_rv_ratio_1d` (deprecated, mixed units), `iv_rv_spread_30d_pct`, `iv_rv_ratio_30d`, `iv_rv_zscore_1d`, `iv_rv_percentile_30d`, `minutes_since_iv_observation`, `minutes_since_rv_observation`, `iv_available`, `rv_available` |
 | `index_price_snapshot_1m_observed` | `timestamp`, `exchange`, `symbol`, `index_name`, `index_price`, `index_price_source_timestamp`, `ingested_at`, `source_endpoint` |
 | `index_price_1m_feature` | `timestamp_m1`, `exchange`, `symbol`, `index_price`, `index_price_is_observed`, `index_price_source_timestamp`, `minutes_since_index_price_observation` |
 | `futures_summary_snapshot_1m_observed` | `timestamp`, `exchange`, `symbol`, `instrument_type`, `mark_price`, `index_price`, `open_interest`, `volume`, `turnover`, `funding_rate`, `ingested_at`, `source_endpoint` |
@@ -621,6 +621,13 @@ Exact variables for the missing Silver contracts:
 | `recent_trade_snapshot_1m_observed` | `trade_time`, `exchange`, `symbol`, `instrument_type`, `instrument_name`, `underlying`, `expiry`, `strike`, `option_type`, `trade_id`, `deduplication_key`, `trade_id_is_source`, `price`, `quantity`, `side`, `snapshot_timestamp`, `snapshot_derived`, `ingested_at`, `source_endpoint` |
 | `instrument_metadata_snapshot_daily_observed`, `futures_instrument_metadata_snapshot_daily_observed` | `snapshot_date`, `exchange`, `instrument_name`, `symbol`, `instrument_type`, `base_currency`, `quote_currency`, `settlement_currency`, `expiry`, `strike`, `option_type`, `tick_size`, `contract_size`, `min_trade_amount`, `creation_timestamp`, `is_active`, `is_listed`, `listing_state`, `ingested_at`, `source_endpoint` |
 | `historical_volatility_observed` | `timestamp`, `exchange`, `symbol`, `historical_volatility`, `historical_volatility_source_timestamp`, `ingested_at`, `source_endpoint` |
+
+Rolling IV/RV builders read 30 days of prior calendar context before calculating each target
+month, then write only the target month. `realized_volatility_1m_feature` keeps Spot and Perpetual
+returns/RV windows separate (`spot_*`, `perps_*`). The legacy canonical `rv_*` columns use one
+explicit source for the whole symbol: Perpetuals when available, otherwise Spot. They do not switch
+source row by row; missing selected-source minutes remain unavailable and are flagged through
+`canonical_rv_source_available`.
 
 ### 4.7.3 Gold: physical status by repository origin
 
@@ -863,6 +870,7 @@ uv run pyright --level error
 uv run ty check
 uv run lint-imports --config .importlinter
 uv run python scripts/validate_config_with_pydantic.py --config config.yaml
+uv run python scripts/validate_readme_inventory.py
 uv run python scripts/validate_conventional_commit.py --latest
 uv run --extra dev pytest
 ```
@@ -875,6 +883,7 @@ uv run --extra dev pytest
 | `uv run ty check` | Additional typing gate | Maintain policy-level typing consistency across the codebase. | Unresolved typing gaps and annotation inconsistencies. |
 | `uv run lint-imports --config .importlinter` | Architecture boundaries | Enforce dependency direction and import-layer contracts. | Boundary violations (for example domain importing infrastructure internals). |
 | `uv run python scripts/validate_config_with_pydantic.py --config config.yaml` | Runtime config schema | Reject invalid runtime configuration before pipeline execution. | Missing/invalid config fields or schema/type constraint failures. |
+| `uv run python scripts/validate_readme_inventory.py` | README inventory contract | Keep documented Gold dataset IDs aligned with typed contracts and physical inventory policy. | Missing or unknown documented dataset IDs. |
 | `uv run python scripts/validate_conventional_commit.py --latest` | Commit policy | Enforce Conventional Commit subjects for local commits, PR titles, and squash commits. | Non-compliant commit or PR title such as missing `type:` prefix. |
 | `uv run --extra dev pytest` | Behavioral + regression tests | Validate functional behavior in parallel and enforce coverage thresholds. | Test failures, behavioral regressions, or coverage below configured threshold. |
 
@@ -884,6 +893,9 @@ Operational notes:
 - Pre-commit enforces the same logical quality-gate path used in CI.
 - Commit messages and PR titles must follow Conventional Commits, for example
   `docs: update README missing day snapshot` or `feat(gold): add live full dataset contract`.
+- `uv run python scripts/update_project_history_docs.py` remains the maintenance command for
+  `DECISIONS.md`, `RISKS.md`, and `TIMELINE.md`; it is not a PR gate because the generator reads
+  the current Git history and therefore changes whenever a new commit is added.
 - GitHub repository gates are configured through the versioned CLI script
   `scripts/github/apply_quality_gates.sh`. The GitHub web UI is only an inspection surface; rerun
   the script after intentional changes to required checks, merge policy, or branch protection.

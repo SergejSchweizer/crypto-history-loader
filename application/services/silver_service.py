@@ -136,6 +136,10 @@ class SilverBuildReport:
     max_timestamp: str | None
     symbols: list[str]
     columns: list[str]
+    # QC-02: number of days of prior-month context buffered before calculating each
+    # target month, for builders whose rolling windows require cross-month state
+    # (realized volatility, IV, IV/RV). ``None`` for builders with no such buffering.
+    calculation_lookback_days: int | None = None
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -155,6 +159,7 @@ class SilverBuildReport:
             "max_timestamp": self.max_timestamp,
             "symbols": self.symbols,
             "columns": self.columns,
+            "calculation_lookback_days": self.calculation_lookback_days,
         }
 
 

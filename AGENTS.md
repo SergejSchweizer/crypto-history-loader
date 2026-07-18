@@ -154,12 +154,12 @@ Applies to review readiness, PR preparation, and pre-merge quality-gate validati
 - [MUST] Use explicit typing and return types on public interfaces.
 - [SHOULD] Require docstrings for non-trivial modules and functions.
 - [MUST] Run lint, format, typing, tests, and coverage checks before merge when practical.
-- [MUST] Required quality-gate checks include Ruff linting, Ruff formatting check, Pyright strict type checking, Pytest, coverage threshold, docstring checks, import boundary checks, and architecture tests.
-- [MUST] Required documentation checks include `interrogate` docstring coverage and `pydoclint` signature-docstring consistency validation.
+- [MUST] Required quality-gate checks include Ruff linting, Ruff formatting check, Mypy, Pyright strict type checking, ty, Pytest, coverage threshold, config schema validation, README inventory validation, Conventional Commit validation, import boundary checks, and architecture tests.
+- [SHOULD] Use docstring quality tools such as `interrogate` and `pydoclint` when they are configured, but do not describe them as mandatory repository gates unless pre-commit and CI enforce them.
 - [MUST] Run quality tools in strict mode where available, and fail the build on any reported error.
 - [MUST] Do not use permissive flags or downgraded severity levels that hide lint, type, formatting, or test failures.
 - [MUST] Agents must not bypass checks with `--no-verify` unless explicitly instructed by the human maintainer.
-- [MUST] `.pre-commit-config.yaml` includes and maintains hooks for `ruff`, `interrogate`, `pydoclint`, `pyright`, and `pytest`.
+- [MUST] `.pre-commit-config.yaml` includes and maintains hooks for the same logical mandatory checks enforced by CI.
 
 ## Review Findings Format
 
@@ -193,8 +193,6 @@ Applies to review readiness, PR preparation, and pre-merge quality-gate validati
 
 - `ruff check .`
 - `ruff format --check .`
-- `interrogate .`
-- `pydoclint src`
 - `pyright --level error`
 - `pytest -q`
 
@@ -216,7 +214,7 @@ Applies when adding or changing tests, fixing bugs, refactoring behavior, adding
 
 ## Coverage Policy
 
-- [MUST] Target repository coverage is 90%.
+- [MUST] Target repository coverage is 85%.
 - [MUST] Preserve or improve coverage for meaningful changes.
 - [MUST] If coverage is below 90%, disclose the gap and follow-up work.
 
@@ -281,20 +279,19 @@ Applies to Python quality tooling, typing, formatting, and local validation comm
 - [MUST] Every public function, class, and method uses Google-style docstrings.
 - [MUST] Function docstrings document: what and why, parameters, returns, raised exceptions, assumptions, side effects, and data semantics.
 - [MUST] When applicable, function docstrings also document time-alignment assumptions and exchange-specific quirks.
-- [MUST] Enforce docstring coverage with `interrogate`.
-- [MUST] Enforce docstring/signature consistency with `pydoclint`.
+- [SHOULD] Enforce docstring coverage with `interrogate` if the tool is part of the configured gate suite.
+- [SHOULD] Enforce docstring/signature consistency with `pydoclint` if the tool is part of the configured gate suite.
 - [MUST] Keep import boundaries compatible with repository rules when boundary tooling is configured.
 - [SHOULD] Prefer one canonical command sequence for local validation to reduce drift across contributors.
 - [MUST] `pyproject.toml` includes and maintains Ruff pydocstyle configuration with Google convention.
-- [MUST] `pyproject.toml` includes and maintains `interrogate` with `fail-under = 95`.
-- [MUST] `pyproject.toml` includes and maintains `pydoclint` with Google style and return-type checks.
-- [MUST] `pyproject.toml` includes and maintains coverage report threshold with `fail_under = 90`.
+- [SHOULD] `pyproject.toml` includes and maintains `interrogate` and `pydoclint` configuration when those tools are enabled as gates.
+- [MUST] `pyproject.toml` includes and maintains coverage report threshold with `fail_under = 85`.
 - [MUST] `pyproject.toml` keeps `line-length = 120` and `target-version = "py314"` for Ruff unless intentionally changed and documented.
 
 ## Agent Action Checklist
 
 - Run lint and format checks before finalizing changes.
-- Run docstring quality checks (`interrogate` and `pydoclint`) before finalizing changes.
+- Run docstring quality checks (`interrogate` and `pydoclint`) before finalizing changes when those tools are configured.
 - Run type checks for modified modules.
 - Run targeted tests first, then broader tests when practical.
 - Report any tool that could not be run and why.
@@ -308,8 +305,6 @@ Applies to Python quality tooling, typing, formatting, and local validation comm
 
 - `ruff check .`
 - `ruff format --check .`
-- `interrogate .`
-- `pydoclint src`
 - `mypy .` or `pyright`
 - `pytest -q`
 

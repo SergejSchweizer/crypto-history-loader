@@ -166,6 +166,19 @@ basis. Only annualized, horizon-matched fields (`iv_30d_annualized_pct` against
 sub-30-day RV and remain only for backward compatibility with existing persisted artifacts; new
 consumers should prefer the annualized 30-day comparison.
 
+Rolling IV/RV builders calculate each monthly output on a buffered frame that includes 30 days of
+prior calendar context, then trim writes back to the target month. This keeps previous-close,
+rolling RV, z-score, and percentile values invariant to monthly storage partition boundaries.
+
+`realized_volatility_1m_feature` computes Spot and Perpetual returns and RV windows as separate
+feature families (`spot_*` and `perps_*`). The legacy canonical `rv_*` columns mirror one explicit
+source for the whole symbol: Perpetuals when any Perpetual source exists, otherwise Spot. The
+builder does not row-wise coalesce Spot and Perpetual prices, so Spot/Perp basis changes cannot be
+misclassified as ordinary returns. The selected source is exposed as `canonical_rv_source`, and
+missing selected-source observations remain unavailable through `canonical_rv_source_available`.
+Silver manifests include `quantitative_feature_semantics` from typed contracts so units,
+horizons, annualization basis, lookback, source policy, and null policy are auditable.
+
 The Gold layer has two canonical model-ready endpoints: `gold.market.history_full.m1` for
 historical data produced by this repository, and `gold.live.full.m1` for live-origin data produced
 from `crypto-live-loader` inputs. Narrower Gold contracts remain available as internal building
@@ -246,7 +259,8 @@ pyright --level error
 ty check
 lint-imports --config .importlinter
 python scripts/validate_config_with_pydantic.py --config config.yaml
-python scripts/update_project_history_docs.py --check
+python scripts/validate_readme_inventory.py
+python scripts/validate_conventional_commit.py
 pytest
 ```
 

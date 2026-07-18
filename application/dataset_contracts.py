@@ -2,11 +2,20 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal
 
 MissingDataPolicy = Literal["drop_invalid", "observed_only", "forward_fill", "asof_join", "none"]
 TimestampSemantics = Literal["event_open_time", "observed_timestamp", "minute_grid", "trade_time"]
+QuantitativeUnit = Literal[
+    "decimal_return",
+    "decimal_volatility",
+    "percentage_points",
+    "price",
+    "boolean",
+    "dimensionless",
+    "minutes",
+]
 
 
 @dataclass(frozen=True)
@@ -19,6 +28,40 @@ class SilverDatasetContract:
     timestamp_semantics: TimestampSemantics
     missing_data_policy: MissingDataPolicy
     output_columns: tuple[str, ...]
+    feature_semantics: dict[str, QuantitativeFeatureSemantics] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class QuantitativeFeatureSemantics:
+    """Machine-readable quantitative meaning for a feature column.
+
+    The metadata is intentionally compact: it covers the units and construction
+    choices that decide whether two columns may be compared directly, and it records
+    the lookback/source policy needed by partitioned builders and manifests.
+    """
+
+    unit: QuantitativeUnit
+    horizon: str | None
+    annualized: bool
+    annualization_basis_days: int | None
+    estimator: str
+    required_lookback_days: int
+    source_selection_policy: str
+    null_policy: str
+
+    def as_dict(self) -> dict[str, object]:
+        """Return a JSON-serializable representation for manifests and tests."""
+
+        return {
+            "unit": self.unit,
+            "horizon": self.horizon,
+            "annualized": self.annualized,
+            "annualization_basis_days": self.annualization_basis_days,
+            "estimator": self.estimator,
+            "required_lookback_days": self.required_lookback_days,
+            "source_selection_policy": self.source_selection_policy,
+            "null_policy": self.null_policy,
+        }
 
 
 @dataclass(frozen=True)
@@ -380,6 +423,8 @@ SILVER_REALIZED_VOLATILITY_FEATURE_COLUMNS = [
     "timestamp_m1",
     "exchange",
     "symbol",
+    "canonical_rv_source",
+    "canonical_rv_source_available",
     "rv_5m",
     "rv_15m",
     "rv_1h",
@@ -396,15 +441,43 @@ SILVER_REALIZED_VOLATILITY_FEATURE_COLUMNS = [
     "rv_1d_annualized_pct",
     "rv_30d",
     "rv_30d_annualized_pct",
+    "spot_log_return",
+    "spot_rv_5m",
+    "spot_rv_15m",
+    "spot_rv_1h",
+    "spot_rv_4h",
+    "spot_rv_1d",
+    "spot_rv_30d",
+    "spot_rv_5m_annualized_pct",
+    "spot_rv_15m_annualized_pct",
+    "spot_rv_1h_annualized_pct",
+    "spot_rv_4h_annualized_pct",
+    "spot_rv_1d_annualized_pct",
+    "spot_rv_30d_annualized_pct",
+    "perps_log_return",
+    "perps_rv_5m",
+    "perps_rv_15m",
+    "perps_rv_1h",
+    "perps_rv_4h",
+    "perps_rv_1d",
+    "perps_rv_30d",
+    "perps_rv_5m_annualized_pct",
+    "perps_rv_15m_annualized_pct",
+    "perps_rv_1h_annualized_pct",
+    "perps_rv_4h_annualized_pct",
+    "perps_rv_1d_annualized_pct",
+    "perps_rv_30d_annualized_pct",
     "parkinson_rv_1h",
     "jump_proxy",
     "spot_available",
     "perps_available",
+    "spot_perps_basis_available",
 ]
 SILVER_IV_RV_FEATURE_COLUMNS = [
     "timestamp_m1",
     "exchange",
     "symbol",
+    "canonical_rv_source",
     # Deprecated (QC-01): these mix an annualized IV percentage-point index with a
     # non-annualized, sub-30-day-horizon RV estimate. Units and horizons are
     # incompatible; kept unchanged for backward compatibility with existing
@@ -424,6 +497,211 @@ SILVER_IV_RV_FEATURE_COLUMNS = [
     "iv_available",
     "rv_available",
 ]
+
+
+def _volatility_feature_semantics() -> dict[str, QuantitativeFeatureSemantics]:
+    return {
+        "iv_close": QuantitativeFeatureSemantics(
+            unit="percentage_points",
+            horizon="30d",
+            annualized=True,
+            annualization_basis_days=365,
+            estimator="deribit_volatility_index_close",
+            required_lookback_days=30,
+            source_selection_policy="historical_observed_with_snapshot_override_by_timestamp",
+            null_policy="observed_only",
+        ),
+        "iv_30d_annualized_pct": QuantitativeFeatureSemantics(
+            unit="percentage_points",
+            horizon="30d",
+            annualized=True,
+            annualization_basis_days=365,
+            estimator="deribit_volatility_index_close_alias",
+            required_lookback_days=30,
+            source_selection_policy="historical_observed_with_snapshot_override_by_timestamp",
+            null_policy="observed_only",
+        ),
+        "iv_return_1m": QuantitativeFeatureSemantics(
+            unit="decimal_return",
+            horizon="1m",
+            annualized=False,
+            annualization_basis_days=None,
+            estimator="log_return",
+            required_lookback_days=30,
+            source_selection_policy="same_iv_source_stream",
+            null_policy="null_without_previous_positive_close",
+        ),
+        "iv_percentile_30d": QuantitativeFeatureSemantics(
+            unit="dimensionless",
+            horizon="30d",
+            annualized=False,
+            annualization_basis_days=None,
+            estimator="closed_trailing_empirical_percentile",
+            required_lookback_days=30,
+            source_selection_policy="same_iv_source_stream",
+            null_policy="null_without_numeric_observation",
+        ),
+    }
+
+
+def _rv_feature_semantics() -> dict[str, QuantitativeFeatureSemantics]:
+    semantics: dict[str, QuantitativeFeatureSemantics] = {
+        "canonical_rv_source": QuantitativeFeatureSemantics(
+            unit="dimensionless",
+            horizon=None,
+            annualized=False,
+            annualization_basis_days=None,
+            estimator="source_identity",
+            required_lookback_days=30,
+            source_selection_policy="perps_if_symbol_has_perps_else_spot_no_rowwise_fallback",
+            null_policy="never_null_for_processed_rows",
+        ),
+        "canonical_rv_source_available": QuantitativeFeatureSemantics(
+            unit="boolean",
+            horizon="1m",
+            annualized=False,
+            annualization_basis_days=None,
+            estimator="selected_source_close_non_null",
+            required_lookback_days=30,
+            source_selection_policy="perps_if_symbol_has_perps_else_spot_no_rowwise_fallback",
+            null_policy="false_when_selected_source_missing",
+        ),
+        "spot_log_return": QuantitativeFeatureSemantics(
+            unit="decimal_return",
+            horizon="1m",
+            annualized=False,
+            annualization_basis_days=None,
+            estimator="log_return_on_spot_close",
+            required_lookback_days=30,
+            source_selection_policy="spot_only",
+            null_policy="null_without_previous_positive_spot_close",
+        ),
+        "perps_log_return": QuantitativeFeatureSemantics(
+            unit="decimal_return",
+            horizon="1m",
+            annualized=False,
+            annualization_basis_days=None,
+            estimator="log_return_on_perpetual_close",
+            required_lookback_days=30,
+            source_selection_policy="perps_only",
+            null_policy="null_without_previous_positive_perps_close",
+        ),
+        "parkinson_rv_1h": QuantitativeFeatureSemantics(
+            unit="decimal_volatility",
+            horizon="1h",
+            annualized=False,
+            annualization_basis_days=None,
+            estimator="parkinson_range_volatility",
+            required_lookback_days=30,
+            source_selection_policy="canonical_rv_source",
+            null_policy="null_when_canonical_ohlc_missing",
+        ),
+        "jump_proxy": QuantitativeFeatureSemantics(
+            unit="dimensionless",
+            horizon="1d",
+            annualized=False,
+            annualization_basis_days=None,
+            estimator="absolute_rolling_zscore_of_canonical_log_return",
+            required_lookback_days=30,
+            source_selection_policy="canonical_rv_source",
+            null_policy="null_until_two_observations_or_zero_std",
+        ),
+    }
+    for prefix, source_policy in (("", "canonical_rv_source"), ("spot_", "spot_only"), ("perps_", "perps_only")):
+        for raw_column, horizon in (
+            ("rv_5m", "5m"),
+            ("rv_15m", "15m"),
+            ("rv_1h", "1h"),
+            ("rv_4h", "4h"),
+            ("rv_1d", "1d"),
+            ("rv_30d", "30d"),
+        ):
+            column = f"{prefix}{raw_column}"
+            semantics[column] = QuantitativeFeatureSemantics(
+                unit="decimal_volatility",
+                horizon=horizon,
+                annualized=False,
+                annualization_basis_days=None,
+                estimator="sqrt_sum_squared_log_returns",
+                required_lookback_days=30,
+                source_selection_policy=source_policy,
+                null_policy="null_without_positive_current_and_previous_close",
+            )
+            semantics[f"{column}_annualized_pct"] = QuantitativeFeatureSemantics(
+                unit="percentage_points",
+                horizon=horizon,
+                annualized=True,
+                annualization_basis_days=365,
+                estimator="sqrt_sum_squared_log_returns_scaled_to_365d_pct",
+                required_lookback_days=30,
+                source_selection_policy=source_policy,
+                null_policy="null_when_raw_window_null",
+            )
+    return semantics
+
+
+def _iv_rv_feature_semantics() -> dict[str, QuantitativeFeatureSemantics]:
+    return {
+        "canonical_rv_source": QuantitativeFeatureSemantics(
+            unit="dimensionless",
+            horizon=None,
+            annualized=False,
+            annualization_basis_days=None,
+            estimator="source_identity_from_realized_volatility",
+            required_lookback_days=30,
+            source_selection_policy="inherited_from_realized_volatility_1m_feature",
+            null_policy="null_when_rv_missing",
+        ),
+        "iv_rv_spread_30d_pct": QuantitativeFeatureSemantics(
+            unit="percentage_points",
+            horizon="30d",
+            annualized=True,
+            annualization_basis_days=365,
+            estimator="iv_30d_annualized_pct_minus_rv_30d_annualized_pct",
+            required_lookback_days=30,
+            source_selection_policy="iv_source_and_canonical_rv_source",
+            null_policy="null_when_iv_or_rv_null",
+        ),
+        "iv_rv_ratio_30d": QuantitativeFeatureSemantics(
+            unit="dimensionless",
+            horizon="30d",
+            annualized=True,
+            annualization_basis_days=365,
+            estimator="iv_30d_annualized_pct_divided_by_rv_30d_annualized_pct",
+            required_lookback_days=30,
+            source_selection_policy="iv_source_and_canonical_rv_source",
+            null_policy="null_when_iv_or_rv_null_or_rv_non_positive",
+        ),
+        "iv_rv_zscore_1d": QuantitativeFeatureSemantics(
+            unit="dimensionless",
+            horizon="1d",
+            annualized=False,
+            annualization_basis_days=None,
+            estimator="rolling_zscore_of_legacy_iv_minus_rv_1d",
+            required_lookback_days=30,
+            source_selection_policy="legacy_iv_rv_1d",
+            null_policy="null_until_two_observations_or_zero_std",
+        ),
+        "iv_rv_percentile_30d": QuantitativeFeatureSemantics(
+            unit="dimensionless",
+            horizon="30d",
+            annualized=False,
+            annualization_basis_days=None,
+            estimator="closed_trailing_percentile_of_legacy_iv_minus_rv_1d",
+            required_lookback_days=30,
+            source_selection_policy="legacy_iv_rv_1d",
+            null_policy="null_without_numeric_observation",
+        ),
+    }
+
+
+def silver_feature_semantics(dataset_type: str) -> dict[str, dict[str, object]]:
+    """Return JSON-serializable quantitative feature semantics for a Silver dataset."""
+
+    contract = SILVER_DATASET_CONTRACTS.get(dataset_type)
+    if contract is None:
+        return {}
+    return {column: semantics.as_dict() for column, semantics in contract.feature_semantics.items()}
 
 
 SILVER_DATASET_CONTRACTS: dict[str, SilverDatasetContract] = {
@@ -538,6 +816,7 @@ SILVER_DATASET_CONTRACTS: dict[str, SilverDatasetContract] = {
         timestamp_semantics="observed_timestamp",
         missing_data_policy="observed_only",
         output_columns=tuple(SILVER_VOLATILITY_FEATURE_COLUMNS),
+        feature_semantics=_volatility_feature_semantics(),
     ),
     "realized_volatility_1m_feature": SilverDatasetContract(
         dataset_type="realized_volatility_1m_feature",
@@ -546,6 +825,7 @@ SILVER_DATASET_CONTRACTS: dict[str, SilverDatasetContract] = {
         timestamp_semantics="minute_grid",
         missing_data_policy="observed_only",
         output_columns=tuple(SILVER_REALIZED_VOLATILITY_FEATURE_COLUMNS),
+        feature_semantics=_rv_feature_semantics(),
     ),
     "iv_rv_1m_feature": SilverDatasetContract(
         dataset_type="iv_rv_1m_feature",
@@ -554,6 +834,7 @@ SILVER_DATASET_CONTRACTS: dict[str, SilverDatasetContract] = {
         timestamp_semantics="minute_grid",
         missing_data_policy="observed_only",
         output_columns=tuple(SILVER_IV_RV_FEATURE_COLUMNS),
+        feature_semantics=_iv_rv_feature_semantics(),
     ),
     "index_price_snapshot_1m_observed": SilverDatasetContract(
         dataset_type="index_price_snapshot_1m_observed",

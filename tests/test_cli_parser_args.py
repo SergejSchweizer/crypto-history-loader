@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import shlex
+import sys
 from pathlib import Path
 
 import pytest
@@ -9,6 +11,7 @@ import pytest
 from api import cli
 from api.cli import build_parser
 from application.dataset_contracts import supported_silver_build_ids
+from scripts import run_medallion_pipeline
 
 EXPECTED_MEDALLION_SILVER_DATASETS = set(supported_silver_build_ids())
 
@@ -128,6 +131,60 @@ def test_medallion_pipeline_cli_args_in_config_are_parser_compatible() -> None:
         argv = [command, *[str(token) for token in cli_args]]
         parsed = parser.parse_args(argv)
         assert parsed.command == command
+
+
+def _readme_shell_commands() -> list[list[str]]:
+    readme = (Path(__file__).resolve().parents[1] / "README.md").read_text(encoding="utf-8")
+    commands: list[list[str]] = []
+    in_bash = False
+    current: list[str] = []
+    for line in readme.splitlines():
+        stripped = line.strip()
+        if stripped == "```bash":
+            in_bash = True
+            current = []
+            continue
+        if in_bash and stripped == "```":
+            in_bash = False
+            if current:
+                command = " ".join(part.removesuffix("\\").strip() for part in current)
+                tokens = shlex.split(command)
+                if tokens[:3] == ["uv", "run", "python"] and len(tokens) >= 4:
+                    commands.append(tokens[3:])
+            current = []
+            continue
+        if in_bash and stripped:
+            current.append(stripped)
+    return commands
+
+
+def test_readme_python_commands_parse_without_lake_or_network_access(monkeypatch: pytest.MonkeyPatch) -> None:
+    """QC-05: documented Python commands should stay compatible with parser surfaces."""
+
+    parser = build_parser()
+    commands = _readme_shell_commands()
+    assert commands
+
+    parsed_main_commands = 0
+    parsed_pipeline_commands = 0
+    for command in commands:
+        if command[0] == "main.py":
+            parsed = parser.parse_args(command[1:])
+            assert parsed.command in {
+                "bronze-build",
+                "silver-build",
+                "gold-build",
+                "dataset-inventory",
+            }
+            parsed_main_commands += 1
+        elif command[0] == "scripts/run_medallion_pipeline.py":
+            monkeypatch.setattr(sys, "argv", command)
+            parsed = run_medallion_pipeline.parse_args()
+            assert parsed.config.endswith("config.yaml")
+            parsed_pipeline_commands += 1
+
+    assert parsed_main_commands >= 6
+    assert parsed_pipeline_commands == 1
 
 
 def test_medallion_pipeline_schedules_complete_silver_and_gold_runs() -> None:

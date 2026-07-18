@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
+from math import log
 from pathlib import Path
 
 import pytest
@@ -640,3 +641,154 @@ def test_build_volatility_index_1m_feature_uses_trailing_iv_windows(tmp_path: Pa
     assert written["iv_percentile_30d"].to_list() == [1.0, 1.0, 1.0, 1.0, 1.0]
     assert written["iv_zscore_1d"].null_count() == 1
     assert written["iv_zscore_7d"].null_count() == 1
+
+
+def test_build_volatility_index_1m_feature_preserves_previous_close_across_month_boundary(
+    tmp_path: Path,
+) -> None:
+    """QC-02: the first minute of a month must see the prior month's final close."""
+
+    silver = tmp_path / "silver"
+
+    def _row(timestamp: datetime, close: float) -> dict[str, object]:
+        return {
+            "timestamp": timestamp,
+            "exchange": "deribit",
+            "symbol": "BTC",
+            "instrument_type": "perp",
+            "dataset_type": "volatility_index_snapshot_1m",
+            "volatility_value": close,
+            "volatility_open": close - 1.0,
+            "volatility_high": close + 1.0,
+            "volatility_low": close - 2.0,
+            "volatility_close": close,
+            "volatility_source_timestamp": timestamp,
+            "ingested_at": timestamp,
+            "source_endpoint": "rest_get_volatility_index_data",
+        }
+
+    _write_silver_observed_file(
+        silver,
+        dataset_type="volatility_index_snapshot_1m_observed",
+        exchange="deribit",
+        symbol="BTC",
+        month="2026-01",
+        rows=[_row(datetime(2026, 1, 31, 23, 59, tzinfo=UTC), 50.0)],
+    )
+    _write_silver_observed_file(
+        silver,
+        dataset_type="volatility_index_snapshot_1m_observed",
+        exchange="deribit",
+        symbol="BTC",
+        month="2026-02",
+        rows=[_row(datetime(2026, 2, 1, 0, 0, tzinfo=UTC), 55.0)],
+    )
+
+    build_volatility_index_1m_feature_for_symbol(
+        silver_root=str(silver),
+        exchange="deribit",
+        symbol="BTC",
+    )
+
+    january_output = pl.read_parquet(
+        silver
+        / "dataset_type=volatility_index_1m_feature"
+        / "exchange=deribit"
+        / "symbol=BTC"
+        / "timeframe=1m"
+        / "year=2026"
+        / "month=2026-01"
+        / "BTC-2026-01.parquet"
+    )
+    february_output = pl.read_parquet(
+        silver
+        / "dataset_type=volatility_index_1m_feature"
+        / "exchange=deribit"
+        / "symbol=BTC"
+        / "timeframe=1m"
+        / "year=2026"
+        / "month=2026-02"
+        / "BTC-2026-02.parquet"
+    )
+
+    # Storage-partition trimming: each month's output only contains its own rows.
+    assert january_output.height == 1
+    assert february_output.height == 1
+    # Without cross-month buffering this would be null because the prior close
+    # lived in a different monthly partition.
+    assert february_output["iv_return_1m"].to_list()[0] == pytest.approx(log(55.0 / 50.0))
+
+
+def test_build_volatility_index_1m_feature_preserves_previous_close_across_year_boundary(
+    tmp_path: Path,
+) -> None:
+    """QC-02: the first minute of a year must see the prior year's final close."""
+
+    silver = tmp_path / "silver"
+
+    def _row(timestamp: datetime, close: float) -> dict[str, object]:
+        return {
+            "timestamp": timestamp,
+            "exchange": "deribit",
+            "symbol": "BTC",
+            "instrument_type": "perp",
+            "dataset_type": "volatility_index_snapshot_1m",
+            "volatility_value": close,
+            "volatility_open": close - 1.0,
+            "volatility_high": close + 1.0,
+            "volatility_low": close - 2.0,
+            "volatility_close": close,
+            "volatility_source_timestamp": timestamp,
+            "ingested_at": timestamp,
+            "source_endpoint": "rest_get_volatility_index_data",
+        }
+
+    _write_silver_observed_file(
+        silver,
+        dataset_type="volatility_index_snapshot_1m_observed",
+        exchange="deribit",
+        symbol="BTC",
+        month="2025-12",
+        rows=[_row(datetime(2025, 12, 31, 23, 59, tzinfo=UTC), 50.0)],
+    )
+    _write_silver_observed_file(
+        silver,
+        dataset_type="volatility_index_snapshot_1m_observed",
+        exchange="deribit",
+        symbol="BTC",
+        month="2026-01",
+        rows=[_row(datetime(2026, 1, 1, 0, 0, tzinfo=UTC), 55.0)],
+    )
+
+    build_volatility_index_1m_feature_for_symbol(
+        silver_root=str(silver),
+        exchange="deribit",
+        symbol="BTC",
+    )
+
+    december_output = pl.read_parquet(
+        silver
+        / "dataset_type=volatility_index_1m_feature"
+        / "exchange=deribit"
+        / "symbol=BTC"
+        / "timeframe=1m"
+        / "year=2025"
+        / "month=2025-12"
+        / "BTC-2025-12.parquet"
+    )
+    january_output = pl.read_parquet(
+        silver
+        / "dataset_type=volatility_index_1m_feature"
+        / "exchange=deribit"
+        / "symbol=BTC"
+        / "timeframe=1m"
+        / "year=2026"
+        / "month=2026-01"
+        / "BTC-2026-01.parquet"
+    )
+
+    assert december_output.height == 1
+    assert january_output.height == 1
+    # Without cross-year buffering this would be null because the prior close
+    # lived in a different calendar-year monthly partition.
+    assert january_output["iv_return_1m"].to_list()[0] == pytest.approx(log(55.0 / 50.0))

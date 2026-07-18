@@ -8,10 +8,21 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from application.dataset_contracts import SILVER_REALIZED_VOLATILITY_FEATURE_COLUMNS
+from application.services.silver_monthly_lookback import (
+    lookback_month_keys,
+    month_end_exclusive,
+    month_start,
+)
 
 # QC-01: canonical annualization basis for crypto calendar-time volatility (365
 # calendar days per year, expressed in minutes) shared by every annualized RV field.
 _ANNUALIZATION_MINUTES_PER_YEAR = 365 * 24 * 60
+
+# QC-02: widest rolling window used by this builder (`rv_30d`), in days. Every month
+# is calculated on a buffered frame that includes this much prior context so rolling
+# windows, the previous close, and the log-return at the start of a month are not
+# reset by monthly storage partition boundaries.
+_REQUIRED_LOOKBACK_DAYS = 30
 
 # QC-01: raw RV window -> window length in minutes, used to scale each raw
 # (non-annualized) RV window into an annualized volatility percentage point.
@@ -47,6 +58,7 @@ class SilverReportFactory(Protocol):
         max_timestamp: str | None,
         symbols: list[str],
         columns: list[str],
+        calculation_lookback_days: int | None = None,
     ) -> object: ...
 
 
@@ -163,10 +175,10 @@ def _read_source_month(pl: Any, paths: list[Path], *, month: str, symbol: str, p
     )
 
 
-def _rolling_rv_expr(pl: Any, window_size: str) -> Any:
-    squared_returns = pl.col("log_return").pow(2)
+def _rolling_rv_expr(pl: Any, *, return_column: str, window_size: str) -> Any:
+    squared_returns = pl.col(return_column).pow(2)
     return (
-        pl.when(pl.col("log_return").is_not_null())
+        pl.when(pl.col(return_column).is_not_null())
         .then(
             squared_returns.rolling_sum_by(
                 "timestamp_m1",
@@ -206,6 +218,35 @@ def _annualized_pct_expr(pl: Any, raw_column: str, window_minutes: int) -> Any:
 
     scale = (_ANNUALIZATION_MINUTES_PER_YEAR / window_minutes) ** 0.5 * 100.0
     return pl.col(raw_column) * scale
+
+
+def _source_return_expr(pl: Any, *, close_column: str) -> Any:
+    previous_close = pl.col(close_column).forward_fill().shift(1).over(["exchange", "symbol"])
+    return (
+        pl.when((pl.col(close_column) > 0.0) & (previous_close > 0.0))
+        .then((pl.col(close_column) / previous_close).log())
+        .otherwise(None)
+    )
+
+
+def _source_rv_exprs(pl: Any, *, prefix: str) -> list[Any]:
+    return [
+        _rolling_rv_expr(pl, return_column=f"{prefix}_log_return", window_size="5m").alias(f"{prefix}_rv_5m"),
+        _rolling_rv_expr(pl, return_column=f"{prefix}_log_return", window_size="15m").alias(f"{prefix}_rv_15m"),
+        _rolling_rv_expr(pl, return_column=f"{prefix}_log_return", window_size="1h").alias(f"{prefix}_rv_1h"),
+        _rolling_rv_expr(pl, return_column=f"{prefix}_log_return", window_size="4h").alias(f"{prefix}_rv_4h"),
+        _rolling_rv_expr(pl, return_column=f"{prefix}_log_return", window_size="1d").alias(f"{prefix}_rv_1d"),
+        _rolling_rv_expr(pl, return_column=f"{prefix}_log_return", window_size="30d").alias(f"{prefix}_rv_30d"),
+    ]
+
+
+def _source_annualized_exprs(pl: Any, *, prefix: str) -> list[Any]:
+    return [
+        _annualized_pct_expr(pl, f"{prefix}_{raw_column}", window_minutes).alias(
+            f"{prefix}_{raw_column}_annualized_pct"
+        )
+        for raw_column, window_minutes in _RV_WINDOW_MINUTES.items()
+    ]
 
 
 def build_realized_volatility_1m_feature_for_symbol(
@@ -253,19 +294,67 @@ def build_realized_volatility_1m_feature_for_symbol(
         symbol=normalized_symbol,
         timeframe=timeframe,
     )
+    # QC-03: the legacy canonical rv_* columns use one source for the whole symbol.
+    # Perpetuals are preferred when available because IV/RV comparisons in this
+    # repository are derivatives-regime features. If no perpetual input exists, spot
+    # is the explicit canonical fallback. The builder never switches source row by
+    # row, so spot/perp basis moves cannot become synthetic returns.
+    canonical_rv_source = "perps" if perps_paths else "spot"
     months = sorted(_source_months(spot_paths) | _source_months(perps_paths))
     agg_rows_in = 0
     agg_rows_out = 0
     min_timestamp: datetime | None = None
     max_timestamp: datetime | None = None
+    # QC-02: cache source-month reads across iterations since lookback windows for
+    # consecutive target months overlap heavily.
+    spot_cache: dict[str, Any] = {}
+    perps_cache: dict[str, Any] = {}
+
+    def _cached_source_month(paths: list[Path], cache: dict[str, Any], prefix: str, key: str) -> Any:
+        if key not in cache:
+            cache[key] = _read_source_month(pl, paths, month=key, symbol=normalized_symbol, prefix=prefix)
+        return cache[key]
 
     for month in months:
-        spot = _read_source_month(pl, spot_paths, month=month, symbol=normalized_symbol, prefix="spot")
-        perps = _read_source_month(pl, perps_paths, month=month, symbol=normalized_symbol, prefix="perps")
-        inputs = [frame for frame in (spot, perps) if frame is not None]
-        if not inputs:
+        target_start = month_start(month)
+        target_end = month_end_exclusive(month)
+        calculation_keys = [*lookback_month_keys(month, lookback_days=_REQUIRED_LOOKBACK_DAYS), month]
+
+        spot_frames = []
+        perps_frames = []
+        for key in calculation_keys:
+            spot_month = _cached_source_month(spot_paths, spot_cache, "spot", key)
+            if spot_month is not None:
+                spot_frames.append(spot_month)
+            perps_month = _cached_source_month(perps_paths, perps_cache, "perps", key)
+            if perps_month is not None:
+                perps_frames.append(perps_month)
+
+        target_spot = spot_cache.get(month)
+        target_perps = perps_cache.get(month)
+        target_inputs = [source_frame for source_frame in (target_spot, target_perps) if source_frame is not None]
+        if not target_inputs:
             continue
-        rows_in = sum(frame.height for frame in inputs)
+        rows_in = sum(source_frame.height for source_frame in target_inputs)
+
+        spot = (
+            pl.concat(spot_frames, how="vertical_relaxed").unique(
+                subset=["exchange", "symbol", "timestamp_m1"],
+                keep="last",
+                maintain_order=True,
+            )
+            if spot_frames
+            else None
+        )
+        perps = (
+            pl.concat(perps_frames, how="vertical_relaxed").unique(
+                subset=["exchange", "symbol", "timestamp_m1"],
+                keep="last",
+                maintain_order=True,
+            )
+            if perps_frames
+            else None
+        )
         if spot is None:
             frame = perps
         elif perps is None:
@@ -288,30 +377,39 @@ def build_realized_volatility_1m_feature_for_symbol(
                 frame = frame.with_columns(pl.lit(None, dtype=pl.Float64).alias(column_name))
         frame = frame.with_columns(
             [
-                pl.coalesce([pl.col("perps_open"), pl.col("spot_open")]).alias("rv_open"),
-                pl.coalesce([pl.col("perps_high"), pl.col("spot_high")]).alias("rv_high"),
-                pl.coalesce([pl.col("perps_low"), pl.col("spot_low")]).alias("rv_low"),
-                pl.coalesce([pl.col("perps_close"), pl.col("spot_close")]).alias("rv_close"),
+                pl.lit(canonical_rv_source).alias("canonical_rv_source"),
+                pl.col(f"{canonical_rv_source}_open").alias("rv_open"),
+                pl.col(f"{canonical_rv_source}_high").alias("rv_high"),
+                pl.col(f"{canonical_rv_source}_low").alias("rv_low"),
+                pl.col(f"{canonical_rv_source}_close").alias("rv_close"),
                 pl.col("spot_close").is_not_null().alias("spot_available"),
                 pl.col("perps_close").is_not_null().alias("perps_available"),
+                (
+                    pl.col("spot_close").is_not_null()
+                    & pl.col("perps_close").is_not_null()
+                    & (pl.col("spot_close") != pl.col("perps_close"))
+                ).alias("spot_perps_basis_available"),
             ]
         ).sort(["exchange", "symbol", "timestamp_m1"])
-        previous_close = pl.col("rv_close").shift(1).over(["exchange", "symbol"])
         frame = (
             frame.with_columns(
-                pl.when((pl.col("rv_close") > 0.0) & (previous_close > 0.0))
-                .then((pl.col("rv_close") / previous_close).log())
-                .otherwise(None)
-                .alias("log_return")
+                [
+                    _source_return_expr(pl, close_column="spot_close").alias("spot_log_return"),
+                    _source_return_expr(pl, close_column="perps_close").alias("perps_log_return"),
+                    _source_return_expr(pl, close_column="rv_close").alias("log_return"),
+                    pl.col(f"{canonical_rv_source}_close").is_not_null().alias("canonical_rv_source_available"),
+                ]
             )
             .with_columns(
                 [
-                    _rolling_rv_expr(pl, "5m").alias("rv_5m"),
-                    _rolling_rv_expr(pl, "15m").alias("rv_15m"),
-                    _rolling_rv_expr(pl, "1h").alias("rv_1h"),
-                    _rolling_rv_expr(pl, "4h").alias("rv_4h"),
-                    _rolling_rv_expr(pl, "1d").alias("rv_1d"),
-                    _rolling_rv_expr(pl, "30d").alias("rv_30d"),
+                    *_source_rv_exprs(pl, prefix="spot"),
+                    *_source_rv_exprs(pl, prefix="perps"),
+                    _rolling_rv_expr(pl, return_column="log_return", window_size="5m").alias("rv_5m"),
+                    _rolling_rv_expr(pl, return_column="log_return", window_size="15m").alias("rv_15m"),
+                    _rolling_rv_expr(pl, return_column="log_return", window_size="1h").alias("rv_1h"),
+                    _rolling_rv_expr(pl, return_column="log_return", window_size="4h").alias("rv_4h"),
+                    _rolling_rv_expr(pl, return_column="log_return", window_size="1d").alias("rv_1d"),
+                    _rolling_rv_expr(pl, return_column="log_return", window_size="30d").alias("rv_30d"),
                     (
                         (
                             (pl.col("rv_high") / pl.col("rv_low"))
@@ -333,11 +431,19 @@ def build_realized_volatility_1m_feature_for_symbol(
             )
             .with_columns(
                 [
-                    _annualized_pct_expr(pl, raw_column, window_minutes).alias(f"{raw_column}_annualized_pct")
-                    for raw_column, window_minutes in _RV_WINDOW_MINUTES.items()
+                    *_source_annualized_exprs(pl, prefix="spot"),
+                    *_source_annualized_exprs(pl, prefix="perps"),
+                    *[
+                        _annualized_pct_expr(pl, raw_column, window_minutes).alias(f"{raw_column}_annualized_pct")
+                        for raw_column, window_minutes in _RV_WINDOW_MINUTES.items()
+                    ],
                 ]
             )
         )
+        # QC-02: the buffered frame spans the lookback window plus the target month so
+        # rolling functions above see the required trailing context; trim back to only
+        # the target month's rows before writing.
+        frame = frame.filter((pl.col("timestamp_m1") >= target_start) & (pl.col("timestamp_m1") < target_end))
         feature = frame.select(SILVER_REALIZED_VOLATILITY_FEATURE_COLUMNS)
 
         target = dependencies.silver_month_path(
@@ -378,4 +484,5 @@ def build_realized_volatility_1m_feature_for_symbol(
         max_timestamp=dependencies.iso_utc(max_timestamp),
         symbols=[normalized_symbol],
         columns=SILVER_REALIZED_VOLATILITY_FEATURE_COLUMNS,
+        calculation_lookback_days=_REQUIRED_LOOKBACK_DAYS,
     )
