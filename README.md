@@ -23,7 +23,7 @@ Author: Sergej Schweizer
   - [4.4 Funding (`dataset_type=funding`)](#44-funding-dataset_typefunding)
   - [4.5 `perps_trades` (`dataset_type=perps_trades`)](#45-perps_trades-dataset_typeperps_trades)
   - [4.6 `options_trades` (`dataset_type=options_trades`)](#46-options_trades-dataset_typeoptions_trades)
-  - [4.7 Layer Inventory Snapshot](#47-layer-inventory-snapshot)
+  - [4.7 Layer Inventory Snapshot (`dataset_type=layer_inventory_snapshot`)](#47-layer-inventory-snapshot-dataset_typelayer_inventory_snapshot)
 - [5. Example Commands](#5-example-commands)
   - [5.1 End-to-End Pipeline](#51-end-to-end-pipeline)
   - [5.2 Layer Commands](#52-layer-commands)
@@ -227,7 +227,7 @@ Coverage reference for missing statistics in this section:
 - Missing Days: count of missing calendar days in the [Start Date, End Date] span
 
 The complete Bronze missing-day snapshot generated from `lake/bronze` on 2026-07-12 CEST is in
-[the authoritative layer inventory](#47-layer-inventory-snapshot). It reports dates and missing days
+[the authoritative layer inventory](#47-layer-inventory-snapshot-dataset_typelayer_inventory_snapshot). It reports dates and missing days
 per primary series, which avoids treating BTC, ETH, and SOL series with different lifetimes as one series.
 
 ## 4.1 Spot (`dataset_type=spot_ohlcv`)
@@ -539,7 +539,7 @@ Coverage:
 
 ---
 
-## 4.7 Layer Inventory Snapshot
+## 4.7 Layer Inventory Snapshot (`dataset_type=layer_inventory_snapshot`)
 
 This is the authoritative local-data snapshot as of 2026-07-12 CEST. Dates are derived from the
 partitioned Parquet files. Missing days are counted per primary series between that series' first and
