@@ -141,7 +141,7 @@ def test_history_full_gold_joins_historical_sources_without_targets(tmp_path: Pa
     assert "perp_close_price" in history_full.columns
     assert "funding_rate_last_known" in history_full.columns
     assert "open_interest_open_interest" in history_full.columns
-    assert "trades_close_price" in history_full.columns
+    assert "perps_trades_close_price" in history_full.columns
     assert "options_trades_close_price" in history_full.columns
     assert history_full.columns == [
         "timestamp_m1",
@@ -172,18 +172,18 @@ def test_history_full_gold_joins_historical_sources_without_targets(tmp_path: Pa
         "minutes_since_open_interest_observation",
         "open_interest_observation_lag_sec",
         "open_interest_source_timestamp",
-        "trades_open_price",
-        "trades_high_price",
-        "trades_low_price",
-        "trades_close_price",
-        "trades_volume",
-        "trades_quote_volume",
-        "trades_trade_count",
-        "trades_buy_volume",
-        "trades_sell_volume",
-        "trades_buy_trade_count",
-        "trades_sell_trade_count",
-        "trades_buy_volume_share",
+        "perps_trades_open_price",
+        "perps_trades_high_price",
+        "perps_trades_low_price",
+        "perps_trades_close_price",
+        "perps_trades_volume",
+        "perps_trades_quote_volume",
+        "perps_trades_trade_count",
+        "perps_trades_buy_volume",
+        "perps_trades_sell_volume",
+        "perps_trades_buy_trade_count",
+        "perps_trades_sell_trade_count",
+        "perps_trades_buy_volume_share",
         "options_trades_open_price",
         "options_trades_high_price",
         "options_trades_low_price",
@@ -202,7 +202,7 @@ def test_history_full_gold_joins_historical_sources_without_targets(tmp_path: Pa
     assert "strategy_momentum_log_return_1m" not in history_full.columns
     assert "strategy_reversion_half_life_5m" not in history_full.columns
     assert "historical_volatility_reference" not in history_full.columns
-    assert "trades_buy_volume_share" in history_full.columns
+    assert "perps_trades_buy_volume_share" in history_full.columns
     assert "options_trades_sell_trade_count" in history_full.columns
     assert "minutes_since_open_interest_observation" in history_full.columns
     assert "funding_data_available" in history_full.columns
@@ -220,7 +220,7 @@ def test_history_full_gold_joins_historical_sources_without_targets(tmp_path: Pa
     assert manifest["optional_source_datasets"] == []
     assert manifest["strategy_feature_lookbacks"] == {}
     assert manifest["prediction_target_definitions"] == {}
-    assert manifest["feature_metadata"]["trades_close_price"]["source_dataset"] == "perps_trades_1m_feature"
+    assert manifest["feature_metadata"]["perps_trades_close_price"]["source_dataset"] == "perps_trades_1m_feature"
 
 
 def test_history_full_gold_contract_declares_canonical_historical_sources() -> None:

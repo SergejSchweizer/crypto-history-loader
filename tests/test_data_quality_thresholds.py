@@ -26,15 +26,15 @@ def test_quality_thresholds_trades_1m_fixture() -> None:
                 datetime(2026, 5, 1, 0, 1, tzinfo=UTC),
                 datetime(2026, 5, 1, 0, 2, tzinfo=UTC),
             ],
-            "trades_close_price": [100.0, 101.0, 102.0],
-            "trades_volume": [10.0, 11.0, 12.0],
-            "trades_buy_volume_share": [0.6, 0.55, 0.58],
+            "perps_trades_close_price": [100.0, 101.0, 102.0],
+            "perps_trades_volume": [10.0, 11.0, 12.0],
+            "perps_trades_buy_volume_share": [0.6, 0.55, 0.58],
         }
     )
     assert _coverage_ratio(frame, "timestamp_m1") >= 0.99
-    assert frame["trades_close_price"].null_count() == 0
-    assert frame["trades_volume"].null_count() == 0
-    drift = abs(float(frame["trades_buy_volume_share"].mean()) - 0.5)
+    assert frame["perps_trades_close_price"].null_count() == 0
+    assert frame["perps_trades_volume"].null_count() == 0
+    drift = abs(float(frame["perps_trades_buy_volume_share"].mean()) - 0.5)
     assert drift <= 0.2
 
 
@@ -49,7 +49,7 @@ def test_quality_thresholds_gold_fixture_missing_values_bounded() -> None:
             ],
             "spot_ohlcv_close_price": [1.0, 1.1, None, 1.2],
             "perp_close_price": [10.0, 10.2, 10.3, 10.4],
-            "trades_trade_count": [5, 6, 4, 7],
+            "perps_trades_trade_count": [5, 6, 4, 7],
         }
     )
     assert _coverage_ratio(frame, "timestamp_m1") >= 0.99

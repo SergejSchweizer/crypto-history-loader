@@ -37,6 +37,8 @@ def feature_source_dataset(column_name: str) -> str:
         "iv_source_timestamp",
         "iv_data_available",
     }
+    if column_name.startswith("perps_trades_"):
+        return "perps_trades_1m_feature"
     if column_name.startswith("options_trades_"):
         return "options_trades_1m_feature"
     if column_name.startswith("spot_ohlcv_"):
