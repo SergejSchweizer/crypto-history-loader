@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -34,16 +33,27 @@ def test_normalize_symbol_and_discover_symbols_for_dataset(tmp_path: Path) -> No
     ) == {"BTC"}
 
 
-def test_read_dataset_frame_uses_newest_matching_symbol_file(tmp_path: Path) -> None:
+def test_read_dataset_frame_loads_all_matching_symbol_partitions(tmp_path: Path) -> None:
     root = tmp_path / "silver"
     symbol_root = root / "dataset_type=spot_ohlcv" / "exchange=deribit" / "symbol=BTC-PERPETUAL" / "timeframe=1m"
     symbol_root.mkdir(parents=True)
-    old_file = symbol_root / "old.parquet"
-    new_file = symbol_root / "new.parquet"
-    pl.DataFrame({"value": [1]}).write_parquet(old_file)
-    pl.DataFrame({"value": [2]}).write_parquet(new_file)
-    os.utime(old_file, (1, 1))
-    os.utime(new_file, (2, 2))
+    first_file = symbol_root / "first.parquet"
+    second_file = symbol_root / "second.parquet"
+    pl.DataFrame(
+        {
+            "open_time": [
+                datetime(2026, 5, 1, 0, 1, tzinfo=UTC),
+                datetime(2026, 5, 1, 0, 0, tzinfo=UTC),
+            ],
+            "value": [2, 1],
+        }
+    ).write_parquet(first_file)
+    pl.DataFrame(
+        {
+            "open_time": [datetime(2026, 5, 1, 0, 2, tzinfo=UTC)],
+            "value": [3],
+        }
+    ).write_parquet(second_file)
 
     frame = gold_frames.read_dataset_frame(
         silver_root=str(root),
@@ -53,7 +63,7 @@ def test_read_dataset_frame_uses_newest_matching_symbol_file(tmp_path: Path) -> 
         timeframe="1m",
     )
 
-    assert frame.get_column("value").to_list() == [2]
+    assert frame.get_column("value").to_list() == [1, 2, 3]
 
 
 def test_prepare_open_interest_accepts_current_oi_feature_aliases() -> None:
