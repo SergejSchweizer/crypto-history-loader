@@ -646,7 +646,7 @@ but downstream training and inference workflows should target the two full datas
 |---|---|---|---|
 | Historical | `gold.market.core.m1` | BTC 2018-08-14..2026-06-25, ETH 2019-03-14..2026-06-25, SOL 2022-04-29..2026-06-25; 0 | `timestamp_m1`, `exchange`, `symbol`, `spot_open_price`, `spot_high_price`, `spot_low_price`, `spot_close_price`, `spot_volume`, `perp_open_price`, `perp_high_price`, `perp_low_price`, `perp_close_price`, `perp_volume` |
 | Historical | `gold.market.core_funding.m1` | Same core period; 0 | Core variables plus `funding_rate_last_known`, `minutes_since_funding`, `is_funding_observation_minute`, `funding_data_available` |
-| Historical | `gold.market.perps_trades.m1` | BTC 2018-08-14..2026-06-11, ETH 2019-03-14..2026-05-29, SOL 2022-04-29..2022-12-30; 0 in Gold artifact | `timestamp_m1`, `exchange`, `symbol`, `perps_trades_open_price`, `perps_trades_high_price`, `perps_trades_low_price`, `perps_trades_close_price`, `perps_trades_volume`, `perps_trades_quote_volume`, `perps_trades_trade_count`, `perps_trades_buy_volume`, `perps_trades_sell_volume`, `perps_trades_buy_trade_count`, `perps_trades_sell_trade_count`, `perps_trades_buy_volume_share` |
+| Historical | `gold.market.perps_trades.m1` | BTC 2018-08-14..2026-07-21, ETH 2019-03-14..2026-07-21, SOL 2022-04-29..2022-12-30; 0 in Gold artifact | `timestamp_m1`, `exchange`, `symbol`, `perps_trades_open_price`, `perps_trades_high_price`, `perps_trades_low_price`, `perps_trades_close_price`, `perps_trades_volume`, `perps_trades_quote_volume`, `perps_trades_trade_count`, `perps_trades_buy_volume`, `perps_trades_sell_volume`, `perps_trades_buy_trade_count`, `perps_trades_sell_trade_count`, `perps_trades_buy_volume_share` |
 | Historical | `gold.market.options_trades.m1` | BTC 2018-08-14..2026-06-25, ETH 2019-03-21..2026-06-11, SOL 2022-05-04..2022-12-30; 0 | Same trade variables with `option_trades_` prefix |
 | Historical | `gold.market.full.m1` | BTC 2018-08-01..2026-06-25, ETH 2019-03-01..2026-06-25, SOL 2022-03-01..2026-06-25; 0 | Core plus OI flags, funding features, perp trade features, and option trade features; no IV/RV or regime variables |
 | Historical | `gold.market.history_full.m1` | Union of historical source minute timestamps; source gaps remain null | Only features sourced from `spot_ohlcv`, `perps_ohlcv`, `open_interest`, `funding`, `perps_trades`, and `options_trades`, including Silver features calculated from those historical datasets. It excludes IV/RV, volatility-index, L2, live snapshot, strategy, target, and label columns. |
@@ -672,9 +672,11 @@ uv run python scripts/run_medallion_pipeline.py --config config.yaml
 
 Runs `bronze-build -> silver-build -> gold-build` using `medallion-pipeline` settings from
 `config.yaml`, enforces single-run locking via `.run/full-pipeline.lock`, and writes a shared
-append-only pipeline log. The configured code path supports volatility-index OHLC fields, but the
-physical inventory in section 4.7 is authoritative: existing Gold artifacts must be rebuilt before
-they can be considered IV/RV-ready.
+append-only pipeline log. The Bronze step is forced to `--full-gap-fill`, so each cron run rescans
+all configured historical Bronze datasets for internal, head, and tail gaps before Silver and Gold
+rebuild. The configured code path supports volatility-index OHLC fields, but the physical inventory
+in section 4.7 is authoritative: existing Gold artifacts must be rebuilt before they can be
+considered IV/RV-ready.
 
 ## 5.2 Layer Commands
 
@@ -824,7 +826,8 @@ Bronze checkpoint path:
 Checkpoint behavior:
 
 - completed tasks are recorded incrementally
-- reruns with the same effective plan skip completed tasks
+- tail-delta reruns with the same effective plan skip completed tasks
+- full-gap-fill reruns ignore existing checkpoints and rescan lake coverage before scheduling fetches
 - successful runs delete the checkpoint automatically
 
 Manual reset:

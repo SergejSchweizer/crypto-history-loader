@@ -48,6 +48,7 @@ medallion-pipeline:
       - ETH
       - SOL
       - --save-parquet-lake
+      - --full-gap-fill
       - --no-json-output
   silver:
     enabled: true

@@ -96,6 +96,7 @@ def _build_steps(*, main_path: Path, config_path: Path, config_data: dict[str, A
         if layer_name == "bronze" and command == "bronze-build":
             cli_args = _apply_bronze_start_defaults(cli_args=cli_args, config_data=config_data)
             cli_args = _ensure_volatility_dataset_arg(cli_args)
+            cli_args = _ensure_bronze_full_gap_fill_arg(cli_args)
         if layer_name == "silver" and command == "silver-build":
             cli_args = _ensure_volatility_dataset_arg(cli_args)
 
@@ -121,6 +122,14 @@ def _ensure_volatility_dataset_arg(cli_args: list[str]) -> list[str]:
     while insert_idx < len(rewritten) and not rewritten[insert_idx].startswith("--"):
         insert_idx += 1
     rewritten.insert(insert_idx, "volatility_index_data")
+    return rewritten
+
+
+def _ensure_bronze_full_gap_fill_arg(cli_args: list[str]) -> list[str]:
+    """Force cron medallion Bronze runs to rescan all historical gaps."""
+
+    rewritten = [arg for arg in cli_args if arg not in {"--tail-delta-only", "--full-gap-fill"}]
+    rewritten.append("--full-gap-fill")
     return rewritten
 
 
