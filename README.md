@@ -649,6 +649,7 @@ but downstream training and inference workflows should target the two full datas
 | Historical | `gold.market.perps_trades.m1` | BTC 2018-08-14..2026-06-11, ETH 2019-03-14..2026-05-29, SOL 2022-04-29..2022-12-30; 0 in Gold artifact | `timestamp_m1`, `exchange`, `symbol`, `trades_open_price`, `trades_high_price`, `trades_low_price`, `trades_close_price`, `trades_volume`, `trades_quote_volume`, `trades_trade_count`, `trades_buy_volume`, `trades_sell_volume`, `trades_buy_trade_count`, `trades_sell_trade_count`, `trades_buy_volume_share` |
 | Historical | `gold.market.options_trades.m1` | BTC 2018-08-14..2026-06-25, ETH 2019-03-21..2026-06-11, SOL 2022-05-04..2022-12-30; 0 | Same trade variables with `option_trades_` prefix |
 | Historical | `gold.market.full.m1` | BTC 2018-08-01..2026-06-25, ETH 2019-03-01..2026-06-25, SOL 2022-03-01..2026-06-25; 0 | Core plus OI flags, funding features, perp trade features, and option trade features; no IV/RV or regime variables |
+| Historical | `gold.market.history_full.m1` | Union of historical source minute timestamps; source gaps remain null | Only features sourced from `spot_ohlcv`, `perps_ohlcv`, `open_interest`, `funding`, `perps_trades`, and `options_trades`, including Silver features calculated from those historical datasets. It excludes IV/RV, volatility-index, L2, live snapshot, strategy, target, and label columns. |
 | Live | `index_price_m1_features` | BTC/ETH/SOL 2026-05-24..2026-06-07; 0 | `schema_version`, `dataset_type`, `exchange`, `index_name`, `ts_minute`, `snapshot_count`, `price_open`, `price_high`, `price_low`, `price_close`, `price_mean`, `log_return_1m_mean` |
 | Live | `l2_m1_features` | BTC/ETH/SOL 2026-05-05..2026-06-07; 0 | `ts_minute`, `exchange`, `symbol`, `instrument_type`, `depth`, `feature_set_version`, `snapshot_count`, `coverage_ratio`, `first_snapshot_ts`, `last_snapshot_ts`, `is_complete_minute`, `quality_flags`, mid/microprice OHLC statistics, spreads, imbalance, bid/ask depth, book pressure, mark/index/OI/funding fields |
 | Live | `option_surface_m1` | BTC/ETH/SOL on 2026-05-24 only; 0 within that day | `schema_version`, `dataset_type`, `ts_minute`, `month`, `exchange`, `instrument_type`, `currency`, `expiry_date`, `term_days`, `term_bucket`, `atm_iv`, `atm_strike`, `atm_moneyness`, `iv_near_atm_call`, `iv_near_atm_put`, `open_interest_sum`, `volume_sum`, `contract_count`, `valid_surface_contract_count`, `surface_coverage_ratio`, `skew_slope`, `smile_curvature`, `rr25`, `bf25` |
@@ -719,9 +720,15 @@ uv run python main.py gold-build \
 Bronze by `crypto-history-loader`. It joins spot OHLCV, perpetual OHLCV, funding, open interest,
 perpetual trades, and option trades through their Silver representations on the union of their
 historical minute timestamps. Missing source values remain null; the dataset is not cut to a date
-intersection. Realized-volatility, IV/RV, volatility-index, L2, index, futures-summary,
-option-surface, strategy, target, and label columns belong to narrower research-facing Gold
-contracts.
+intersection. Event-driven trade aggregates are not forward-filled because filling trade counts or
+volumes would create synthetic trades. Silver features calculated only from the historical datasets
+listed in section 4.1 through 4.6 are retained, including trade-side flow ratios, funding recency,
+and open-interest observation/fill flags. Realized-volatility, IV/RV, volatility-index, L2, index,
+futures-summary, option-surface, live snapshot, strategy, target, and label columns belong to
+narrower research-facing Gold contracts.
+The section 4.7 `layer_inventory_snapshot` dataset remains the lineage and inventory reference for
+the historical layer; it is not joined into `gold.market.history_full.m1` because it is not a
+per-symbol minute market-feature source.
 
 Regime research Gold contract (optional Silver sources may be absent):
 

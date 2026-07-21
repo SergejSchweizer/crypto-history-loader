@@ -37,6 +37,60 @@ GOLD_DATASET_SPECS: dict[str, dict[str, object]] = {
 }
 SUPPORTED_GOLD_DATASET_IDS = set(supported_gold_dataset_ids())
 GOLD_RETENTION_KEEP_VERSIONS = 3
+HISTORY_FULL_HISTORY_SOURCE_COLUMNS = (
+    "timestamp_m1",
+    "exchange",
+    "symbol",
+    "spot_ohlcv_open_price",
+    "spot_ohlcv_high_price",
+    "spot_ohlcv_low_price",
+    "spot_ohlcv_close_price",
+    "spot_ohlcv_volume",
+    "spot_ohlcv_quote_volume",
+    "spot_ohlcv_trade_count",
+    "perp_open_price",
+    "perp_high_price",
+    "perp_low_price",
+    "perp_close_price",
+    "perp_volume",
+    "perp_quote_volume",
+    "perp_trade_count",
+    "funding_rate_last_known",
+    "funding_observed_at",
+    "minutes_since_funding",
+    "is_funding_observation_minute",
+    "funding_data_available",
+    "open_interest_open_interest",
+    "open_interest_is_observed",
+    "open_interest_is_ffill",
+    "minutes_since_open_interest_observation",
+    "open_interest_observation_lag_sec",
+    "open_interest_source_timestamp",
+    "trades_open_price",
+    "trades_high_price",
+    "trades_low_price",
+    "trades_close_price",
+    "trades_volume",
+    "trades_quote_volume",
+    "trades_trade_count",
+    "trades_buy_volume",
+    "trades_sell_volume",
+    "trades_buy_trade_count",
+    "trades_sell_trade_count",
+    "trades_buy_volume_share",
+    "options_trades_open_price",
+    "options_trades_high_price",
+    "options_trades_low_price",
+    "options_trades_close_price",
+    "options_trades_volume",
+    "options_trades_quote_volume",
+    "options_trades_trade_count",
+    "options_trades_buy_volume",
+    "options_trades_sell_volume",
+    "options_trades_buy_trade_count",
+    "options_trades_sell_trade_count",
+    "options_trades_buy_volume_share",
+)
 _parse_semver = gold_versioning.parse_semver
 _format_semver = gold_versioning.format_semver
 _bump_semver = gold_versioning.bump_semver
@@ -56,6 +110,12 @@ def validate_gold_retention_keep_versions(keep_last_versions: int) -> int:
             f"{GOLD_RETENTION_KEEP_VERSIONS} versions; received {keep_last_versions}"
         )
     return GOLD_RETENTION_KEEP_VERSIONS
+
+
+def _select_history_full_history_source_columns(merged: Any) -> Any:
+    """Keep only columns derived from crypto-history-loader historical datasets."""
+
+    return merged.select(list(HISTORY_FULL_HISTORY_SOURCE_COLUMNS))
 
 
 def _require_polars() -> Any:
@@ -427,6 +487,8 @@ def build_gold_for_symbol(
             )
     merged = _add_strategy_feature_families(pl, merged.sort("timestamp_m1"), dataset_id)
     merged = _add_prediction_targets(pl, merged, dataset_id)
+    if dataset_id == "gold.market.history_full.m1":
+        merged = _select_history_full_history_source_columns(merged)
     l2_validation_audit = {"l2_invalid_rows_found": 0, "l2_invalid_rows_dropped": 0}
     if _dataset_includes_l2(dataset_id):
         merged, l2_validation_audit = _validate_or_filter_l2_quality(pl, merged, l2_validation_mode)

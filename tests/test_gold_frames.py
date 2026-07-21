@@ -56,6 +56,44 @@ def test_read_dataset_frame_uses_newest_matching_symbol_file(tmp_path: Path) -> 
     assert frame.get_column("value").to_list() == [2]
 
 
+def test_prepare_open_interest_accepts_current_oi_feature_aliases() -> None:
+    timestamp = datetime(2026, 5, 1, 0, 0, tzinfo=UTC)
+    frame = pl.DataFrame(
+        {
+            "timestamp_m1": [timestamp],
+            "exchange": ["deribit"],
+            "symbol": ["BTC-PERPETUAL"],
+            "open_interest": [1000.0],
+            "oi_is_observed": [True],
+            "oi_is_ffill": [False],
+            "minutes_since_oi_observation": [0],
+            "oi_observation_lag_sec": [3],
+        }
+    )
+
+    prepared = gold_frames.prepare_open_interest(pl, frame, "BTC")
+
+    assert prepared.select(
+        [
+            "symbol",
+            "open_interest_open_interest",
+            "open_interest_is_observed",
+            "open_interest_is_ffill",
+            "minutes_since_open_interest_observation",
+            "open_interest_observation_lag_sec",
+        ]
+    ).to_dicts() == [
+        {
+            "symbol": "BTC",
+            "open_interest_open_interest": 1000.0,
+            "open_interest_is_observed": True,
+            "open_interest_is_ffill": False,
+            "minutes_since_open_interest_observation": 0,
+            "open_interest_observation_lag_sec": 3,
+        }
+    ]
+
+
 def test_read_latest_l2_gold_frame_supports_nested_and_flat_layouts(tmp_path: Path) -> None:
     nested = (
         tmp_path
@@ -139,6 +177,12 @@ def test_prepare_dataset_frame_and_minute_grid() -> None:
         "spot_ohlcv_low_price",
         "spot_ohlcv_close_price",
         "spot_ohlcv_volume",
+        "spot_ohlcv_quote_volume",
+        "spot_ohlcv_trade_count",
+    ]
+    assert prepared.select(["spot_ohlcv_quote_volume", "spot_ohlcv_trade_count"]).to_dicts() == [
+        {"spot_ohlcv_quote_volume": None, "spot_ohlcv_trade_count": None},
+        {"spot_ohlcv_quote_volume": None, "spot_ohlcv_trade_count": None},
     ]
     assert grid.height == 3
     assert grid.get_column("symbol").to_list() == ["BTC", "BTC", "BTC"]

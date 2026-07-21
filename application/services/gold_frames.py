@@ -279,6 +279,7 @@ def read_dataset_frame(
 def prepare_spot_ohlcv_or_perp(pl: Any, frame: Any, prefix: str, symbol: str) -> Any:
     """Prepare spot_ohlcv or perpetual OHLCV bars for the Gold join contract."""
 
+    columns = set(frame.columns)
     return (
         frame.with_columns(
             [
@@ -296,6 +297,14 @@ def prepare_spot_ohlcv_or_perp(pl: Any, frame: Any, prefix: str, symbol: str) ->
                 pl.col("low_price").cast(pl.Float64).alias(f"{prefix}_low_price"),
                 pl.col("close_price").cast(pl.Float64).alias(f"{prefix}_close_price"),
                 pl.col("volume").cast(pl.Float64).alias(f"{prefix}_volume"),
+                (
+                    pl.col("quote_volume").cast(pl.Float64)
+                    if "quote_volume" in columns
+                    else pl.lit(None, dtype=pl.Float64)
+                ).alias(f"{prefix}_quote_volume"),
+                (
+                    pl.col("trade_count").cast(pl.Int64) if "trade_count" in columns else pl.lit(None, dtype=pl.Int64)
+                ).alias(f"{prefix}_trade_count"),
             ]
         )
         .sort("timestamp_m1")
@@ -305,6 +314,22 @@ def prepare_spot_ohlcv_or_perp(pl: Any, frame: Any, prefix: str, symbol: str) ->
 def prepare_open_interest(pl: Any, frame: Any, symbol: str) -> Any:
     """Prepare open-interest features for the Gold join contract."""
 
+    columns = set(frame.columns)
+    observed_col = "open_interest_is_observed" if "open_interest_is_observed" in columns else "oi_is_observed"
+    ffill_col = "open_interest_is_ffill" if "open_interest_is_ffill" in columns else "oi_is_ffill"
+    minutes_col = (
+        "minutes_since_open_interest_observation"
+        if "minutes_since_open_interest_observation" in columns
+        else "minutes_since_oi_observation"
+    )
+    lag_col = (
+        "open_interest_observation_lag_sec"
+        if "open_interest_observation_lag_sec" in columns
+        else "oi_observation_lag_sec"
+    )
+    source_col = (
+        "open_interest_source_timestamp" if "open_interest_source_timestamp" in columns else "oi_source_timestamp"
+    )
     return (
         frame.with_columns(
             [
@@ -318,10 +343,15 @@ def prepare_open_interest(pl: Any, frame: Any, symbol: str) -> Any:
                 "exchange",
                 "symbol",
                 pl.col("open_interest").cast(pl.Float64).alias("open_interest_open_interest"),
-                pl.col("open_interest_is_observed").cast(pl.Boolean),
-                pl.col("open_interest_is_ffill").cast(pl.Boolean),
-                pl.col("minutes_since_open_interest_observation").cast(pl.Int64),
-                pl.col("open_interest_observation_lag_sec").cast(pl.Int64),
+                pl.col(observed_col).cast(pl.Boolean).alias("open_interest_is_observed"),
+                pl.col(ffill_col).cast(pl.Boolean).alias("open_interest_is_ffill"),
+                pl.col(minutes_col).cast(pl.Int64).alias("minutes_since_open_interest_observation"),
+                pl.col(lag_col).cast(pl.Int64).alias("open_interest_observation_lag_sec"),
+                (
+                    pl.col(source_col).cast(pl.Datetime(time_unit="us", time_zone="UTC"))
+                    if source_col in columns
+                    else pl.lit(None, dtype=pl.Datetime(time_unit="us", time_zone="UTC"))
+                ).alias("open_interest_source_timestamp"),
             ]
         )
         .sort("timestamp_m1")
@@ -331,6 +361,7 @@ def prepare_open_interest(pl: Any, frame: Any, symbol: str) -> Any:
 def prepare_funding(pl: Any, frame: Any, symbol: str) -> Any:
     """Prepare funding-rate features for the Gold join contract."""
 
+    columns = set(frame.columns)
     return (
         frame.with_columns(
             [
@@ -344,6 +375,11 @@ def prepare_funding(pl: Any, frame: Any, symbol: str) -> Any:
                 "exchange",
                 "symbol",
                 pl.col("funding_rate_last_known").cast(pl.Float64),
+                (
+                    pl.col("funding_observed_at").cast(pl.Datetime(time_unit="us", time_zone="UTC"))
+                    if "funding_observed_at" in columns
+                    else pl.lit(None, dtype=pl.Datetime(time_unit="us", time_zone="UTC"))
+                ).alias("funding_observed_at"),
                 pl.col("minutes_since_funding").cast(pl.Int64),
                 pl.col("is_funding_observation_minute").cast(pl.Boolean),
                 pl.col("funding_data_available").cast(pl.Boolean),

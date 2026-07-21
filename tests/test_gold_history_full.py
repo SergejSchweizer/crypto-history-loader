@@ -143,10 +143,69 @@ def test_history_full_gold_joins_historical_sources_without_targets(tmp_path: Pa
     assert "open_interest_open_interest" in history_full.columns
     assert "trades_close_price" in history_full.columns
     assert "options_trades_close_price" in history_full.columns
+    assert history_full.columns == [
+        "timestamp_m1",
+        "exchange",
+        "symbol",
+        "spot_ohlcv_open_price",
+        "spot_ohlcv_high_price",
+        "spot_ohlcv_low_price",
+        "spot_ohlcv_close_price",
+        "spot_ohlcv_volume",
+        "spot_ohlcv_quote_volume",
+        "spot_ohlcv_trade_count",
+        "perp_open_price",
+        "perp_high_price",
+        "perp_low_price",
+        "perp_close_price",
+        "perp_volume",
+        "perp_quote_volume",
+        "perp_trade_count",
+        "funding_rate_last_known",
+        "funding_observed_at",
+        "minutes_since_funding",
+        "is_funding_observation_minute",
+        "funding_data_available",
+        "open_interest_open_interest",
+        "open_interest_is_observed",
+        "open_interest_is_ffill",
+        "minutes_since_open_interest_observation",
+        "open_interest_observation_lag_sec",
+        "open_interest_source_timestamp",
+        "trades_open_price",
+        "trades_high_price",
+        "trades_low_price",
+        "trades_close_price",
+        "trades_volume",
+        "trades_quote_volume",
+        "trades_trade_count",
+        "trades_buy_volume",
+        "trades_sell_volume",
+        "trades_buy_trade_count",
+        "trades_sell_trade_count",
+        "trades_buy_volume_share",
+        "options_trades_open_price",
+        "options_trades_high_price",
+        "options_trades_low_price",
+        "options_trades_close_price",
+        "options_trades_volume",
+        "options_trades_quote_volume",
+        "options_trades_trade_count",
+        "options_trades_buy_volume",
+        "options_trades_sell_volume",
+        "options_trades_buy_trade_count",
+        "options_trades_sell_trade_count",
+        "options_trades_buy_volume_share",
+    ]
     assert "rv_1h" not in history_full.columns
     assert "iv_minus_rv_1h" not in history_full.columns
     assert "strategy_momentum_log_return_1m" not in history_full.columns
+    assert "strategy_reversion_half_life_5m" not in history_full.columns
     assert "historical_volatility_reference" not in history_full.columns
+    assert "trades_buy_volume_share" in history_full.columns
+    assert "options_trades_sell_trade_count" in history_full.columns
+    assert "minutes_since_open_interest_observation" in history_full.columns
+    assert "funding_data_available" in history_full.columns
     assert history_full["spot_ohlcv_close_price"].to_list()[0] is None
     assert not any(column.startswith(("target_", "label_")) for column in history_full.columns)
     assert manifest["dataset_id"] == "gold.market.history_full.m1"
