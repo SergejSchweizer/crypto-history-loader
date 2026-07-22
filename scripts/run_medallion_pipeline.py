@@ -42,6 +42,15 @@ def _default_repo_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
+def _default_config_path(repo_root: Path) -> Path:
+    """Return the safest default config path for unattended pipeline runs."""
+
+    runtime_config = repo_root / ".run" / "cron-config.yaml"
+    if runtime_config.exists():
+        return runtime_config
+    return repo_root / "config.yaml"
+
+
 def _load_yaml(path: Path) -> dict[str, Any]:
     """Load YAML mapping from config path."""
 
@@ -259,7 +268,7 @@ def parse_args() -> argparse.Namespace:
 
     parser = argparse.ArgumentParser(description="Run bronze, silver, and gold builders as one pipeline.")
     parser.add_argument("--repo-root", default=str(repo_root), help="Repository root path")
-    parser.add_argument("--config", default=str(repo_root / "config.yaml"), help="Path to config.yaml")
+    parser.add_argument("--config", default=str(_default_config_path(repo_root)), help="Path to config.yaml")
     parser.add_argument("--python-bin", default=sys.executable, help="Python executable used for builder commands")
     parser.add_argument("--main-path", default=str(repo_root / "main.py"), help="Path to main.py entrypoint")
     parser.add_argument("--lock-file", default=str(default_lock_file), help="Non-blocking lock file path")

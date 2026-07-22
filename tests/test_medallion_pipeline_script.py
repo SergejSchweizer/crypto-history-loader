@@ -243,6 +243,21 @@ def test_log_path_from_config_anchors_relative_dir_to_repo_root(tmp_path: Path) 
     assert out == (tmp_path / ".logs" / "crypto-history-loader.log").resolve()
 
 
+def test_default_config_path_prefers_runtime_cron_config(tmp_path: Path) -> None:
+    module = _load_pipeline_module()
+    runtime_config = tmp_path / ".run" / "cron-config.yaml"
+    runtime_config.parent.mkdir()
+    runtime_config.write_text("x: 1\n", encoding="utf-8")
+
+    assert module._default_config_path(tmp_path) == runtime_config
+
+
+def test_default_config_path_falls_back_to_repo_config(tmp_path: Path) -> None:
+    module = _load_pipeline_module()
+
+    assert module._default_config_path(tmp_path) == tmp_path / "config.yaml"
+
+
 def test_lock_acquire_and_release(tmp_path: Path) -> None:
     module = _load_pipeline_module()
     lock_file = tmp_path / "lock" / "x.lock"
