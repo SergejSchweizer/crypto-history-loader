@@ -100,7 +100,7 @@ def run_bronze_build(
             checkpoint_path = dependencies.bronze_checkpoint_path()
             checkpoint_enabled = bool(args.save_parquet_lake) or checkpoint_path.exists()
             checkpoint_fingerprint = dependencies.bronze_checkpoint_fingerprint(args=args, plan=plan)
-            empty_checkpoint = {
+            empty_checkpoint: dict[str, set[str]] = {
                 "candle": set(),
                 "open_interest": set(),
                 "funding": set(),

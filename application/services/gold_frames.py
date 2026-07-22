@@ -272,12 +272,16 @@ def read_dataset_frame(
             break
     if not candidate_files:
         raise ValueError(f"Missing silver dataset for symbol={symbol}: {dataset_type}")
-    frames = [pl.read_parquet(str(path)) for path in sorted(candidate_files)]
-    frame = pl.concat(frames, how="diagonal_relaxed").unique(maintain_order=True)
+    # Sort by mtime (oldest first) so that when overlapping/duplicate periods exist across
+    # partition files (for example a legacy symbol-name variant reprocessed under a new file),
+    # the freshest write wins once deduplicated by timestamp below.
+    ordered_files = sorted(candidate_files, key=lambda path: (path.stat().st_mtime, str(path)))
+    frames = [pl.read_parquet(str(path)) for path in ordered_files]
+    frame = pl.concat(frames, how="diagonal_relaxed")
     for timestamp_column in ("open_time", "timestamp_m1", "timestamp", "trade_time"):
         if timestamp_column in frame.columns:
-            return frame.sort(timestamp_column)
-    return frame
+            return frame.unique(subset=[timestamp_column], keep="last", maintain_order=False).sort(timestamp_column)
+    return frame.unique(maintain_order=True)
 
 
 def prepare_spot_ohlcv_or_perp(pl: Any, frame: Any, prefix: str, symbol: str) -> Any:

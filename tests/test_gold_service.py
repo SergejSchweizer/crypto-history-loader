@@ -652,7 +652,7 @@ def test_build_gold_prefers_canonical_perps_ohlcv_over_legacy_perp(tmp_path: Pat
     assert written["perp_close_price"].to_list() == [20.0]
 
 
-def test_build_gold_uses_latest_silver_artifacts_only(tmp_path: Path) -> None:
+def test_build_gold_dedupes_overlapping_silver_partitions_by_recency(tmp_path: Path) -> None:
     silver = tmp_path / "silver"
     gold = tmp_path / "gold"
     symbol = "BTC"
@@ -736,10 +736,15 @@ def test_build_gold_uses_latest_silver_artifacts_only(tmp_path: Path) -> None:
         symbol=symbol,
         dataset_id="gold.market.core.m1",
     )
-    assert report.rows_out == 1
+    # Both partition files are read: for the overlapping t0 minute the freshest file wins,
+    # while t1 (only present in the older file) is still preserved in the union.
+    assert report.rows_out == 2
+
+    written = pl.read_parquet(report.parquet_path).sort("timestamp_m1")
+    assert written.get_column("spot_ohlcv_open_price").to_list() == [2.0, 9.0]
 
     payload = json.loads(_require_manifest_path(report).read_text(encoding="utf-8"))
-    assert payload["source_silver_datasets"]["spot_ohlcv_1m"]["rows"] == 1
+    assert payload["source_silver_datasets"]["spot_ohlcv_1m"]["rows"] == 2
 
 
 def test_build_gold_for_symbol_normalizes_input_symbol(tmp_path: Path) -> None:
