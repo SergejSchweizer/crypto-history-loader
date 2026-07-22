@@ -9,7 +9,7 @@ import logging
 import os
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal, cast
 
@@ -296,10 +296,11 @@ def resolve_symbol_start_open_ms_bound(
     )
     if not context.tail_delta_only:
         return configured_bound
-    rolling_bound = int((datetime.now(UTC) - timedelta(days=30)).timestamp() * 1000)
+    today_start = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+    today_start_open_ms = int(today_start.timestamp() * 1000)
     if configured_bound is None:
-        return rolling_bound
-    return max(configured_bound, rolling_bound)
+        return today_start_open_ms
+    return max(configured_bound, today_start_open_ms)
 
 
 def dataset_task_key_maps(

@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+from datetime import UTC, datetime
 from pathlib import Path
 
 from application.datasets import DatasetTask
@@ -179,7 +180,8 @@ def test_resolve_symbol_start_open_ms_bound_applies_specific_and_tail_bounds() -
     )
     resolved = runtime.resolve_symbol_start_open_ms_bound(exchange="deribit", symbol="BTCUSDT", context=tail_context)
     assert isinstance(resolved, int)
-    assert resolved > 1000
+    today_start_ms = int(datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0).timestamp() * 1000)
+    assert resolved == today_start_ms
 
 
 def test_fingerprint_and_write_checkpoint_roundtrip(tmp_path: Path) -> None:

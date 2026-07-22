@@ -632,7 +632,7 @@ source row by row; missing selected-source minutes remain unavailable and are fl
 ### 4.7.3 Gold: physical status by repository origin
 
 Historical Gold artifacts are built by this repository. Live Gold artifacts have lineage paths under
-`/home/vcs/git/crypto-live-loader`; this is recorded in the transform-state JSON files.
+`/home/dev_crypto/crypto-live-loader`; this is recorded in the transform-state JSON files.
 
 The Gold layer is organized around two canonical model-ready datasets:
 

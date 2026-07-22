@@ -247,7 +247,7 @@ def test_global_start_date_is_not_widened_by_older_symbol_bounds() -> None:
         loader_cmd._RUNTIME_ADAPTER.context = original_context
 
 
-def test_symbol_start_bound_caps_to_last_30_days_in_tail_mode() -> None:
+def test_symbol_start_bound_caps_to_today_in_tail_mode() -> None:
     original_context = loader_cmd._RUNTIME_ADAPTER.context
     try:
         loader_cmd._RUNTIME_ADAPTER.context = BronzeRuntimeBoundsContext(
@@ -256,10 +256,9 @@ def test_symbol_start_bound_caps_to_last_30_days_in_tail_mode() -> None:
             symbol_start_open_ms={},
             exchange_symbol_start_open_ms={"deribit:BTC": 1000},
         )
-        rolling_30_days_ago_before_call_ms = int((datetime.now(UTC).timestamp() - (30 * 24 * 60 * 60)) * 1000)
+        today_start_ms = int(datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0).timestamp() * 1000)
         resolved = loader_cmd._symbol_start_open_ms_bound(exchange="deribit", symbol="BTCUSDT")
-        assert isinstance(resolved, int)
-        assert resolved >= rolling_30_days_ago_before_call_ms
+        assert resolved == today_start_ms
     finally:
         loader_cmd._RUNTIME_ADAPTER.context = original_context
 

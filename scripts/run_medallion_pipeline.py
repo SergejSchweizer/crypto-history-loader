@@ -96,7 +96,6 @@ def _build_steps(*, main_path: Path, config_path: Path, config_data: dict[str, A
         if layer_name == "bronze" and command == "bronze-build":
             cli_args = _apply_bronze_start_defaults(cli_args=cli_args, config_data=config_data)
             cli_args = _ensure_volatility_dataset_arg(cli_args)
-            cli_args = _ensure_bronze_full_gap_fill_arg(cli_args)
         if layer_name == "silver" and command == "silver-build":
             cli_args = _ensure_volatility_dataset_arg(cli_args)
 
@@ -122,14 +121,6 @@ def _ensure_volatility_dataset_arg(cli_args: list[str]) -> list[str]:
     while insert_idx < len(rewritten) and not rewritten[insert_idx].startswith("--"):
         insert_idx += 1
     rewritten.insert(insert_idx, "volatility_index_data")
-    return rewritten
-
-
-def _ensure_bronze_full_gap_fill_arg(cli_args: list[str]) -> list[str]:
-    """Force cron medallion Bronze runs to rescan all historical gaps."""
-
-    rewritten = [arg for arg in cli_args if arg not in {"--tail-delta-only", "--full-gap-fill"}]
-    rewritten.append("--full-gap-fill")
     return rewritten
 
 
@@ -161,6 +152,15 @@ def _apply_bronze_start_defaults(*, cli_args: list[str], config_data: dict[str, 
     return rewritten
 
 
+def _resolve_configured_log_path(value: str, *, repo_root: Path) -> Path:
+    """Resolve a configured log path, anchoring relative values to the repo root."""
+
+    path = Path(value.strip())
+    if not path.is_absolute():
+        path = repo_root / path
+    return path.resolve()
+
+
 def _log_path_from_config(*, config_data: dict[str, Any], repo_root: Path) -> Path:
     """Resolve shared log file path from config env mapping."""
 
@@ -168,10 +168,12 @@ def _log_path_from_config(*, config_data: dict[str, Any], repo_root: Path) -> Pa
     if isinstance(env_cfg, dict):
         configured_file = env_cfg.get("DEPTH_SYNC_LOG_FILE")
         if isinstance(configured_file, str) and configured_file.strip():
-            return (Path(configured_file.strip()).parent / "run-medallion-pipeline.log").resolve()
+            return _resolve_configured_log_path(configured_file, repo_root=repo_root).with_name(
+                "run-medallion-pipeline.log"
+            )
         configured_dir = env_cfg.get("DEPTH_SYNC_LOG_DIR")
         if isinstance(configured_dir, str) and configured_dir.strip():
-            return (Path(configured_dir.strip()) / "crypto-history-loader.log").resolve()
+            return _resolve_configured_log_path(configured_dir, repo_root=repo_root) / "crypto-history-loader.log"
     return (repo_root / ".run" / "logs" / "crypto-history-loader.log").resolve()
 
 
