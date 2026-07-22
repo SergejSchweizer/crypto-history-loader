@@ -46,6 +46,32 @@ def test_build_steps_uses_configured_market_args_with_trades(tmp_path: Path) -> 
     assert "--dataset" in args
     assert "perps_trades" in args
     assert "volatility_index_data" in args
+    assert "--full-gap-fill" in args
+    assert "--tail-delta-only" not in args
+
+
+def test_build_steps_forces_bronze_full_gap_fill_for_cron(tmp_path: Path) -> None:
+    module = _load_pipeline_module()
+    main_path = tmp_path / "main.py"
+    main_path.write_text("print('ok')\n", encoding="utf-8")
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text("x: 1\n", encoding="utf-8")
+    cfg = {
+        "medallion-pipeline": {
+            "execution_order": ["bronze"],
+            "bronze": {
+                "enabled": True,
+                "command": "bronze-build",
+                "cli_args": ["--dataset", "spot_ohlcv", "--tail-delta-only"],
+            },
+        }
+    }
+
+    steps = module._build_steps(main_path=main_path, config_path=config_path, config_data=cfg)
+    args = steps[0].args
+
+    assert "--tail-delta-only" not in args
+    assert args[-1] == "--full-gap-fill"
 
 
 def test_build_steps_adds_volatility_to_silver_dataset_args(tmp_path: Path) -> None:

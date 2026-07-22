@@ -100,21 +100,26 @@ def run_bronze_build(
             checkpoint_path = dependencies.bronze_checkpoint_path()
             checkpoint_enabled = bool(args.save_parquet_lake) or checkpoint_path.exists()
             checkpoint_fingerprint = dependencies.bronze_checkpoint_fingerprint(args=args, plan=plan)
-            checkpoint_completed = (
-                dependencies.load_bronze_checkpoint(
+            empty_checkpoint: dict[str, set[str]] = {
+                "candle": set(),
+                "open_interest": set(),
+                "funding": set(),
+                "volatility_index_data": set(),
+                "trade": set(),
+            }
+            if checkpoint_enabled and bool(args.tail_delta_only):
+                checkpoint_completed = dependencies.load_bronze_checkpoint(
                     path=checkpoint_path,
                     fingerprint=checkpoint_fingerprint,
                     logger=logger,
                 )
-                if checkpoint_enabled
-                else {
-                    "candle": set(),
-                    "open_interest": set(),
-                    "funding": set(),
-                    "volatility_index_data": set(),
-                    "trade": set(),
-                }
-            )
+            else:
+                checkpoint_completed = empty_checkpoint
+                if checkpoint_path.exists() and not bool(args.tail_delta_only):
+                    logger.info(
+                        "Ignoring Bronze checkpoint '%s' for full-gap-fill run; lake gaps will be rescanned",
+                        checkpoint_path,
+                    )
             dependencies.hydrate_checkpoint_aliases(
                 completed=checkpoint_completed,
                 candle_tasks=state.candle_tasks,

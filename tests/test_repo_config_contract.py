@@ -106,3 +106,15 @@ def test_repo_config_medallion_bronze_inherits_symbol_start_bounds() -> None:
     symbol_idx = bronze_step.args.index("--symbol-start-dates")
     expected_symbol_dates = config["bronze-build"]["symbol_start_dates"]
     assert bronze_step.args[symbol_idx + 1 : symbol_idx + 1 + len(expected_symbol_dates)] == expected_symbol_dates
+
+
+def test_repo_config_medallion_bronze_forces_full_gap_fill() -> None:
+    module = _load_pipeline_module()
+    config = _load_repo_config()
+    main_path = _repo_root() / "main.py"
+    config_path = _repo_root() / "config.yaml"
+    steps = module._build_steps(main_path=main_path, config_path=config_path, config_data=config)
+    bronze_step = next(step for step in steps if step.name == "bronze")
+
+    assert "--full-gap-fill" in bronze_step.args
+    assert "--tail-delta-only" not in bronze_step.args

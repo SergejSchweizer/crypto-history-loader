@@ -604,3 +604,64 @@ def test_run_bronze_build_resumes_from_checkpoint_and_clears_on_success(
     assert ("deribit", "spot_ohlcv", "BTC", "1m") not in scheduled
     assert ("deribit", "spot_ohlcv", "ETH", "1m") in scheduled
     assert not checkpoint_path.exists()
+
+
+def test_run_bronze_build_full_gap_fill_ignores_checkpoint_and_rescans(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _NoopLock:
+        def __init__(self, lock_path: str) -> None:
+            del lock_path
+
+        def __enter__(self) -> None:
+            return None
+
+        def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
+            del exc_type, exc, tb
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(loader_cmd, "SingleInstanceLock", _NoopLock)
+    monkeypatch.setattr(loader_cmd, "ensure_bronze_sidecars", lambda **kwargs: [])
+    scheduled: list[tuple[str, str, str, str]] = []
+
+    def _fake_fetch_all_task_groups(**kwargs: object):  # type: ignore[no-untyped-def]
+        candle_tasks = cast(list[tuple[str, str, str, str]], kwargs["candle_tasks"])
+        scheduled.extend(candle_tasks)
+        rows = {task: [] for task in candle_tasks}
+        return _empty_fetch_result(candle_results=rows)
+
+    monkeypatch.setattr(loader_cmd, "_fetch_all_task_groups", _fake_fetch_all_task_groups)
+
+    args = argparse.Namespace(
+        exchange="deribit",
+        exchanges=None,
+        market=["spot_ohlcv"],
+        symbols=["BTC", "ETH"],
+        perp_trade_symbols=["BTC"],
+        options_trade_symbols=["BTC"],
+        save_parquet_lake=False,
+        lake_root="lake/bronze",
+        no_json_output=True,
+        tail_delta_only=False,
+    )
+    plan = loader_cmd._build_bronze_fetch_plan(args=args, logger=logging.getLogger("test"))
+    fingerprint = loader_cmd._bronze_checkpoint_fingerprint(args=args, plan=plan)
+    checkpoint_path = loader_cmd._bronze_checkpoint_path()
+    loader_cmd._write_bronze_checkpoint(
+        checkpoint_path,
+        fingerprint=fingerprint,
+        completed={
+            "candle": {"deribit|spot_ohlcv|BTC|1m"},
+            "open_interest": set(),
+            "funding": set(),
+            "volatility_index_data": set(),
+            "trade": set(),
+        },
+    )
+
+    loader_cmd.run_bronze_build(args=args, logger=logging.getLogger("test"))
+
+    assert ("deribit", "spot_ohlcv", "BTC", "1m") in scheduled
+    assert ("deribit", "spot_ohlcv", "ETH", "1m") in scheduled
+    assert not checkpoint_path.exists()
