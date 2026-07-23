@@ -68,7 +68,11 @@ def _inventory_policy_errors(
     gold_root: Path,
 ) -> list[str]:
     errors: list[str] = []
-    rows = build_dataset_inventory(bronze_root=bronze_root, silver_root=silver_root, gold_root=gold_root)
+    rows = build_dataset_inventory(
+        bronze_root=bronze_root,
+        silver_root=silver_root,
+        gold_root=gold_root,
+    )
     markdown = inventory_to_markdown(rows)
     for dataset_id in sorted(contract_ids):
         if f"`{dataset_id}`" not in markdown:
@@ -76,7 +80,11 @@ def _inventory_policy_errors(
     for row in rows:
         if row.layer != "gold":
             continue
-        expected_origin = "crypto-live-loader" if row.dataset.startswith("gold.live.") else "crypto-history-loader"
+        expected_origin = (
+            "crypto-live-loader"
+            if row.dataset.startswith("gold.live.")
+            else "crypto-history-loader"
+        )
         if row.origin_repository != expected_origin:
             errors.append(
                 f"Gold dataset has wrong origin: {row.dataset} -> {row.origin_repository}; "
@@ -110,9 +118,14 @@ def validate_dataset_catalog(
     missing = sorted(contract_ids - catalog_ids)
     extra = sorted(catalog_ids - contract_ids)
     if missing:
-        errors.append("DATASETS.md contract inventory missing contracts: " + ", ".join(missing))
+        errors.append(
+            "DATASETS.md contract inventory missing contracts: " + ", ".join(missing)
+        )
     if extra:
-        errors.append("DATASETS.md contract inventory contains unknown contracts: " + ", ".join(extra))
+        errors.append(
+            "DATASETS.md contract inventory contains unknown contracts: "
+            + ", ".join(extra)
+        )
 
     text = datasets_path.read_text(encoding="utf-8")
     if FEATURE_DICTIONARY_MARKER not in text:
@@ -126,12 +139,15 @@ def validate_dataset_catalog(
             errors.append(f"DATASETS.md missing dataset detail section: {dataset_id}")
             continue
         if "Feature groups:" not in section and "feature groups:" not in section:
-            errors.append(f"DATASETS.md dataset section missing feature membership: {dataset_id}")
+            errors.append(
+                f"DATASETS.md dataset section missing feature membership: {dataset_id}"
+            )
         if "**Keys**" not in section:
             errors.append(f"DATASETS.md dataset section missing Keys group: {dataset_id}")
 
+    feature_dictionary = text[text.index(FEATURE_DICTIONARY_MARKER) :]
     for key in ("timestamp_m1", "exchange", "symbol"):
-        if f"`{key}`" not in text[text.index(FEATURE_DICTIONARY_MARKER) :]:
+        if f"`{key}`" not in feature_dictionary:
             errors.append(f"DATASETS.md feature dictionary missing key feature: {key}")
 
     errors.extend(
@@ -151,13 +167,16 @@ def readme_gold_dataset_ids(readme_path: Path) -> set[str]:
     text = readme_path.read_text(encoding="utf-8")
     if CONTRACT_INVENTORY_MARKER in text and CONTRACT_DETAIL_MARKER in text:
         return documented_gold_dataset_ids(readme_path)
+
     marker = "Available Gold dataset IDs:"
     try:
         section_start = text.index(marker)
     except ValueError as exc:
-        raise ValueError(
-            f"{readme_path} contains neither DATASETS.md markers nor the former README Gold section"
-        ) from exc
+        sibling_catalog = readme_path.with_name("DATASETS.md")
+        if readme_path.name == "README.md" and sibling_catalog.exists():
+            return documented_gold_dataset_ids(sibling_catalog)
+        raise ValueError(f"{readme_path} missing section: {marker}") from exc
+
     section = text[section_start:]
     next_heading = re.search(r"\n##\s+", section)
     if next_heading is not None:
@@ -199,9 +218,14 @@ def validate_readme_inventory(
     missing = sorted(contract_ids - readme_ids)
     extra = sorted(readme_ids - contract_ids)
     if missing:
-        errors.append("README Available Gold dataset IDs missing contracts: " + ", ".join(missing))
+        errors.append(
+            "README Available Gold dataset IDs missing contracts: " + ", ".join(missing)
+        )
     if extra:
-        errors.append("README Available Gold dataset IDs contain unknown contracts: " + ", ".join(extra))
+        errors.append(
+            "README Available Gold dataset IDs contain unknown contracts: "
+            + ", ".join(extra)
+        )
     errors.extend(
         _inventory_policy_errors(
             contract_ids=contract_ids,
@@ -215,7 +239,13 @@ def validate_readme_inventory(
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--datasets", "--readme", dest="datasets", type=Path, default=Path("DATASETS.md"))
+    parser.add_argument(
+        "--datasets",
+        "--readme",
+        dest="readme",
+        type=Path,
+        default=Path("DATASETS.md"),
+    )
     parser.add_argument("--bronze-root", type=Path, default=Path("lake/bronze"))
     parser.add_argument("--silver-root", type=Path, default=Path("lake/silver"))
     parser.add_argument("--gold-root", type=Path, default=Path("lake/gold"))
@@ -227,7 +257,7 @@ def main(argv: list[str] | None = None) -> int:
 
     args = _parser().parse_args(argv)
     errors = validate_dataset_catalog(
-        datasets_path=args.datasets,
+        datasets_path=args.readme,
         bronze_root=args.bronze_root,
         silver_root=args.silver_root,
         gold_root=args.gold_root,
