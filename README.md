@@ -197,6 +197,12 @@ config.yaml
 Recommended permissions:
 
 ```bash
+chmod 644 config.yaml
+```
+
+Historical Bronze full-gap run:
+
+```bash
 uv run python main.py --debug bronze-build \
  --exchange deribit \
  --dataset spot_ohlcv perps_ohlcv open_interest funding perps_trades options_trades volatility_index_data \
@@ -431,6 +437,10 @@ Coverage:
 Market role: tick-level perpetual execution flow and aggressor direction.
 Relationship: microstructure input for `perps_trades_1m_feature` and downstream Gold joins.
 Time aggregation: native `tick` (one row per trade).
+Coverage sidecar: successful zero-row Deribit responses for missing minute windows are recorded in
+the same Bronze date partition as `empty_minutes.parquet` with `status=confirmed_empty`. These
+sidecars are negative coverage, not synthetic trades: they prevent re-fetching legitimately quiet
+minutes and are consumed by Silver trade features.
 
 ### 1.1 Deribit endpoint
 
@@ -452,6 +462,9 @@ Runtime override: set `DEPTH_DERIBIT_PERP_TRADES_PAGE_SIZE` to tune request page
 - Builder 2: `build_perps_trades_1m_feature_for_symbol`.
 - Aggregate `tick` rows to `1m` OHLC columns: `open_price`, `high_price`, `low_price`, `close_price`.
 - Aggregate flow columns: `volume`, `quote_volume`, `trade_count`, `buy_volume`, `sell_volume`, `buy_trade_count`, `sell_trade_count`, `buy_volume_share`.
+- Confirmed-empty Bronze minutes are materialized as 1m feature rows with `trade_count=0`,
+  zero volume/flow columns, and price fields forward-filled only from prior observed trade closes.
+  The builder never backfills from future trade minutes.
 - Time aggregation: `tick -> 1m`.
 
 ### 3. High-value features
@@ -486,6 +499,9 @@ Coverage:
 Market role: tick-level option execution flow, with trade-level contract metadata available at ingest (`instrument_name`, `expiry`, `strike`, `option_type`).
 Relationship: upstream input for option-flow minute features and cross-asset joins.
 Time aggregation: native `tick`.
+Coverage sidecar: successful zero-row Deribit responses for missing option-trade minute windows are
+stored as `empty_minutes.parquet` rows with `status=confirmed_empty` under
+`dataset_type=options_trades`. They mark real no-trade minutes without writing fake Bronze trade rows.
 
 ### 1.1 Deribit endpoint
 
@@ -505,6 +521,8 @@ Runtime override: set `DEPTH_DERIBIT_OPTIONS_TRADES_PAGE_SIZE` to tune request p
 - Observed schema (post-validation/dedup): `trade_time`, `trade_id`, `price`, `quantity`, `side`, `exchange`, `symbol`, `instrument_type`.
 - Feature aggregation (`tick -> 1m`) OHLC columns: `open_price`, `high_price`, `low_price`, `close_price`.
 - Feature flow columns: `volume`, `quote_volume`, `trade_count`, `buy_volume`, `sell_volume`, `buy_trade_count`, `sell_trade_count`, `buy_volume_share`.
+- Confirmed-empty Bronze minutes are included in `options_trades_1m_feature` as zero-flow rows with
+  price fields forward-filled from past observed option-trade closes only.
 - Current Silver limitation: contract metadata columns from Bronze (`expiry`, `strike`, `option_type`) are not retained.
 - Time aggregation: `tick -> 1m`.
 
@@ -672,11 +690,12 @@ uv run python scripts/run_medallion_pipeline.py --config config.yaml
 
 Runs `bronze-build -> silver-build -> gold-build` using `medallion-pipeline` settings from
 `config.yaml`, enforces single-run locking via `.run/full-pipeline.lock`, and writes a shared
-append-only pipeline log. The Bronze step is forced to `--full-gap-fill`, so each cron run rescans
-all configured historical Bronze datasets for internal, head, and tail gaps before Silver and Gold
-rebuild. The configured code path supports volatility-index OHLC fields, but the physical inventory
-in section 4.7 is authoritative: existing Gold artifacts must be rebuilt before they can be
-considered IV/RV-ready.
+append-only pipeline log. Normal Bronze datasets keep the configured tail-delta mode for daily cron
+runs. `perps_trades` and `options_trades` are split into a separate
+`bronze-trades-minute-gap` step with `--full-gap-fill`, so trade tick coverage can inspect every
+missing minute while non-trade datasets only download the new tail. The configured code path
+supports volatility-index OHLC fields, but the physical inventory in section 4.7 is authoritative:
+existing Gold artifacts must be rebuilt before they can be considered IV/RV-ready.
 
 ## 5.2 Layer Commands
 
@@ -828,6 +847,8 @@ Checkpoint behavior:
 - completed tasks are recorded incrementally
 - tail-delta reruns with the same effective plan skip completed tasks
 - full-gap-fill reruns ignore existing checkpoints and rescan lake coverage before scheduling fetches
+- trade full-gap-fill treats real trade minutes plus confirmed-empty `empty_minutes.parquet` sidecars
+  as covered minutes
 - successful runs delete the checkpoint automatically
 
 Manual reset:
@@ -836,7 +857,11 @@ Manual reset:
 rm -f .run/checkpoints/bronze-build.json
 ```
 
-`perps_trades` storage path: `dataset_type=perps_trades`.
+Trade storage paths:
+
+- `perps_trades`: `dataset_type=perps_trades`
+- `options_trades`: `dataset_type=options_trades`
+- confirmed zero-row minute sidecars: same partition as the trade data, file name `empty_minutes.parquet`
 
 Gold source selection:
 

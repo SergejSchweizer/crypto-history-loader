@@ -68,6 +68,7 @@ Bronze
   - source-shaped, normalized records
   - deterministic partition paths
   - idempotent writes
+  - negative coverage sidecars for confirmed empty trade minutes
   - restart-safe checkpoints
 
 Silver
@@ -99,6 +100,15 @@ volatility_index_data
 `volatility_open`, `volatility_high`, `volatility_low`, and `volatility_close`; Gold exposes
 them as `volatility_index_value`, `volatility_index_open`, `volatility_index_high`,
 `volatility_index_low`, and `volatility_index_close`.
+
+`perps_trades` and `options_trades` use minute-level Bronze coverage because no-trade minutes are
+valid market states, not necessarily missing data. Successful zero-row Deribit responses are stored
+as `empty_minutes.parquet` sidecars in the corresponding Bronze date partition with
+`status=confirmed_empty`. These sidecars are negative coverage only; Bronze never writes synthetic
+trade rows. Silver trade 1m feature builders consume observed trade ticks plus confirmed-empty
+minutes. Empty minutes become zero-flow feature rows, and price fields are filled only from prior
+observed trade closes, including across month boundaries. Future trade observations must never be
+used to backfill empty-minute prices.
 
 Silver and Gold contracts live in `application/dataset_contracts.py`. If a dataset is renamed,
 added, or removed, update all of the following in the same change set:
