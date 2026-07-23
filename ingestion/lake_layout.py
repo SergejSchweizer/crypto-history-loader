@@ -39,6 +39,16 @@ def partition_data_files(partition_root: Path) -> list[Path]:
     return sorted(files)
 
 
+def partition_empty_minute_files(partition_root: Path) -> list[Path]:
+    """Return confirmed-empty minute sidecars under a series partition root."""
+
+    files = {
+        *partition_root.glob("year=*/month=*/date=*/empty_minutes.parquet"),
+        *partition_root.glob("month=*/date=*/empty_minutes.parquet"),
+    }
+    return sorted(files)
+
+
 def dataset_data_files(lake_root: str, dataset_type: str) -> list[Path]:
     """Return dataset parquet files across current and previous bronze layouts."""
 

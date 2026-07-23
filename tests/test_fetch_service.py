@@ -58,6 +58,11 @@ def _minute_grid(start: datetime, end: datetime) -> list[datetime]:
     return [datetime.fromtimestamp(value / 1000, tz=UTC) for value in range(start_ms, end_ms + 1, 60_000)]
 
 
+def _noop_empty_minutes_writer(**kwargs: object) -> list[str]:
+    del kwargs
+    return []
+
+
 def test_fetch_candle_tasks_parallel_splits_success_and_errors() -> None:
     task_ok = CandleFetchTaskDTO(exchange="deribit", market="spot_ohlcv", symbol="BTCUSDT", timeframe="1m")
     task_fail = CandleFetchTaskDTO(exchange="deribit", market="spot_ohlcv", symbol="ETHUSDT", timeframe="1m")
@@ -618,10 +623,12 @@ def test_fetch_symbol_trades_full_gap_fill_respects_start_bound_for_existing_sym
         lake_root="lake/bronze",
         partition_dates_reader=lambda **kwargs: [date(2022, 4, 28)],
         open_time_minutes_reader=lambda **kwargs: [],
+        empty_minutes_reader=lambda **kwargs: [],
         symbol_normalizer=lambda **kwargs: "BTC",
         now_open_resolver=lambda **kwargs: end_open_ms,
         history_fetcher=lambda **kwargs: pytest.fail("history_fetcher should not be called when open_times exist"),
         range_fetcher=_range_fetcher,
+        empty_minutes_writer=_noop_empty_minutes_writer,
         tail_delta_only=False,
         start_open_ms_bound=start_bound_ms,
     )
@@ -658,10 +665,12 @@ def test_fetch_symbol_trades_full_gap_fill_fetches_internal_and_tail_gaps() -> N
             *_minute_grid(datetime(2022, 4, 29, 0, 0, tzinfo=UTC), datetime(2022, 4, 29, 23, 59, tzinfo=UTC)),
             *_minute_grid(datetime(2022, 5, 1, 0, 0, tzinfo=UTC), datetime(2022, 5, 1, 23, 59, tzinfo=UTC)),
         ],
+        empty_minutes_reader=lambda **kwargs: [],
         symbol_normalizer=lambda **kwargs: "BTC-PERPETUAL",
         now_open_resolver=lambda **kwargs: end_open_ms,
         history_fetcher=lambda **kwargs: pytest.fail("history_fetcher should not be called when open_times exist"),
         range_fetcher=_range_fetcher,
+        empty_minutes_writer=_noop_empty_minutes_writer,
         tail_delta_only=False,
     )
 
@@ -676,6 +685,7 @@ def test_fetch_symbol_trades_full_gap_fill_plans_missing_perp_minutes() -> None:
     missing_minute_start_ms = int(datetime(2022, 4, 29, 0, 1, tzinfo=UTC).timestamp() * 1000)
     missing_minute_end_ms = int(datetime(2022, 4, 29, 0, 1, 59, 999000, tzinfo=UTC).timestamp() * 1000)
     calls: list[tuple[int, int]] = []
+    empty_writes: list[dict[str, object]] = []
 
     def _range_fetcher(**kwargs: object) -> list[TradeTick]:
         calls.append((int(cast(Any, kwargs["start_open_ms"])), int(cast(Any, kwargs["end_open_ms"]))))
@@ -693,15 +703,48 @@ def test_fetch_symbol_trades_full_gap_fill_plans_missing_perp_minutes() -> None:
             datetime(2022, 4, 29, 0, 2, tzinfo=UTC),
             datetime(2022, 4, 29, 0, 3, tzinfo=UTC),
         ],
+        empty_minutes_reader=lambda **kwargs: [],
         symbol_normalizer=lambda **kwargs: "BTC-PERPETUAL",
         now_open_resolver=lambda **kwargs: end_open_ms,
         history_fetcher=lambda **kwargs: pytest.fail("history_fetcher should not be called when partitions exist"),
         range_fetcher=_range_fetcher,
+        empty_minutes_writer=lambda **kwargs: empty_writes.append(kwargs) or [],
         tail_delta_only=False,
     )
 
     assert rows == []
     assert calls == [(missing_minute_start_ms, missing_minute_end_ms)]
+    assert empty_writes
+    assert empty_writes[0]["start_open_ms"] == missing_minute_start_ms
+    assert empty_writes[0]["end_open_ms"] == missing_minute_end_ms
+    assert empty_writes[0]["symbol"] == "BTC-PERPETUAL"
+
+
+def test_fetch_symbol_trades_full_gap_fill_skips_confirmed_empty_perp_minutes() -> None:
+    end_open_ms = int(datetime(2022, 4, 29, 0, 3, tzinfo=UTC).timestamp() * 1000)
+
+    rows = fetch_symbol_trades(
+        exchange="deribit",
+        market="perp",
+        symbol="BTC",
+        lake_root="lake/bronze",
+        partition_dates_reader=lambda **kwargs: [date(2022, 4, 29)],
+        partition_open_time_bounds_reader=lambda **kwargs: {},
+        open_time_minutes_reader=lambda **kwargs: [
+            datetime(2022, 4, 29, 0, 0, tzinfo=UTC),
+            datetime(2022, 4, 29, 0, 2, tzinfo=UTC),
+            datetime(2022, 4, 29, 0, 3, tzinfo=UTC),
+        ],
+        empty_minutes_reader=lambda **kwargs: [datetime(2022, 4, 29, 0, 1, tzinfo=UTC)],
+        symbol_normalizer=lambda **kwargs: "BTC-PERPETUAL",
+        now_open_resolver=lambda **kwargs: end_open_ms,
+        history_fetcher=lambda **kwargs: pytest.fail("history_fetcher should not be called when partitions exist"),
+        range_fetcher=lambda **kwargs: pytest.fail("confirmed empty minute should not be fetched"),
+        empty_minutes_writer=_noop_empty_minutes_writer,
+        tail_delta_only=False,
+    )
+
+    assert rows == []
 
 
 def test_fetch_symbol_trades_resumes_partial_trade_partition_from_max_open_time() -> None:
@@ -726,10 +769,12 @@ def test_fetch_symbol_trades_resumes_partial_trade_partition_from_max_open_time(
             datetime(2022, 4, 29, 0, 0, tzinfo=UTC),
             datetime(2022, 4, 29, 7, 14, tzinfo=UTC),
         ),
+        empty_minutes_reader=lambda **kwargs: [],
         symbol_normalizer=lambda **kwargs: "BTC-PERPETUAL",
         now_open_resolver=lambda **kwargs: end_open_ms,
         history_fetcher=lambda **kwargs: pytest.fail("history_fetcher should not be called when partitions exist"),
         range_fetcher=_range_fetcher,
+        empty_minutes_writer=_noop_empty_minutes_writer,
         tail_delta_only=False,
     )
 
@@ -754,10 +799,12 @@ def test_fetch_symbol_trades_uses_partition_dates_instead_of_open_time_scan() ->
             datetime(2022, 4, 29, 0, 0, tzinfo=UTC),
             datetime(2022, 4, 29, 0, 3, tzinfo=UTC),
         ),
+        empty_minutes_reader=lambda **kwargs: [],
         symbol_normalizer=lambda **kwargs: "BTC-PERPETUAL",
         now_open_resolver=lambda **kwargs: end_open_ms,
         history_fetcher=lambda **kwargs: pytest.fail("history_fetcher should not be called when partitions exist"),
         range_fetcher=lambda **kwargs: pytest.fail("range_fetcher should not be called for covered trade day"),
+        empty_minutes_writer=_noop_empty_minutes_writer,
         tail_delta_only=False,
     )
 

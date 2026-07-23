@@ -41,12 +41,14 @@ from ingestion.funding import (
     normalize_funding_timeframe,
 )
 from ingestion.lake_queries import (
+    empty_trade_minutes_in_lake_by_dataset,
     open_time_bounds_in_lake_by_dataset,
     open_time_minutes_in_lake_by_dataset,
     open_times_in_lake,
     open_times_in_lake_by_dataset,
     partition_dates_in_lake_by_dataset,
 )
+from ingestion.lake_writes import write_empty_trade_minutes
 from ingestion.open_interest import (
     OpenInterestPoint,
     fetch_open_interest_all_history,
@@ -238,6 +240,8 @@ def fetch_symbol_trades(
     lake_root: str,
     open_times_reader: Callable[..., list[datetime]] = open_times_in_lake_by_dataset,
     open_time_minutes_reader: Callable[..., list[datetime]] = open_time_minutes_in_lake_by_dataset,
+    empty_minutes_reader: Callable[..., list[datetime]] = empty_trade_minutes_in_lake_by_dataset,
+    empty_minutes_writer: Callable[..., list[str]] = write_empty_trade_minutes,
     partition_dates_reader: Callable[..., list[date]] = partition_dates_in_lake_by_dataset,
     partition_open_time_bounds_reader: Callable[..., dict[date, tuple[datetime, datetime]]] = (
         open_time_bounds_in_lake_by_dataset
@@ -263,6 +267,8 @@ def fetch_symbol_trades(
         lake_root=lake_root,
         open_times_reader=open_times_reader,
         open_time_minutes_reader=open_time_minutes_reader,
+        empty_minutes_reader=empty_minutes_reader,
+        empty_minutes_writer=empty_minutes_writer,
         partition_dates_reader=partition_dates_reader,
         partition_open_time_bounds_reader=partition_open_time_bounds_reader,
         symbol_normalizer=symbol_normalizer,

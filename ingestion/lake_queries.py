@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from ingestion.lake_datasets import ohlcv_dataset_type_for_market
-from ingestion.lake_layout import date_from_partition_path, partition_data_files
+from ingestion.lake_layout import date_from_partition_path, partition_data_files, partition_empty_minute_files
 
 
 def open_times_in_lake_by_dataset(
@@ -108,6 +108,58 @@ def open_time_minutes_in_lake_by_dataset(
         .collect()
     )
     return [value for value in frame["open_time"].to_list() if isinstance(value, datetime)]
+
+
+def empty_trade_minutes_in_lake_by_dataset(
+    lake_root: str,
+    dataset_type: str,
+    market: str,
+    exchange: str,
+    symbol: str,
+    timeframe: str,
+) -> list[datetime]:
+    """Return sorted UTC minutes confirmed empty by successful trade fetches.
+
+    Args:
+        lake_root: Root directory for Bronze parquet partitions.
+        dataset_type: Bronze dataset_type partition label.
+        market: Instrument type partition label.
+        exchange: Exchange partition label.
+        symbol: Symbol partition label.
+        timeframe: Timeframe partition label.
+
+    Returns:
+        Sorted unique ``minute`` values from ``empty_minutes.parquet`` sidecars.
+
+    Raises:
+        RuntimeError: Polars is unavailable.
+    """
+
+    partition_root = _series_partition_root(
+        lake_root=lake_root,
+        dataset_type=dataset_type,
+        market=market,
+        exchange=exchange,
+        symbol=symbol,
+        timeframe=timeframe,
+    )
+    if not partition_root.exists():
+        return []
+
+    empty_files = [str(path) for path in partition_empty_minute_files(partition_root)]
+    if not empty_files:
+        return []
+
+    pl = _require_polars()
+    frame = (
+        pl.scan_parquet(empty_files)
+        .filter(pl.col("status") == "confirmed_empty")
+        .select(pl.col("minute"))
+        .unique()
+        .sort("minute")
+        .collect()
+    )
+    return [value for value in frame["minute"].to_list() if isinstance(value, datetime)]
 
 
 def partition_dates_in_lake_by_dataset(
