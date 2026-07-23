@@ -284,6 +284,7 @@ def run_silver_build(args: argparse.Namespace, logger: logging.Logger) -> None:
             silver_root=silver_root,
             exchange=exchange,
             symbol=symbol,
+            bronze_root=bronze_root,
             observed_timeframe="tick",
         )
         feature_payload = _report_payload("perps_trades_1m_feature", symbol, feature)
@@ -311,9 +312,12 @@ def run_silver_build(args: argparse.Namespace, logger: logging.Logger) -> None:
             silver_root=silver_root,
             exchange=exchange,
             symbol=symbol,
+            bronze_root=bronze_root,
             observed_timeframe="tick",
             observed_dataset_type="options_trades_observed",
             output_dataset_type="options_trades_1m_feature",
+            bronze_dataset_type="options_trades",
+            instrument_type="option",
         )
         feature_payload = _report_payload("options_trades_1m_feature", symbol, feature)
         logger.info(

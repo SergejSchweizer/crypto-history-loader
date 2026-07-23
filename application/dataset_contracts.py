@@ -5,7 +5,14 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Literal
 
-MissingDataPolicy = Literal["drop_invalid", "observed_only", "forward_fill", "asof_join", "none"]
+MissingDataPolicy = Literal[
+    "drop_invalid",
+    "observed_only",
+    "observed_plus_confirmed_empty",
+    "forward_fill",
+    "asof_join",
+    "none",
+]
 TimestampSemantics = Literal["event_open_time", "observed_timestamp", "minute_grid", "trade_time"]
 QuantitativeUnit = Literal[
     "decimal_return",
@@ -774,7 +781,7 @@ SILVER_DATASET_CONTRACTS: dict[str, SilverDatasetContract] = {
         timeframe="1m",
         timestamp_column="timestamp_m1",
         timestamp_semantics="minute_grid",
-        missing_data_policy="observed_only",
+        missing_data_policy="observed_plus_confirmed_empty",
         output_columns=tuple(SILVER_TRADES_M1_FEATURE_COLUMNS),
     ),
     "options_trades_1m_feature": SilverDatasetContract(
@@ -782,7 +789,7 @@ SILVER_DATASET_CONTRACTS: dict[str, SilverDatasetContract] = {
         timeframe="1m",
         timestamp_column="timestamp_m1",
         timestamp_semantics="minute_grid",
-        missing_data_policy="observed_only",
+        missing_data_policy="observed_plus_confirmed_empty",
         output_columns=tuple(SILVER_TRADES_M1_FEATURE_COLUMNS),
     ),
     "volatility_index_data_observed": SilverDatasetContract(

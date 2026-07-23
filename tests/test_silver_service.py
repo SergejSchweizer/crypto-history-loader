@@ -24,6 +24,7 @@ from application.services.silver_service import (
     discover_symbols,
 )
 from application.services.silver_sidecars import write_monthly_sidecars
+from ingestion.lake_writes import write_empty_trade_minutes
 
 pl = pytest.importorskip("polars")
 
@@ -57,6 +58,29 @@ def _write_bronze_day_file(
     )
     target.parent.mkdir(parents=True, exist_ok=True)
     pl.DataFrame([dict(row) for row in rows]).write_parquet(target)
+
+
+def _write_bronze_empty_minutes(
+    root: Path,
+    *,
+    dataset_type: str,
+    exchange: str,
+    instrument_type: str,
+    symbol: str,
+    start: datetime,
+    end: datetime,
+) -> None:
+    write_empty_trade_minutes(
+        lake_root=str(root),
+        dataset_type=dataset_type,
+        exchange=exchange,
+        instrument_type=instrument_type,
+        symbol=symbol,
+        timeframe="tick",
+        start_open_ms=int(start.timestamp() * 1000),
+        end_open_ms=int(end.timestamp() * 1000),
+        checked_at=datetime(2026, 7, 23, 12, 0, tzinfo=UTC),
+    )
 
 
 def test_build_silver_for_symbol_writes_monthly_parquet_and_aggregated_report(tmp_path: Path) -> None:
@@ -698,6 +722,52 @@ def test_build_trade_feature_frame_aggregates_minute_flow_features() -> None:
     assert row["buy_volume_share"] == pytest.approx(2.0 / 3.0)
 
 
+def test_build_trade_feature_frame_adds_confirmed_empty_minutes_with_past_close() -> None:
+    frame = pl.DataFrame(
+        [
+            {
+                "trade_time": datetime(2026, 5, 1, 0, 0, 10, tzinfo=UTC),
+                "exchange": "deribit",
+                "symbol": "BTC",
+                "instrument_type": "perp",
+                "price": 100.0,
+                "quantity": 2.0,
+                "side": "buy",
+            }
+        ]
+    )
+    empty_minutes = pl.DataFrame(
+        [
+            {
+                "dataset_type": "perps_trades",
+                "exchange": "deribit",
+                "instrument_type": "perp",
+                "symbol": "BTC",
+                "timeframe": "tick",
+                "minute": datetime(2026, 5, 1, 0, 1, tzinfo=UTC),
+                "status": "confirmed_empty",
+                "checked_at": datetime(2026, 7, 23, 12, 0, tzinfo=UTC),
+                "request_start_ms": 0,
+                "request_end_ms": 0,
+                "row_count": 0,
+            }
+        ]
+    )
+
+    feature = _build_trade_feature_frame(pl, frame, symbol="BTC", empty_minutes_frame=empty_minutes)
+
+    assert feature.height == 2
+    empty_row = feature.filter(pl.col("timestamp_m1") == datetime(2026, 5, 1, 0, 1, tzinfo=UTC)).row(0, named=True)
+    assert empty_row["open_price"] == 100.0
+    assert empty_row["high_price"] == 100.0
+    assert empty_row["low_price"] == 100.0
+    assert empty_row["close_price"] == 100.0
+    assert empty_row["volume"] == 0.0
+    assert empty_row["quote_volume"] == 0.0
+    assert empty_row["trade_count"] == 0
+    assert empty_row["buy_volume_share"] == 0.0
+
+
 def test_build_perps_trades_1m_feature_filters_invalid_and_deduplicates(tmp_path: Path) -> None:
     bronze = tmp_path / "bronze"
     silver = tmp_path / "silver"
@@ -785,6 +855,167 @@ def test_build_perps_trades_1m_feature_filters_invalid_and_deduplicates(tmp_path
     )
     assert report.rows_in == 1
     assert report.rows_out == 1
+
+
+def test_build_perps_trades_1m_feature_includes_confirmed_empty_minutes(tmp_path: Path) -> None:
+    bronze = tmp_path / "bronze"
+    silver = tmp_path / "silver"
+    symbol = "BTC-PERPETUAL"
+    trade_time = datetime(2026, 5, 1, 0, 0, 10, tzinfo=UTC)
+    _write_bronze_day_file(
+        bronze,
+        market="perps_trades",
+        exchange="deribit",
+        symbol=symbol,
+        timeframe="tick",
+        month="2026-05",
+        day="2026-05-01",
+        rows=[
+            {
+                "schema_version": "v1",
+                "dataset_type": "perps_trades",
+                "exchange": "deribit",
+                "symbol": symbol,
+                "instrument_type": "perp",
+                "event_time": trade_time,
+                "ingested_at": datetime(2026, 5, 1, 0, 0, 11, tzinfo=UTC),
+                "run_id": "r1",
+                "source_endpoint": "public_trades",
+                "open_time": trade_time,
+                "close_time": trade_time,
+                "timeframe": "tick",
+                "trade_id": "t1",
+                "price": 100.0,
+                "quantity": 2.0,
+                "side": "buy",
+                "is_maker": True,
+            }
+        ],
+        dataset_type="perps_trades",
+        instrument_type="perp",
+    )
+    _write_bronze_empty_minutes(
+        bronze,
+        dataset_type="perps_trades",
+        exchange="deribit",
+        instrument_type="perp",
+        symbol=symbol,
+        start=datetime(2026, 5, 1, 0, 1, tzinfo=UTC),
+        end=datetime(2026, 5, 1, 0, 1, 59, 999000, tzinfo=UTC),
+    )
+    build_perps_trades_observed_for_symbol(
+        bronze_root=str(bronze),
+        silver_root=str(silver),
+        exchange="deribit",
+        symbol=symbol,
+        instrument_type="perp",
+        timeframe="tick",
+    )
+
+    report = build_perps_trades_1m_feature_for_symbol(
+        bronze_root=str(bronze),
+        silver_root=str(silver),
+        exchange="deribit",
+        symbol=symbol,
+        observed_timeframe="tick",
+    )
+
+    assert report.rows_in == 2
+    assert report.rows_out == 2
+    out_file = (
+        silver
+        / "dataset_type=perps_trades_1m_feature"
+        / "exchange=deribit"
+        / f"symbol={symbol}"
+        / "timeframe=1m"
+        / "year=2026"
+        / "month=2026-05"
+        / f"{symbol}-2026-05.parquet"
+    )
+    feature = pl.read_parquet(out_file)
+    empty_row = feature.filter(pl.col("timestamp_m1") == datetime(2026, 5, 1, 0, 1, tzinfo=UTC)).row(0, named=True)
+    assert empty_row["trade_count"] == 0
+    assert empty_row["volume"] == 0.0
+    assert empty_row["close_price"] == 100.0
+
+
+def test_build_perps_trades_1m_feature_fills_empty_month_from_previous_close(tmp_path: Path) -> None:
+    bronze = tmp_path / "bronze"
+    silver = tmp_path / "silver"
+    symbol = "BTC-PERPETUAL"
+    trade_time = datetime(2026, 5, 31, 23, 59, 10, tzinfo=UTC)
+    _write_bronze_day_file(
+        bronze,
+        market="perps_trades",
+        exchange="deribit",
+        symbol=symbol,
+        timeframe="tick",
+        month="2026-05",
+        day="2026-05-31",
+        rows=[
+            {
+                "schema_version": "v1",
+                "dataset_type": "perps_trades",
+                "exchange": "deribit",
+                "symbol": symbol,
+                "instrument_type": "perp",
+                "event_time": trade_time,
+                "ingested_at": datetime(2026, 5, 31, 23, 59, 11, tzinfo=UTC),
+                "run_id": "r1",
+                "source_endpoint": "public_trades",
+                "open_time": trade_time,
+                "close_time": trade_time,
+                "timeframe": "tick",
+                "trade_id": "t1",
+                "price": 100.0,
+                "quantity": 2.0,
+                "side": "buy",
+                "is_maker": True,
+            }
+        ],
+        dataset_type="perps_trades",
+        instrument_type="perp",
+    )
+    _write_bronze_empty_minutes(
+        bronze,
+        dataset_type="perps_trades",
+        exchange="deribit",
+        instrument_type="perp",
+        symbol=symbol,
+        start=datetime(2026, 6, 1, 0, 0, tzinfo=UTC),
+        end=datetime(2026, 6, 1, 0, 0, 59, 999000, tzinfo=UTC),
+    )
+    build_perps_trades_observed_for_symbol(
+        bronze_root=str(bronze),
+        silver_root=str(silver),
+        exchange="deribit",
+        symbol=symbol,
+        instrument_type="perp",
+        timeframe="tick",
+    )
+
+    report = build_perps_trades_1m_feature_for_symbol(
+        bronze_root=str(bronze),
+        silver_root=str(silver),
+        exchange="deribit",
+        symbol=symbol,
+        observed_timeframe="tick",
+    )
+
+    assert report.months_processed == ["2026-05", "2026-06"]
+    june_file = (
+        silver
+        / "dataset_type=perps_trades_1m_feature"
+        / "exchange=deribit"
+        / f"symbol={symbol}"
+        / "timeframe=1m"
+        / "year=2026"
+        / "month=2026-06"
+        / f"{symbol}-2026-06.parquet"
+    )
+    june_row = pl.read_parquet(june_file).row(0, named=True)
+    assert june_row["trade_count"] == 0
+    assert june_row["close_price"] == 100.0
 
 
 def test_build_options_trades_1m_feature_for_symbol(tmp_path: Path) -> None:
@@ -887,6 +1118,98 @@ def test_build_options_trades_1m_feature_for_symbol(tmp_path: Path) -> None:
         / f"{symbol}-2026-05.parquet"
     )
     assert out_file.exists()
+
+
+def test_build_options_trades_1m_feature_includes_confirmed_empty_minutes(tmp_path: Path) -> None:
+    bronze = tmp_path / "bronze"
+    silver = tmp_path / "silver"
+    symbol = "BTC"
+    trade_time = datetime(2026, 5, 1, 0, 0, 10, tzinfo=UTC)
+    _write_bronze_day_file(
+        bronze,
+        market="options_trades",
+        exchange="deribit",
+        symbol=symbol,
+        timeframe="tick",
+        month="2026-05",
+        day="2026-05-01",
+        rows=[
+            {
+                "schema_version": "v1",
+                "dataset_type": "options_trades",
+                "exchange": "deribit",
+                "symbol": symbol,
+                "instrument_type": "option",
+                "event_time": trade_time,
+                "ingested_at": datetime(2026, 5, 1, 0, 0, 11, tzinfo=UTC),
+                "run_id": "r1",
+                "source_endpoint": "public_options_trades",
+                "open_time": trade_time,
+                "close_time": trade_time,
+                "timeframe": "tick",
+                "trade_id": "o1",
+                "price": 10.0,
+                "quantity": 2.0,
+                "side": "buy",
+                "is_maker": True,
+                "instrument_name": "BTC-31MAY26-100000-C",
+                "expiry": "31MAY26",
+                "strike": 100000.0,
+                "option_type": "call",
+            }
+        ],
+        dataset_type="options_trades",
+        instrument_type="option",
+    )
+    _write_bronze_empty_minutes(
+        bronze,
+        dataset_type="options_trades",
+        exchange="deribit",
+        instrument_type="option",
+        symbol=symbol,
+        start=datetime(2026, 5, 1, 0, 1, tzinfo=UTC),
+        end=datetime(2026, 5, 1, 0, 1, 59, 999000, tzinfo=UTC),
+    )
+    build_perps_trades_observed_for_symbol(
+        bronze_root=str(bronze),
+        silver_root=str(silver),
+        exchange="deribit",
+        symbol=symbol,
+        instrument_type="option",
+        timeframe="tick",
+        bronze_dataset_type="options_trades",
+        output_dataset_type="options_trades_observed",
+    )
+
+    report = build_perps_trades_1m_feature_for_symbol(
+        bronze_root=str(bronze),
+        silver_root=str(silver),
+        exchange="deribit",
+        symbol=symbol,
+        observed_timeframe="tick",
+        observed_dataset_type="options_trades_observed",
+        output_dataset_type="options_trades_1m_feature",
+        bronze_dataset_type="options_trades",
+        instrument_type="option",
+    )
+
+    assert report.rows_in == 2
+    assert report.rows_out == 2
+    out_file = (
+        silver
+        / "dataset_type=options_trades_1m_feature"
+        / "exchange=deribit"
+        / f"symbol={symbol}"
+        / "timeframe=1m"
+        / "year=2026"
+        / "month=2026-05"
+        / f"{symbol}-2026-05.parquet"
+    )
+    feature = pl.read_parquet(out_file)
+    empty_row = feature.filter(pl.col("timestamp_m1") == datetime(2026, 5, 1, 0, 1, tzinfo=UTC)).row(0, named=True)
+    assert empty_row["trade_count"] == 0
+    assert empty_row["volume"] == 0.0
+    assert empty_row["close_price"] == 10.0
 
 
 def test_build_volatility_observed_for_symbol(tmp_path: Path) -> None:
