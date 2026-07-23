@@ -102,14 +102,21 @@ def _build_steps(*, main_path: Path, config_path: Path, config_data: dict[str, A
         if not isinstance(cli_args_raw, list):
             raise ValueError(f"medallion-pipeline.{layer_name}.cli_args must be a list")
         cli_args = [str(token) for token in cli_args_raw]
+        skip_layer_step = False
         if layer_name == "bronze" and command == "bronze-build":
             cli_args = _apply_bronze_start_defaults(cli_args=cli_args, config_data=config_data)
             cli_args = _ensure_volatility_dataset_arg(cli_args)
+            trade_gap_args, cli_args = _split_perps_trade_minute_gap_args(cli_args)
+            if trade_gap_args:
+                cmd = [str(main_path), "--config", str(config_path), command, *trade_gap_args]
+                steps.append(PipelineStep(name="bronze-perps-trades-minute-gap", args=cmd))
+                skip_layer_step = not cli_args
         if layer_name == "silver" and command == "silver-build":
             cli_args = _ensure_volatility_dataset_arg(cli_args)
 
-        cmd = [str(main_path), "--config", str(config_path), command, *cli_args]
-        steps.append(PipelineStep(name=layer_name, args=cmd))
+        if not skip_layer_step:
+            cmd = [str(main_path), "--config", str(config_path), command, *cli_args]
+            steps.append(PipelineStep(name=layer_name, args=cmd))
     return steps
 
 
@@ -117,6 +124,64 @@ def _has_option(cli_args: list[str], option_name: str) -> bool:
     """Return whether a CLI option is already present."""
 
     return option_name in cli_args
+
+
+def _dataset_values(cli_args: list[str]) -> list[str]:
+    """Return values belonging to the ``--dataset`` option."""
+
+    if "--dataset" not in cli_args:
+        return []
+    dataset_idx = cli_args.index("--dataset")
+    values: list[str] = []
+    cursor = dataset_idx + 1
+    while cursor < len(cli_args) and not cli_args[cursor].startswith("--"):
+        values.append(cli_args[cursor])
+        cursor += 1
+    return values
+
+
+def _replace_dataset_values(cli_args: list[str], dataset_values: list[str]) -> list[str]:
+    """Return CLI args with the ``--dataset`` value block replaced."""
+
+    if "--dataset" not in cli_args:
+        return cli_args
+    dataset_idx = cli_args.index("--dataset")
+    cursor = dataset_idx + 1
+    while cursor < len(cli_args) and not cli_args[cursor].startswith("--"):
+        cursor += 1
+    return [*cli_args[: dataset_idx + 1], *dataset_values, *cli_args[cursor:]]
+
+
+def _without_option(cli_args: list[str], option_name: str) -> list[str]:
+    """Return CLI args without a boolean option token."""
+
+    return [token for token in cli_args if token != option_name]
+
+
+def _split_perps_trade_minute_gap_args(cli_args: list[str]) -> tuple[list[str] | None, list[str]]:
+    """Split Medallion Bronze args so perps trades can run minute-level gap fill.
+
+    Daily cron still uses tail-delta mode for normal market datasets, while
+    perpetual trades get a separate full-gap-fill pass that can inspect Bronze
+    minute coverage. Confirmed empty minutes remain absent until a negative
+    coverage manifest is available, so this step may re-check legitimately quiet
+    minutes on later full-gap runs.
+    """
+
+    dataset_values = _dataset_values(cli_args)
+    if "perps_trades" not in dataset_values or "--tail-delta-only" not in cli_args:
+        return None, cli_args
+
+    remaining_datasets = [value for value in dataset_values if value != "perps_trades"]
+    gap_args = _replace_dataset_values(cli_args, ["perps_trades"])
+    gap_args = _without_option(gap_args, "--tail-delta-only")
+    if "--full-gap-fill" not in gap_args:
+        gap_args.append("--full-gap-fill")
+
+    if not remaining_datasets:
+        return gap_args, []
+    remaining_args = _replace_dataset_values(cli_args, remaining_datasets)
+    return gap_args, remaining_args
 
 
 def _ensure_volatility_dataset_arg(cli_args: list[str]) -> list[str]:

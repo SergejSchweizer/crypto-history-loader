@@ -42,6 +42,7 @@ from ingestion.funding import (
 )
 from ingestion.lake_queries import (
     open_time_bounds_in_lake_by_dataset,
+    open_time_minutes_in_lake_by_dataset,
     open_times_in_lake,
     open_times_in_lake_by_dataset,
     partition_dates_in_lake_by_dataset,
@@ -236,6 +237,7 @@ def fetch_symbol_trades(
     symbol: str,
     lake_root: str,
     open_times_reader: Callable[..., list[datetime]] = open_times_in_lake_by_dataset,
+    open_time_minutes_reader: Callable[..., list[datetime]] = open_time_minutes_in_lake_by_dataset,
     partition_dates_reader: Callable[..., list[date]] = partition_dates_in_lake_by_dataset,
     partition_open_time_bounds_reader: Callable[..., dict[date, tuple[datetime, datetime]]] = (
         open_time_bounds_in_lake_by_dataset
@@ -260,6 +262,7 @@ def fetch_symbol_trades(
         symbol=symbol,
         lake_root=lake_root,
         open_times_reader=open_times_reader,
+        open_time_minutes_reader=open_time_minutes_reader,
         partition_dates_reader=partition_dates_reader,
         partition_open_time_bounds_reader=partition_open_time_bounds_reader,
         symbol_normalizer=symbol_normalizer,

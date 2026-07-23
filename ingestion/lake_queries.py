@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from importlib import import_module
 from pathlib import Path
 from typing import Any, cast
 
@@ -56,6 +57,57 @@ def open_times_in_lake_by_dataset(
                 if isinstance(value, datetime):
                     values.append(value)
     return sorted(set(values))
+
+
+def open_time_minutes_in_lake_by_dataset(
+    lake_root: str,
+    dataset_type: str,
+    market: str,
+    exchange: str,
+    symbol: str,
+    timeframe: str,
+) -> list[datetime]:
+    """Return sorted unique UTC minute buckets containing at least one trade.
+
+    Args:
+        lake_root: Root directory for Bronze parquet partitions.
+        dataset_type: Bronze dataset_type partition label.
+        market: Instrument type partition label.
+        exchange: Exchange partition label.
+        symbol: Symbol partition label.
+        timeframe: Timeframe partition label.
+
+    Returns:
+        Sorted unique ``open_time`` values truncated to minute precision.
+
+    Raises:
+        RuntimeError: Polars is unavailable.
+    """
+
+    partition_root = _series_partition_root(
+        lake_root=lake_root,
+        dataset_type=dataset_type,
+        market=market,
+        exchange=exchange,
+        symbol=symbol,
+        timeframe=timeframe,
+    )
+    if not partition_root.exists():
+        return []
+
+    data_files = [str(path) for path in partition_data_files(partition_root)]
+    if not data_files:
+        return []
+
+    pl = _require_polars()
+    frame = (
+        pl.scan_parquet(data_files)
+        .select(pl.col("open_time").dt.truncate("1m").alias("open_time"))
+        .unique()
+        .sort("open_time")
+        .collect()
+    )
+    return [value for value in frame["open_time"].to_list() if isinstance(value, datetime)]
 
 
 def partition_dates_in_lake_by_dataset(
@@ -297,7 +349,15 @@ def _require_pyarrow_parquet() -> Any:
     """Load PyArrow parquet module required for lake metadata queries."""
 
     try:
-        import pyarrow.parquet as pq
+        return import_module("pyarrow.parquet")
     except ImportError as exc:
         raise RuntimeError("pyarrow is required for parquet lake output. Install project dependencies.") from exc
-    return pq
+
+
+def _require_polars() -> Any:
+    """Load Polars required for efficient lake timestamp aggregation."""
+
+    try:
+        return import_module("polars")
+    except ImportError as exc:
+        raise RuntimeError("polars is required for parquet lake timestamp aggregation.") from exc

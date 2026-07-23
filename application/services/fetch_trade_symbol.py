@@ -8,7 +8,12 @@ from datetime import UTC, date, datetime
 
 from application.services.fetch_executors import elapsed_seconds
 from application.services.fetch_history_rows import filter_chunk_callback, filter_rows_by_start_bound
-from application.services.fetch_range_planning import day_start_ms, missing_trade_day_ranges, ranges_in_random_order
+from application.services.fetch_range_planning import (
+    day_start_ms,
+    missing_trade_day_ranges,
+    missing_trade_minute_ranges,
+    ranges_in_random_order,
+)
 from application.services.fetch_trade_windows import (
     dedupe_sort_trade_rows,
     fetch_trade_window,
@@ -19,6 +24,7 @@ from application.services.fetch_trade_windows import (
 from application.services.gapfill_service import _last_closed_open_ms, _missing_ranges_ms
 from ingestion.lake_queries import (
     open_time_bounds_in_lake_by_dataset,
+    open_time_minutes_in_lake_by_dataset,
     open_times_in_lake_by_dataset,
     partition_dates_in_lake_by_dataset,
 )
@@ -34,6 +40,7 @@ def fetch_symbol_trades(
     symbol: str,
     lake_root: str,
     open_times_reader: Callable[..., list[datetime]] = open_times_in_lake_by_dataset,
+    open_time_minutes_reader: Callable[..., list[datetime]] = open_time_minutes_in_lake_by_dataset,
     partition_dates_reader: Callable[..., list[date]] = partition_dates_in_lake_by_dataset,
     partition_open_time_bounds_reader: Callable[..., dict[date, tuple[datetime, datetime]]] = (
         open_time_bounds_in_lake_by_dataset
@@ -161,7 +168,6 @@ def fetch_symbol_trades(
             )
         return dedupe_sort_trade_rows(tail_rows)
 
-    del open_times_reader
     scan_started_at = datetime.now(UTC)
     logger.debug(
         "Trade partition scan start dataset_type=%s exchange=%s market=%s symbol=%s timeframe=tick lake_root=%s",
@@ -291,12 +297,41 @@ def fetch_symbol_trades(
 
     del ranges_builder
     missing_range_start_ms = start_open_ms_bound if start_open_ms_bound is not None else earliest_existing_ms
-    missing_ranges = missing_trade_day_ranges(
-        existing_dates=stored_partition_dates,
-        coverage_bounds=stored_open_time_bounds or None,
-        start_open_ms=missing_range_start_ms,
-        end_open_ms=end_open_ms,
-    )
+    if market == "perp":
+        stored_open_minutes = open_time_minutes_reader(
+            lake_root=lake_root,
+            dataset_type=trades_dataset_type,
+            market=market,
+            exchange=exchange,
+            symbol=storage_symbol,
+            timeframe="tick",
+        )
+        missing_ranges = missing_trade_minute_ranges(
+            existing_open_minutes=stored_open_minutes,
+            start_open_ms=missing_range_start_ms,
+            end_open_ms=end_open_ms,
+        )
+        logger.debug(
+            (
+                "Trade minute gap scan done dataset_type=%s exchange=%s market=%s symbol=%s "
+                "minutes=%s ranges=%s elapsed_s=%s"
+            ),
+            trades_dataset_type,
+            exchange,
+            market,
+            storage_symbol,
+            len(stored_open_minutes),
+            len(missing_ranges),
+            elapsed_seconds(scan_started_at),
+        )
+    else:
+        del open_times_reader
+        missing_ranges = missing_trade_day_ranges(
+            existing_dates=stored_partition_dates,
+            coverage_bounds=stored_open_time_bounds or None,
+            start_open_ms=missing_range_start_ms,
+            end_open_ms=end_open_ms,
+        )
     logger.debug(
         (
             "Trade gap plan ranges exchange=%s market=%s symbol=%s stored_partitions=%s "
