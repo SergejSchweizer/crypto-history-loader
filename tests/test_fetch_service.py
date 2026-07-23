@@ -747,6 +747,99 @@ def test_fetch_symbol_trades_full_gap_fill_skips_confirmed_empty_perp_minutes() 
     assert rows == []
 
 
+def test_fetch_symbol_trades_full_gap_fill_plans_missing_option_minutes() -> None:
+    end_open_ms = int(datetime(2022, 4, 29, 0, 3, tzinfo=UTC).timestamp() * 1000)
+    missing_minute_start_ms = int(datetime(2022, 4, 29, 0, 1, tzinfo=UTC).timestamp() * 1000)
+    missing_minute_end_ms = int(datetime(2022, 4, 29, 0, 1, 59, 999000, tzinfo=UTC).timestamp() * 1000)
+    calls: list[tuple[int, int]] = []
+    empty_writes: list[dict[str, object]] = []
+
+    def _range_fetcher(**kwargs: object) -> list[OptionTradeTick]:
+        calls.append((int(cast(Any, kwargs["start_open_ms"])), int(cast(Any, kwargs["end_open_ms"]))))
+        return []
+
+    rows = fetch_symbol_trades(
+        exchange="deribit",
+        market="option",
+        symbol="BTC",
+        lake_root="lake/bronze",
+        partition_dates_reader=lambda **kwargs: [date(2022, 4, 29)],
+        partition_open_time_bounds_reader=lambda **kwargs: {},
+        open_time_minutes_reader=lambda **kwargs: [
+            datetime(2022, 4, 29, 0, 0, tzinfo=UTC),
+            datetime(2022, 4, 29, 0, 2, tzinfo=UTC),
+            datetime(2022, 4, 29, 0, 3, tzinfo=UTC),
+        ],
+        empty_minutes_reader=lambda **kwargs: [],
+        symbol_normalizer=lambda **kwargs: pytest.fail("option symbols should use canonical uppercase storage symbol"),
+        now_open_resolver=lambda **kwargs: end_open_ms,
+        history_fetcher=lambda **kwargs: pytest.fail("history_fetcher should not be called when partitions exist"),
+        range_fetcher=_range_fetcher,
+        empty_minutes_writer=lambda **kwargs: empty_writes.append(kwargs) or [],
+        tail_delta_only=False,
+    )
+
+    assert rows == []
+    assert calls == [(missing_minute_start_ms, missing_minute_end_ms)]
+    assert empty_writes
+    assert empty_writes[0]["dataset_type"] == "options_trades"
+    assert empty_writes[0]["instrument_type"] == "option"
+    assert empty_writes[0]["symbol"] == "BTC"
+
+
+def test_fetch_symbol_trades_full_gap_fill_skips_confirmed_empty_option_minutes() -> None:
+    end_open_ms = int(datetime(2022, 4, 29, 0, 3, tzinfo=UTC).timestamp() * 1000)
+
+    rows = fetch_symbol_trades(
+        exchange="deribit",
+        market="option",
+        symbol="btc",
+        lake_root="lake/bronze",
+        partition_dates_reader=lambda **kwargs: [date(2022, 4, 29)],
+        partition_open_time_bounds_reader=lambda **kwargs: {},
+        open_time_minutes_reader=lambda **kwargs: [
+            datetime(2022, 4, 29, 0, 0, tzinfo=UTC),
+            datetime(2022, 4, 29, 0, 2, tzinfo=UTC),
+            datetime(2022, 4, 29, 0, 3, tzinfo=UTC),
+        ],
+        empty_minutes_reader=lambda **kwargs: [datetime(2022, 4, 29, 0, 1, tzinfo=UTC)],
+        symbol_normalizer=lambda **kwargs: pytest.fail("option symbols should use canonical uppercase storage symbol"),
+        now_open_resolver=lambda **kwargs: end_open_ms,
+        history_fetcher=lambda **kwargs: pytest.fail("history_fetcher should not be called when partitions exist"),
+        range_fetcher=lambda **kwargs: pytest.fail("confirmed empty option minute should not be fetched"),
+        empty_minutes_writer=_noop_empty_minutes_writer,
+        tail_delta_only=False,
+    )
+
+    assert rows == []
+
+
+def test_fetch_symbol_trades_bootstrap_with_start_bound_writes_empty_option_minutes() -> None:
+    start_bound_ms = int(datetime(2022, 4, 29, 0, 0, tzinfo=UTC).timestamp() * 1000)
+    end_open_ms = int(datetime(2022, 4, 29, 0, 1, tzinfo=UTC).timestamp() * 1000)
+    empty_writes: list[dict[str, object]] = []
+
+    rows = fetch_symbol_trades(
+        exchange="deribit",
+        market="option",
+        symbol="BTC",
+        lake_root="lake/bronze",
+        partition_dates_reader=lambda **kwargs: [],
+        now_open_resolver=lambda **kwargs: end_open_ms,
+        history_fetcher=lambda **kwargs: pytest.fail("history_fetcher should not be called when start bound is set"),
+        range_fetcher=lambda **kwargs: [],
+        empty_minutes_writer=lambda **kwargs: empty_writes.append(kwargs) or [],
+        tail_delta_only=False,
+        start_open_ms_bound=start_bound_ms,
+    )
+
+    assert rows == []
+    assert empty_writes
+    assert empty_writes[0]["dataset_type"] == "options_trades"
+    assert empty_writes[0]["instrument_type"] == "option"
+    assert empty_writes[0]["symbol"] == "BTC"
+
+
 def test_fetch_symbol_trades_resumes_partial_trade_partition_from_max_open_time() -> None:
     end_open_ms = int(datetime(2022, 4, 29, 11, 30, tzinfo=UTC).timestamp() * 1000)
     stored_max = datetime(2022, 4, 29, 7, 14, 52, tzinfo=UTC)

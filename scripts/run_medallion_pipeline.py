@@ -106,10 +106,10 @@ def _build_steps(*, main_path: Path, config_path: Path, config_data: dict[str, A
         if layer_name == "bronze" and command == "bronze-build":
             cli_args = _apply_bronze_start_defaults(cli_args=cli_args, config_data=config_data)
             cli_args = _ensure_volatility_dataset_arg(cli_args)
-            trade_gap_args, cli_args = _split_perps_trade_minute_gap_args(cli_args)
+            trade_gap_args, cli_args = _split_trade_minute_gap_args(cli_args)
             if trade_gap_args:
                 cmd = [str(main_path), "--config", str(config_path), command, *trade_gap_args]
-                steps.append(PipelineStep(name="bronze-perps-trades-minute-gap", args=cmd))
+                steps.append(PipelineStep(name="bronze-trades-minute-gap", args=cmd))
                 skip_layer_step = not cli_args
         if layer_name == "silver" and command == "silver-build":
             cli_args = _ensure_volatility_dataset_arg(cli_args)
@@ -158,22 +158,23 @@ def _without_option(cli_args: list[str], option_name: str) -> list[str]:
     return [token for token in cli_args if token != option_name]
 
 
-def _split_perps_trade_minute_gap_args(cli_args: list[str]) -> tuple[list[str] | None, list[str]]:
-    """Split Medallion Bronze args so perps trades can run minute-level gap fill.
+def _split_trade_minute_gap_args(cli_args: list[str]) -> tuple[list[str] | None, list[str]]:
+    """Split Medallion Bronze args so tick trades can run minute-level gap fill.
 
     Daily cron still uses tail-delta mode for normal market datasets, while
-    perpetual trades get a separate full-gap-fill pass that can inspect Bronze
-    minute coverage. Confirmed empty minutes remain absent until a negative
-    coverage manifest is available, so this step may re-check legitimately quiet
-    minutes on later full-gap runs.
+    trade tick datasets get a separate full-gap-fill pass that inspects Bronze
+    minute coverage. Successful zero-row Deribit responses are stored in
+    ``empty_minutes.parquet`` sidecars so legitimately quiet minutes are not
+    re-checked on later full-gap runs.
     """
 
     dataset_values = _dataset_values(cli_args)
-    if "perps_trades" not in dataset_values or "--tail-delta-only" not in cli_args:
+    trade_dataset_values = [value for value in dataset_values if value in {"perps_trades", "options_trades"}]
+    if not trade_dataset_values or "--tail-delta-only" not in cli_args:
         return None, cli_args
 
-    remaining_datasets = [value for value in dataset_values if value != "perps_trades"]
-    gap_args = _replace_dataset_values(cli_args, ["perps_trades"])
+    remaining_datasets = [value for value in dataset_values if value not in trade_dataset_values]
+    gap_args = _replace_dataset_values(cli_args, trade_dataset_values)
     gap_args = _without_option(gap_args, "--tail-delta-only")
     if "--full-gap-fill" not in gap_args:
         gap_args.append("--full-gap-fill")

@@ -177,3 +177,50 @@ def test_empty_trade_minutes_roundtrip_and_deduplicate(tmp_path: Path) -> None:
         datetime(2026, 4, 27, 10, 1, tzinfo=UTC),
         datetime(2026, 4, 27, 10, 2, tzinfo=UTC),
     ]
+
+
+def test_empty_trade_minutes_roundtrip_for_options_trades(tmp_path: Path) -> None:
+    start_ms = int(datetime(2026, 4, 27, 10, 0, 30, tzinfo=UTC).timestamp() * 1000)
+    end_ms = int(datetime(2026, 4, 27, 10, 1, 15, tzinfo=UTC).timestamp() * 1000)
+
+    written = write_empty_trade_minutes(
+        lake_root=str(tmp_path),
+        dataset_type="options_trades",
+        exchange="deribit",
+        instrument_type="option",
+        symbol="BTC",
+        timeframe="tick",
+        start_open_ms=start_ms,
+        end_open_ms=end_ms,
+        checked_at=datetime(2026, 7, 23, 12, 0, tzinfo=UTC),
+    )
+
+    minutes = empty_trade_minutes_in_lake_by_dataset(
+        lake_root=str(tmp_path),
+        dataset_type="options_trades",
+        market="option",
+        exchange="deribit",
+        symbol="BTC",
+        timeframe="tick",
+    )
+
+    assert written == [
+        str(
+            (
+                tmp_path
+                / "dataset_type=options_trades"
+                / "exchange=deribit"
+                / "instrument_type=option"
+                / "symbol=BTC"
+                / "timeframe=tick"
+                / "year=2026"
+                / "month=2026-04"
+                / "date=2026-04-27"
+                / "empty_minutes.parquet"
+            ).resolve()
+        )
+    ]
+    assert minutes == [
+        datetime(2026, 4, 27, 10, 0, tzinfo=UTC),
+        datetime(2026, 4, 27, 10, 1, tzinfo=UTC),
+    ]

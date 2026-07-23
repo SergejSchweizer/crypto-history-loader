@@ -36,6 +36,12 @@ from ingestion.trades import OptionTradeTick, TradeMarket, TradeTick, fetch_trad
 logger = logging.getLogger(__name__)
 
 
+def _uses_trade_minute_gap_coverage(market: TradeMarket) -> bool:
+    """Return whether a trade market should use minute-level coverage checks."""
+
+    return market in {"perp", "option"}
+
+
 def fetch_symbol_trades(
     exchange: Exchange,
     market: TradeMarket,
@@ -254,6 +260,18 @@ def fetch_symbol_trades(
                         started_at=phase_started_at,
                     )
                     continue
+                if _uses_trade_minute_gap_coverage(market) and not window_rows:
+                    empty_minutes_writer(
+                        lake_root=lake_root,
+                        dataset_type=trades_dataset_type,
+                        exchange=exchange,
+                        instrument_type=market,
+                        symbol=storage_symbol,
+                        timeframe="tick",
+                        start_open_ms=window_start_ms,
+                        end_open_ms=window_end_ms,
+                        checked_at=datetime.now(UTC),
+                    )
                 if window_rows and on_history_chunk is not None:
                     on_history_chunk(window_rows)
                 bootstrap_rows.extend(window_rows)
@@ -301,7 +319,7 @@ def fetch_symbol_trades(
 
     del ranges_builder
     missing_range_start_ms = start_open_ms_bound if start_open_ms_bound is not None else earliest_existing_ms
-    if market == "perp":
+    if _uses_trade_minute_gap_coverage(market):
         stored_open_minutes = open_time_minutes_reader(
             lake_root=lake_root,
             dataset_type=trades_dataset_type,
@@ -408,7 +426,7 @@ def fetch_symbol_trades(
                 started_at=phase_started_at,
             )
             continue
-        if market == "perp" and not window_rows:
+        if _uses_trade_minute_gap_coverage(market) and not window_rows:
             empty_minutes_writer(
                 lake_root=lake_root,
                 dataset_type=trades_dataset_type,

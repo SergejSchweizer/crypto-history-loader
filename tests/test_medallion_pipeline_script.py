@@ -73,7 +73,7 @@ def test_build_steps_preserves_bronze_delta_mode_from_config(tmp_path: Path) -> 
     assert "--full-gap-fill" not in args
 
 
-def test_build_steps_splits_perps_trades_tail_mode_into_minute_gap_step(tmp_path: Path) -> None:
+def test_build_steps_splits_trade_tail_mode_into_minute_gap_step(tmp_path: Path) -> None:
     module = _load_pipeline_module()
     main_path = tmp_path / "main.py"
     main_path.write_text("print('ok')\n", encoding="utf-8")
@@ -101,15 +101,55 @@ def test_build_steps_splits_perps_trades_tail_mode_into_minute_gap_step(tmp_path
 
     steps = module._build_steps(main_path=main_path, config_path=config_path, config_data=cfg)
 
-    assert [step.name for step in steps] == ["bronze-perps-trades-minute-gap", "bronze"]
+    assert [step.name for step in steps] == ["bronze-trades-minute-gap", "bronze"]
     gap_args = steps[0].args
     bronze_args = steps[1].args
     gap_dataset_idx = gap_args.index("--dataset")
     bronze_dataset_idx = bronze_args.index("--dataset")
-    assert gap_args[gap_dataset_idx + 1] == "perps_trades"
+    assert gap_args[gap_dataset_idx + 1 : gap_args.index("--symbols")] == ["perps_trades", "options_trades"]
     assert "--full-gap-fill" in gap_args
     assert "--tail-delta-only" not in gap_args
-    assert "perps_trades" not in bronze_args[bronze_dataset_idx + 1 : bronze_args.index("--symbols")]
+    bronze_datasets = bronze_args[bronze_dataset_idx + 1 : bronze_args.index("--symbols")]
+    assert "perps_trades" not in bronze_datasets
+    assert "options_trades" not in bronze_datasets
+    assert "--tail-delta-only" in bronze_args
+
+
+def test_build_steps_splits_options_only_tail_mode_into_minute_gap_step(tmp_path: Path) -> None:
+    module = _load_pipeline_module()
+    main_path = tmp_path / "main.py"
+    main_path.write_text("print('ok')\n", encoding="utf-8")
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text("x: 1\n", encoding="utf-8")
+    cfg = {
+        "medallion-pipeline": {
+            "execution_order": ["bronze"],
+            "bronze": {
+                "enabled": True,
+                "command": "bronze-build",
+                "cli_args": [
+                    "--dataset",
+                    "options_trades",
+                    "--symbols",
+                    "BTC",
+                    "--tail-delta-only",
+                    "--no-json-output",
+                ],
+            },
+        }
+    }
+
+    steps = module._build_steps(main_path=main_path, config_path=config_path, config_data=cfg)
+
+    assert [step.name for step in steps] == ["bronze-trades-minute-gap", "bronze"]
+    gap_args = steps[0].args
+    bronze_args = steps[1].args
+    gap_dataset_idx = gap_args.index("--dataset")
+    bronze_dataset_idx = bronze_args.index("--dataset")
+    assert gap_args[gap_dataset_idx + 1 : gap_args.index("--symbols")] == ["options_trades"]
+    assert "--full-gap-fill" in gap_args
+    assert "--tail-delta-only" not in gap_args
+    assert bronze_args[bronze_dataset_idx + 1 : bronze_args.index("--symbols")] == ["volatility_index_data"]
     assert "--tail-delta-only" in bronze_args
 
 

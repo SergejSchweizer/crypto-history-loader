@@ -125,7 +125,7 @@ def write_empty_trade_minutes(
 
     Args:
         lake_root: Root directory for Bronze parquet partitions.
-        dataset_type: Bronze dataset type, currently ``perps_trades``.
+        dataset_type: Bronze trade dataset type, for example ``perps_trades`` or ``options_trades``.
         exchange: Exchange partition label.
         instrument_type: Instrument type partition label.
         symbol: Symbol partition label.
