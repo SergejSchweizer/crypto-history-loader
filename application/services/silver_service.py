@@ -15,6 +15,9 @@ from application.dataset_contracts import (
     SILVER_FUTURES_SUMMARY_OBSERVED_COLUMNS as SILVER_FUTURES_SUMMARY_OBSERVED_COLUMNS,
 )
 from application.dataset_contracts import (
+    SILVER_HISTORICAL_PREDICTION_FEATURE_COLUMNS as SILVER_HISTORICAL_PREDICTION_FEATURE_COLUMNS,
+)
+from application.dataset_contracts import (
     SILVER_HISTORICAL_VOLATILITY_OBSERVED_COLUMNS as SILVER_HISTORICAL_VOLATILITY_OBSERVED_COLUMNS,
 )
 from application.dataset_contracts import SILVER_INDEX_PRICE_FEATURE_COLUMNS as SILVER_INDEX_PRICE_FEATURE_COLUMNS
@@ -51,6 +54,7 @@ from application.dataset_contracts import (
 from application.services import (
     silver_funding,
     silver_futures_summary,
+    silver_historical_prediction,
     silver_historical_volatility,
     silver_index_price,
     silver_instrument_metadata,
@@ -82,6 +86,7 @@ discover_options_surface_symbols = silver_options_surface.discover_options_surfa
 discover_l2_symbols = silver_l2.discover_l2_symbols
 discover_recent_trade_symbols = silver_recent_trades.discover_recent_trade_symbols
 discover_instrument_metadata_symbols = silver_instrument_metadata.discover_instrument_metadata_symbols
+discover_historical_prediction_symbols = silver_historical_prediction.discover_historical_prediction_symbols
 
 
 def _funding_dependencies() -> silver_funding.FundingDependencies:
@@ -980,6 +985,34 @@ def build_realized_volatility_1m_feature_for_symbol(
     )
     if not isinstance(report, SilverBuildReport):
         raise TypeError("realized volatility 1m feature builder returned an unexpected report type")
+    return report
+
+
+def build_historical_prediction_1m_feature_for_symbol(
+    *,
+    silver_root: str,
+    exchange: str,
+    symbol: str,
+    timeframe: str = "1m",
+    output_dataset_type: str = "historical_prediction_1m_feature",
+) -> SilverBuildReport:
+    """Build historical predictor features from repository-native Silver sources."""
+
+    report = silver_historical_prediction.build_historical_prediction_1m_feature_for_symbol(
+        silver_root=silver_root,
+        exchange=exchange,
+        symbol=symbol,
+        timeframe=timeframe,
+        output_dataset_type=output_dataset_type,
+        dependencies=silver_historical_prediction.HistoricalPredictionDependencies(
+            require_polars=_require_polars,
+            silver_month_path=_silver_month_path,
+            iso_utc=_iso_utc,
+            report_factory=SilverBuildReport,
+        ),
+    )
+    if not isinstance(report, SilverBuildReport):
+        raise TypeError("Historical prediction feature builder returned an unexpected report type")
     return report
 
 

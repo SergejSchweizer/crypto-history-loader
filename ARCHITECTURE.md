@@ -197,11 +197,14 @@ canonical full datasets.
 
 `gold.market.history_full.m1` is the full historical dataset for data this repository actually
 fetches into Bronze. It joins only spot OHLCV, perpetual OHLCV, open interest, funding,
-perpetual-trade, and option-trade families through their Silver representations on the historical
-minute grid. The grid covers the union of those historical source timestamps; missing source values
-stay null. Realized-volatility, IV/RV, volatility-index, L2, index, futures-summary,
-option-surface, strategy, target, and label columns belong to narrower research-facing Gold
-contracts, not to `gold.market.history_full.m1`.
+perpetual-trade, option-trade, and `historical_prediction_1m_feature` families through their
+Silver representations on the historical minute grid. The grid covers the union of those
+historical source timestamps; missing source values stay null. The historical prediction family is
+derived only from the 4.1-4.6 historical datasets and provides trailing returns, realized
+volatility windows, basis, funding/open-interest stress, and trade-flow pressure features. It must
+not consume volatility-index or IV/RV inputs. Realized-volatility, IV/RV, volatility-index, L2,
+index, futures-summary, option-surface, strategy, target, and label columns belong to narrower
+research-facing Gold contracts, not to `gold.market.history_full.m1`.
 
 `gold.market.regime_features.m1` owns the research-facing IV/RV regime contract. Its minute grid
 is determined only by required spot, perpetual, funding, open-interest, realized-volatility, and

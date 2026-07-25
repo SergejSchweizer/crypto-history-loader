@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from application.dataset_contracts import gold_dataset_contract
+from application.dataset_contracts import SILVER_HISTORICAL_PREDICTION_FEATURE_COLUMNS, gold_dataset_contract
 from application.services.gold_service import build_gold_for_symbol
 from tests.test_gold_regime_features import _write_silver
 
@@ -116,6 +116,24 @@ def _write_raw_history_sources(silver: Path, timestamps: list[datetime]) -> None
         ],
     )
     _write_trade_features(silver, timestamps)
+    _write_silver(
+        silver,
+        dataset_type="historical_prediction_1m_feature",
+        symbol="BTC",
+        timeframe="1m",
+        rows=[
+            {
+                "timestamp_m1": timestamp,
+                "exchange": "deribit",
+                "symbol": "BTC",
+                **{
+                    column: float(index + offset)
+                    for offset, column in enumerate(SILVER_HISTORICAL_PREDICTION_FEATURE_COLUMNS[3:], start=1)
+                },
+            }
+            for index, timestamp in enumerate(timestamps)
+        ],
+    )
 
 
 def test_history_full_gold_joins_historical_sources_without_targets(tmp_path: Path) -> None:
@@ -196,6 +214,7 @@ def test_history_full_gold_joins_historical_sources_without_targets(tmp_path: Pa
         "options_trades_buy_trade_count",
         "options_trades_sell_trade_count",
         "options_trades_buy_volume_share",
+        *SILVER_HISTORICAL_PREDICTION_FEATURE_COLUMNS[3:],
     ]
     assert "rv_1h" not in history_full.columns
     assert "iv_minus_rv_1h" not in history_full.columns
@@ -206,6 +225,7 @@ def test_history_full_gold_joins_historical_sources_without_targets(tmp_path: Pa
     assert "options_trades_sell_trade_count" in history_full.columns
     assert "minutes_since_open_interest_observation" in history_full.columns
     assert "funding_data_available" in history_full.columns
+    assert "historical_prediction_perps_rv_1h" in history_full.columns
     assert history_full["spot_ohlcv_close_price"].to_list()[0] is None
     assert not any(column.startswith(("target_", "label_")) for column in history_full.columns)
     assert manifest["dataset_id"] == "gold.market.history_full.m1"
@@ -216,6 +236,7 @@ def test_history_full_gold_joins_historical_sources_without_targets(tmp_path: Pa
         "open_interest_1m_feature",
         "perps_trades_1m_feature",
         "options_trades_1m_feature",
+        "historical_prediction_1m_feature",
     ]
     assert manifest["optional_source_datasets"] == []
     assert manifest["strategy_feature_lookbacks"] == {}
@@ -234,5 +255,6 @@ def test_history_full_gold_contract_declares_canonical_historical_sources() -> N
         "open_interest_1m_feature",
         "perps_trades_1m_feature",
         "options_trades_1m_feature",
+        "historical_prediction_1m_feature",
     ]
     assert contract.optional_requirements == ()

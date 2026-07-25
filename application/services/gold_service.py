@@ -14,6 +14,7 @@ from typing import Any
 from application.dataset_contracts import (
     FULL_MARKET_GOLD_REQUIREMENTS,
     GOLD_DATASET_CONTRACTS,
+    SILVER_HISTORICAL_PREDICTION_FEATURE_COLUMNS,
     gold_dataset_contract,
     supported_gold_dataset_ids,
 )
@@ -90,6 +91,7 @@ HISTORY_FULL_HISTORY_SOURCE_COLUMNS = (
     "options_trades_buy_trade_count",
     "options_trades_sell_trade_count",
     "options_trades_buy_volume_share",
+    *SILVER_HISTORICAL_PREDICTION_FEATURE_COLUMNS[3:],
 )
 _parse_semver = gold_versioning.parse_semver
 _format_semver = gold_versioning.format_semver

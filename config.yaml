@@ -61,6 +61,7 @@ medallion-pipeline:
       - open_interest
       - perps_trades
       - options_trades
+      - historical_prediction
       - volatility_index_data
       - volatility_index_snapshot_1m
       - realized_volatility

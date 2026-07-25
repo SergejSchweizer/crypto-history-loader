@@ -36,6 +36,7 @@ def test_silver_contracts_cover_service_output_columns() -> None:
         "options_trades_observed": silver_service.SILVER_TRADES_OBSERVED_COLUMNS,
         "perps_trades_1m_feature": silver_service.SILVER_TRADES_M1_FEATURE_COLUMNS,
         "options_trades_1m_feature": silver_service.SILVER_TRADES_M1_FEATURE_COLUMNS,
+        "historical_prediction_1m_feature": silver_service.SILVER_HISTORICAL_PREDICTION_FEATURE_COLUMNS,
         "volatility_index_data_observed": silver_service.SILVER_VOLATILITY_OBSERVED_COLUMNS,
         "volatility_index_snapshot_1m_observed": silver_service.SILVER_VOLATILITY_OBSERVED_COLUMNS,
         "volatility_index_1m_feature": silver_service.SILVER_VOLATILITY_FEATURE_COLUMNS,

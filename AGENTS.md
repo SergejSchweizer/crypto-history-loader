@@ -322,6 +322,17 @@ Applies to day-to-day agent execution flow for implementation, debugging, and de
 - [MUST] Use lowercase letters, numbers, and hyphens only in branch names.
 - [MUST] Do not use vague branch names such as `codex/fixes`, `codex/update`, `codex/big-change`, `codex/refactor-all`, or `codex/work`.
 - [MUST] Keep one branch to one logical change.
+- [MUST] Treat `BACKLOG.md` as a simple ticket system. Each backlog PR is one ticket and one logical change.
+- [MUST] Every backlog ticket records these separate fields: `Status`, `Updated` in `YYYY-MM-DD` format,
+  `PR`, `Branch`, and `Depends on`. `Branch` remains recorded after deletion as historical traceability.
+- [MUST] Allowed ticket statuses are `Planned`, `In Progress`, `Blocked`, `Ready`, and `Merged`.
+  `Merged` is the only completed status; do not use ambiguous completion terms such as `Done`, `Implemented`,
+  `Complete`, or `Finished`.
+- [MUST] Every ticket defines numbered `Description` requirements and numbered `Acceptance` checks with an exact
+  one-to-one ID mapping. Each description ID has exactly one acceptance ID, and each acceptance ID verifies only
+  its matching description requirement. A ticket may not enter `Ready` while either side is missing or mismatched.
+- [MUST] Update the ticket's `Status` and `Updated` date whenever its state changes. Set `PR` to the pull request URL
+  when the PR is created; use `TBD` only before a PR exists.
 - [MUST] Pursue backlog PRs as stacked PRs: preserve their declared order, base each follow-up
   backlog branch on the preceding backlog branch until it merges, and restack downstream branches
   after upstream merges.
@@ -341,7 +352,11 @@ Applies to day-to-day agent execution flow for implementation, debugging, and de
   as the final commit subject.
 - [MUST] Push the feature branch and open a pull request into `main`.
 - [MUST] Never self-merge a pull request unless explicitly instructed.
-- [SHOULD] Prefer squash merge and delete the feature branch after merge.
+- [MUST] A finished PR must be merged into `main`; leaving a finished PR unmerged is not an allowed terminal state.
+- [MUST] After a PR is merged, verify that its commit is reachable from `origin/main`, then delete both the local
+  feature branch and the remote feature branch. Do not delete either copy before that reachability check passes.
+- [MUST] Record the final PR URL, `Status: Merged`, and merge date in the backlog ticket before deleting the branches.
+- [SHOULD] Prefer squash merge.
 - [MUST] If rebasing requires history rewrite, only use `git push --force-with-lease`, never plain `git push --force`.
 - [MUST] After merge, sync with `git checkout main` and `git pull --ff-only origin main`.
 - [MUST] Do not weaken tests to make them pass.
@@ -367,10 +382,27 @@ Applies to day-to-day agent execution flow for implementation, debugging, and de
 Remove checks that do not exist in the repository.
 
 ```markdown
+## Ticket
+
+- Backlog: PR-XX
+- Status: In Progress
+- Updated: YYYY-MM-DD
+- Branch: codex/<scope>-<short-description>
+
 ## Summary
 
 - Describe what changed.
 - Describe why it changed.
+
+## Description
+
+- R1: State the first required behavior.
+- R2: State the second required behavior.
+
+## Acceptance
+
+- A1 (verifies R1): State the observable pass condition for R1.
+- A2 (verifies R2): State the observable pass condition for R2.
 
 ## Dataset / Pipeline Impact
 
@@ -411,12 +443,15 @@ Remove checks that do not exist in the repository.
 - Push branch and open PR targeting `main`.
 - Validate with quality gates and tests.
 - Do not merge without explicit instruction.
+- When explicitly instructed to finish, merge into `main`, verify the merge on `origin/main`, update the ticket,
+  and delete the local and remote feature branches.
 - Summarize risks, residual gaps, and follow-up work.
 
 ## Definition of Done
 
 - Requested change is implemented and validated.
 - Work enters `main` only through a pull request from a focused feature branch.
+- The backlog ticket is `Merged`, has its final date and PR URL, and its local and remote branches are deleted.
 - Debug and failure paths are observable.
 - Docs and tests match the updated behavior.
 

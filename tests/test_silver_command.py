@@ -225,6 +225,56 @@ def test_run_silver_build_realized_volatility_builds_iv_rv_feature(
     assert built == [("rv", "BTC"), ("iv_rv", "BTC")]
 
 
+def test_run_silver_build_runs_historical_prediction_after_base_jobs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    built: list[str] = []
+
+    def fake_discover_symbols(
+        bronze_root: str,
+        market: str,
+        exchange: str,
+        timeframe: str = "1m",
+        instrument_type: str | None = None,
+    ) -> list[str]:
+        del bronze_root, exchange, timeframe, instrument_type
+        return ["BTC-PERPETUAL"] if market == "perps_trades" else []
+
+    def fake_discover_historical_symbols(*, silver_root: str, exchange: str, timeframe: str) -> list[str]:
+        del silver_root, exchange, timeframe
+        return ["BTC"]
+
+    def fake_build_trades_observed(**kwargs: object) -> SilverBuildReport:
+        built.append("perps_trades_observed")
+        return _report("perps_trades_observed")
+
+    def fake_build_trades_feature(**kwargs: object) -> SilverBuildReport:
+        built.append("perps_trades_1m_feature")
+        return _report("perps_trades_1m_feature")
+
+    def fake_build_historical_prediction(**kwargs: object) -> SilverBuildReport:
+        built.append("historical_prediction_1m_feature")
+        return _report("historical_prediction_1m_feature")
+
+    monkeypatch.setattr(silver_cmd, "discover_symbols", fake_discover_symbols)
+    monkeypatch.setattr(silver_cmd, "discover_historical_prediction_symbols", fake_discover_historical_symbols)
+    monkeypatch.setattr(silver_cmd, "build_perps_trades_observed_for_symbol", fake_build_trades_observed)
+    monkeypatch.setattr(silver_cmd, "build_perps_trades_1m_feature_for_symbol", fake_build_trades_feature)
+    monkeypatch.setattr(
+        silver_cmd, "build_historical_prediction_1m_feature_for_symbol", fake_build_historical_prediction
+    )
+    monkeypatch.setattr(silver_cmd, "write_monthly_sidecars", lambda **kwargs: ([], []))
+
+    args = silver_args(market=["perps_trades", "historical_prediction"])
+    silver_cmd.run_silver_build(args=args, logger=logging.getLogger("test"))
+
+    assert built == [
+        "perps_trades_observed",
+        "perps_trades_1m_feature",
+        "historical_prediction_1m_feature",
+    ]
+
+
 def test_run_silver_build_index_price_builds_observed_and_feature(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

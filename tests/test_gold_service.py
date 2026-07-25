@@ -137,6 +137,7 @@ def test_dataset_specs_symbol_normalization_and_hash_helpers() -> None:
     assert _feature_source_dataset("funding_rate_last_known") == "funding_1m_feature"
     assert _feature_source_dataset("perps_trades_open_price") == "perps_trades_1m_feature"
     assert _feature_source_dataset("options_trades_open_price") == "options_trades_1m_feature"
+    assert _feature_source_dataset("historical_prediction_perps_rv_1h") == "historical_prediction_1m_feature"
     assert _feature_source_dataset("volatility_index_data_value") == "volatility_index_data_observed"
     assert _feature_source_dataset("volatility_index_value") == "volatility_index_data_observed"
     assert _feature_source_dataset("rv_1h") == "realized_volatility_1m_feature"

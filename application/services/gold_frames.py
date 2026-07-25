@@ -6,8 +6,11 @@ import math
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import datetime
+from importlib import import_module
 from pathlib import Path
 from typing import Any
+
+from application.dataset_contracts import SILVER_HISTORICAL_PREDICTION_FEATURE_COLUMNS
 
 type GoldFramePrepareFunc = Callable[[Any, Any, str], Any]
 type OptionalFeatureSchemaFunc = Callable[[Any], list[tuple[str, Any]]]
@@ -83,7 +86,7 @@ def require_polars() -> Any:
     """
 
     try:
-        import polars as pl
+        pl = import_module("polars")
     except ImportError as exc:
         raise RuntimeError("polars is required for gold-build. Install project dependencies.") from exc
     return pl
@@ -280,6 +283,14 @@ def read_dataset_frame(
     frame = pl.concat(frames, how="diagonal_relaxed")
     for timestamp_column in ("open_time", "timestamp_m1", "timestamp", "trade_time"):
         if timestamp_column in frame.columns:
+            if dataset_type == "options_l2_1m_feature" and "instrument_name" in frame.columns:
+                # Options L2 has one row per contract and minute. Deduplicating only by
+                # minute would discard contracts before Gold computes market coverage.
+                return frame.unique(
+                    subset=[timestamp_column, "instrument_name"],
+                    keep="last",
+                    maintain_order=False,
+                ).sort([timestamp_column, "instrument_name"])
             return frame.unique(subset=[timestamp_column], keep="last", maintain_order=False).sort(timestamp_column)
     return frame.unique(maintain_order=True)
 
@@ -660,6 +671,7 @@ def prepare_realized_volatility(pl: Any, frame: Any, symbol: str) -> Any:
         "perps_rv_1d_annualized_pct",
         "perps_rv_30d_annualized_pct",
     )
+
     optional_boolean_columns = ("canonical_rv_source_available", "spot_perps_basis_available")
     for column in optional_float_columns:
         if column not in frame.columns:
@@ -732,6 +744,25 @@ def prepare_realized_volatility(pl: Any, frame: Any, symbol: str) -> Any:
                 pl.col("spot_perps_basis_available").cast(pl.Boolean),
             ]
         )
+        .sort("timestamp_m1")
+    )
+
+
+def prepare_historical_prediction(pl: Any, frame: Any, symbol: str) -> Any:
+    """Prepare repository-native historical predictor features for Gold joins."""
+
+    for column in SILVER_HISTORICAL_PREDICTION_FEATURE_COLUMNS:
+        if column in {"timestamp_m1", "exchange", "symbol"} or column in frame.columns:
+            continue
+        frame = frame.with_columns(pl.lit(None, dtype=pl.Float64).alias(column))
+    return (
+        frame.with_columns(
+            [
+                pl.col("timestamp_m1").cast(pl.Datetime(time_unit="us", time_zone="UTC")),
+                pl.lit(symbol).alias("symbol"),
+            ]
+        )
+        .select(SILVER_HISTORICAL_PREDICTION_FEATURE_COLUMNS)
         .sort("timestamp_m1")
     )
 
@@ -990,6 +1021,11 @@ GOLD_FRAME_PREPARATION_SPECS: dict[str, GoldFramePreparationSpec] = {
         dataset_type="options_trades_1m_feature",
         prepare=prepare_options_trades,
         source_lineage="silver_options_trade_features",
+    ),
+    "historical_prediction_1m_feature": GoldFramePreparationSpec(
+        dataset_type="historical_prediction_1m_feature",
+        prepare=prepare_historical_prediction,
+        source_lineage="silver_historical_prediction_features",
     ),
     "volatility_index_data_observed": GoldFramePreparationSpec(
         dataset_type="volatility_index_data_observed",
