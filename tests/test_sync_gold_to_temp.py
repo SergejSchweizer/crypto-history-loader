@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import subprocess
 import sys
 from pathlib import Path
 
@@ -82,3 +83,10 @@ def test_cron_recipe_declares_2330_sync_schedule() -> None:
     assert "scripts/sync_gold_to_temp.py" in content[1]
     assert "--source-root lake/gold" in content[1]
     assert "--lock-file .run/sync-gold-to-temp.lock" in content[1]
+
+
+def test_script_runs_from_repo_path_with_help() -> None:
+    script = Path(__file__).resolve().parents[1] / "scripts" / "sync_gold_to_temp.py"
+    result = subprocess.run([sys.executable, str(script), "--help"], check=True, capture_output=True, text=True)
+
+    assert "Mirror the current Gold lake to /volume1/Temp/gold" in result.stdout

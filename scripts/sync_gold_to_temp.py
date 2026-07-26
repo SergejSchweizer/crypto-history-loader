@@ -5,8 +5,12 @@ from __future__ import annotations
 import argparse
 import logging
 import shutil
+import sys
 from dataclasses import dataclass
 from pathlib import Path
+
+if __package__ in {None, ""}:
+    sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 from application.services.runtime_service import SingleInstanceError, SingleInstanceLock
 from scripts.logging_utils import configure_logger
