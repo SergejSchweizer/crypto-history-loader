@@ -212,6 +212,12 @@ Gold behavior:
 - only the latest three versions are retained per dataset/exchange/symbol lineage
 - live Gold datasets never fill gaps from historical datasets
 
+Gold mirror:
+
+- nightly cron recipe lives in `docs/cron/gold-sync.cron`
+- syncs `lake/gold` to `/volume1/Temp/gold` every day at `23:30`
+- mirror runs through `scripts/sync_gold_to_temp.py` and uses the shared `.logs` root
+
 ## Quality gates
 
 ```bash
