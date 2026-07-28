@@ -12,7 +12,11 @@ from application.dataset_contracts import supported_gold_dataset_ids
 
 
 def gold_args(
-    *, retention_keep_versions: int = 3, maxprocesses: int = 4, no_json_output: bool = False
+    *,
+    retention_keep_versions: int = 3,
+    maxprocesses: int = 4,
+    no_json_output: bool = False,
+    dataset_id: str = "gold.market.full.m1",
 ) -> argparse.Namespace:
     """Build the minimal argparse namespace used by gold-build command tests."""
 
@@ -21,7 +25,7 @@ def gold_args(
         gold_root="lake/gold",
         l2_root="remote_l2_m1_features",
         exchange="deribit",
-        dataset_id="gold.market.full.m1",
+        dataset_id=dataset_id,
         dataset_version="v1.0.0",
         auto_version=False,
         version_base="v1.0.0",
@@ -148,6 +152,38 @@ def test_run_gold_build_skips_symbol_on_value_error(
         "Gold dataset skipped symbol=BTC dataset_id=gold.market.full.m1 reason=missing silver prerequisite"
         in caplog.text
     )
+
+
+def test_run_gold_build_runs_history_full_minute_before_derived_timeframes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    built: list[str] = []
+
+    monkeypatch.setattr(
+        gold_cmd,
+        "_resolve_dataset_ids",
+        lambda dataset_id: [dataset_id or "gold.market.history_full.m5"],
+    )
+    monkeypatch.setattr(gold_cmd, "_resolve_gold_symbols", lambda **kwargs: ["BTC"])
+    monkeypatch.setattr(gold_cmd, "_validate_version_args", lambda **kwargs: None)
+
+    class _Report:
+        rows_out = 1
+        parquet_path = "/tmp/data.parquet"
+
+        def to_dict(self) -> dict[str, object]:
+            return {"dataset_id": built[-1], "rows_out": 1}
+
+    def _build_gold_for_symbol(**kwargs: object) -> _Report:
+        built.append(str(kwargs["dataset_id"]))
+        return _Report()
+
+    monkeypatch.setattr(gold_cmd, "build_gold_for_symbol", _build_gold_for_symbol)
+
+    args = gold_args(dataset_id="gold.market.history_full.m5")
+    gold_cmd.run_gold_build(args=args, logger=logging.getLogger("test"))
+
+    assert built == ["gold.market.history_full.m1", "gold.market.history_full.m5"]
 
 
 def test_run_gold_build_rejects_invalid_retention_keep_versions() -> None:

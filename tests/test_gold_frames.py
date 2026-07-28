@@ -198,6 +198,79 @@ def test_prepare_dataset_frame_and_minute_grid() -> None:
     assert grid.get_column("symbol").to_list() == ["BTC", "BTC", "BTC"]
 
 
+def test_resample_history_full_frame_aggregates_buckets() -> None:
+    timestamps = [datetime(2026, 1, 1, 0, minute, tzinfo=UTC) for minute in range(6)]
+    frame = pl.DataFrame(
+        {
+            "timestamp_m1": timestamps,
+            "exchange": ["deribit"] * 6,
+            "symbol": ["BTC"] * 6,
+            "spot_ohlcv_open_price": [100.0 + minute for minute in range(6)],
+            "spot_ohlcv_high_price": [101.0 + minute for minute in range(6)],
+            "spot_ohlcv_low_price": [99.0 + minute for minute in range(6)],
+            "spot_ohlcv_close_price": [100.5 + minute for minute in range(6)],
+            "spot_ohlcv_volume": [10.0 + minute for minute in range(6)],
+            "perps_trades_open_price": [200.0 + minute for minute in range(6)],
+            "perps_trades_high_price": [201.0 + minute for minute in range(6)],
+            "perps_trades_low_price": [199.0 + minute for minute in range(6)],
+            "perps_trades_close_price": [200.5 + minute for minute in range(6)],
+            "perps_trades_volume": [20.0 + minute for minute in range(6)],
+            "perps_trades_buy_volume": [0.6 * (20.0 + minute) for minute in range(6)],
+            "perps_trades_buy_volume_share": [0.6] * 6,
+            "funding_rate_last_known": [0.001] * 6,
+            "funding_data_available": [True] * 6,
+            "is_funding_observation_minute": [minute == 0 for minute in range(6)],
+            "open_interest_open_interest": [1000.0 + minute for minute in range(6)],
+            "open_interest_is_observed": [True] * 6,
+            "open_interest_is_ffill": [False] * 6,
+        }
+    )
+
+    resampled = gold_frames.resample_history_full_frame(pl, frame, "5m")
+
+    assert resampled.height == 2
+    assert resampled["timestamp_m1"].to_list() == [
+        datetime(2026, 1, 1, 0, 0, tzinfo=UTC),
+        datetime(2026, 1, 1, 0, 5, tzinfo=UTC),
+    ]
+    assert resampled["spot_ohlcv_open_price"].to_list() == [100.0, 105.0]
+    assert resampled["spot_ohlcv_high_price"].to_list() == [105.0, 106.0]
+    assert resampled["spot_ohlcv_low_price"].to_list() == [99.0, 104.0]
+    assert resampled["spot_ohlcv_close_price"].to_list() == [104.5, 105.5]
+    assert resampled["spot_ohlcv_volume"].to_list() == [60.0, 15.0]
+    assert resampled["perps_trades_buy_volume_share"].to_list() == [pytest.approx(0.6), pytest.approx(0.6)]
+    assert resampled["funding_data_available"].to_list() == [True, True]
+    assert resampled["open_interest_open_interest"].to_list() == [1004.0, 1005.0]
+
+
+@pytest.mark.parametrize(
+    ("interval", "expected_rows"),
+    [
+        ("5m", 12),
+        ("30m", 2),
+        ("1h", 1),
+    ],
+)
+def test_resample_history_full_frame_supports_coarser_buckets(interval: str, expected_rows: int) -> None:
+    timestamps = [datetime(2026, 1, 1, 0, minute, tzinfo=UTC) for minute in range(60)]
+    frame = pl.DataFrame(
+        {
+            "timestamp_m1": timestamps,
+            "exchange": ["deribit"] * 60,
+            "symbol": ["BTC"] * 60,
+            "spot_ohlcv_open_price": [100.0 + minute for minute in range(60)],
+            "spot_ohlcv_high_price": [101.0 + minute for minute in range(60)],
+            "spot_ohlcv_low_price": [99.0 + minute for minute in range(60)],
+            "spot_ohlcv_close_price": [100.5 + minute for minute in range(60)],
+            "spot_ohlcv_volume": [10.0 + minute for minute in range(60)],
+        }
+    )
+
+    resampled = gold_frames.resample_history_full_frame(pl, frame, interval)
+
+    assert resampled.height == expected_rows
+
+
 def test_gold_contract_requirements_have_preparation_specs() -> None:
     registered = set(gold_frames.gold_frame_preparation_specs())
     contract_sources = {

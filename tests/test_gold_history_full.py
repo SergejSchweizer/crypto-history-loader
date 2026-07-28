@@ -258,3 +258,45 @@ def test_history_full_gold_contract_declares_canonical_historical_sources() -> N
         "historical_prediction_1m_feature",
     ]
     assert contract.optional_requirements == ()
+
+
+def test_history_full_gold_derives_coarser_timeframes_from_minute_artifact(tmp_path: Path) -> None:
+    """Coarser history-full datasets should be resampled from the canonical minute artifact."""
+
+    timestamps = [datetime(2026, 5, 1, 0, minute, tzinfo=UTC) for minute in range(6)]
+    silver = tmp_path / "silver"
+    gold = tmp_path / "gold-history-full"
+    _write_raw_history_sources(silver, timestamps)
+
+    minute_report = build_gold_for_symbol(
+        silver_root=str(silver),
+        gold_root=str(gold),
+        exchange="deribit",
+        symbol="BTC",
+        dataset_id="gold.market.history_full.m1",
+    )
+    assert minute_report.rows_out == 6
+
+    resampled_report = build_gold_for_symbol(
+        silver_root=str(silver),
+        gold_root=str(gold),
+        exchange="deribit",
+        symbol="BTC",
+        dataset_id="gold.market.history_full.m5",
+    )
+    resampled = pl.read_parquet(resampled_report.parquet_path).sort("timestamp_m1")
+
+    assert resampled_report.dataset_id == "gold.market.history_full.m5"
+    assert resampled_report.rows_out == 2
+    assert resampled["timestamp_m1"].to_list() == [
+        datetime(2026, 5, 1, 0, 0, tzinfo=UTC),
+        datetime(2026, 5, 1, 0, 5, tzinfo=UTC),
+    ]
+    assert resampled["spot_ohlcv_open_price"].to_list() == [1.0, 5.0]
+    assert resampled["spot_ohlcv_close_price"].to_list() == [4.5, 5.5]
+    assert resampled["perps_trades_volume"].to_list() == [60.0, 15.0]
+    assert resampled["perps_trades_buy_volume_share"].to_list() == [
+        pytest.approx(40.0 / 60.0),
+        pytest.approx(11.0 / 15.0),
+    ]
+    assert resampled["options_trades_trade_count"].to_list() == [110, 25]

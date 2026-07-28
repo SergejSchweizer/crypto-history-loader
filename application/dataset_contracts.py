@@ -1199,6 +1199,21 @@ GOLD_DATASET_CONTRACTS: dict[str, GoldDatasetContract] = {
         requirements=HISTORY_FULL_GOLD_REQUIREMENTS,
         include_l2=False,
     ),
+    "gold.market.history_full.m5": GoldDatasetContract(
+        dataset_id="gold.market.history_full.m5",
+        requirements=(),
+        include_l2=False,
+    ),
+    "gold.market.history_full.m30": GoldDatasetContract(
+        dataset_id="gold.market.history_full.m30",
+        requirements=(),
+        include_l2=False,
+    ),
+    "gold.market.history_full.h1": GoldDatasetContract(
+        dataset_id="gold.market.history_full.h1",
+        requirements=(),
+        include_l2=False,
+    ),
     "gold.live.volatility_features.m1": GoldDatasetContract(
         dataset_id="gold.live.volatility_features.m1",
         requirements=LIVE_VOLATILITY_GOLD_REQUIREMENTS,

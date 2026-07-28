@@ -162,6 +162,9 @@ uv run python main.py gold-build \
   --dataset-id gold.market.history_full.m1
 ```
 
+`gold.market.history_full.m5`, `gold.market.history_full.m30`, and `gold.market.history_full.h1`
+are derived from the canonical `gold.market.history_full.m1` artifact.
+
 See [`DATASETS.md`](DATASETS.md) for every supported Gold dataset ID and its complete feature contract.
 
 Build the live microstructure Gold dataset:

@@ -21,6 +21,12 @@ from application.services.gold_service import (
 )
 
 _SEMVER_RE = re.compile(r"^v\d+\.\d+\.\d+$")
+_HISTORY_FULL_BASE_DATASET_ID = "gold.market.history_full.m1"
+_HISTORY_FULL_DERIVED_DATASET_IDS = {
+    "gold.market.history_full.m5",
+    "gold.market.history_full.m30",
+    "gold.market.history_full.h1",
+}
 
 
 def add_gold_build_parser(subparsers: Any) -> None:
@@ -127,6 +133,21 @@ def run_gold_build(args: argparse.Namespace, logger: logging.Logger) -> None:
             exchange=exchange,
             dataset_id=selected_dataset_id,
         )
+    derived_dataset_ids = [
+        selected_dataset_id
+        for selected_dataset_id in dataset_ids
+        if selected_dataset_id in _HISTORY_FULL_DERIVED_DATASET_IDS
+    ]
+    if derived_dataset_ids and _HISTORY_FULL_BASE_DATASET_ID not in schedule:
+        schedule[_HISTORY_FULL_BASE_DATASET_ID] = _resolve_gold_symbols(
+            symbols=symbols,
+            silver_root=silver_root,
+            exchange=exchange,
+            dataset_id=_HISTORY_FULL_BASE_DATASET_ID,
+        )
+    effective_dataset_ids = list(dataset_ids)
+    if derived_dataset_ids and _HISTORY_FULL_BASE_DATASET_ID not in effective_dataset_ids:
+        effective_dataset_ids.insert(0, _HISTORY_FULL_BASE_DATASET_ID)
     logger.info("Gold build schedule dataset_symbols=%s", schedule)
     _validate_version_args(auto_version=auto_version, dataset_version=dataset_version, version_base=version_base)
 
@@ -165,6 +186,7 @@ def run_gold_build(args: argparse.Namespace, logger: logging.Logger) -> None:
         return report.to_dict()
 
     jobs: list[Callable[[], dict[str, object] | None]] = []
+    derived_jobs: list[Callable[[], dict[str, object] | None]] = []
 
     def _make_job(selected_dataset_id: str, symbol: str) -> Callable[[], dict[str, object] | None]:
         def _job() -> dict[str, object] | None:
@@ -172,9 +194,10 @@ def run_gold_build(args: argparse.Namespace, logger: logging.Logger) -> None:
 
         return _job
 
-    for selected_dataset_id in dataset_ids:
+    for selected_dataset_id in effective_dataset_ids:
         for symbol in schedule[selected_dataset_id]:
-            jobs.append(_make_job(selected_dataset_id, symbol))
+            target_jobs = derived_jobs if selected_dataset_id in _HISTORY_FULL_DERIVED_DATASET_IDS else jobs
+            target_jobs.append(_make_job(selected_dataset_id, symbol))
 
     logger.info("Gold build parallelization maxprocesses=%s jobs=%s", maxprocesses, len(jobs))
     with ThreadPoolExecutor(max_workers=maxprocesses) as executor:
@@ -183,6 +206,14 @@ def run_gold_build(args: argparse.Namespace, logger: logging.Logger) -> None:
             payload = future.result()
             if payload is not None:
                 reports.append(payload)
+    if derived_jobs:
+        logger.info("Gold derived build schedule jobs=%s", len(derived_jobs))
+        with ThreadPoolExecutor(max_workers=maxprocesses) as executor:
+            futures = [executor.submit(job) for job in derived_jobs]
+            for future in futures:
+                payload = future.result()
+                if payload is not None:
+                    reports.append(payload)
 
     if not bool(args.no_json_output):
         print(json.dumps({"reports": reports}, indent=2))

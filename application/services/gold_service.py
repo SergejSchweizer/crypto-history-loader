@@ -102,6 +102,18 @@ _prune_gold_versions = gold_versioning.prune_gold_versions
 _prune_gold_artifacts = gold_versioning.prune_gold_artifacts
 _contract_bump_level = gold_versioning.contract_bump_level
 
+_HISTORY_FULL_BASE_DATASET_ID = "gold.market.history_full.m1"
+_HISTORY_FULL_DERIVED_DATASET_IDS = {
+    "gold.market.history_full.m5",
+    "gold.market.history_full.m30",
+    "gold.market.history_full.h1",
+}
+_HISTORY_FULL_DERIVED_INTERVALS = {
+    "gold.market.history_full.m5": "5m",
+    "gold.market.history_full.m30": "30m",
+    "gold.market.history_full.h1": "1h",
+}
+
 
 def validate_gold_retention_keep_versions(keep_last_versions: int) -> int:
     """Return the fixed Gold retention window or fail on unsupported values."""
@@ -118,6 +130,48 @@ def _select_history_full_history_source_columns(merged: Any) -> Any:
     """Keep only columns derived from crypto-history-loader historical datasets."""
 
     return merged.select(list(HISTORY_FULL_HISTORY_SOURCE_COLUMNS))
+
+
+def _history_full_derived_interval(dataset_id: str) -> str | None:
+    """Return the bucket interval for a derived history-full Gold dataset."""
+
+    return _HISTORY_FULL_DERIVED_INTERVALS.get(dataset_id)
+
+
+def _history_full_source_dataset_id(dataset_id: str) -> str | None:
+    """Return the canonical minute dataset used to derive a history-full variant."""
+
+    if dataset_id in _HISTORY_FULL_DERIVED_DATASET_IDS:
+        return _HISTORY_FULL_BASE_DATASET_ID
+    return None
+
+
+def _read_latest_gold_dataset_artifact(
+    *,
+    gold_root: str,
+    dataset_id: str,
+    exchange: str,
+    symbol: str,
+) -> tuple[Any, Path, dict[str, object]]:
+    """Load the newest Gold parquet and manifest for one dataset lineage."""
+
+    pl = _require_polars()
+    root = Path(gold_root)
+    dataset_root = root / f"dataset_id={dataset_id}" / "dataset_type=gold_symbol_dataset"
+    candidate_paths = sorted(
+        dataset_root.glob(f"feature_set_version=*/exchange={exchange}/symbol={symbol}/*.parquet"),
+        key=lambda path: (path.stat().st_mtime, str(path)),
+    )
+    if not candidate_paths:
+        raise ValueError(f"Missing gold dataset for symbol={symbol}: {dataset_id}")
+    parquet_path = candidate_paths[-1]
+    manifest_path = parquet_path.with_suffix(".json")
+    if not manifest_path.exists():
+        raise ValueError(f"Missing gold manifest for symbol={symbol}: {dataset_id}")
+    manifest_payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if manifest_payload.get("dataset_id") != dataset_id:
+        raise ValueError(f"Gold artifact lineage mismatch for symbol={symbol}: {dataset_id}")
+    return pl.read_parquet(str(parquet_path)), parquet_path, manifest_payload
 
 
 def _require_polars() -> Any:
@@ -218,6 +272,9 @@ def discover_gold_symbols(silver_root: str, exchange: str) -> list[str]:
 def discover_gold_symbols_for_dataset(silver_root: str, exchange: str, dataset_id: str) -> list[str]:
     """Discover symbols for one specific gold dataset requirement set."""
 
+    base_dataset_id = _history_full_source_dataset_id(dataset_id)
+    if base_dataset_id is not None:
+        return discover_gold_symbols_for_dataset(silver_root=silver_root, exchange=exchange, dataset_id=base_dataset_id)
     required = _dataset_requirements(dataset_id)
     by_dataset: list[set[str]] = []
     for dataset_type, timeframe in required:
@@ -402,6 +459,202 @@ def _missing_value_audit(pl: Any, frame: Any) -> tuple[dict[str, int], int]:
     return gold_audit.missing_value_audit(pl, frame)
 
 
+def _build_history_full_derived_for_symbol(
+    *,
+    gold_root: str,
+    exchange: str,
+    symbol: str,
+    dataset_id: str,
+    dataset_version: str,
+    auto_version: bool,
+    version_base: str,
+    keep_last_versions: int,
+) -> GoldBuildReport:
+    """Build a coarser history-full Gold dataset from the canonical minute artifact."""
+
+    interval = _history_full_derived_interval(dataset_id)
+    if interval is None:
+        raise ValueError(f"Unsupported derived history_full dataset_id: {dataset_id}")
+    pl = _require_polars()
+    symbol = normalize_symbol(symbol)
+    source_frame, source_parquet_path, source_manifest = _read_latest_gold_dataset_artifact(
+        gold_root=gold_root,
+        dataset_id=_HISTORY_FULL_BASE_DATASET_ID,
+        exchange=exchange,
+        symbol=symbol,
+    )
+    merged = gold_frames.resample_history_full_frame(pl, source_frame, interval)
+    if merged.height == 0:
+        raise ValueError(f"Gold build produced zero rows for symbol={symbol} dataset_id={dataset_id}")
+
+    cols = merged.columns
+    min_ts, max_ts, _, _, _ = _time_span_coverage(merged)
+    source_summary = {
+        _HISTORY_FULL_BASE_DATASET_ID: {
+            "columns": source_frame.columns,
+            "rows": source_frame.height,
+            "source_symbols": [symbol],
+            "source_artifact": source_parquet_path.name,
+            "source_dataset_version": source_manifest.get("dataset_version"),
+        }
+    }
+    source_data_hash = _json_payload_hash(
+        {
+            "source_dataset_id": _HISTORY_FULL_BASE_DATASET_ID,
+            "source_dataset_version": source_manifest.get("dataset_version"),
+            "source_feature_set_hash": source_manifest.get("feature_set_hash"),
+            "source_source_data_hash": source_manifest.get("source_data_hash"),
+            "source_rows": source_manifest.get("rows_out"),
+            "source_columns": source_manifest.get("columns"),
+        }
+    )
+    contract_signature: dict[str, object] = {
+        "columns": cols,
+        "join_policy": f"history_full_resample_{interval}",
+        "source_dataset_keys": [_HISTORY_FULL_BASE_DATASET_ID],
+        "resample_interval": interval,
+    }
+    missing_by_column, missing_total = _missing_value_audit(pl, merged)
+    feature_set_hash = _json_payload_hash(
+        {
+            "dataset_id": dataset_id,
+            "contract_signature": contract_signature,
+        }
+    )
+    git_hash = _git_commit_hash()
+    git_short = git_hash[:8] if git_hash != "nogit" else "nogit"
+    root = Path(gold_root)
+    root.mkdir(parents=True, exist_ok=True)
+    resolved_version = dataset_version
+    previous_version: str | None = None
+    version_bump_level = "manual"
+    version_bump_reason = "manual_version"
+    if auto_version:
+        _parse_semver(version_base)
+        previous_manifest = _latest_manifest_for_dataset(root, exchange, symbol, dataset_id)
+        if previous_manifest is None:
+            resolved_version = version_base
+            version_bump_level = "initial"
+            version_bump_reason = "no_previous_manifest"
+        else:
+            previous_version_value = previous_manifest.get("dataset_version")
+            previous_version = str(previous_version_value) if isinstance(previous_version_value, str) else version_base
+            _parse_semver(previous_version)
+            bump_level, bump_reason = _contract_bump_level(
+                previous_manifest,
+                contract_signature,
+                previous_source_data_hash=str(previous_manifest.get("source_data_hash", "")),
+                current_source_data_hash=source_data_hash,
+            )
+            resolved_version = _bump_semver(previous_version, bump_level)
+            version_bump_level = bump_level
+            version_bump_reason = bump_reason
+    else:
+        _parse_semver(dataset_version)
+
+    build_id = f"{feature_set_hash}_{source_data_hash}_{git_short}"
+    manifest_payload = {
+        "dataset": "gold_symbol_dataset",
+        "dataset_id": dataset_id,
+        "dataset_version": resolved_version,
+        "feature_set_hash": feature_set_hash,
+        "source_data_hash": source_data_hash,
+        "git_commit_hash": git_hash,
+        "build_id": build_id,
+        "contract_signature": contract_signature,
+        "version_bump_level": version_bump_level,
+        "version_bump_reason": version_bump_reason,
+        "previous_version": previous_version,
+        "origin_repository": _origin_repository(dataset_id),
+        "exchange": exchange,
+        "symbol": symbol,
+        "build_date_utc": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "column_hash": _feature_hash(cols),
+        "rows_out": merged.height,
+        "columns": cols,
+        "min_timestamp": _iso_utc(min_ts if isinstance(min_ts, datetime) else None),
+        "max_timestamp": _iso_utc(max_ts if isinstance(max_ts, datetime) else None),
+        "expected_minutes_in_span": None,
+        "missing_minutes_in_span": None,
+        "observed_row_coverage_ratio": None,
+        "l2_validation_mode": None,
+        "l2_invalid_rows_found": None,
+        "l2_invalid_rows_dropped": None,
+        "missing_value_count_total": missing_total,
+        "missing_value_count_by_column": missing_by_column,
+        "source_silver_datasets": source_summary,
+        "required_source_datasets": [_HISTORY_FULL_BASE_DATASET_ID],
+        "optional_source_datasets": [],
+        "optional_source_availability": {},
+        "strategy_feature_lookbacks": {},
+        "prediction_target_definitions": {},
+        "feature_metadata": _feature_metadata(pl, merged, exchange),
+        "resample_interval": interval,
+        "source_dataset_id": _HISTORY_FULL_BASE_DATASET_ID,
+    }
+    hash_string = f"{feature_set_hash}_{source_data_hash}"
+    feature_set_version = resolved_version
+    symbol_file = symbol.replace("-", "_")
+    stem = f"{symbol_file}_GOLD_{hash_string}"
+    artifact_dir = (
+        root
+        / f"dataset_id={dataset_id}"
+        / "dataset_type=gold_symbol_dataset"
+        / f"feature_set_version={feature_set_version}"
+        / f"exchange={exchange}"
+        / f"symbol={symbol}"
+    )
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    parquet_path = artifact_dir / f"{stem}.parquet"
+    merged.write_parquet(parquet_path)
+    plot_path = artifact_dir / f"{stem}.png"
+    written_plot = _write_feature_distribution_plot(merged, plot_path, normalize_y=False)
+    if written_plot is None:
+        raise ValueError(
+            "Gold build requires plot generation for every dataset, but plot generation failed "
+            "(missing matplotlib dependency or no plottable numeric columns)."
+        )
+    manifest_payload["plot_generated"] = True
+    manifest_path = artifact_dir / f"{stem}.json"
+    manifest_path.write_text(json.dumps(manifest_payload, indent=2), encoding="utf-8")
+    written_manifest: str | None = str(manifest_path.resolve())
+    _prune_gold_versions(
+        gold_root=root,
+        dataset_id=dataset_id,
+        exchange=exchange,
+        symbol=symbol,
+        keep_last_versions=keep_last_versions,
+    )
+    _prune_gold_artifacts(
+        gold_root=root,
+        dataset_id=dataset_id,
+        exchange=exchange,
+        symbol=symbol,
+        keep_last_versions=keep_last_versions,
+    )
+
+    return GoldBuildReport(
+        exchange=exchange,
+        symbol=symbol,
+        rows_out=merged.height,
+        columns=cols,
+        min_timestamp=str(manifest_payload["min_timestamp"]) if manifest_payload["min_timestamp"] is not None else None,
+        max_timestamp=str(manifest_payload["max_timestamp"]) if manifest_payload["max_timestamp"] is not None else None,
+        parquet_path=str(parquet_path.resolve()),
+        manifest_path=written_manifest,
+        plot_path=written_plot,
+        hash_string=hash_string,
+        dataset_id=dataset_id,
+        dataset_version=resolved_version,
+        feature_set_hash=feature_set_hash,
+        source_data_hash=source_data_hash,
+        git_commit_hash=git_hash,
+        version_bump_level=version_bump_level,
+        version_bump_reason=version_bump_reason,
+        previous_version=previous_version,
+    )
+
+
 def build_gold_for_symbol(
     *,
     silver_root: str,
@@ -424,6 +677,19 @@ def build_gold_for_symbol(
     """
 
     keep_last_versions = validate_gold_retention_keep_versions(keep_last_versions)
+    derived_interval = _history_full_derived_interval(dataset_id)
+    if derived_interval is not None:
+        return _build_history_full_derived_for_symbol(
+            gold_root=gold_root,
+            exchange=exchange,
+            symbol=symbol,
+            dataset_id=dataset_id,
+            dataset_version=dataset_version,
+            auto_version=auto_version,
+            version_base=version_base,
+            keep_last_versions=keep_last_versions,
+        )
+
     pl = _require_polars()
     symbol = normalize_symbol(symbol)
     required = _dataset_requirements(dataset_id)
