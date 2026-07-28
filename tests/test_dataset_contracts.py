@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -115,6 +116,15 @@ def test_supported_dataset_helpers_are_contract_driven_and_stable() -> None:
     for outputs in (*BRONZE_TO_SILVER_DATASETS.values(), *SILVER_LIVE_ORIGIN_BUILD_DATASETS.values()):
         assert outputs
         assert set(outputs) <= set(SILVER_DATASET_CONTRACTS)
+
+
+def test_gold_dataset_ids_follow_canonical_or_extended_grain_naming() -> None:
+    """Gold dataset names should stay explicit about family and grain."""
+
+    pattern = re.compile(r"^gold\.(market|live|hybrid)\.[a-z0-9_]+\.(m1|m5|m30|h1)$")
+
+    for dataset_id in GOLD_DATASET_CONTRACTS:
+        assert pattern.fullmatch(dataset_id), dataset_id
 
 
 def test_contract_lookup_rejects_unknown_dataset_names() -> None:

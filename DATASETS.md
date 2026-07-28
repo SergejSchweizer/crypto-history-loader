@@ -32,6 +32,9 @@ current Lake until it is built.
   exist only in `gold.market.prediction_targets.m1`.
 - `gold.market.history_full.m5`, `gold.market.history_full.m30`, and `gold.market.history_full.h1`
   are deterministic bucket-start resamples of `gold.market.history_full.m1`.
+- Gold dataset IDs are standalone contracts. Canonical datasets use the finest trusted grain for
+  their family, and any independently materialized extension gets its own dataset ID with an
+  explicit grain suffix.
 - Gold manifests record the dataset version, feature-set hash, source-data hash, Git commit, source
   lineage, coverage, and build metadata.
 - The latest three versions are retained per dataset/exchange/symbol lineage.

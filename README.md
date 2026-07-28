@@ -164,6 +164,8 @@ uv run python main.py gold-build \
 
 `gold.market.history_full.m5`, `gold.market.history_full.m30`, and `gold.market.history_full.h1`
 are derived from the canonical `gold.market.history_full.m1` artifact.
+Gold datasets are always named as standalone contracts; when a derived timeframe becomes reusable,
+it gets its own dataset ID instead of overloading the canonical one.
 
 See [`DATASETS.md`](DATASETS.md) for every supported Gold dataset ID and its complete feature contract.
 
