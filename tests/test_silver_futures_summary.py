@@ -163,3 +163,79 @@ def test_build_futures_summary_handles_optional_fields_and_duplicates(tmp_path: 
     assert feature["mark_index_ratio"].to_list() == [1.03, 1.03, 1.1]
     assert feature["summary_is_observed"].to_list() == [True, False, True]
     assert feature["minutes_since_summary_observation"].to_list() == [0, 1, 0]
+
+
+def test_build_futures_summary_ignores_unused_bronze_schema_drift(tmp_path: Path) -> None:
+    """Unused Bronze fields should not break month-level parquet reads when their inferred dtype changes."""
+
+    bronze = tmp_path / "bronze"
+    silver = tmp_path / "silver"
+    t0 = datetime(2026, 7, 9, 12, tzinfo=UTC)
+    t1 = datetime(2026, 7, 9, 13, tzinfo=UTC)
+    common = {
+        "schema_version": "v1",
+        "dataset_type": "futures_summary_snapshot_1m",
+        "exchange": "deribit",
+        "source": "rest_get_book_summary_by_currency",
+        "currency": "SOL",
+        "requested_currency": "SOL",
+        "source_currency": "SOL",
+        "instrument_name": "SOL_USDC-31JUL26",
+        "instrument_type": "future",
+        "exchange_creation_time": t0,
+        "run_id": "r",
+        "bid_price": 100.0,
+        "ask_price": 102.0,
+        "mid_price": 101.0,
+        "last": 101.0,
+        "low": 90.0,
+        "price_change": 1.0,
+        "raw_payload_hash": "h",
+        "mark_price": 101.0,
+        "open_interest": 10.0,
+        "volume": 1.0,
+        "volume_usd": 101.0,
+        "estimated_delivery_price": 100.0,
+    }
+    _write_futures_summary_hour_file(
+        bronze,
+        exchange="deribit",
+        currency="SOL",
+        month="2026-07",
+        day="2026-07-09",
+        hour="12",
+        rows=[
+            {
+                **common,
+                "snapshot_time": t0,
+                "ingested_at": datetime(2026, 7, 9, 12, 0, 1, tzinfo=UTC),
+                "high": None,
+            },
+        ],
+    )
+    _write_futures_summary_hour_file(
+        bronze,
+        exchange="deribit",
+        currency="SOL",
+        month="2026-07",
+        day="2026-07-09",
+        hour="13",
+        rows=[
+            {
+                **common,
+                "snapshot_time": t1,
+                "ingested_at": datetime(2026, 7, 9, 13, 0, 1, tzinfo=UTC),
+                "high": 110.0,
+            },
+        ],
+    )
+
+    observed_report = build_futures_summary_observed_for_symbol(
+        bronze_root=str(bronze),
+        silver_root=str(silver),
+        exchange="deribit",
+        symbol="SOL",
+    )
+
+    assert observed_report.rows_in == 2
+    assert observed_report.rows_out == 2

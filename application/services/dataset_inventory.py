@@ -415,9 +415,9 @@ def _empty_coverage() -> dict[str, Any]:
 
 def _scan_inventory_parquet(pl: Any, files: list[Path]) -> Any:
     # Inventory scans summarize historical lake files that may contain additive schema drift.
-    # Extra columns are ignored so coverage reporting remains read-only and tolerant of
-    # backward-compatible field additions across partitions.
-    return pl.scan_parquet([str(path) for path in files], extra_columns="ignore")
+    # Extra columns are ignored and missing selected columns are inserted so coverage reporting remains read-only and
+    # tolerant of backward-compatible field additions or historical sparse partitions.
+    return pl.scan_parquet([str(path) for path in files], extra_columns="ignore", missing_columns="insert")
 
 
 def _timestamp_column(schema_columns: tuple[str, ...], timestamp_hint: str | None) -> str | None:

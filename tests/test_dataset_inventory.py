@@ -82,6 +82,42 @@ def test_inventory_reports_partition_dates_and_mixed_series_lifetimes(tmp_path: 
     }
 
 
+def test_inventory_tolerates_files_missing_selected_columns(tmp_path: Path) -> None:
+    """Inventory scans should remain read-only when historical parquet files miss selected coverage columns."""
+
+    bronze = tmp_path / "bronze"
+    _write_parquet(
+        bronze
+        / "dataset_type=spot_ohlcv"
+        / "exchange=deribit"
+        / "instrument_type=spot_ohlcv"
+        / "symbol=BTC"
+        / "timeframe=1m"
+        / "date=2026-01-01"
+        / "data.parquet",
+        [{"open_time": datetime(2026, 1, 1), "symbol": "BTC", "close_price": 1.0}],
+    )
+    _write_parquet(
+        bronze
+        / "dataset_type=spot_ohlcv"
+        / "exchange=deribit"
+        / "instrument_type=spot_ohlcv"
+        / "symbol=BTC"
+        / "timeframe=1m"
+        / "date=2026-01-02"
+        / "data.parquet",
+        [{"symbol": "BTC", "close_price": 1.0}],
+    )
+
+    rows = build_dataset_inventory(bronze_root=bronze, silver_root=tmp_path / "silver", gold_root=tmp_path / "gold")
+    spot = next(row for row in rows if row.layer == "bronze" and row.dataset == "spot_ohlcv")
+
+    assert spot.row_count == 2
+    assert spot.start_date == "2026-01-01"
+    assert spot.end_date == "2026-01-01"
+    assert spot.observed_days == 1
+
+
 def test_inventory_reports_legacy_perp_as_canonical_perps_ohlcv(tmp_path: Path) -> None:
     """Legacy Silver dataset_type=perp remains visible as canonical perps_ohlcv work."""
 
