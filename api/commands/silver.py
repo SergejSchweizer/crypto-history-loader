@@ -6,7 +6,7 @@ import argparse
 import json
 import logging
 from collections.abc import Callable
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Any, Literal, cast
 
@@ -392,20 +392,8 @@ def run_silver_build(args: argparse.Namespace, logger: logging.Logger) -> None:
             timeframe=timeframe,
         )
         feature_payload = _report_payload("realized_volatility_1m_feature", symbol, feature)
-        iv_rv = build_iv_rv_1m_feature_for_symbol(
-            silver_root=silver_root,
-            exchange=exchange,
-            symbol=symbol,
-            timeframe=timeframe,
-        )
-        iv_rv_payload = _report_payload("iv_rv_1m_feature", symbol, iv_rv)
-        logger.info(
-            "Silver realized_volatility reports written symbol=%s rv_rows=%s iv_rv_rows=%s",
-            symbol,
-            feature.rows_out,
-            iv_rv.rows_out,
-        )
-        return [feature_payload, iv_rv_payload]
+        logger.info("Silver realized_volatility report written symbol=%s feature_rows=%s", symbol, feature.rows_out)
+        return [feature_payload]
 
     def _run_iv_rv(symbol: str) -> list[dict[str, object]]:
         feature = build_iv_rv_1m_feature_for_symbol(
@@ -801,23 +789,64 @@ def run_silver_build(args: argparse.Namespace, logger: logging.Logger) -> None:
         handler = market_handlers.get(market)
         for symbol in effective_symbols:
             if handler is not None:
-                target_jobs = derived_jobs if spec.discovery == "historical_prediction" else jobs
+                # ``iv_rv`` depends on freshly written realized-volatility outputs.
+                # Keep it in the derived phase so it never races the base stage
+                # while reading the same Silver lake it is building from.
+                target_jobs = derived_jobs if market in {"historical_prediction", "iv_rv"} else jobs
                 target_jobs.append((market, symbol, _make_handler_job(handler, symbol)))
             else:
                 jobs.append((market, symbol, _make_ohlcv_job(market, symbol)))
 
     logger.info("Silver build parallelization maxprocesses=%s jobs=%s", maxprocesses, len(jobs))
     with ThreadPoolExecutor(max_workers=maxprocesses) as executor:
-        futures = [executor.submit(job) for _, _, job in jobs]
-        for future in futures:
-            reports.extend(future.result())
+        futures: list[tuple[str, str, Future[list[dict[str, object]]]]] = []
+        for market, symbol, job in jobs:
+            futures.append((market, symbol, executor.submit(job)))
+        _collect_job_results(
+            futures=futures,
+            logger=logger,
+            reports=reports,
+            stage_name="base",
+        )
     if derived_jobs:
         logger.info("Silver derived build schedule jobs=%s", len(derived_jobs))
         with ThreadPoolExecutor(max_workers=maxprocesses) as executor:
-            futures = [executor.submit(job) for _, _, job in derived_jobs]
-            for future in futures:
-                reports.extend(future.result())
+            futures = []
+            for market, symbol, job in derived_jobs:
+                futures.append((market, symbol, executor.submit(job)))
+            _collect_job_results(
+                futures=futures,
+                logger=logger,
+                reports=reports,
+                stage_name="derived",
+            )
 
     if not bool(args.no_json_output):
         print(json.dumps({"reports": reports}, indent=2))
     logger.info("Command complete: silver-build reports=%s", len(reports))
+
+
+def _collect_job_results(
+    *,
+    futures: list[tuple[str, str, Future[list[dict[str, object]]]]],
+    logger: logging.Logger,
+    reports: list[dict[str, object]],
+    stage_name: str,
+) -> None:
+    """Collect job results in submission order while logging wait points.
+
+    The Silver runner schedules many heavy jobs in parallel, but the historical
+    submission-order wait makes it hard to see which job is actually blocking a
+    run. Logging the explicit wait target keeps behavior unchanged while making
+    stalled markets and symbols visible in the shared pipeline log.
+    """
+
+    for market, symbol, future in futures:
+        logger.info("Silver waiting for %s job market=%s symbol=%s", stage_name, market, symbol)
+        try:
+            job_reports = future.result()
+        except Exception:
+            logger.exception("Silver %s job failed market=%s symbol=%s", stage_name, market, symbol)
+            raise
+        logger.info("Silver completed %s job market=%s symbol=%s", stage_name, market, symbol)
+        reports.extend(job_reports)
