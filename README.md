@@ -181,7 +181,10 @@ distinct IDs instead of overloading one another.
 `gold.history.full.m1` minute schema and add historical-prediction features.
 `gold.history.full.m5`, `gold.history.full.m30`, and `gold.history.full.h1`
 are derived from the canonical `gold.history.full.m1` artifact.
-The supported Gold build choices currently include the History-Full family above.
+`gold.history.extended.m5`, `gold.history.extended.m30`, and `gold.history.extended.h1`
+are derived from the canonical `gold.history.extended.m1` artifact.
+The supported Gold build choices currently include the History-Full and Extended-History families above.
+That includes the extended history-line resamples derived from `gold.history.extended.m1`.
 
 See [`DATASETS.md`](DATASETS.md) for every supported Gold dataset ID and its complete feature contract.
 

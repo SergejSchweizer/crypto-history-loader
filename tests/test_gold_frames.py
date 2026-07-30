@@ -177,6 +177,26 @@ def test_resample_history_full_frame_supports_coarser_buckets(interval: str, exp
     assert resampled.height == expected_rows
 
 
+@pytest.mark.parametrize(
+    ("dataset_id", "expected_interval"),
+    [
+        ("gold.history.full.m5", "5m"),
+        ("gold.history.full.m30", "30m"),
+        ("gold.history.full.h1", "1h"),
+        ("gold.history.extended.m5", "5m"),
+        ("gold.history.extended.m30", "30m"),
+        ("gold.history.extended.h1", "1h"),
+    ],
+)
+def test_history_full_resample_interval_supports_extended_aliases(
+    dataset_id: str,
+    expected_interval: str,
+) -> None:
+    """History-full resample helper should map both canonical and extended aliases."""
+
+    assert gold_frames.history_full_resample_interval(dataset_id) == expected_interval
+
+
 def test_read_latest_l2_gold_frame_supports_nested_and_flat_layouts(tmp_path: Path) -> None:
     nested = (
         tmp_path

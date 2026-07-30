@@ -34,9 +34,11 @@ current Lake until it is built.
   features from this repository.
 - `gold.history.full.m5`, `gold.history.full.m30`, and `gold.history.full.h1`
   are deterministic bucket-start resamples of `gold.history.full.m1`.
-- The supported Gold build surface currently contains only the History-Full family above; other
-  legacy Gold contracts remain here for historical reference but are not part of the supported
-  `gold-build` choices.
+- `gold.history.extended.m5`, `gold.history.extended.m30`, and `gold.history.extended.h1`
+  are deterministic bucket-start resamples of `gold.history.extended.m1`.
+- The supported Gold build surface currently contains the History-Full, Extended-History, and
+  Live-Full families above; other legacy Gold contracts remain here for historical reference but
+  are not part of the supported `gold-build` choices.
 - Gold dataset IDs are standalone contracts. Canonical datasets use the finest trusted grain for
   their family, and any independently materialized extension gets its own dataset ID.
 - Gold manifests record the dataset version, feature-set hash, source-data hash, Git commit, source
@@ -53,7 +55,11 @@ current Lake until it is built.
 | `gold.history.full.m30` | Thirty-minute resample of the canonical historical market table. | Derived from `gold.history.full.m1` | None | Contracted, not materialized |
 | `gold.history.full.h1` | One-hour resample of the canonical historical market table. | Derived from `gold.history.full.m1` | None | Contracted, not materialized |
 | `gold.history.extended.m1` | Canonical history-full table plus historical-prediction features. | `spot_ohlcv`, `perps_ohlcv`, `funding_1m_feature`, `open_interest_1m_feature`, `perps_trades_1m_feature`, `options_trades_1m_feature`, `historical_prediction_1m_feature` | None | Contracted, not materialized |
+| `gold.history.extended.m5` | Five-minute resample of the extended historical market table. | Derived from `gold.history.extended.m1` | None | Contracted, not materialized |
+| `gold.history.extended.m30` | Thirty-minute resample of the extended historical market table. | Derived from `gold.history.extended.m1` | None | Contracted, not materialized |
+| `gold.history.extended.h1` | One-hour resample of the extended historical market table. | Derived from `gold.history.extended.m1` | None | Contracted, not materialized |
 | `gold.history.extended_full.m1` | Canonical history-full table plus historical-prediction features. | `spot_ohlcv`, `perps_ohlcv`, `funding_1m_feature`, `open_interest_1m_feature`, `perps_trades_1m_feature`, `options_trades_1m_feature`, `historical_prediction_1m_feature` | None | Contracted, not materialized |
+| `gold.live.full.m1` | Canonical live-loader snapshot table for model-ready live features. | `volatility_index_snapshot_1m_observed`, `index_price_snapshot_1m_observed`, `futures_summary_snapshot_1m_observed`, `options_ticker_snapshot_1m_observed`, `options_instrument_ticker_snapshot_1m_observed`, `perps_l2_snapshot_1m_observed`, `options_l2_snapshot_1m_observed`, `recent_trade_snapshot_1m_observed`, `instrument_metadata_snapshot_daily_observed`, `futures_instrument_metadata_snapshot_daily_observed` | None | Contracted, not materialized |
 
 The status column is a dated snapshot, not a runtime guarantee. Regenerate
 `docs/dataset_inventory.md` after Lake rebuilds.
@@ -100,6 +106,24 @@ dataset. Definitions for every feature are in [Feature dictionary](#feature-dict
 - Aggregation rule: OHLC fields use first/high/low/last semantics, additive fields are summed,
   minute-end state fields keep the last non-null observation in each bucket, and trade-volume shares
   are recomputed from the resampled bucket totals.
+
+### gold.history.extended.m5 / gold.history.extended.m30 / gold.history.extended.h1
+
+- Origin: `crypto-history-loader`.
+- Alignment: deterministic bucket-start resample of `gold.history.extended.m1` using 5m, 30m, or
+  1h buckets.
+- Feature groups: same closed schema as `gold.history.extended.m1`.
+- Aggregation rule: same as `gold.history.full.m5 / gold.history.full.m30 / gold.history.full.h1`.
+
+### gold.live.full.m1
+
+- Origin: `crypto-live-loader`.
+- Alignment: union of live-loader minute and daily snapshot timestamps; source gaps remain null
+  unless the upstream Silver contract explicitly defines a carried-forward state.
+- Feature groups: **Keys**, **Volatility state**, **Index-price state**, **Futures summary state**,
+  **Options-ticker snapshots**, **Perpetual L2 snapshots**, **Options L2 snapshots**,
+  **Recent-trade snapshot keys**, **Instrument metadata snapshot keys**.
+- Deliberately excluded: historical-prediction, target, label, and history-only trade aggregates.
 
 ## Feature dictionary
 

@@ -26,6 +26,17 @@ _HISTORY_FULL_DERIVED_DATASET_IDS = {
     "gold.history.full.m5",
     "gold.history.full.m30",
     "gold.history.full.h1",
+    "gold.history.extended.m5",
+    "gold.history.extended.m30",
+    "gold.history.extended.h1",
+}
+_HISTORY_FULL_DERIVED_BASE_DATASET_IDS = {
+    "gold.history.full.m5": "gold.history.full.m1",
+    "gold.history.full.m30": "gold.history.full.m1",
+    "gold.history.full.h1": "gold.history.full.m1",
+    "gold.history.extended.m5": "gold.history.extended.m1",
+    "gold.history.extended.m30": "gold.history.extended.m1",
+    "gold.history.extended.h1": "gold.history.extended.m1",
 }
 
 
@@ -138,16 +149,21 @@ def run_gold_build(args: argparse.Namespace, logger: logging.Logger) -> None:
         for selected_dataset_id in dataset_ids
         if selected_dataset_id in _HISTORY_FULL_DERIVED_DATASET_IDS
     ]
-    if derived_dataset_ids and _HISTORY_FULL_BASE_DATASET_ID not in schedule:
-        schedule[_HISTORY_FULL_BASE_DATASET_ID] = _resolve_gold_symbols(
-            symbols=symbols,
-            silver_root=silver_root,
-            exchange=exchange,
-            dataset_id=_HISTORY_FULL_BASE_DATASET_ID,
-        )
+    base_dataset_ids = {
+        _HISTORY_FULL_DERIVED_BASE_DATASET_IDS[selected_dataset_id] for selected_dataset_id in derived_dataset_ids
+    }
+    for base_dataset_id in base_dataset_ids:
+        if base_dataset_id not in schedule:
+            schedule[base_dataset_id] = _resolve_gold_symbols(
+                symbols=symbols,
+                silver_root=silver_root,
+                exchange=exchange,
+                dataset_id=base_dataset_id,
+            )
     effective_dataset_ids = list(dataset_ids)
-    if derived_dataset_ids and _HISTORY_FULL_BASE_DATASET_ID not in effective_dataset_ids:
-        effective_dataset_ids.insert(0, _HISTORY_FULL_BASE_DATASET_ID)
+    for base_dataset_id in sorted(base_dataset_ids):
+        if base_dataset_id not in effective_dataset_ids:
+            effective_dataset_ids.insert(0, base_dataset_id)
     logger.info("Gold build schedule dataset_symbols=%s", schedule)
     _validate_version_args(auto_version=auto_version, dataset_version=dataset_version, version_base=version_base)
 

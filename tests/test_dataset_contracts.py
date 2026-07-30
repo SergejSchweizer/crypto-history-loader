@@ -51,9 +51,7 @@ def test_silver_contracts_cover_service_output_columns() -> None:
         "options_instrument_ticker_snapshot_1m_observed": silver_service.SILVER_OPTIONS_TICKER_OBSERVED_COLUMNS,
         "options_surface_1m_feature": silver_service.SILVER_OPTION_SURFACE_FEATURE_COLUMNS,
         "perps_l2_snapshot_1m_observed": silver_service.SILVER_L2_OBSERVED_COLUMNS,
-        "perps_l2_1m_feature": silver_service.SILVER_L2_FEATURE_COLUMNS,
         "options_l2_snapshot_1m_observed": silver_service.SILVER_L2_OBSERVED_COLUMNS,
-        "options_l2_1m_feature": silver_service.SILVER_L2_FEATURE_COLUMNS,
         "recent_trade_snapshot_1m_observed": silver_service.SILVER_RECENT_TRADE_SNAPSHOT_OBSERVED_COLUMNS,
         "instrument_metadata_snapshot_daily_observed": silver_service.SILVER_INSTRUMENT_METADATA_OBSERVED_COLUMNS,
         "futures_instrument_metadata_snapshot_daily_observed": (
@@ -100,7 +98,11 @@ def test_gold_contracts_are_service_compatible() -> None:
         "gold.history.full.m30",
         "gold.history.full.h1",
         "gold.history.extended.m1",
+        "gold.history.extended.m5",
+        "gold.history.extended.m30",
+        "gold.history.extended.h1",
         "gold.history.extended_full.m1",
+        "gold.live.full.m1",
     }
     assert gold_service.SUPPORTED_GOLD_DATASET_IDS == expected_supported
     for dataset_id in expected_supported:
@@ -121,12 +123,16 @@ def test_supported_dataset_helpers_are_contract_driven_and_stable() -> None:
         sorted({*BRONZE_TO_SILVER_DATASETS, *SILVER_LIVE_ORIGIN_BUILD_DATASETS})
     )
     assert supported_gold_dataset_ids() == (
+        "gold.history.extended.h1",
         "gold.history.extended.m1",
+        "gold.history.extended.m30",
+        "gold.history.extended.m5",
         "gold.history.extended_full.m1",
         "gold.history.full.h1",
         "gold.history.full.m1",
         "gold.history.full.m30",
         "gold.history.full.m5",
+        "gold.live.full.m1",
     )
 
     for outputs in (*BRONZE_TO_SILVER_DATASETS.values(), *SILVER_LIVE_ORIGIN_BUILD_DATASETS.values()):

@@ -101,11 +101,30 @@ _HISTORY_FULL_DERIVED_DATASET_IDS = {
     "gold.history.full.m5",
     "gold.history.full.m30",
     "gold.history.full.h1",
+    "gold.history.extended.m5",
+    "gold.history.extended.m30",
+    "gold.history.extended.h1",
 }
 _HISTORY_FULL_DERIVED_INTERVALS = {
     "gold.history.full.m5": "5m",
     "gold.history.full.m30": "30m",
     "gold.history.full.h1": "1h",
+    "gold.history.extended.m5": "5m",
+    "gold.history.extended.m30": "30m",
+    "gold.history.extended.h1": "1h",
+}
+_HISTORY_FULL_DERIVED_SOURCE_DATASET_IDS = {
+    "gold.history.full.m5": "gold.history.full.m1",
+    "gold.history.full.m30": "gold.history.full.m1",
+    "gold.history.full.h1": "gold.history.full.m1",
+    "gold.history.extended.m5": "gold.history.extended.m1",
+    "gold.history.extended.m30": "gold.history.extended.m1",
+    "gold.history.extended.h1": "gold.history.extended.m1",
+}
+_LIVE_FULL_NON_GRID_DATASETS = {
+    "recent_trade_snapshot_1m_observed",
+    "instrument_metadata_snapshot_daily_observed",
+    "futures_instrument_metadata_snapshot_daily_observed",
 }
 _parse_semver = gold_versioning.parse_semver
 _format_semver = gold_versioning.format_semver
@@ -149,9 +168,7 @@ def _history_full_derived_interval(dataset_id: str) -> str | None:
 def _history_full_source_dataset_id(dataset_id: str) -> str | None:
     """Return the canonical minute dataset used to derive a history-full variant."""
 
-    if dataset_id in _HISTORY_FULL_DERIVED_DATASET_IDS:
-        return _HISTORY_FULL_BASE_DATASET_ID
-    return None
+    return _HISTORY_FULL_DERIVED_SOURCE_DATASET_IDS.get(dataset_id)
 
 
 def _read_latest_gold_dataset_artifact(
@@ -483,11 +500,14 @@ def _build_history_full_derived_for_symbol(
     interval = _history_full_derived_interval(dataset_id)
     if interval is None:
         raise ValueError(f"Unsupported derived history_full dataset_id: {dataset_id}")
+    source_dataset_id = _history_full_source_dataset_id(dataset_id)
+    if source_dataset_id is None:
+        raise ValueError(f"Unsupported derived history_full dataset_id: {dataset_id}")
     pl = _require_polars()
     symbol = normalize_symbol(symbol)
     source_frame, source_parquet_path, source_manifest = _read_latest_gold_dataset_artifact(
         gold_root=gold_root,
-        dataset_id=_HISTORY_FULL_BASE_DATASET_ID,
+        dataset_id=source_dataset_id,
         exchange=exchange,
         symbol=symbol,
     )
@@ -498,7 +518,7 @@ def _build_history_full_derived_for_symbol(
     cols = merged.columns
     min_ts, max_ts, _, _, _ = _time_span_coverage(merged)
     source_summary = {
-        _HISTORY_FULL_BASE_DATASET_ID: {
+        source_dataset_id: {
             "columns": source_frame.columns,
             "rows": source_frame.height,
             "source_symbols": [symbol],
@@ -508,7 +528,7 @@ def _build_history_full_derived_for_symbol(
     }
     source_data_hash = _json_payload_hash(
         {
-            "source_dataset_id": _HISTORY_FULL_BASE_DATASET_ID,
+            "source_dataset_id": source_dataset_id,
             "source_dataset_version": source_manifest.get("dataset_version"),
             "source_feature_set_hash": source_manifest.get("feature_set_hash"),
             "source_source_data_hash": source_manifest.get("source_data_hash"),
@@ -519,7 +539,7 @@ def _build_history_full_derived_for_symbol(
     contract_signature: dict[str, object] = {
         "columns": cols,
         "join_policy": f"history_full_resample_{interval}",
-        "source_dataset_keys": [_HISTORY_FULL_BASE_DATASET_ID],
+        "source_dataset_keys": [source_dataset_id],
         "resample_interval": interval,
     }
     missing_by_column, missing_total = _missing_value_audit(pl, merged)
@@ -591,14 +611,14 @@ def _build_history_full_derived_for_symbol(
         "missing_value_count_total": missing_total,
         "missing_value_count_by_column": missing_by_column,
         "source_silver_datasets": source_summary,
-        "required_source_datasets": [_HISTORY_FULL_BASE_DATASET_ID],
+        "required_source_datasets": [source_dataset_id],
         "optional_source_datasets": [],
         "optional_source_availability": {},
         "strategy_feature_lookbacks": {},
         "prediction_target_definitions": {},
         "feature_metadata": _feature_metadata(pl, merged, exchange),
         "resample_interval": interval,
-        "source_dataset_id": _HISTORY_FULL_BASE_DATASET_ID,
+        "source_dataset_id": source_dataset_id,
     }
     hash_string = f"{feature_set_hash}_{source_data_hash}"
     feature_set_version = resolved_version
@@ -702,6 +722,7 @@ def build_gold_for_symbol(
     required = _dataset_requirements(dataset_id)
     optional = _dataset_optional_requirements(dataset_id)
     raw_by_dataset: dict[str, Any] = {}
+    required_prepared_by_dataset: list[tuple[str, Any]] = []
     for dataset_type, timeframe in required:
         raw_by_dataset[dataset_type] = _read_dataset_frame(
             silver_root=silver_root,
@@ -711,7 +732,6 @@ def build_gold_for_symbol(
             timeframe=timeframe,
         )
 
-    required_prepared: list[Any] = []
     l2_source_path: Path | None = None
     if _dataset_includes_l2(dataset_id):
         effective_l2_root = l2_root or gold_root
@@ -722,14 +742,25 @@ def build_gold_for_symbol(
         )
         raw_by_dataset["gold_l2_m1"] = l2_raw
     for dataset_type, _timeframe in required:
-        required_prepared.append(_prepare_dataset_frame(pl, dataset_type, raw_by_dataset[dataset_type], symbol))
+        required_prepared_by_dataset.append(
+            (dataset_type, _prepare_dataset_frame(pl, dataset_type, raw_by_dataset[dataset_type], symbol))
+        )
     if _dataset_includes_l2(dataset_id):
-        required_prepared.append(_prepare_dataset_frame(pl, "gold_l2_m1", raw_by_dataset["gold_l2_m1"], symbol))
-    if not required_prepared:
+        required_prepared_by_dataset.append(
+            ("gold_l2_m1", _prepare_dataset_frame(pl, "gold_l2_m1", raw_by_dataset["gold_l2_m1"], symbol))
+        )
+    if not required_prepared_by_dataset:
         raise ValueError(f"No prepared datasets for symbol={symbol} dataset_id={dataset_id}")
     key_cols = ["timestamp_m1", "exchange", "symbol"]
-    merged = _build_minute_grid(pl, required_prepared, exchange, symbol)
-    for frame in required_prepared:
+    grid_prepared = [
+        frame
+        for dataset_type, frame in required_prepared_by_dataset
+        if dataset_id != "gold.live.full.m1" or dataset_type not in _LIVE_FULL_NON_GRID_DATASETS
+    ]
+    if not grid_prepared:
+        grid_prepared = [frame for _dataset_type, frame in required_prepared_by_dataset]
+    merged = _build_minute_grid(pl, grid_prepared, exchange, symbol)
+    for _dataset_type, frame in required_prepared_by_dataset:
         merged = merged.join(frame, on=key_cols, how="left", coalesce=True)
     required_grid = merged.select(key_cols)
 
