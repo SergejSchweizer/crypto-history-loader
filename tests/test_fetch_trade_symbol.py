@@ -58,10 +58,18 @@ def test_fetch_symbol_trades_uses_partition_dates_instead_of_open_time_scan() ->
         open_times_reader=lambda **_kwargs: pytest.fail("trade fetch should not scan tick open_time values"),
         partition_dates_reader=lambda **kwargs: partition_calls.append(kwargs) or [date(2022, 4, 29)],
         partition_open_time_bounds_reader=lambda **_kwargs: {},
+        open_time_minutes_reader=lambda **_kwargs: [
+            datetime(2022, 4, 29, 0, 0, tzinfo=UTC),
+            datetime(2022, 4, 29, 0, 1, tzinfo=UTC),
+            datetime(2022, 4, 29, 0, 2, tzinfo=UTC),
+            datetime(2022, 4, 29, 0, 3, tzinfo=UTC),
+        ],
+        empty_minutes_reader=lambda **_kwargs: [],
         symbol_normalizer=lambda **_kwargs: "BTC-PERPETUAL",
         now_open_resolver=lambda **_kwargs: end_open_ms,
         history_fetcher=lambda **_kwargs: pytest.fail("history_fetcher should not be called when partitions exist"),
         range_fetcher=lambda **_kwargs: pytest.fail("range_fetcher should not be called for covered trade day"),
+        empty_minutes_writer=lambda **_kwargs: [],
     )
 
     assert rows == []

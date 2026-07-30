@@ -266,7 +266,7 @@ def _symbol_start_open_ms_bound(exchange: Exchange, symbol: str) -> int | None:
     """Resolve effective start bound for Bronze fetches.
 
     In default incremental mode (``tail_delta_only``), cap backfill to the
-    last 30 days even when older static bounds are configured.
+    current UTC day even when older static bounds are configured.
     """
 
     return resolve_symbol_start_open_ms_bound(

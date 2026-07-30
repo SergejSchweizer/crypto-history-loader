@@ -154,6 +154,70 @@ def missing_trade_day_ranges(
     return ranges
 
 
+def missing_trade_minute_ranges(
+    *,
+    existing_open_minutes: list[datetime],
+    start_open_ms: int,
+    end_open_ms: int,
+) -> list[tuple[int, int]]:
+    """Build missing trade ranges from minute buckets containing trades.
+
+    Args:
+        existing_open_minutes: Persisted trade timestamps truncated to UTC minute
+            precision. Each timestamp means that at least one trade exists in
+            that minute.
+        start_open_ms: Inclusive requested start in epoch milliseconds.
+        end_open_ms: Inclusive requested end in epoch milliseconds.
+
+    Returns:
+        Inclusive millisecond ranges covering contiguous missing minute buckets.
+
+    Notes:
+        This planner intentionally treats minutes with no stored trade as
+        fetchable gaps. If the exchange legitimately had no trades in a minute,
+        a fetch can return zero rows and the minute will remain absent until a
+        negative-coverage manifest records confirmed empty minutes.
+    """
+
+    if end_open_ms < start_open_ms:
+        return []
+
+    minute_ms = 60_000
+    start_minute_ms = start_open_ms - (start_open_ms % minute_ms)
+    end_minute_ms = end_open_ms - (end_open_ms % minute_ms)
+    existing_ms = {
+        int(value.timestamp() * 1000) - (int(value.timestamp() * 1000) % minute_ms) for value in existing_open_minutes
+    }
+    ranges: list[tuple[int, int]] = []
+    current_range_start: int | None = None
+    previous_missing_minute: int | None = None
+    cursor = start_minute_ms
+    while cursor <= end_minute_ms:
+        if cursor not in existing_ms:
+            if current_range_start is None:
+                current_range_start = cursor
+            previous_missing_minute = cursor
+        elif current_range_start is not None and previous_missing_minute is not None:
+            ranges.append(
+                (
+                    max(start_open_ms, current_range_start),
+                    min(end_open_ms, previous_missing_minute + minute_ms - 1),
+                )
+            )
+            current_range_start = None
+            previous_missing_minute = None
+        cursor += minute_ms
+
+    if current_range_start is not None and previous_missing_minute is not None:
+        ranges.append(
+            (
+                max(start_open_ms, current_range_start),
+                min(end_open_ms, previous_missing_minute + minute_ms - 1),
+            )
+        )
+    return ranges
+
+
 def build_missing_ranges_with_optional_head_gap(
     *,
     existing_open_times: list[datetime],

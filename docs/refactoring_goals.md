@@ -73,7 +73,8 @@ Evidence:
 - `api/commands/loader.py` is reduced to command assembly and no longer owns mutable runtime globals.
 - `application/services/fetch_service.py` is split into smaller modules by concern.
 - Checkpoint resume tests cover completed, partial, stale, and failed task states.
-- Trade gap-fill tests cover dense windows, empty windows, retryable failures, all-window failures, and restart after partial persistence.
+- Trade gap-fill tests cover dense windows, confirmed-empty minute sidecars, retryable failures,
+  all-window failures, and restart after partial persistence.
 
 ### 3. Silver And Gold Transformations Have Dataset Contracts
 
@@ -260,9 +261,10 @@ Exit criteria:
 - Trade-window planning, recoverable fetch-error classification, deterministic trade dedupe, bounded window fetches,
   and trade progress logging live in `application/services/fetch_trade_windows.py`; `fetch_service.py` keeps
   compatibility aliases for existing callers while retaining orchestration.
-- UTC day-window planning, deterministic missing-range ordering, explicit head-gap planning, and daily trade
+- UTC day-window planning, deterministic missing-range ordering, explicit head-gap planning, and trade minute
   coverage-gap planning live in `application/services/fetch_range_planning.py`; `fetch_service.py` keeps compatibility
-  aliases for existing tests and callers while retaining orchestration.
+  aliases for existing tests and callers while retaining orchestration. Perpetual and option trade gaps combine
+  observed trade minutes with confirmed-empty `empty_minutes.parquet` sidecars before scheduling fetches.
 - Fetch timeout execution, process fallback handling, and heartbeat wrapping live in
   `application/services/fetch_executors.py`; `fetch_service.py` keeps compatibility aliases for existing tests/callers.
 - Bound-filtered history row callbacks, open-time key extraction, bounded daily fetch dedupe, and bootstrap row
@@ -339,6 +341,8 @@ Progress:
   side effects separate from Silver transformation functions.
 - Silver trade observed-frame cleaning and 1m trade-flow aggregation now live in
   `application/services/silver_trades.py`, with `application/services/silver_service.py` retaining compatibility aliases.
+  Trade 1m feature builders include confirmed-empty Bronze minutes as zero-flow rows and fill price fields only from
+  prior observed closes.
 - Silver open-interest observed and 1m feature transformations now live in `application/services/silver_open_interest.py`, with
   `application/services/silver_service.py` retaining compatibility entry points.
 - Silver funding observed and 1m feature transformations now live in `application/services/silver_funding.py`, with

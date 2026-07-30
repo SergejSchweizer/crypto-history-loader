@@ -6,7 +6,7 @@ import argparse
 import json
 import logging
 from collections.abc import Callable
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Any, Literal, cast
 
@@ -18,6 +18,7 @@ from application.services.silver_service import (
     build_futures_instrument_metadata_observed_for_symbol,
     build_futures_summary_1m_feature_for_symbol,
     build_futures_summary_observed_for_symbol,
+    build_historical_prediction_1m_feature_for_symbol,
     build_historical_volatility_observed_for_symbol,
     build_index_price_1m_feature_for_symbol,
     build_index_price_observed_for_symbol,
@@ -41,6 +42,7 @@ from application.services.silver_service import (
     build_volatility_observed_for_symbol,
     build_volatility_snapshot_observed_for_symbol,
     discover_futures_summary_symbols,
+    discover_historical_prediction_symbols,
     discover_index_price_symbols,
     discover_instrument_metadata_symbols,
     discover_iv_rv_symbols,
@@ -70,6 +72,7 @@ SilverDiscoveryKind = Literal[
     "options_l2",
     "recent_trade",
     "instrument_metadata",
+    "historical_prediction",
 ]
 
 
@@ -147,6 +150,7 @@ SILVER_BUILD_SPECS: dict[str, SilverBuildSpec] = {
         bronze_dataset="historical_volatility",
         bronze_instrument="perp",
     ),
+    "historical_prediction": SilverBuildSpec(dataset="historical_prediction", discovery="historical_prediction"),
 }
 
 SILVER_BUILD_DATASETS: tuple[str, ...] = supported_silver_build_ids()
@@ -157,6 +161,7 @@ DEFAULT_SILVER_BUILD_DATASETS: tuple[str, ...] = (
     "funding",
     "perps_trades",
     "options_trades",
+    "historical_prediction",
     "volatility_index_data",
 )
 
@@ -284,6 +289,7 @@ def run_silver_build(args: argparse.Namespace, logger: logging.Logger) -> None:
             silver_root=silver_root,
             exchange=exchange,
             symbol=symbol,
+            bronze_root=bronze_root,
             observed_timeframe="tick",
         )
         feature_payload = _report_payload("perps_trades_1m_feature", symbol, feature)
@@ -311,9 +317,12 @@ def run_silver_build(args: argparse.Namespace, logger: logging.Logger) -> None:
             silver_root=silver_root,
             exchange=exchange,
             symbol=symbol,
+            bronze_root=bronze_root,
             observed_timeframe="tick",
             observed_dataset_type="options_trades_observed",
             output_dataset_type="options_trades_1m_feature",
+            bronze_dataset_type="options_trades",
+            instrument_type="option",
         )
         feature_payload = _report_payload("options_trades_1m_feature", symbol, feature)
         logger.info(
@@ -383,20 +392,8 @@ def run_silver_build(args: argparse.Namespace, logger: logging.Logger) -> None:
             timeframe=timeframe,
         )
         feature_payload = _report_payload("realized_volatility_1m_feature", symbol, feature)
-        iv_rv = build_iv_rv_1m_feature_for_symbol(
-            silver_root=silver_root,
-            exchange=exchange,
-            symbol=symbol,
-            timeframe=timeframe,
-        )
-        iv_rv_payload = _report_payload("iv_rv_1m_feature", symbol, iv_rv)
-        logger.info(
-            "Silver realized_volatility reports written symbol=%s rv_rows=%s iv_rv_rows=%s",
-            symbol,
-            feature.rows_out,
-            iv_rv.rows_out,
-        )
-        return [feature_payload, iv_rv_payload]
+        logger.info("Silver realized_volatility report written symbol=%s feature_rows=%s", symbol, feature.rows_out)
+        return [feature_payload]
 
     def _run_iv_rv(symbol: str) -> list[dict[str, object]]:
         feature = build_iv_rv_1m_feature_for_symbol(
@@ -612,6 +609,20 @@ def run_silver_build(args: argparse.Namespace, logger: logging.Logger) -> None:
         )
         return [_report_payload("historical_volatility_observed", symbol, observed)]
 
+    def _run_historical_prediction(symbol: str) -> list[dict[str, object]]:
+        feature = build_historical_prediction_1m_feature_for_symbol(
+            silver_root=silver_root,
+            exchange=exchange,
+            symbol=symbol,
+            timeframe=timeframe,
+        )
+        logger.info(
+            "Silver historical_prediction report written symbol=%s feature_rows=%s",
+            symbol,
+            feature.rows_out,
+        )
+        return [_report_payload("historical_prediction_1m_feature", symbol, feature)]
+
     def _run_ohlcv(market: str, symbol: str) -> list[dict[str, object]]:
         report = build_silver_for_symbol(
             bronze_root=bronze_root,
@@ -651,6 +662,7 @@ def run_silver_build(args: argparse.Namespace, logger: logging.Logger) -> None:
         "instrument_metadata_snapshot_daily": _run_instrument_metadata,
         "futures_instrument_metadata_snapshot_daily": _run_futures_instrument_metadata,
         "historical_volatility": _run_historical_volatility,
+        "historical_prediction": _run_historical_prediction,
     }
 
     def _discover_effective_symbols(market: str, spec: SilverBuildSpec) -> list[str]:
@@ -730,6 +742,12 @@ def run_silver_build(args: argparse.Namespace, logger: logging.Logger) -> None:
                 exchange=exchange,
                 dataset_type=market,
             )
+        if spec.discovery == "historical_prediction":
+            return discover_historical_prediction_symbols(
+                silver_root=silver_root,
+                exchange=exchange,
+                timeframe=timeframe,
+            )
 
         bronze_dataset = spec.bronze_dataset or market
         bronze_instrument = spec.bronze_instrument or market
@@ -747,6 +765,7 @@ def run_silver_build(args: argparse.Namespace, logger: logging.Logger) -> None:
     if selected is None:
         raise ValueError("Missing dataset selection. Provide --dataset.")
     jobs: list[tuple[str, str, Callable[[], list[dict[str, object]]]]] = []
+    derived_jobs: list[tuple[str, str, Callable[[], list[dict[str, object]]]]] = []
 
     def _make_handler_job(
         handler: Callable[[str], list[dict[str, object]]],
@@ -770,16 +789,64 @@ def run_silver_build(args: argparse.Namespace, logger: logging.Logger) -> None:
         handler = market_handlers.get(market)
         for symbol in effective_symbols:
             if handler is not None:
-                jobs.append((market, symbol, _make_handler_job(handler, symbol)))
+                # ``iv_rv`` depends on freshly written realized-volatility outputs.
+                # Keep it in the derived phase so it never races the base stage
+                # while reading the same Silver lake it is building from.
+                target_jobs = derived_jobs if market in {"historical_prediction", "iv_rv"} else jobs
+                target_jobs.append((market, symbol, _make_handler_job(handler, symbol)))
             else:
                 jobs.append((market, symbol, _make_ohlcv_job(market, symbol)))
 
     logger.info("Silver build parallelization maxprocesses=%s jobs=%s", maxprocesses, len(jobs))
     with ThreadPoolExecutor(max_workers=maxprocesses) as executor:
-        futures = [executor.submit(job) for _, _, job in jobs]
-        for future in futures:
-            reports.extend(future.result())
+        futures: list[tuple[str, str, Future[list[dict[str, object]]]]] = []
+        for market, symbol, job in jobs:
+            futures.append((market, symbol, executor.submit(job)))
+        _collect_job_results(
+            futures=futures,
+            logger=logger,
+            reports=reports,
+            stage_name="base",
+        )
+    if derived_jobs:
+        logger.info("Silver derived build schedule jobs=%s", len(derived_jobs))
+        with ThreadPoolExecutor(max_workers=maxprocesses) as executor:
+            futures = []
+            for market, symbol, job in derived_jobs:
+                futures.append((market, symbol, executor.submit(job)))
+            _collect_job_results(
+                futures=futures,
+                logger=logger,
+                reports=reports,
+                stage_name="derived",
+            )
 
     if not bool(args.no_json_output):
         print(json.dumps({"reports": reports}, indent=2))
     logger.info("Command complete: silver-build reports=%s", len(reports))
+
+
+def _collect_job_results(
+    *,
+    futures: list[tuple[str, str, Future[list[dict[str, object]]]]],
+    logger: logging.Logger,
+    reports: list[dict[str, object]],
+    stage_name: str,
+) -> None:
+    """Collect job results in submission order while logging wait points.
+
+    The Silver runner schedules many heavy jobs in parallel, but the historical
+    submission-order wait makes it hard to see which job is actually blocking a
+    run. Logging the explicit wait target keeps behavior unchanged while making
+    stalled markets and symbols visible in the shared pipeline log.
+    """
+
+    for market, symbol, future in futures:
+        logger.info("Silver waiting for %s job market=%s symbol=%s", stage_name, market, symbol)
+        try:
+            job_reports = future.result()
+        except Exception:
+            logger.exception("Silver %s job failed market=%s symbol=%s", stage_name, market, symbol)
+            raise
+        logger.info("Silver completed %s job market=%s symbol=%s", stage_name, market, symbol)
+        reports.extend(job_reports)

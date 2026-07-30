@@ -11,6 +11,7 @@ Author: Sergej Schweizer
 | [`DATASETS.md`](DATASETS.md) | Authoritative Gold dataset catalog: every dataset ID, source contract, feature, feature meaning, null policy, lineage rule, physical status, and build example |
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | Package boundaries, medallion data flow, side effects, storage ownership, and architectural update rules |
 | [`AGENTS.md`](AGENTS.md) | Repository operating and engineering policy |
+| [`BACKLOG.md`](BACKLOG.md) | Authoritative ticket backlog, PR status, branch, date, scope, and acceptance criteria |
 | [`docs/dataset_inventory.md`](docs/dataset_inventory.md) | Generated physical and contracted dataset inventory when present |
 
 Gold dataset definitions must not be duplicated in this README. Update `DATASETS.md` together with `application/dataset_contracts.py` whenever a Gold contract changes.
@@ -78,6 +79,7 @@ main.py               Python CLI entrypoint
 DATASETS.md           authoritative Gold dataset catalog
 ARCHITECTURE.md       architecture contract
 AGENTS.md             repository operating policy
+BACKLOG.md            authoritative ticket backlog
 ```
 
 New Bronze datasets start with a `DatasetSpec` in `application/datasets.py`. Silver and Gold output contracts are centralized in `application/dataset_contracts.py`.
@@ -130,7 +132,21 @@ uv run python main.py silver-build \
   --bronze-root lake/bronze \
   --silver-root lake/silver \
   --exchange deribit \
-  --dataset spot_ohlcv perps_ohlcv open_interest funding perps_trades options_trades \
+  --dataset spot_ohlcv perps_ohlcv open_interest funding perps_trades options_trades historical_prediction \
+  --timeframe 1m \
+  --maxprocesses 4
+```
+
+`historical_prediction` creates trailing ex-ante Silver predictors for historical IV/RV and regime research. It excludes forward-looking labels and volatility-index or IV/RV-derived inputs.
+
+Build only the historical prediction features:
+
+```bash
+uv run python main.py silver-build \
+  --bronze-root lake/bronze \
+  --silver-root lake/silver \
+  --exchange deribit \
+  --dataset historical_prediction \
   --timeframe 1m \
   --maxprocesses 4
 ```
@@ -143,8 +159,29 @@ uv run python main.py gold-build \
   --gold-root lake/gold \
   --exchange deribit \
   --maxprocesses 4 \
-  --dataset-id gold.market.history_full.m1
+  --dataset-id gold.history.full.m1
 ```
+
+Build the extended historical Gold dataset, which keeps the canonical schema and adds
+history-prediction features:
+
+```bash
+uv run python main.py gold-build \
+  --silver-root lake/silver \
+  --gold-root lake/gold \
+  --exchange deribit \
+  --maxprocesses 4 \
+  --dataset-id gold.history.extended.m1
+```
+
+Gold datasets are always named as standalone contracts; canonical and extended datasets get
+distinct IDs instead of overloading one another.
+
+`gold.history.extended.m1` and `gold.history.extended_full.m1` both keep the canonical
+`gold.history.full.m1` minute schema and add historical-prediction features.
+`gold.history.full.m5`, `gold.history.full.m30`, and `gold.history.full.h1`
+are derived from the canonical `gold.history.full.m1` artifact.
+The supported Gold build choices currently include the History-Full family above.
 
 See [`DATASETS.md`](DATASETS.md) for every supported Gold dataset ID and its complete feature contract.
 
@@ -184,6 +221,12 @@ Gold behavior:
 - event-driven trade activity is not forward-filled
 - only the latest three versions are retained per dataset/exchange/symbol lineage
 - live Gold datasets never fill gaps from historical datasets
+
+Gold mirror:
+
+- nightly cron recipe lives in `docs/cron/gold-sync.cron`
+- syncs `lake/gold` to `/volume1/Temp/gold` every day at `23:30`
+- mirror runs through `scripts/sync_gold_to_temp.py` and uses the shared `.logs` root
 
 ## Quality gates
 

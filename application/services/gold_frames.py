@@ -6,8 +6,11 @@ import math
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import datetime
+from importlib import import_module
 from pathlib import Path
 from typing import Any
+
+from application.dataset_contracts import SILVER_HISTORICAL_PREDICTION_FEATURE_COLUMNS
 
 type GoldFramePrepareFunc = Callable[[Any, Any, str], Any]
 type OptionalFeatureSchemaFunc = Callable[[Any], list[tuple[str, Any]]]
@@ -83,7 +86,7 @@ def require_polars() -> Any:
     """
 
     try:
-        import polars as pl
+        pl = import_module("polars")
     except ImportError as exc:
         raise RuntimeError("polars is required for gold-build. Install project dependencies.") from exc
     return pl
@@ -280,6 +283,14 @@ def read_dataset_frame(
     frame = pl.concat(frames, how="diagonal_relaxed")
     for timestamp_column in ("open_time", "timestamp_m1", "timestamp", "trade_time"):
         if timestamp_column in frame.columns:
+            if dataset_type == "options_l2_1m_feature" and "instrument_name" in frame.columns:
+                # Options L2 has one row per contract and minute. Deduplicating only by
+                # minute would discard contracts before Gold computes market coverage.
+                return frame.unique(
+                    subset=[timestamp_column, "instrument_name"],
+                    keep="last",
+                    maintain_order=False,
+                ).sort([timestamp_column, "instrument_name"])
             return frame.unique(subset=[timestamp_column], keep="last", maintain_order=False).sort(timestamp_column)
     return frame.unique(maintain_order=True)
 
@@ -660,6 +671,7 @@ def prepare_realized_volatility(pl: Any, frame: Any, symbol: str) -> Any:
         "perps_rv_1d_annualized_pct",
         "perps_rv_30d_annualized_pct",
     )
+
     optional_boolean_columns = ("canonical_rv_source_available", "spot_perps_basis_available")
     for column in optional_float_columns:
         if column not in frame.columns:
@@ -732,6 +744,25 @@ def prepare_realized_volatility(pl: Any, frame: Any, symbol: str) -> Any:
                 pl.col("spot_perps_basis_available").cast(pl.Boolean),
             ]
         )
+        .sort("timestamp_m1")
+    )
+
+
+def prepare_historical_prediction(pl: Any, frame: Any, symbol: str) -> Any:
+    """Prepare repository-native historical predictor features for Gold joins."""
+
+    for column in SILVER_HISTORICAL_PREDICTION_FEATURE_COLUMNS:
+        if column in {"timestamp_m1", "exchange", "symbol"} or column in frame.columns:
+            continue
+        frame = frame.with_columns(pl.lit(None, dtype=pl.Float64).alias(column))
+    return (
+        frame.with_columns(
+            [
+                pl.col("timestamp_m1").cast(pl.Datetime(time_unit="us", time_zone="UTC")),
+                pl.lit(symbol).alias("symbol"),
+            ]
+        )
+        .select(SILVER_HISTORICAL_PREDICTION_FEATURE_COLUMNS)
         .sort("timestamp_m1")
     )
 
@@ -990,6 +1021,11 @@ GOLD_FRAME_PREPARATION_SPECS: dict[str, GoldFramePreparationSpec] = {
         dataset_type="options_trades_1m_feature",
         prepare=prepare_options_trades,
         source_lineage="silver_options_trade_features",
+    ),
+    "historical_prediction_1m_feature": GoldFramePreparationSpec(
+        dataset_type="historical_prediction_1m_feature",
+        prepare=prepare_historical_prediction,
+        source_lineage="silver_historical_prediction_features",
     ),
     "volatility_index_data_observed": GoldFramePreparationSpec(
         dataset_type="volatility_index_data_observed",
@@ -1392,6 +1428,124 @@ def _forward_log_return(current_price: float | None, future_price: float | None)
     if current_price is None or future_price is None or current_price <= 0.0 or future_price <= 0.0:
         return None
     return math.log(future_price / current_price)
+
+
+_HISTORY_FULL_RESAMPLE_TIMEFRAMES: dict[str, str] = {
+    "gold.history.full.m5": "5m",
+    "gold.history.full.m30": "30m",
+    "gold.history.full.h1": "1h",
+}
+
+
+def history_full_resample_interval(dataset_id: str) -> str | None:
+    """Return the minute-bucket interval for a derived history-full Gold dataset."""
+
+    return _HISTORY_FULL_RESAMPLE_TIMEFRAMES.get(dataset_id)
+
+
+def resample_history_full_frame(pl: Any, frame: Any, interval: str) -> Any:
+    """Aggregate the canonical history-full minute table into a coarser Gold timeframe.
+
+    The resample keeps the same column contract as the minute dataset while applying
+    column-specific aggregation rules:
+
+    - OHLC fields use first/high/low/last semantics.
+    - additive counts and volumes are summed.
+    - stateful trailing features keep the last value in the bucket.
+    - bucket-level boolean availability flags use ``any``.
+
+    Args:
+        pl: Polars module.
+        frame: Canonical ``gold.history.full.m1`` frame.
+        interval: Coarser timeframe such as ``5m``, ``30m``, or ``1h``.
+
+    Returns:
+        A resampled Gold frame labeled on the bucket start timestamp.
+
+    Raises:
+        ValueError: If the requested interval is unsupported or the input lacks keys.
+    """
+
+    if interval not in {"5m", "30m", "1h"}:
+        raise ValueError(f"Unsupported history_full resample interval: {interval}")
+    required_keys = {"timestamp_m1", "exchange", "symbol"}
+    if not required_keys.issubset(frame.columns):
+        raise ValueError("history_full resample requires timestamp_m1, exchange, and symbol columns")
+
+    key_columns = ["timestamp_m1", "exchange", "symbol"]
+    share_columns = {
+        "perps_trades_buy_volume_share",
+        "options_trades_buy_volume_share",
+    }
+    any_columns = {
+        "funding_data_available",
+        "is_funding_observation_minute",
+        "open_interest_is_observed",
+        "open_interest_is_ffill",
+    }
+
+    bucketed = frame.with_columns(
+        pl.col("timestamp_m1")
+        .cast(pl.Datetime(time_unit="us", time_zone="UTC"))
+        .dt.truncate(interval)
+        .alias("timestamp_m1")
+    ).sort(["exchange", "symbol", "timestamp_m1"])
+
+    agg_exprs: list[Any] = []
+    for column in frame.columns:
+        if column in key_columns or column in share_columns:
+            continue
+        if column.endswith(("_open_price", "_open")):
+            agg_exprs.append(pl.col(column).drop_nulls().first().alias(column))
+        elif column.endswith(("_high_price", "_high")):
+            agg_exprs.append(pl.col(column).max().alias(column))
+        elif column.endswith(("_low_price", "_low")):
+            agg_exprs.append(pl.col(column).min().alias(column))
+        elif column.endswith(("_close_price", "_close")):
+            agg_exprs.append(pl.col(column).drop_nulls().last().alias(column))
+        elif (
+            column.endswith("_volume")
+            or column.endswith("_quote_volume")
+            or column.endswith("_trade_count")
+            or column.endswith("_buy_trade_count")
+            or column.endswith("_sell_trade_count")
+        ):
+            agg_exprs.append(pl.col(column).sum().alias(column))
+        elif column in any_columns:
+            agg_exprs.append(pl.col(column).any().alias(column))
+        else:
+            # The remaining columns are stateful minute-end features. Carrying the
+            # last observation forward inside each bucket preserves the most recent
+            # market state without inventing a new within-bucket interpolation rule.
+            agg_exprs.append(pl.col(column).drop_nulls().last().alias(column))
+
+    resampled = (
+        bucketed.group_by(["exchange", "symbol", "timestamp_m1"], maintain_order=True)
+        .agg(agg_exprs)
+        .sort(["exchange", "symbol", "timestamp_m1"])
+    )
+    share_updates = []
+    if {"perps_trades_buy_volume", "perps_trades_volume", "perps_trades_buy_volume_share"}.issubset(frame.columns):
+        share_updates.append(
+            pl.when(pl.col("perps_trades_volume") > 0.0)
+            .then(pl.col("perps_trades_buy_volume") / pl.col("perps_trades_volume"))
+            .otherwise(None)
+            .alias("perps_trades_buy_volume_share")
+        )
+    if {
+        "options_trades_buy_volume",
+        "options_trades_volume",
+        "options_trades_buy_volume_share",
+    }.issubset(frame.columns):
+        share_updates.append(
+            pl.when(pl.col("options_trades_volume") > 0.0)
+            .then(pl.col("options_trades_buy_volume") / pl.col("options_trades_volume"))
+            .otherwise(None)
+            .alias("options_trades_buy_volume_share")
+        )
+    if share_updates:
+        resampled = resampled.with_columns(share_updates)
+    return resampled.select(frame.columns)
 
 
 def prepare_dataset_frame(pl: Any, dataset_type: str, frame: Any, symbol: str) -> Any:

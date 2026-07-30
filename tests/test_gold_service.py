@@ -21,6 +21,7 @@ from application.services.gold_service import (
     _parse_semver,
     build_gold_for_symbol,
     discover_gold_symbols,
+    discover_gold_symbols_for_dataset,
     normalize_symbol,
     validate_gold_retention_keep_versions,
 )
@@ -137,6 +138,7 @@ def test_dataset_specs_symbol_normalization_and_hash_helpers() -> None:
     assert _feature_source_dataset("funding_rate_last_known") == "funding_1m_feature"
     assert _feature_source_dataset("perps_trades_open_price") == "perps_trades_1m_feature"
     assert _feature_source_dataset("options_trades_open_price") == "options_trades_1m_feature"
+    assert _feature_source_dataset("historical_prediction_perps_rv_1h") == "historical_prediction_1m_feature"
     assert _feature_source_dataset("volatility_index_data_value") == "volatility_index_data_observed"
     assert _feature_source_dataset("volatility_index_value") == "volatility_index_data_observed"
     assert _feature_source_dataset("rv_1h") == "realized_volatility_1m_feature"
@@ -1299,6 +1301,195 @@ def test_discover_gold_symbols_requires_trades_dataset(tmp_path: Path) -> None:
         ],
     )
     assert discover_gold_symbols(str(silver), exchange) == []
+
+
+def test_discover_gold_symbols_for_extended_history_full_reuses_source_contract(
+    tmp_path: Path,
+) -> None:
+    silver = tmp_path / "silver"
+    exchange = "deribit"
+    t0 = datetime(2026, 5, 1, 0, 0, tzinfo=UTC)
+    _write_silver_month(
+        silver,
+        dataset_type="spot_ohlcv",
+        exchange=exchange,
+        symbol="BTC_USDC",
+        timeframe="1m",
+        month="2026-05",
+        rows=[
+            {
+                "open_time": t0,
+                "exchange": exchange,
+                "symbol": "BTC",
+                "open_price": 1.0,
+                "high_price": 1.0,
+                "low_price": 1.0,
+                "close_price": 1.0,
+                "volume": 1.0,
+            }
+        ],
+    )
+    _write_silver_month(
+        silver,
+        dataset_type="perps_ohlcv",
+        exchange=exchange,
+        symbol="BTC-PERPETUAL",
+        timeframe="1m",
+        month="2026-05",
+        rows=[
+            {
+                "open_time": t0,
+                "exchange": exchange,
+                "symbol": "BTC",
+                "open_price": 1.0,
+                "high_price": 1.0,
+                "low_price": 1.0,
+                "close_price": 1.0,
+                "volume": 1.0,
+            }
+        ],
+    )
+    _write_silver_month(
+        silver,
+        dataset_type="open_interest_1m_feature",
+        exchange=exchange,
+        symbol="BTC-PERPETUAL",
+        timeframe="1m",
+        month="2026-05",
+        rows=[
+            {
+                "timestamp_m1": t0,
+                "exchange": exchange,
+                "symbol": "BTC",
+                "open_interest": 1.0,
+                "open_interest_is_observed": True,
+                "open_interest_is_ffill": False,
+                "minutes_since_open_interest_observation": 0,
+                "open_interest_observation_lag_sec": 0,
+            }
+        ],
+    )
+    _write_silver_month(
+        silver,
+        dataset_type="funding_1m_feature",
+        exchange=exchange,
+        symbol="BTC-PERPETUAL",
+        timeframe="1m",
+        month="2026-05",
+        rows=[
+            {
+                "timestamp": t0,
+                "exchange": exchange,
+                "symbol": "BTC",
+                "funding_rate_last_known": 0.0,
+                "minutes_since_funding": 0,
+                "is_funding_observation_minute": True,
+                "funding_data_available": True,
+            }
+        ],
+    )
+    _write_silver_month(
+        silver,
+        dataset_type="historical_prediction_1m_feature",
+        exchange=exchange,
+        symbol="BTC",
+        timeframe="1m",
+        month="2026-05",
+        rows=[
+            {
+                "timestamp_m1": t0,
+                "exchange": exchange,
+                "symbol": "BTC",
+                "historical_prediction_spot_log_return_1m": 0.0,
+                "historical_prediction_perps_log_return_1m": 0.0,
+                "historical_prediction_spot_rv_15m": 0.0,
+                "historical_prediction_spot_rv_1h": 0.0,
+                "historical_prediction_spot_rv_1d": 0.0,
+                "historical_prediction_perps_rv_15m": 0.0,
+                "historical_prediction_perps_rv_1h": 0.0,
+                "historical_prediction_perps_rv_1d": 0.0,
+                "historical_prediction_spot_perp_basis": 0.0,
+                "historical_prediction_basis_change_1m": 0.0,
+                "historical_prediction_basis_zscore_1h": 0.0,
+                "historical_prediction_open_interest_delta_1m": 0.0,
+                "historical_prediction_open_interest_pct_change_1m": 0.0,
+                "historical_prediction_open_interest_zscore_1h": 0.0,
+                "historical_prediction_funding_rate_change_1m": 0.0,
+                "historical_prediction_funding_rate_zscore_1d": 0.0,
+                "historical_prediction_funding_basis_divergence": 0.0,
+                "historical_prediction_perps_trade_imbalance": 0.0,
+                "historical_prediction_perps_trade_count_zscore_1h": 0.0,
+                "historical_prediction_perps_quote_volume_zscore_1h": 0.0,
+                "historical_prediction_perps_price_impact_1m": 0.0,
+                "historical_prediction_options_trade_imbalance": 0.0,
+                "historical_prediction_options_trade_count_zscore_1h": 0.0,
+                "historical_prediction_options_quote_volume_zscore_1h": 0.0,
+                "historical_prediction_leverage_build_up_signal": 0.0,
+                "historical_prediction_short_stress_signal": 0.0,
+                "historical_prediction_flow_volatility_pressure": 0.0,
+            }
+        ],
+    )
+    _write_silver_month(
+        silver,
+        dataset_type="perps_trades_1m_feature",
+        exchange=exchange,
+        symbol="BTC-PERPETUAL",
+        timeframe="1m",
+        month="2026-05",
+        rows=[
+            {
+                "timestamp_m1": t0,
+                "exchange": exchange,
+                "symbol": "BTC",
+                "instrument_type": "perp",
+                "open_price": 1.0,
+                "high_price": 1.0,
+                "low_price": 1.0,
+                "close_price": 1.0,
+                "volume": 1.0,
+                "quote_volume": 1.0,
+                "trade_count": 1,
+                "buy_volume": 0.5,
+                "sell_volume": 0.5,
+                "buy_trade_count": 1,
+                "sell_trade_count": 0,
+                "buy_volume_share": 0.5,
+            }
+        ],
+    )
+    _write_silver_month(
+        silver,
+        dataset_type="options_trades_1m_feature",
+        exchange=exchange,
+        symbol="BTC",
+        timeframe="1m",
+        month="2026-05",
+        rows=[
+            {
+                "timestamp_m1": t0,
+                "exchange": exchange,
+                "symbol": "BTC",
+                "instrument_type": "option",
+                "open_price": 1.0,
+                "high_price": 1.0,
+                "low_price": 1.0,
+                "close_price": 1.0,
+                "volume": 1.0,
+                "quote_volume": 1.0,
+                "trade_count": 1,
+                "buy_volume": 0.5,
+                "sell_volume": 0.5,
+                "buy_trade_count": 1,
+                "sell_trade_count": 0,
+                "buy_volume_share": 0.5,
+            }
+        ],
+    )
+
+    assert discover_gold_symbols_for_dataset(str(silver), exchange, "gold.history.extended_full.m1") == ["BTC"]
+    assert discover_gold_symbols_for_dataset(str(silver), exchange, "gold.history.extended.m1") == ["BTC"]
+    assert discover_gold_symbols_for_dataset(str(silver), exchange, "gold.history.full.m5") == ["BTC"]
 
 
 def test_build_gold_hybrid_full_l2_contains_l2_features(tmp_path: Path) -> None:

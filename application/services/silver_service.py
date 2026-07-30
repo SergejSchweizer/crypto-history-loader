@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from importlib import import_module
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +13,9 @@ from application.dataset_contracts import (
 )
 from application.dataset_contracts import (
     SILVER_FUTURES_SUMMARY_OBSERVED_COLUMNS as SILVER_FUTURES_SUMMARY_OBSERVED_COLUMNS,
+)
+from application.dataset_contracts import (
+    SILVER_HISTORICAL_PREDICTION_FEATURE_COLUMNS as SILVER_HISTORICAL_PREDICTION_FEATURE_COLUMNS,
 )
 from application.dataset_contracts import (
     SILVER_HISTORICAL_VOLATILITY_OBSERVED_COLUMNS as SILVER_HISTORICAL_VOLATILITY_OBSERVED_COLUMNS,
@@ -50,6 +54,7 @@ from application.dataset_contracts import (
 from application.services import (
     silver_funding,
     silver_futures_summary,
+    silver_historical_prediction,
     silver_historical_volatility,
     silver_index_price,
     silver_instrument_metadata,
@@ -81,6 +86,7 @@ discover_options_surface_symbols = silver_options_surface.discover_options_surfa
 discover_l2_symbols = silver_l2.discover_l2_symbols
 discover_recent_trade_symbols = silver_recent_trades.discover_recent_trade_symbols
 discover_instrument_metadata_symbols = silver_instrument_metadata.discover_instrument_metadata_symbols
+discover_historical_prediction_symbols = silver_historical_prediction.discover_historical_prediction_symbols
 
 
 def _funding_dependencies() -> silver_funding.FundingDependencies:
@@ -110,7 +116,7 @@ def _open_interest_dependencies() -> silver_open_interest.OpenInterestDependenci
 
 def _require_polars() -> Any:
     try:
-        import polars as pl
+        pl = import_module("polars")
     except ImportError as exc:
         raise RuntimeError("polars is required for silver-build. Install project dependencies.") from exc
     return pl
@@ -313,6 +319,63 @@ def _bronze_month_files(
         *root.glob(f"month={month}/date=*/data.parquet"),
     }
     return sorted(str(path) for path in files)
+
+
+def _bronze_empty_minute_month_files(
+    bronze_root: str,
+    market: str,
+    exchange: str,
+    symbol: str,
+    timeframe: str,
+    month: str,
+    instrument_type: str,
+) -> list[str]:
+    """Return confirmed-empty minute sidecars for one Bronze trade month."""
+
+    year = month.split("-", 1)[0]
+    root = (
+        Path(bronze_root)
+        / f"dataset_type={market}"
+        / f"exchange={exchange}"
+        / f"instrument_type={instrument_type}"
+        / f"symbol={symbol}"
+        / f"timeframe={timeframe}"
+    )
+    files = {
+        *root.glob(f"year={year}/month={month}/date=*/empty_minutes.parquet"),
+        *root.glob(f"month={month}/date=*/empty_minutes.parquet"),
+    }
+    return sorted(str(path) for path in files)
+
+
+def _discover_empty_minute_months(
+    bronze_root: str,
+    market: str,
+    exchange: str,
+    symbol: str,
+    timeframe: str,
+    instrument_type: str,
+) -> list[str]:
+    """Discover months with confirmed-empty minute sidecars for one Bronze trade symbol."""
+
+    root = (
+        Path(bronze_root)
+        / f"dataset_type={market}"
+        / f"exchange={exchange}"
+        / f"instrument_type={instrument_type}"
+        / f"symbol={symbol}"
+        / f"timeframe={timeframe}"
+    )
+    if not root.exists():
+        return []
+    months: set[str] = set()
+    for path in root.glob("year=*/month=*"):
+        if path.name.startswith("month=") and any(path.glob("date=*/empty_minutes.parquet")):
+            months.add(path.name.split("=", 1)[1])
+    for path in root.glob("month=*"):
+        if path.name.startswith("month=") and any(path.glob("date=*/empty_minutes.parquet")):
+            months.add(path.name.split("=", 1)[1])
+    return sorted(months)
 
 
 def discover_symbols(
@@ -600,11 +663,14 @@ def build_perps_trades_1m_feature_for_symbol(
     silver_root: str,
     exchange: str,
     symbol: str,
+    bronze_root: str | None = None,
     observed_timeframe: str = "tick",
     observed_dataset_type: str = "perps_trades_observed",
     output_dataset_type: str = "perps_trades_1m_feature",
+    bronze_dataset_type: str = "perps_trades",
+    instrument_type: str = "perp",
 ) -> SilverBuildReport:
-    """Build monthly trade 1m features from observed tick-trade data."""
+    """Build monthly trade 1m features from observed ticks and confirmed empty minutes."""
 
     pl = _require_polars()
     observed_root = (
@@ -621,6 +687,20 @@ def build_perps_trades_1m_feature_for_symbol(
             if path.parent.name.startswith("month=")
         }
     )
+    if bronze_root is not None:
+        months = sorted(
+            {
+                *months,
+                *_discover_empty_minute_months(
+                    bronze_root=bronze_root,
+                    market=bronze_dataset_type,
+                    exchange=exchange,
+                    symbol=symbol,
+                    timeframe=observed_timeframe,
+                    instrument_type=instrument_type,
+                ),
+            }
+        )
     accumulator = SilverMonthlyBuildAccumulator(
         dataset=output_dataset_type,
         exchange=exchange,
@@ -630,17 +710,62 @@ def build_perps_trades_1m_feature_for_symbol(
         columns=SILVER_TRADES_M1_FEATURE_COLUMNS,
     )
 
+    previous_close_price: float | None = None
     for month in months:
         year = month.split("-", 1)[0]
         month_file = observed_root / f"year={year}" / f"month={month}" / f"{symbol}-{month}.parquet"
-        if not month_file.exists():
+        empty_files = (
+            _bronze_empty_minute_month_files(
+                bronze_root=bronze_root,
+                market=bronze_dataset_type,
+                exchange=exchange,
+                symbol=symbol,
+                timeframe=observed_timeframe,
+                month=month,
+                instrument_type=instrument_type,
+            )
+            if bronze_root is not None
+            else []
+        )
+        if not month_file.exists() and not empty_files:
             continue
-        frame = pl.read_parquet(month_file).sort("trade_time")
-        rows_in = frame.height
+        frame = (
+            pl.read_parquet(month_file).sort("trade_time")
+            if month_file.exists()
+            else pl.DataFrame(
+                schema={
+                    "trade_time": pl.Datetime(time_unit="us", time_zone="UTC"),
+                    "exchange": pl.Utf8,
+                    "symbol": pl.Utf8,
+                    "instrument_type": pl.Utf8,
+                    "price": pl.Float64,
+                    "quantity": pl.Float64,
+                    "side": pl.Utf8,
+                }
+            )
+        )
+        empty_minutes = pl.scan_parquet(empty_files).collect() if empty_files else None
+        rows_in = frame.height + (empty_minutes.height if empty_minutes is not None else 0)
         if rows_in == 0:
             continue
 
-        feature = _build_trade_feature_frame(pl, frame, symbol=symbol)
+        feature = _build_trade_feature_frame(pl, frame, symbol=symbol, empty_minutes_frame=empty_minutes)
+        if feature.height == 0:
+            continue
+        if previous_close_price is not None:
+            # Confirmed-empty leading minutes can only be priced from prior observations; never backfill from future
+            # trade minutes because that would leak information into Gold feature rows.
+            feature = feature.with_columns(
+                [
+                    pl.col("open_price").fill_null(pl.lit(previous_close_price)),
+                    pl.col("high_price").fill_null(pl.lit(previous_close_price)),
+                    pl.col("low_price").fill_null(pl.lit(previous_close_price)),
+                    pl.col("close_price").fill_null(pl.lit(previous_close_price)),
+                ]
+            ).select(SILVER_TRADES_M1_FEATURE_COLUMNS)
+        latest_close = feature.filter(pl.col("close_price").is_not_null()).select(pl.col("close_price").last()).item()
+        if isinstance(latest_close, int | float):
+            previous_close_price = float(latest_close)
 
         target = _silver_month_path(
             silver_root=silver_root,
@@ -860,6 +985,34 @@ def build_realized_volatility_1m_feature_for_symbol(
     )
     if not isinstance(report, SilverBuildReport):
         raise TypeError("realized volatility 1m feature builder returned an unexpected report type")
+    return report
+
+
+def build_historical_prediction_1m_feature_for_symbol(
+    *,
+    silver_root: str,
+    exchange: str,
+    symbol: str,
+    timeframe: str = "1m",
+    output_dataset_type: str = "historical_prediction_1m_feature",
+) -> SilverBuildReport:
+    """Build historical predictor features from repository-native Silver sources."""
+
+    report = silver_historical_prediction.build_historical_prediction_1m_feature_for_symbol(
+        silver_root=silver_root,
+        exchange=exchange,
+        symbol=symbol,
+        timeframe=timeframe,
+        output_dataset_type=output_dataset_type,
+        dependencies=silver_historical_prediction.HistoricalPredictionDependencies(
+            require_polars=_require_polars,
+            silver_month_path=_silver_month_path,
+            iso_utc=_iso_utc,
+            report_factory=SilverBuildReport,
+        ),
+    )
+    if not isinstance(report, SilverBuildReport):
+        raise TypeError("Historical prediction feature builder returned an unexpected report type")
     return report
 
 

@@ -8,7 +8,12 @@ from datetime import UTC, date, datetime
 
 from application.services.fetch_executors import elapsed_seconds
 from application.services.fetch_history_rows import filter_chunk_callback, filter_rows_by_start_bound
-from application.services.fetch_range_planning import day_start_ms, missing_trade_day_ranges, ranges_in_random_order
+from application.services.fetch_range_planning import (
+    day_start_ms,
+    missing_trade_day_ranges,
+    missing_trade_minute_ranges,
+    ranges_in_random_order,
+)
 from application.services.fetch_trade_windows import (
     dedupe_sort_trade_rows,
     fetch_trade_window,
@@ -18,14 +23,23 @@ from application.services.fetch_trade_windows import (
 )
 from application.services.gapfill_service import _last_closed_open_ms, _missing_ranges_ms
 from ingestion.lake_queries import (
+    empty_trade_minutes_in_lake_by_dataset,
     open_time_bounds_in_lake_by_dataset,
+    open_time_minutes_in_lake_by_dataset,
     open_times_in_lake_by_dataset,
     partition_dates_in_lake_by_dataset,
 )
+from ingestion.lake_writes import write_empty_trade_minutes
 from ingestion.spot_ohlcv import Exchange, normalize_storage_symbol
 from ingestion.trades import OptionTradeTick, TradeMarket, TradeTick, fetch_trades_all_history, fetch_trades_range
 
 logger = logging.getLogger(__name__)
+
+
+def _uses_trade_minute_gap_coverage(market: TradeMarket) -> bool:
+    """Return whether a trade market should use minute-level coverage checks."""
+
+    return market in {"perp", "option"}
 
 
 def fetch_symbol_trades(
@@ -34,6 +48,9 @@ def fetch_symbol_trades(
     symbol: str,
     lake_root: str,
     open_times_reader: Callable[..., list[datetime]] = open_times_in_lake_by_dataset,
+    open_time_minutes_reader: Callable[..., list[datetime]] = open_time_minutes_in_lake_by_dataset,
+    empty_minutes_reader: Callable[..., list[datetime]] = empty_trade_minutes_in_lake_by_dataset,
+    empty_minutes_writer: Callable[..., list[str]] = write_empty_trade_minutes,
     partition_dates_reader: Callable[..., list[date]] = partition_dates_in_lake_by_dataset,
     partition_open_time_bounds_reader: Callable[..., dict[date, tuple[datetime, datetime]]] = (
         open_time_bounds_in_lake_by_dataset
@@ -161,7 +178,6 @@ def fetch_symbol_trades(
             )
         return dedupe_sort_trade_rows(tail_rows)
 
-    del open_times_reader
     scan_started_at = datetime.now(UTC)
     logger.debug(
         "Trade partition scan start dataset_type=%s exchange=%s market=%s symbol=%s timeframe=tick lake_root=%s",
@@ -244,6 +260,18 @@ def fetch_symbol_trades(
                         started_at=phase_started_at,
                     )
                     continue
+                if _uses_trade_minute_gap_coverage(market) and not window_rows:
+                    empty_minutes_writer(
+                        lake_root=lake_root,
+                        dataset_type=trades_dataset_type,
+                        exchange=exchange,
+                        instrument_type=market,
+                        symbol=storage_symbol,
+                        timeframe="tick",
+                        start_open_ms=window_start_ms,
+                        end_open_ms=window_end_ms,
+                        checked_at=datetime.now(UTC),
+                    )
                 if window_rows and on_history_chunk is not None:
                     on_history_chunk(window_rows)
                 bootstrap_rows.extend(window_rows)
@@ -291,12 +319,52 @@ def fetch_symbol_trades(
 
     del ranges_builder
     missing_range_start_ms = start_open_ms_bound if start_open_ms_bound is not None else earliest_existing_ms
-    missing_ranges = missing_trade_day_ranges(
-        existing_dates=stored_partition_dates,
-        coverage_bounds=stored_open_time_bounds or None,
-        start_open_ms=missing_range_start_ms,
-        end_open_ms=end_open_ms,
-    )
+    if _uses_trade_minute_gap_coverage(market):
+        stored_open_minutes = open_time_minutes_reader(
+            lake_root=lake_root,
+            dataset_type=trades_dataset_type,
+            market=market,
+            exchange=exchange,
+            symbol=storage_symbol,
+            timeframe="tick",
+        )
+        confirmed_empty_minutes = empty_minutes_reader(
+            lake_root=lake_root,
+            dataset_type=trades_dataset_type,
+            market=market,
+            exchange=exchange,
+            symbol=storage_symbol,
+            timeframe="tick",
+        )
+        covered_minutes = sorted({*stored_open_minutes, *confirmed_empty_minutes})
+        missing_ranges = missing_trade_minute_ranges(
+            existing_open_minutes=covered_minutes,
+            start_open_ms=missing_range_start_ms,
+            end_open_ms=end_open_ms,
+        )
+        logger.debug(
+            (
+                "Trade minute gap scan done dataset_type=%s exchange=%s market=%s symbol=%s "
+                "trade_minutes=%s empty_minutes=%s covered_minutes=%s ranges=%s elapsed_s=%s"
+            ),
+            trades_dataset_type,
+            exchange,
+            market,
+            storage_symbol,
+            len(stored_open_minutes),
+            len(confirmed_empty_minutes),
+            len(covered_minutes),
+            len(missing_ranges),
+            elapsed_seconds(scan_started_at),
+        )
+    else:
+        del open_times_reader
+        missing_ranges = missing_trade_day_ranges(
+            existing_dates=stored_partition_dates,
+            coverage_bounds=stored_open_time_bounds or None,
+            start_open_ms=missing_range_start_ms,
+            end_open_ms=end_open_ms,
+        )
     logger.debug(
         (
             "Trade gap plan ranges exchange=%s market=%s symbol=%s stored_partitions=%s "
@@ -358,6 +426,18 @@ def fetch_symbol_trades(
                 started_at=phase_started_at,
             )
             continue
+        if _uses_trade_minute_gap_coverage(market) and not window_rows:
+            empty_minutes_writer(
+                lake_root=lake_root,
+                dataset_type=trades_dataset_type,
+                exchange=exchange,
+                instrument_type=market,
+                symbol=storage_symbol,
+                timeframe="tick",
+                start_open_ms=window_start_ms,
+                end_open_ms=window_end_ms,
+                checked_at=datetime.now(UTC),
+            )
         if window_rows and on_history_chunk is not None:
             on_history_chunk(window_rows)
         gap_rows.extend(window_rows)

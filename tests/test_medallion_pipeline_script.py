@@ -46,11 +46,10 @@ def test_build_steps_uses_configured_market_args_with_trades(tmp_path: Path) -> 
     assert "--dataset" in args
     assert "perps_trades" in args
     assert "volatility_index_data" in args
-    assert "--full-gap-fill" in args
     assert "--tail-delta-only" not in args
 
 
-def test_build_steps_forces_bronze_full_gap_fill_for_cron(tmp_path: Path) -> None:
+def test_build_steps_preserves_bronze_delta_mode_from_config(tmp_path: Path) -> None:
     module = _load_pipeline_module()
     main_path = tmp_path / "main.py"
     main_path.write_text("print('ok')\n", encoding="utf-8")
@@ -70,8 +69,88 @@ def test_build_steps_forces_bronze_full_gap_fill_for_cron(tmp_path: Path) -> Non
     steps = module._build_steps(main_path=main_path, config_path=config_path, config_data=cfg)
     args = steps[0].args
 
-    assert "--tail-delta-only" not in args
-    assert args[-1] == "--full-gap-fill"
+    assert "--tail-delta-only" in args
+    assert "--full-gap-fill" not in args
+
+
+def test_build_steps_splits_trade_tail_mode_into_minute_gap_step(tmp_path: Path) -> None:
+    module = _load_pipeline_module()
+    main_path = tmp_path / "main.py"
+    main_path.write_text("print('ok')\n", encoding="utf-8")
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text("x: 1\n", encoding="utf-8")
+    cfg = {
+        "medallion-pipeline": {
+            "execution_order": ["bronze"],
+            "bronze": {
+                "enabled": True,
+                "command": "bronze-build",
+                "cli_args": [
+                    "--dataset",
+                    "spot_ohlcv",
+                    "perps_trades",
+                    "options_trades",
+                    "--symbols",
+                    "BTC",
+                    "--tail-delta-only",
+                    "--no-json-output",
+                ],
+            },
+        }
+    }
+
+    steps = module._build_steps(main_path=main_path, config_path=config_path, config_data=cfg)
+
+    assert [step.name for step in steps] == ["bronze-trades-minute-gap", "bronze"]
+    gap_args = steps[0].args
+    bronze_args = steps[1].args
+    gap_dataset_idx = gap_args.index("--dataset")
+    bronze_dataset_idx = bronze_args.index("--dataset")
+    assert gap_args[gap_dataset_idx + 1 : gap_args.index("--symbols")] == ["perps_trades", "options_trades"]
+    assert "--full-gap-fill" in gap_args
+    assert "--tail-delta-only" not in gap_args
+    bronze_datasets = bronze_args[bronze_dataset_idx + 1 : bronze_args.index("--symbols")]
+    assert "perps_trades" not in bronze_datasets
+    assert "options_trades" not in bronze_datasets
+    assert "--tail-delta-only" in bronze_args
+
+
+def test_build_steps_splits_options_only_tail_mode_into_minute_gap_step(tmp_path: Path) -> None:
+    module = _load_pipeline_module()
+    main_path = tmp_path / "main.py"
+    main_path.write_text("print('ok')\n", encoding="utf-8")
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text("x: 1\n", encoding="utf-8")
+    cfg = {
+        "medallion-pipeline": {
+            "execution_order": ["bronze"],
+            "bronze": {
+                "enabled": True,
+                "command": "bronze-build",
+                "cli_args": [
+                    "--dataset",
+                    "options_trades",
+                    "--symbols",
+                    "BTC",
+                    "--tail-delta-only",
+                    "--no-json-output",
+                ],
+            },
+        }
+    }
+
+    steps = module._build_steps(main_path=main_path, config_path=config_path, config_data=cfg)
+
+    assert [step.name for step in steps] == ["bronze-trades-minute-gap", "bronze"]
+    gap_args = steps[0].args
+    bronze_args = steps[1].args
+    gap_dataset_idx = gap_args.index("--dataset")
+    bronze_dataset_idx = bronze_args.index("--dataset")
+    assert gap_args[gap_dataset_idx + 1 : gap_args.index("--symbols")] == ["options_trades"]
+    assert "--full-gap-fill" in gap_args
+    assert "--tail-delta-only" not in gap_args
+    assert bronze_args[bronze_dataset_idx + 1 : bronze_args.index("--symbols")] == ["volatility_index_data"]
+    assert "--tail-delta-only" in bronze_args
 
 
 def test_build_steps_adds_volatility_to_silver_dataset_args(tmp_path: Path) -> None:
@@ -233,6 +312,30 @@ def test_log_path_from_config_dir_and_default(tmp_path: Path) -> None:
     assert out == (tmp_path / "xlogs" / "crypto-history-loader.log").resolve()
     out_default = module._log_path_from_config(config_data={}, repo_root=tmp_path)
     assert out_default == (tmp_path / ".run" / "logs" / "crypto-history-loader.log").resolve()
+
+
+def test_log_path_from_config_anchors_relative_dir_to_repo_root(tmp_path: Path) -> None:
+    module = _load_pipeline_module()
+    cfg = {"env": {"DEPTH_SYNC_LOG_DIR": ".logs"}}
+
+    out = module._log_path_from_config(config_data=cfg, repo_root=tmp_path)
+
+    assert out == (tmp_path / ".logs" / "crypto-history-loader.log").resolve()
+
+
+def test_default_config_path_prefers_runtime_cron_config(tmp_path: Path) -> None:
+    module = _load_pipeline_module()
+    runtime_config = tmp_path / ".run" / "cron-config.yaml"
+    runtime_config.parent.mkdir()
+    runtime_config.write_text("x: 1\n", encoding="utf-8")
+
+    assert module._default_config_path(tmp_path) == runtime_config
+
+
+def test_default_config_path_falls_back_to_repo_config(tmp_path: Path) -> None:
+    module = _load_pipeline_module()
+
+    assert module._default_config_path(tmp_path) == tmp_path / "config.yaml"
 
 
 def test_lock_acquire_and_release(tmp_path: Path) -> None:

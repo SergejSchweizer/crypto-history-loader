@@ -5,7 +5,15 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Literal
 
-MissingDataPolicy = Literal["drop_invalid", "observed_only", "forward_fill", "asof_join", "none"]
+MissingDataPolicy = Literal[
+    "drop_invalid",
+    "observed_only",
+    "observed_plus_confirmed_empty",
+    "derived_trailing",
+    "forward_fill",
+    "asof_join",
+    "none",
+]
 TimestampSemantics = Literal["event_open_time", "observed_timestamp", "minute_grid", "trade_time"]
 QuantitativeUnit = Literal[
     "decimal_return",
@@ -192,6 +200,38 @@ SILVER_TRADES_OBSERVED_COLUMNS = [
     "price",
     "quantity",
     "side",
+]
+SILVER_HISTORICAL_PREDICTION_FEATURE_COLUMNS = [
+    "timestamp_m1",
+    "exchange",
+    "symbol",
+    "historical_prediction_spot_log_return_1m",
+    "historical_prediction_perps_log_return_1m",
+    "historical_prediction_spot_rv_15m",
+    "historical_prediction_spot_rv_1h",
+    "historical_prediction_spot_rv_1d",
+    "historical_prediction_perps_rv_15m",
+    "historical_prediction_perps_rv_1h",
+    "historical_prediction_perps_rv_1d",
+    "historical_prediction_spot_perp_basis",
+    "historical_prediction_basis_change_1m",
+    "historical_prediction_basis_zscore_1h",
+    "historical_prediction_open_interest_delta_1m",
+    "historical_prediction_open_interest_pct_change_1m",
+    "historical_prediction_open_interest_zscore_1h",
+    "historical_prediction_funding_rate_change_1m",
+    "historical_prediction_funding_rate_zscore_1d",
+    "historical_prediction_funding_basis_divergence",
+    "historical_prediction_perps_trade_imbalance",
+    "historical_prediction_perps_trade_count_zscore_1h",
+    "historical_prediction_perps_quote_volume_zscore_1h",
+    "historical_prediction_perps_price_impact_1m",
+    "historical_prediction_options_trade_imbalance",
+    "historical_prediction_options_trade_count_zscore_1h",
+    "historical_prediction_options_quote_volume_zscore_1h",
+    "historical_prediction_leverage_build_up_signal",
+    "historical_prediction_short_stress_signal",
+    "historical_prediction_flow_volatility_pressure",
 ]
 SILVER_VOLATILITY_OBSERVED_COLUMNS = [
     "timestamp",
@@ -774,7 +814,7 @@ SILVER_DATASET_CONTRACTS: dict[str, SilverDatasetContract] = {
         timeframe="1m",
         timestamp_column="timestamp_m1",
         timestamp_semantics="minute_grid",
-        missing_data_policy="observed_only",
+        missing_data_policy="observed_plus_confirmed_empty",
         output_columns=tuple(SILVER_TRADES_M1_FEATURE_COLUMNS),
     ),
     "options_trades_1m_feature": SilverDatasetContract(
@@ -782,8 +822,16 @@ SILVER_DATASET_CONTRACTS: dict[str, SilverDatasetContract] = {
         timeframe="1m",
         timestamp_column="timestamp_m1",
         timestamp_semantics="minute_grid",
-        missing_data_policy="observed_only",
+        missing_data_policy="observed_plus_confirmed_empty",
         output_columns=tuple(SILVER_TRADES_M1_FEATURE_COLUMNS),
+    ),
+    "historical_prediction_1m_feature": SilverDatasetContract(
+        dataset_type="historical_prediction_1m_feature",
+        timeframe="1m",
+        timestamp_column="timestamp_m1",
+        timestamp_semantics="minute_grid",
+        missing_data_policy="derived_trailing",
+        output_columns=tuple(SILVER_HISTORICAL_PREDICTION_FEATURE_COLUMNS),
     ),
     "volatility_index_data_observed": SilverDatasetContract(
         dataset_type="volatility_index_data_observed",
@@ -990,6 +1038,7 @@ SILVER_LIVE_ORIGIN_BUILD_DATASETS: dict[str, tuple[str, ...]] = {
     "volatility_index_snapshot_1m": ("volatility_index_snapshot_1m_observed", "volatility_index_1m_feature"),
     "realized_volatility": ("realized_volatility_1m_feature",),
     "iv_rv": ("iv_rv_1m_feature",),
+    "historical_prediction": ("historical_prediction_1m_feature",),
     "index_price_snapshot_1m": ("index_price_1m_feature",),
     "futures_summary_snapshot_1m": ("futures_summary_1m_feature",),
     "options_ticker_snapshot_1m": ("options_surface_1m_feature",),
@@ -1063,6 +1112,10 @@ HISTORY_FULL_GOLD_REQUIREMENTS = (
     GoldSourceRequirement("open_interest_1m_feature", "1m"),
     GoldSourceRequirement("perps_trades_1m_feature", "1m"),
     GoldSourceRequirement("options_trades_1m_feature", "1m"),
+)
+
+EXTENDED_HISTORY_FULL_GOLD_REQUIREMENTS = HISTORY_FULL_GOLD_REQUIREMENTS + (
+    GoldSourceRequirement("historical_prediction_1m_feature", "1m"),
 )
 
 LIVE_VOLATILITY_GOLD_REQUIREMENTS = (GoldSourceRequirement("volatility_index_1m_feature", "1m"),)
@@ -1144,9 +1197,34 @@ GOLD_DATASET_CONTRACTS: dict[str, GoldDatasetContract] = {
         requirements=PREDICTION_TARGET_GOLD_REQUIREMENTS,
         include_l2=False,
     ),
-    "gold.market.history_full.m1": GoldDatasetContract(
-        dataset_id="gold.market.history_full.m1",
+    "gold.history.full.m1": GoldDatasetContract(
+        dataset_id="gold.history.full.m1",
         requirements=HISTORY_FULL_GOLD_REQUIREMENTS,
+        include_l2=False,
+    ),
+    "gold.history.full.m5": GoldDatasetContract(
+        dataset_id="gold.history.full.m5",
+        requirements=(),
+        include_l2=False,
+    ),
+    "gold.history.full.m30": GoldDatasetContract(
+        dataset_id="gold.history.full.m30",
+        requirements=(),
+        include_l2=False,
+    ),
+    "gold.history.full.h1": GoldDatasetContract(
+        dataset_id="gold.history.full.h1",
+        requirements=(),
+        include_l2=False,
+    ),
+    "gold.history.extended.m1": GoldDatasetContract(
+        dataset_id="gold.history.extended.m1",
+        requirements=EXTENDED_HISTORY_FULL_GOLD_REQUIREMENTS,
+        include_l2=False,
+    ),
+    "gold.history.extended_full.m1": GoldDatasetContract(
+        dataset_id="gold.history.extended_full.m1",
+        requirements=EXTENDED_HISTORY_FULL_GOLD_REQUIREMENTS,
         include_l2=False,
     ),
     "gold.live.volatility_features.m1": GoldDatasetContract(
@@ -1184,7 +1262,15 @@ GOLD_DATASET_CONTRACTS: dict[str, GoldDatasetContract] = {
 def supported_gold_dataset_ids() -> tuple[str, ...]:
     """Return every supported ``gold-build`` dataset ID in stable order."""
 
-    return tuple(sorted(GOLD_DATASET_CONTRACTS))
+    supported = {
+        "gold.history.full.m1",
+        "gold.history.full.m5",
+        "gold.history.full.m30",
+        "gold.history.full.h1",
+        "gold.history.extended.m1",
+        "gold.history.extended_full.m1",
+    }
+    return tuple(sorted(dataset_id for dataset_id in GOLD_DATASET_CONTRACTS if dataset_id in supported))
 
 
 def silver_dataset_contract(dataset_type: str) -> SilverDatasetContract:

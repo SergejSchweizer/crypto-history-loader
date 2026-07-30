@@ -8,7 +8,7 @@ import logging
 from collections.abc import Callable
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
 
@@ -66,10 +66,10 @@ def run_bronze_build(
 
     dependencies.configure_bronze_start_bounds(args, logger)
     if dependencies.current_runtime_bounds_context().tail_delta_only:
-        rolling_bound = datetime.now(UTC) - timedelta(days=30)
+        today_start = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
         logger.info(
-            "Bronze default tail-mode cap enabled max_missing_window_days=30 rolling_start_utc=%s",
-            rolling_bound.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "Bronze default tail-mode cap enabled delta_scope=today today_start_utc=%s",
+            today_start.strftime("%Y-%m-%dT%H:%M:%SZ"),
         )
 
     try:

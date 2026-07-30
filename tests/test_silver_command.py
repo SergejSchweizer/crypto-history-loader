@@ -209,20 +209,104 @@ def test_run_silver_build_realized_volatility_builds_iv_rv_feature(
         built.append(("rv", str(kwargs["symbol"])))
         return _report("realized_volatility_1m_feature")
 
-    def fake_build_iv_rv(**kwargs: object) -> SilverBuildReport:
-        built.append(("iv_rv", str(kwargs["symbol"])))
-        return _report("iv_rv_1m_feature")
-
     monkeypatch.setattr(silver_cmd, "discover_realized_volatility_symbols", fake_discover_realized_symbols)
     monkeypatch.setattr(silver_cmd, "build_realized_volatility_1m_feature_for_symbol", fake_build_rv)
-    monkeypatch.setattr(silver_cmd, "build_iv_rv_1m_feature_for_symbol", fake_build_iv_rv)
     monkeypatch.setattr(silver_cmd, "write_monthly_sidecars", lambda **kwargs: ([], []))
 
     args = silver_args(market=["realized_volatility"])
 
     silver_cmd.run_silver_build(args=args, logger=logging.getLogger("test"))
 
-    assert built == [("rv", "BTC"), ("iv_rv", "BTC")]
+    assert built == [("rv", "BTC")]
+
+
+def test_run_silver_build_runs_historical_prediction_after_base_jobs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    built: list[str] = []
+
+    def fake_discover_symbols(
+        bronze_root: str,
+        market: str,
+        exchange: str,
+        timeframe: str = "1m",
+        instrument_type: str | None = None,
+    ) -> list[str]:
+        del bronze_root, exchange, timeframe, instrument_type
+        return ["BTC-PERPETUAL"] if market == "perps_trades" else []
+
+    def fake_discover_historical_symbols(*, silver_root: str, exchange: str, timeframe: str) -> list[str]:
+        del silver_root, exchange, timeframe
+        return ["BTC"]
+
+    def fake_build_trades_observed(**kwargs: object) -> SilverBuildReport:
+        built.append("perps_trades_observed")
+        return _report("perps_trades_observed")
+
+    def fake_build_trades_feature(**kwargs: object) -> SilverBuildReport:
+        built.append("perps_trades_1m_feature")
+        return _report("perps_trades_1m_feature")
+
+    def fake_build_historical_prediction(**kwargs: object) -> SilverBuildReport:
+        built.append("historical_prediction_1m_feature")
+        return _report("historical_prediction_1m_feature")
+
+    monkeypatch.setattr(silver_cmd, "discover_symbols", fake_discover_symbols)
+    monkeypatch.setattr(silver_cmd, "discover_historical_prediction_symbols", fake_discover_historical_symbols)
+    monkeypatch.setattr(silver_cmd, "build_perps_trades_observed_for_symbol", fake_build_trades_observed)
+    monkeypatch.setattr(silver_cmd, "build_perps_trades_1m_feature_for_symbol", fake_build_trades_feature)
+    monkeypatch.setattr(
+        silver_cmd, "build_historical_prediction_1m_feature_for_symbol", fake_build_historical_prediction
+    )
+    monkeypatch.setattr(silver_cmd, "write_monthly_sidecars", lambda **kwargs: ([], []))
+
+    args = silver_args(market=["perps_trades", "historical_prediction"])
+    silver_cmd.run_silver_build(args=args, logger=logging.getLogger("test"))
+
+    assert built == [
+        "perps_trades_observed",
+        "perps_trades_1m_feature",
+        "historical_prediction_1m_feature",
+    ]
+
+
+def test_run_silver_build_defers_iv_rv_until_after_base_jobs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    built: list[str] = []
+
+    def fake_discover_symbols(
+        bronze_root: str,
+        market: str,
+        exchange: str,
+        timeframe: str = "1m",
+        instrument_type: str | None = None,
+    ) -> list[str]:
+        del bronze_root, exchange, timeframe, instrument_type
+        return ["BTC"] if market == "spot_ohlcv" else []
+
+    def fake_discover_iv_rv_symbols(*, silver_root: str, exchange: str, timeframe: str) -> list[str]:
+        del silver_root, exchange, timeframe
+        return ["BTC"]
+
+    def fake_build_spot(**kwargs: object) -> SilverBuildReport:
+        built.append(f"spot:{kwargs['symbol']}")
+        return _report("spot_ohlcv")
+
+    def fake_build_iv_rv(**kwargs: object) -> SilverBuildReport:
+        built.append(f"iv_rv:{kwargs['symbol']}")
+        return _report("iv_rv_1m_feature")
+
+    monkeypatch.setattr(silver_cmd, "discover_symbols", fake_discover_symbols)
+    monkeypatch.setattr(silver_cmd, "discover_iv_rv_symbols", fake_discover_iv_rv_symbols)
+    monkeypatch.setattr(silver_cmd, "build_silver_for_symbol", fake_build_spot)
+    monkeypatch.setattr(silver_cmd, "build_iv_rv_1m_feature_for_symbol", fake_build_iv_rv)
+    monkeypatch.setattr(silver_cmd, "write_monthly_sidecars", lambda **kwargs: ([], []))
+
+    args = silver_args(market=["spot_ohlcv", "iv_rv"])
+    silver_cmd.run_silver_build(args=args, logger=logging.getLogger("test"))
+
+    assert built == ["spot:BTC", "iv_rv:BTC"]
 
 
 def test_run_silver_build_index_price_builds_observed_and_feature(
@@ -518,6 +602,58 @@ def test_run_silver_build_rejects_invalid_maxprocesses() -> None:
 
     with pytest.raises(ValueError, match="maxprocesses"):
         silver_cmd.run_silver_build(args=args, logger=logging.getLogger("test"))
+
+
+def test_collect_job_results_logs_wait_points_and_completion(caplog: pytest.LogCaptureFixture) -> None:
+    reports: list[dict[str, object]] = []
+
+    class FakeFuture:
+        def __init__(self, payload: list[dict[str, object]]) -> None:
+            self._payload = payload
+
+        def result(self) -> list[dict[str, object]]:
+            return self._payload
+
+    futures = [
+        ("realized_volatility", "BTC", FakeFuture([{"dataset": "rv"}])),
+        ("iv_rv", "ETH", FakeFuture([{"dataset": "iv_rv"}])),
+    ]
+
+    with caplog.at_level(logging.INFO, logger="test"):
+        silver_cmd._collect_job_results(
+            futures=futures,
+            logger=logging.getLogger("test"),
+            reports=reports,
+            stage_name="base",
+        )
+
+    assert reports == [{"dataset": "rv"}, {"dataset": "iv_rv"}]
+    assert "Silver waiting for base job market=realized_volatility symbol=BTC" in caplog.text
+    assert "Silver completed base job market=realized_volatility symbol=BTC" in caplog.text
+    assert "Silver waiting for base job market=iv_rv symbol=ETH" in caplog.text
+    assert "Silver completed base job market=iv_rv symbol=ETH" in caplog.text
+
+
+def test_collect_job_results_logs_context_on_failure(caplog: pytest.LogCaptureFixture) -> None:
+    reports: list[dict[str, object]] = []
+
+    class FakeFuture:
+        def result(self) -> list[dict[str, object]]:
+            raise RuntimeError("boom")
+
+    futures = [("realized_volatility", "BTC", FakeFuture())]
+
+    with caplog.at_level(logging.INFO, logger="test"):
+        with pytest.raises(RuntimeError, match="boom"):
+            silver_cmd._collect_job_results(
+                futures=futures,
+                logger=logging.getLogger("test"),
+                reports=reports,
+                stage_name="base",
+            )
+
+    assert "Silver waiting for base job market=realized_volatility symbol=BTC" in caplog.text
+    assert "Silver base job failed market=realized_volatility symbol=BTC" in caplog.text
 
 
 def _report(dataset: str) -> SilverBuildReport:

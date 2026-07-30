@@ -20,6 +20,7 @@ def test_feature_source_dataset_maps_known_prefixes() -> None:
     assert feature_source_dataset("funding_rate_last_known") == "funding_1m_feature"
     assert feature_source_dataset("perps_trades_open_price") == "perps_trades_1m_feature"
     assert feature_source_dataset("options_trades_open_price") == "options_trades_1m_feature"
+    assert feature_source_dataset("historical_prediction_perps_rv_1h") == "historical_prediction_1m_feature"
     assert feature_source_dataset("volatility_index_data_value") == "volatility_index_data_observed"
     assert feature_source_dataset("custom_col") == "gold_merged"
 

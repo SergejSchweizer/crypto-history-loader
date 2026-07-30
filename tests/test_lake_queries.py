@@ -10,11 +10,13 @@ import pyarrow.parquet as pq
 
 from ingestion.lake import save_spot_ohlcv_candles_parquet_lake, save_trades_parquet_lake
 from ingestion.lake_queries import (
+    empty_trade_minutes_in_lake_by_dataset,
     latest_open_time_in_lake,
     open_time_bounds_in_lake_by_dataset,
     open_times_in_lake,
     partition_dates_in_lake_by_dataset,
 )
+from ingestion.lake_writes import write_empty_trade_minutes
 from ingestion.spot_ohlcv import SpotCandle
 from ingestion.trades import TradeTick
 
@@ -130,3 +132,95 @@ def test_open_time_bounds_falls_back_when_parquet_stats_are_unavailable(tmp_path
     )
 
     assert bounds == {date(2026, 4, 27): (first, second)}
+
+
+def test_empty_trade_minutes_roundtrip_and_deduplicate(tmp_path: Path) -> None:
+    start_ms = int(datetime(2026, 4, 27, 10, 0, 30, tzinfo=UTC).timestamp() * 1000)
+    end_ms = int(datetime(2026, 4, 27, 10, 2, 15, tzinfo=UTC).timestamp() * 1000)
+
+    first_write = write_empty_trade_minutes(
+        lake_root=str(tmp_path),
+        dataset_type="perps_trades",
+        exchange="deribit",
+        instrument_type="perp",
+        symbol="BTC-PERPETUAL",
+        timeframe="tick",
+        start_open_ms=start_ms,
+        end_open_ms=end_ms,
+        checked_at=datetime(2026, 7, 23, 12, 0, tzinfo=UTC),
+    )
+    second_write = write_empty_trade_minutes(
+        lake_root=str(tmp_path),
+        dataset_type="perps_trades",
+        exchange="deribit",
+        instrument_type="perp",
+        symbol="BTC-PERPETUAL",
+        timeframe="tick",
+        start_open_ms=start_ms,
+        end_open_ms=end_ms,
+        checked_at=datetime(2026, 7, 23, 12, 1, tzinfo=UTC),
+    )
+
+    minutes = empty_trade_minutes_in_lake_by_dataset(
+        lake_root=str(tmp_path),
+        dataset_type="perps_trades",
+        market="perp",
+        exchange="deribit",
+        symbol="BTC-PERPETUAL",
+        timeframe="tick",
+    )
+
+    assert len(first_write) == 1
+    assert second_write == first_write
+    assert minutes == [
+        datetime(2026, 4, 27, 10, 0, tzinfo=UTC),
+        datetime(2026, 4, 27, 10, 1, tzinfo=UTC),
+        datetime(2026, 4, 27, 10, 2, tzinfo=UTC),
+    ]
+
+
+def test_empty_trade_minutes_roundtrip_for_options_trades(tmp_path: Path) -> None:
+    start_ms = int(datetime(2026, 4, 27, 10, 0, 30, tzinfo=UTC).timestamp() * 1000)
+    end_ms = int(datetime(2026, 4, 27, 10, 1, 15, tzinfo=UTC).timestamp() * 1000)
+
+    written = write_empty_trade_minutes(
+        lake_root=str(tmp_path),
+        dataset_type="options_trades",
+        exchange="deribit",
+        instrument_type="option",
+        symbol="BTC",
+        timeframe="tick",
+        start_open_ms=start_ms,
+        end_open_ms=end_ms,
+        checked_at=datetime(2026, 7, 23, 12, 0, tzinfo=UTC),
+    )
+
+    minutes = empty_trade_minutes_in_lake_by_dataset(
+        lake_root=str(tmp_path),
+        dataset_type="options_trades",
+        market="option",
+        exchange="deribit",
+        symbol="BTC",
+        timeframe="tick",
+    )
+
+    assert written == [
+        str(
+            (
+                tmp_path
+                / "dataset_type=options_trades"
+                / "exchange=deribit"
+                / "instrument_type=option"
+                / "symbol=BTC"
+                / "timeframe=tick"
+                / "year=2026"
+                / "month=2026-04"
+                / "date=2026-04-27"
+                / "empty_minutes.parquet"
+            ).resolve()
+        )
+    ]
+    assert minutes == [
+        datetime(2026, 4, 27, 10, 0, tzinfo=UTC),
+        datetime(2026, 4, 27, 10, 1, tzinfo=UTC),
+    ]

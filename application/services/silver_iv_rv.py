@@ -174,6 +174,18 @@ def _read_iv_rv_month(
     raw row count before joining, used for Silver build reporting.
     """
 
+    frame_columns = [
+        "timestamp_m1",
+        "exchange",
+        "symbol",
+        "canonical_rv_source",
+        "iv_close",
+        "iv_30d_annualized_pct",
+        "minutes_since_iv_observation",
+        "rv_1h",
+        "rv_1d",
+        "rv_30d_annualized_pct",
+    ]
     iv_path = _month_file(iv_root, month, symbol)
     rv_path = _month_file(rv_root, month, symbol)
     iv = (
@@ -233,7 +245,10 @@ def _read_iv_rv_month(
         )
     else:
         frame = iv.join(rv, on=["timestamp_m1", "exchange", "symbol"], how="full", coalesce=True)
-    return frame, rows_in
+    missing_columns = [column for column in frame_columns if column not in frame.columns]
+    if missing_columns:
+        frame = frame.with_columns([pl.lit(None).alias(column) for column in missing_columns])
+    return frame.select(frame_columns), rows_in
 
 
 def build_iv_rv_1m_feature_for_symbol(

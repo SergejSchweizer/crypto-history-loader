@@ -68,6 +68,7 @@ Bronze
   - source-shaped, normalized records
   - deterministic partition paths
   - idempotent writes
+  - negative coverage sidecars for confirmed empty trade minutes
   - restart-safe checkpoints
 
 Silver
@@ -99,6 +100,15 @@ volatility_index_data
 `volatility_open`, `volatility_high`, `volatility_low`, and `volatility_close`; Gold exposes
 them as `volatility_index_value`, `volatility_index_open`, `volatility_index_high`,
 `volatility_index_low`, and `volatility_index_close`.
+
+`perps_trades` and `options_trades` use minute-level Bronze coverage because no-trade minutes are
+valid market states, not necessarily missing data. Successful zero-row Deribit responses are stored
+as `empty_minutes.parquet` sidecars in the corresponding Bronze date partition with
+`status=confirmed_empty`. These sidecars are negative coverage only; Bronze never writes synthetic
+trade rows. Silver trade 1m feature builders consume observed trade ticks plus confirmed-empty
+minutes. Empty minutes become zero-flow feature rows, and price fields are filled only from prior
+observed trade closes, including across month boundaries. Future trade observations must never be
+used to backfill empty-minute prices.
 
 Silver and Gold contracts live in `application/dataset_contracts.py`. If a dataset is renamed,
 added, or removed, update all of the following in the same change set:
@@ -187,11 +197,14 @@ canonical full datasets.
 
 `gold.market.history_full.m1` is the full historical dataset for data this repository actually
 fetches into Bronze. It joins only spot OHLCV, perpetual OHLCV, open interest, funding,
-perpetual-trade, and option-trade families through their Silver representations on the historical
-minute grid. The grid covers the union of those historical source timestamps; missing source values
-stay null. Realized-volatility, IV/RV, volatility-index, L2, index, futures-summary,
-option-surface, strategy, target, and label columns belong to narrower research-facing Gold
-contracts, not to `gold.market.history_full.m1`.
+perpetual-trade, option-trade, and `historical_prediction_1m_feature` families through their
+Silver representations on the historical minute grid. The grid covers the union of those
+historical source timestamps; missing source values stay null. The historical prediction family is
+derived only from the 4.1-4.6 historical datasets and provides trailing returns, realized
+volatility windows, basis, funding/open-interest stress, and trade-flow pressure features. It must
+not consume volatility-index or IV/RV inputs. Realized-volatility, IV/RV, volatility-index, L2,
+index, futures-summary, option-surface, strategy, target, and label columns belong to narrower
+research-facing Gold contracts, not to `gold.market.history_full.m1`.
 
 `gold.market.regime_features.m1` owns the research-facing IV/RV regime contract. Its minute grid
 is determined only by required spot, perpetual, funding, open-interest, realized-volatility, and

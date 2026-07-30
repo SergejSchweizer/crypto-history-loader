@@ -236,6 +236,78 @@ def test_build_iv_rv_feature_preserves_rolling_state_across_month_boundary(tmp_p
     assert february_output["iv_rv_zscore_1d"].to_list()[0] is not None
 
 
+def test_build_iv_rv_feature_handles_mixed_month_source_shapes(tmp_path: Path) -> None:
+    """Month-to-month source availability changes must not break vertical buffering."""
+
+    silver = tmp_path / "silver"
+
+    _write_feature_file(
+        silver,
+        dataset_type="volatility_index_1m_feature",
+        exchange="deribit",
+        symbol="BTC",
+        month="2026-01",
+        rows=[
+            {
+                "timestamp_m1": datetime(2026, 1, 31, 23, 59, tzinfo=UTC),
+                "exchange": "deribit",
+                "symbol": "BTC",
+                "iv_close": 60.0,
+                "iv_30d_annualized_pct": 60.0,
+                "minutes_since_iv_observation": 0,
+            }
+        ],
+    )
+    _write_feature_file(
+        silver,
+        dataset_type="realized_volatility_1m_feature",
+        exchange="deribit",
+        symbol="BTC",
+        month="2026-02",
+        rows=[
+            {
+                "timestamp_m1": datetime(2026, 2, 1, 0, 0, tzinfo=UTC),
+                "exchange": "deribit",
+                "symbol": "BTC",
+                "rv_1h": 0.01,
+                "rv_1d": 0.02,
+                "rv_30d_annualized_pct": 45.0,
+            }
+        ],
+    )
+
+    report = build_iv_rv_1m_feature_for_symbol(silver_root=str(silver), exchange="deribit", symbol="BTC")
+    assert report.rows_out == 2
+
+    january_output = pl.read_parquet(
+        silver
+        / "dataset_type=iv_rv_1m_feature"
+        / "exchange=deribit"
+        / "symbol=BTC"
+        / "timeframe=1m"
+        / "year=2026"
+        / "month=2026-01"
+        / "BTC-2026-01.parquet"
+    )
+    february_output = pl.read_parquet(
+        silver
+        / "dataset_type=iv_rv_1m_feature"
+        / "exchange=deribit"
+        / "symbol=BTC"
+        / "timeframe=1m"
+        / "year=2026"
+        / "month=2026-02"
+        / "BTC-2026-02.parquet"
+    )
+
+    assert january_output.columns == SILVER_IV_RV_FEATURE_COLUMNS
+    assert february_output.columns == SILVER_IV_RV_FEATURE_COLUMNS
+    assert january_output["iv_available"].to_list() == [True]
+    assert january_output["rv_available"].to_list() == [False]
+    assert february_output["iv_available"].to_list() == [False]
+    assert february_output["rv_available"].to_list() == [True]
+
+
 def test_build_iv_rv_feature_preserves_rolling_state_across_year_boundary(tmp_path: Path) -> None:
     """QC-02: the first minute of a year must see prior-year iv_rv_zscore_1d context."""
 

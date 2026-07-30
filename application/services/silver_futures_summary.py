@@ -134,6 +134,35 @@ def _column_or_null(pl: Any, frame: Any, column_name: str, dtype: Any) -> Any:
     return pl.lit(None, dtype=dtype)
 
 
+def _bronze_scan_schema(pl: Any) -> dict[str, Any]:
+    return {
+        "snapshot_time": pl.Datetime(time_unit="us", time_zone="UTC"),
+        "instrument_name": pl.Utf8,
+        "exchange": pl.Utf8,
+        "instrument_type": pl.Utf8,
+        "mark_price": pl.Float64,
+        "underlying_price": pl.Float64,
+        "estimated_delivery_price": pl.Float64,
+        "open_interest": pl.Float64,
+        "volume": pl.Float64,
+        "volume_usd": pl.Float64,
+        "interest_rate": pl.Float64,
+        "ingested_at": pl.Datetime(time_unit="us", time_zone="UTC"),
+        "source": pl.Utf8,
+    }
+
+
+def _scan_bronze_month(pl: Any, files: list[str]) -> Any:
+    # The Bronze Deribit response includes fields outside the Silver contract whose parquet dtype can drift between
+    # all-null and numeric files. Projecting the required contract columns avoids failures from unused source fields.
+    return pl.scan_parquet(
+        files,
+        schema=_bronze_scan_schema(pl),
+        missing_columns="insert",
+        extra_columns="ignore",
+    ).collect()
+
+
 def build_futures_summary_observed_for_symbol(
     *,
     bronze_root: str,
@@ -168,7 +197,7 @@ def build_futures_summary_observed_for_symbol(
         files = _bronze_month_files(root, month)
         if not files:
             continue
-        frame = pl.scan_parquet(files).collect()
+        frame = _scan_bronze_month(pl, files)
         rows_in = frame.height
         if rows_in == 0:
             continue

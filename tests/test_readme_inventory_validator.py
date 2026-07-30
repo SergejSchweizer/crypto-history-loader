@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from application.dataset_contracts import GOLD_DATASET_CONTRACTS
+from application.dataset_contracts import supported_gold_dataset_ids
 from scripts.validate_readme_inventory import readme_gold_dataset_ids, validate_readme_inventory
 
 
@@ -19,9 +19,10 @@ def test_readme_inventory_validator_accepts_contract_gold_dataset_ids(tmp_path: 
     """README Gold dataset list should match the typed Gold contract registry."""
 
     readme = tmp_path / "README.md"
-    _write_readme(readme, sorted(GOLD_DATASET_CONTRACTS))
+    supported = supported_gold_dataset_ids()
+    _write_readme(readme, list(supported))
 
-    assert readme_gold_dataset_ids(readme) == set(GOLD_DATASET_CONTRACTS)
+    assert readme_gold_dataset_ids(readme) == set(supported)
     assert (
         validate_readme_inventory(
             readme_path=readme,
@@ -37,7 +38,7 @@ def test_readme_inventory_validator_reports_missing_and_unknown_gold_ids(tmp_pat
     """README drift should fail loudly before stale inventory docs ship."""
 
     readme = tmp_path / "README.md"
-    contracted = sorted(GOLD_DATASET_CONTRACTS)
+    contracted = sorted(supported_gold_dataset_ids())
     missing = contracted[0]
     _write_readme(readme, [*contracted[1:], "gold.unknown.dataset.m1"])
 

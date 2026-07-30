@@ -3,10 +3,22 @@
 This backlog is the source of truth for stacked, atomic PRs that bring every Bronze dataset into a
 contracted Silver representation suitable for IV/RV and regime-change research.
 
-Last updated: 2026-07-17
+Last updated: 2026-07-25
 
 ## Policy
 
+- Use this backlog as a simple ticket system: one `PR-XX` entry is one ticket and one logical pull request.
+- Every ticket must contain separate `Status`, `Updated`, `PR`, `Branch`, and `Depends on` fields. `Updated` uses
+  `YYYY-MM-DD`; `Branch` remains in the merged ticket as historical traceability after branch deletion.
+- The only valid statuses are `Planned`, `In Progress`, `Blocked`, `Ready`, and `Merged`. `Merged` is the only
+  completed status. Terms such as `Done`, `Implemented`, `Complete`, and `Finished` are not valid statuses.
+- Every ticket must contain numbered `Description` requirements (`R1`, `R2`, ...) and numbered `Acceptance`
+  checks (`A1`, `A2`, ...) with exactly the same IDs. `A1` verifies only `R1`, `A2` verifies only `R2`, and so on.
+  No description requirement or acceptance check may exist without its matching counterpart.
+- A ticket may move to `Ready` only when every acceptance check passes. A ticket may move to `Merged` only after
+  the PR is merged into `main` and the merge commit is reachable from `origin/main`.
+- After reachability from `origin/main` is verified, delete both the local and remote feature branches. Record
+  `Status: Merged`, the final `Updated` date, and the final PR URL before deleting them.
 - Keep PRs stacked in the order listed here; each PR must be mergeable after its predecessor.
 - Keep each PR atomic: one dataset family, one contract boundary, or one shared adapter change.
 - Keep outputs deterministic: stable partition layout, stable sort keys, explicit dedup keys, fixed column order,
@@ -17,12 +29,39 @@ Last updated: 2026-07-17
 - Keep IV/RV and regime-change features as reusable market-state features. Prediction labels belong in Gold or a
   later modelling layer.
 - Update this file in every PR that changes dataset naming, contracts, scope, order, or completion status.
-- Keep completed and historically referenced PR entries in this backlog. Do not delete `Done`, `Implemented`, or
-  superseded entries; mark them with their final status and link instead so the backlog remains an audit trail.
+- Keep merged and superseded ticket entries in this backlog as an audit trail; never delete their recorded branch,
+  date, PR URL, description, or acceptance evidence.
+
+## Ticket Template
+
+```markdown
+### PR-XX: Short Ticket Title
+
+Status: Planned
+
+Updated: YYYY-MM-DD
+
+PR: TBD
+
+Branch: `codex/prxx-short-ticket-title`
+
+Depends on: none
+
+Description:
+- R1: State one required behavior or deliverable.
+- R2: State one required behavior or deliverable.
+
+Acceptance:
+- A1 (verifies R1): State the observable condition proving R1.
+- A2 (verifies R2): State the observable condition proving R2.
+```
+
+The number and IDs of `Description` and `Acceptance` items must match exactly. Broad `Goal`, `Scope`, or prose
+sections may provide context, but they never replace the paired requirements and checks.
 
 ## Status Semantics And Working-Tree Policy
 
-`Done` on PR-01 through PR-18 means that the contract, transformation code, and focused tests are merged.
+`Merged` on PR-01 through PR-18 means that the contract, transformation code, and focused tests are in `main`.
 It does not mean that a complete local Lake artifact exists. The 2026-07-10 inventory found ten physical
 Silver dataset types and nine physical Gold families; all other outputs require materialization or rebuild.
 
@@ -119,7 +158,11 @@ recent_trade_snapshot_1m
 
 ### PR-01: Silver Contract Registry Baseline
 
-Status: Done - PR #58: https://github.com/SergejSchweizer/crypto-history-loader/pull/58
+Status: Merged
+
+Updated: 2026-07-25
+
+PR: PR #58: https://github.com/SergejSchweizer/crypto-history-loader/pull/58
 
 Branch: `codex/pr01-silver-contract-registry-baseline`
 
@@ -145,7 +188,11 @@ Acceptance:
 
 ### PR-02: Silver Naming Compatibility For OHLCV
 
-Status: Done - PR #59: https://github.com/SergejSchweizer/crypto-history-loader/pull/59
+Status: Merged
+
+Updated: 2026-07-25
+
+PR: PR #59: https://github.com/SergejSchweizer/crypto-history-loader/pull/59
 
 Branch: `codex/pr02-silver-ohlcv-naming-compat`
 
@@ -167,7 +214,11 @@ Acceptance:
 
 ### PR-03: Volatility Index OHLC Bronze To Silver
 
-Status: Done - PR #60: https://github.com/SergejSchweizer/crypto-history-loader/pull/60
+Status: Merged
+
+Updated: 2026-07-25
+
+PR: PR #60: https://github.com/SergejSchweizer/crypto-history-loader/pull/60
 
 Branch: `codex/pr03-volatility-index-ohlc-silver`
 
@@ -200,7 +251,11 @@ Acceptance:
 
 ### PR-04: Live Volatility Snapshot To Canonical IV Silver
 
-Status: Done - PR #61: https://github.com/SergejSchweizer/crypto-history-loader/pull/61
+Status: Merged
+
+Updated: 2026-07-25
+
+PR: PR #61: https://github.com/SergejSchweizer/crypto-history-loader/pull/61
 
 Branch: `codex/pr04-volatility-snapshot-silver`
 
@@ -225,7 +280,11 @@ Acceptance:
 
 ### PR-05: IV Feature Layer For Regime Research
 
-Status: Done - PR #62: https://github.com/SergejSchweizer/crypto-history-loader/pull/62
+Status: Merged
+
+Updated: 2026-07-25
+
+PR: PR #62: https://github.com/SergejSchweizer/crypto-history-loader/pull/62
 
 Branch: `codex/pr05-iv-index-feature-layer`
 
@@ -253,7 +312,11 @@ Acceptance:
 
 ### PR-06: RV Feature Layer From Spot And Perps OHLCV
 
-Status: Done - PR #63: https://github.com/SergejSchweizer/crypto-history-loader/pull/63
+Status: Merged
+
+Updated: 2026-07-25
+
+PR: PR #63: https://github.com/SergejSchweizer/crypto-history-loader/pull/63
 
 Branch: `codex/pr06-rv-feature-layer`
 
@@ -279,7 +342,11 @@ Acceptance:
 
 ### PR-07: IV/RV Spread Feature Dataset
 
-Status: Done - PR #64: https://github.com/SergejSchweizer/crypto-history-loader/pull/64
+Status: Merged
+
+Updated: 2026-07-25
+
+PR: PR #64: https://github.com/SergejSchweizer/crypto-history-loader/pull/64
 
 Branch: `codex/pr07-iv-rv-spread-feature`
 
@@ -306,7 +373,11 @@ Acceptance:
 
 ### PR-08: Index Price Snapshot Silver
 
-Status: Done - PR #65: https://github.com/SergejSchweizer/crypto-history-loader/pull/65
+Status: Merged
+
+Updated: 2026-07-25
+
+PR: PR #65: https://github.com/SergejSchweizer/crypto-history-loader/pull/65
 
 Branch: `codex/pr08-index-price-snapshot-silver`
 
@@ -328,7 +399,11 @@ Acceptance:
 
 ### PR-09: Futures Summary Snapshot Silver
 
-Status: Done - PR #66: https://github.com/SergejSchweizer/crypto-history-loader/pull/66
+Status: Merged
+
+Updated: 2026-07-25
+
+PR: PR #66: https://github.com/SergejSchweizer/crypto-history-loader/pull/66
 
 Branch: `codex/pr09-futures-summary-silver`
 
@@ -354,7 +429,11 @@ Acceptance:
 
 ### PR-10: Options Ticker Snapshot Silver
 
-Status: Done - PR #67: https://github.com/SergejSchweizer/crypto-history-loader/pull/67
+Status: Merged
+
+Updated: 2026-07-25
+
+PR: PR #67: https://github.com/SergejSchweizer/crypto-history-loader/pull/67
 
 Branch: `codex/pr10-options-ticker-silver`
 
@@ -380,7 +459,11 @@ Acceptance:
 
 ### PR-11: Options Instrument Ticker Snapshot Silver
 
-Status: Done - PR #68: https://github.com/SergejSchweizer/crypto-history-loader/pull/68
+Status: Merged
+
+Updated: 2026-07-25
+
+PR: PR #68: https://github.com/SergejSchweizer/crypto-history-loader/pull/68
 
 Branch: `codex/pr11-options-instrument-ticker-silver`
 
@@ -401,7 +484,11 @@ Acceptance:
 
 ### PR-12: Option Surface 1m Feature
 
-Status: Done - PR #69: https://github.com/SergejSchweizer/crypto-history-loader/pull/69
+Status: Merged
+
+Updated: 2026-07-25
+
+PR: PR #69: https://github.com/SergejSchweizer/crypto-history-loader/pull/69
 
 Branch: `codex/pr12-option-surface-feature`
 
@@ -428,7 +515,11 @@ Acceptance:
 
 ### PR-13: Perps L2 Snapshot Silver
 
-Status: Done - PR #70: https://github.com/SergejSchweizer/crypto-history-loader/pull/70
+Status: Merged
+
+Updated: 2026-07-25
+
+PR: PR #70: https://github.com/SergejSchweizer/crypto-history-loader/pull/70
 
 Branch: `codex/pr13-perps-l2-silver`
 
@@ -455,7 +546,11 @@ Acceptance:
 
 ### PR-14: Options L2 Snapshot Silver
 
-Status: Done - PR #71: https://github.com/SergejSchweizer/crypto-history-loader/pull/71
+Status: Merged
+
+Updated: 2026-07-25
+
+PR: PR #71: https://github.com/SergejSchweizer/crypto-history-loader/pull/71
 
 Branch: `codex/pr14-options-l2-silver`
 
@@ -481,7 +576,11 @@ Acceptance:
 
 ### PR-15: Recent Trade Snapshot Silver
 
-Status: Done - PR #72: https://github.com/SergejSchweizer/crypto-history-loader/pull/72
+Status: Merged
+
+Updated: 2026-07-25
+
+PR: PR #72: https://github.com/SergejSchweizer/crypto-history-loader/pull/72
 
 Branch: `codex/pr15-recent-trade-snapshot-silver`
 
@@ -502,7 +601,11 @@ Acceptance:
 
 ### PR-16: Instrument Metadata Silver
 
-Status: Done - PR #73: https://github.com/SergejSchweizer/crypto-history-loader/pull/73
+Status: Merged
+
+Updated: 2026-07-25
+
+PR: PR #73: https://github.com/SergejSchweizer/crypto-history-loader/pull/73
 
 Branch: `codex/pr16-instrument-metadata-silver`
 
@@ -532,7 +635,11 @@ Acceptance:
 
 ### PR-17: Historical Volatility Silver
 
-Status: Done - PR #74: https://github.com/SergejSchweizer/crypto-history-loader/pull/74
+Status: Merged
+
+Updated: 2026-07-25
+
+PR: PR #74: https://github.com/SergejSchweizer/crypto-history-loader/pull/74
 
 Branch: `codex/pr17-historical-volatility-silver`
 
@@ -553,7 +660,11 @@ Acceptance:
 
 ### PR-18: Gold Contract Update For Regime Feature Set
 
-Status: Done - PR #77: https://github.com/SergejSchweizer/crypto-history-loader/pull/77
+Status: Merged
+
+Updated: 2026-07-25
+
+PR: PR #77: https://github.com/SergejSchweizer/crypto-history-loader/pull/77
 
 Branch: `codex/pr18-gold-regime-feature-contract`
 
@@ -594,7 +705,11 @@ datasets are fetched and transformed by this repository.
 
 ### PR-19: Silver Materialization Audit And Build Manifest
 
-Status: Done - PR #79: https://github.com/SergejSchweizer/crypto-history-loader/pull/79
+Status: Merged
+
+Updated: 2026-07-25
+
+PR: PR #79: https://github.com/SergejSchweizer/crypto-history-loader/pull/79
 
 Branch: `codex/pr19-silver-materialization-audit`
 
@@ -623,7 +738,11 @@ Acceptance:
 
 ### PR-20: Volatility Index Silver Materialization
 
-Status: Done - PR #80: https://github.com/SergejSchweizer/crypto-history-loader/pull/80
+Status: Merged
+
+Updated: 2026-07-25
+
+PR: PR #80: https://github.com/SergejSchweizer/crypto-history-loader/pull/80
 
 Branch: `codex/pr20-volatility-silver-materialization`
 
@@ -645,7 +764,11 @@ Acceptance:
 
 ### PR-21: Realized Volatility And IV/RV Silver Materialization
 
-Status: Done - PR #81: https://github.com/SergejSchweizer/crypto-history-loader/pull/81
+Status: Merged
+
+Updated: 2026-07-25
+
+PR: PR #81: https://github.com/SergejSchweizer/crypto-history-loader/pull/81
 
 Branch: `codex/pr21-rv-iv-rv-silver-materialization`
 
@@ -668,7 +791,11 @@ Acceptance:
 
 ### PR-22: Index Price And Futures Summary Silver Materialization
 
-Status: Done - PR #83: https://github.com/SergejSchweizer/crypto-history-loader/pull/83; PR #92: https://github.com/SergejSchweizer/crypto-history-loader/pull/92
+Status: Merged
+
+Updated: 2026-07-25
+
+PR: PR #83: https://github.com/SergejSchweizer/crypto-history-loader/pull/83; PR #92: https://github.com/SergejSchweizer/crypto-history-loader/pull/92
 
 Branch: `codex/pr22-index-futures-silver-materialization`
 
@@ -689,7 +816,11 @@ Acceptance:
 
 ### PR-23: Options Ticker Silver Materialization
 
-Status: Done - PR #84: https://github.com/SergejSchweizer/crypto-history-loader/pull/84; PR #93: https://github.com/SergejSchweizer/crypto-history-loader/pull/93
+Status: Merged
+
+Updated: 2026-07-25
+
+PR: PR #84: https://github.com/SergejSchweizer/crypto-history-loader/pull/84; PR #93: https://github.com/SergejSchweizer/crypto-history-loader/pull/93
 
 Branch: `codex/pr23-options-ticker-silver-materialization`
 
@@ -711,7 +842,11 @@ Acceptance:
 
 ### PR-24: Options Surface Silver Materialization
 
-Status: Done - PR #85: https://github.com/SergejSchweizer/crypto-history-loader/pull/85; PR #94: https://github.com/SergejSchweizer/crypto-history-loader/pull/94
+Status: Merged
+
+Updated: 2026-07-25
+
+PR: PR #85: https://github.com/SergejSchweizer/crypto-history-loader/pull/85; PR #94: https://github.com/SergejSchweizer/crypto-history-loader/pull/94
 
 Branch: `codex/pr24-options-surface-silver-materialization`
 
@@ -732,7 +867,11 @@ Acceptance:
 
 ### PR-25: Perpetual L2 Silver Materialization
 
-Status: Done - PR #86: https://github.com/SergejSchweizer/crypto-history-loader/pull/86; PR #95: https://github.com/SergejSchweizer/crypto-history-loader/pull/95
+Status: Merged
+
+Updated: 2026-07-25
+
+PR: PR #86: https://github.com/SergejSchweizer/crypto-history-loader/pull/86; PR #95: https://github.com/SergejSchweizer/crypto-history-loader/pull/95
 
 Branch: `codex/pr25-perps-l2-silver-materialization`
 
@@ -753,7 +892,11 @@ Acceptance:
 
 ### PR-26: Options L2 Silver Materialization
 
-Status: Done - PR #87: https://github.com/SergejSchweizer/crypto-history-loader/pull/87; PR #96: https://github.com/SergejSchweizer/crypto-history-loader/pull/96
+Status: Merged
+
+Updated: 2026-07-25
+
+PR: PR #87: https://github.com/SergejSchweizer/crypto-history-loader/pull/87; PR #96: https://github.com/SergejSchweizer/crypto-history-loader/pull/96
 
 Branch: `codex/pr26-options-l2-silver-materialization`
 
@@ -773,7 +916,11 @@ Acceptance:
 
 ### PR-27: Recent Trade Snapshot Silver Materialization
 
-Status: Done - PR #88: https://github.com/SergejSchweizer/crypto-history-loader/pull/88; PR #97: https://github.com/SergejSchweizer/crypto-history-loader/pull/97
+Status: Merged
+
+Updated: 2026-07-25
+
+PR: PR #88: https://github.com/SergejSchweizer/crypto-history-loader/pull/88; PR #97: https://github.com/SergejSchweizer/crypto-history-loader/pull/97
 
 Branch: `codex/pr27-recent-trades-silver-materialization`
 
@@ -794,7 +941,11 @@ Acceptance:
 
 ### PR-28: Instrument Metadata Silver Materialization
 
-Status: Done - PR #98: https://github.com/SergejSchweizer/crypto-history-loader/pull/98
+Status: Merged
+
+Updated: 2026-07-25
+
+PR: PR #98: https://github.com/SergejSchweizer/crypto-history-loader/pull/98
 
 Branch: `codex/pr28-instrument-metadata-silver-materialization`
 
@@ -815,7 +966,11 @@ Acceptance:
 
 ### PR-29: Historical Silver Backfill And Reconciliation
 
-Status: Done - PR #99: https://github.com/SergejSchweizer/crypto-history-loader/pull/99
+Status: Merged
+
+Updated: 2026-07-25
+
+PR: PR #99: https://github.com/SergejSchweizer/crypto-history-loader/pull/99
 
 Branch: `codex/pr29-silver-backfill-reconciliation`
 
@@ -838,7 +993,11 @@ Acceptance:
 
 ### PR-30: Historical Gold IV/RV Feature Dataset
 
-Status: Done - PR #100: https://github.com/SergejSchweizer/crypto-history-loader/pull/100
+Status: Merged
+
+Updated: 2026-07-25
+
+PR: PR #100: https://github.com/SergejSchweizer/crypto-history-loader/pull/100
 
 Branch: `codex/pr30-historical-gold-iv-rv`
 
@@ -860,7 +1019,11 @@ Acceptance:
 
 ### PR-31: Historical Gold Regime Features
 
-Status: Done - PR #101: https://github.com/SergejSchweizer/crypto-history-loader/pull/101; PR #103: https://github.com/SergejSchweizer/crypto-history-loader/pull/103
+Status: Merged
+
+Updated: 2026-07-25
+
+PR: PR #101: https://github.com/SergejSchweizer/crypto-history-loader/pull/101; PR #103: https://github.com/SergejSchweizer/crypto-history-loader/pull/103
 
 Branch: `codex/pr31-historical-gold-regime-features`
 
@@ -881,7 +1044,11 @@ Acceptance:
 
 ### PR-32: Historical Strategy Feature Families
 
-Status: Done - PR #104: https://github.com/SergejSchweizer/crypto-history-loader/pull/104; PR #105: https://github.com/SergejSchweizer/crypto-history-loader/pull/105
+Status: Merged
+
+Updated: 2026-07-25
+
+PR: PR #104: https://github.com/SergejSchweizer/crypto-history-loader/pull/104; PR #105: https://github.com/SergejSchweizer/crypto-history-loader/pull/105
 
 Branch: `codex/pr32-historical-strategy-features`
 
@@ -902,7 +1069,11 @@ Acceptance:
 
 ### PR-33: Historical Prediction Targets And Regime Labels
 
-Status: Done - PR #106: https://github.com/SergejSchweizer/crypto-history-loader/pull/106
+Status: Merged
+
+Updated: 2026-07-25
+
+PR: PR #106: https://github.com/SergejSchweizer/crypto-history-loader/pull/106
 
 Branch: `codex/pr33-historical-targets-labels`
 
@@ -923,7 +1094,11 @@ Acceptance:
 
 ### PR-34: Live-Origin Gold Feature Contract
 
-Status: Done - PR #107: https://github.com/SergejSchweizer/crypto-history-loader/pull/107; PR #108: https://github.com/SergejSchweizer/crypto-history-loader/pull/108
+Status: Merged
+
+Updated: 2026-07-25
+
+PR: PR #107: https://github.com/SergejSchweizer/crypto-history-loader/pull/107; PR #108: https://github.com/SergejSchweizer/crypto-history-loader/pull/108
 
 Branch: `codex/pr34-live-gold-feature-contract`
 
@@ -947,7 +1122,11 @@ Acceptance:
 
 ### PR-35: Historical Full Gold Dataset
 
-Status: Done - PR #110: https://github.com/SergejSchweizer/crypto-history-loader/pull/110
+Status: Merged
+
+Updated: 2026-07-25
+
+PR: PR #110: https://github.com/SergejSchweizer/crypto-history-loader/pull/110
 
 Branch: `codex/pr35-historical-full-gold-dataset`
 
@@ -983,7 +1162,11 @@ Acceptance:
 
 ### PR-36: Live Full Gold Dataset
 
-Status: Done - PR #112: https://github.com/SergejSchweizer/crypto-history-loader/pull/112
+Status: Merged
+
+Updated: 2026-07-25
+
+PR: PR #112: https://github.com/SergejSchweizer/crypto-history-loader/pull/112
 
 Branch: `codex/pr36-live-full-gold-dataset`
 
@@ -1021,7 +1204,11 @@ Acceptance:
 
 ### PR-37: Gold Inventory Documentation And Release Gate
 
-Status: Done - PR #114: https://github.com/SergejSchweizer/crypto-history-loader/pull/114
+Status: Merged
+
+Updated: 2026-07-25
+
+PR: PR #114: https://github.com/SergejSchweizer/crypto-history-loader/pull/114
 
 Branch: `codex/pr37-gold-inventory-contract-gate`
 
@@ -1043,7 +1230,11 @@ Acceptance:
 
 ### PR-38: Fixed Gold Dataset Retention
 
-Status: Done - PR #113: https://github.com/SergejSchweizer/crypto-history-loader/pull/113
+Status: Merged
+
+Updated: 2026-07-25
+
+PR: PR #113: https://github.com/SergejSchweizer/crypto-history-loader/pull/113
 
 Branch: `codex/gold-retention-three-versions`
 
@@ -1072,9 +1263,11 @@ idempotent, and behavior-preserving; each PR must keep existing public commands 
 
 ### PR-39: Silver Build Registry Extraction
 
-Status: Done - PR #120: https://github.com/SergejSchweizer/crypto-history-loader/pull/120
+Status: Merged
 
-PR: https://github.com/SergejSchweizer/crypto-history-loader/pull/120
+Updated: 2026-07-25
+
+PR: PR #120: https://github.com/SergejSchweizer/crypto-history-loader/pull/120
 
 Branch: `codex/pr39-silver-build-registry`
 
@@ -1111,9 +1304,11 @@ Acceptance:
 
 ### PR-40: Shared Silver Monthly IO And Report Kernel
 
-Status: Done - PR #121: https://github.com/SergejSchweizer/crypto-history-loader/pull/121
+Status: Merged
 
-PR: https://github.com/SergejSchweizer/crypto-history-loader/pull/121
+Updated: 2026-07-25
+
+PR: PR #121: https://github.com/SergejSchweizer/crypto-history-loader/pull/121
 
 Branch: `codex/pr40-silver-monthly-io-kernel`
 
@@ -1152,9 +1347,11 @@ Acceptance:
 
 ### PR-41: Gold Frame Preparation Registry
 
-Status: Done - PR #122: https://github.com/SergejSchweizer/crypto-history-loader/pull/122
+Status: Merged
 
-PR: https://github.com/SergejSchweizer/crypto-history-loader/pull/122
+Updated: 2026-07-25
+
+PR: PR #122: https://github.com/SergejSchweizer/crypto-history-loader/pull/122
 
 Branch: `codex/pr41-gold-frame-preparation-registry`
 
@@ -1194,9 +1391,11 @@ Acceptance:
 
 ### PR-42: Contract-Driven Dataset Lists And Command Choices
 
-Status: Done - PR #123: https://github.com/SergejSchweizer/crypto-history-loader/pull/123
+Status: Merged
 
-PR: https://github.com/SergejSchweizer/crypto-history-loader/pull/123
+Updated: 2026-07-25
+
+PR: PR #123: https://github.com/SergejSchweizer/crypto-history-loader/pull/123
 
 Branch: `codex/pr42-contract-driven-dataset-lists`
 
@@ -1234,9 +1433,11 @@ Acceptance:
 
 ### PR-43: Typed Test Fixture And Command Harness Consolidation
 
-Status: Done - PR #124: https://github.com/SergejSchweizer/crypto-history-loader/pull/124
+Status: Merged
 
-PR: https://github.com/SergejSchweizer/crypto-history-loader/pull/124
+Updated: 2026-07-25
+
+PR: PR #124: https://github.com/SergejSchweizer/crypto-history-loader/pull/124
 
 Branch: `codex/pr43-typed-test-command-harness`
 
@@ -1290,7 +1491,11 @@ Priority order:
 
 Priority: P0 - data correctness blocker
 
-Status: Done - PR #140: https://github.com/SergejSchweizer/crypto-history-loader/pull/140
+Status: Merged
+
+Updated: 2026-07-25
+
+PR: PR #140: https://github.com/SergejSchweizer/crypto-history-loader/pull/140
 
 Branch: `codex/qc01-normalize-iv-rv-semantics`
 
@@ -1366,7 +1571,11 @@ Acceptance:
 
 Priority: P0 - data correctness blocker
 
-Status: Implemented - PR #141: https://github.com/SergejSchweizer/crypto-history-loader/pull/141
+Status: Merged
+
+Updated: 2026-07-25
+
+PR: PR #141: https://github.com/SergejSchweizer/crypto-history-loader/pull/141
 
 Branch: `codex/qc02-cross-month-rolling-state`
 
@@ -1418,7 +1627,11 @@ Acceptance:
 
 Priority: P0 - data correctness blocker
 
-Status: Implemented - PR #141: https://github.com/SergejSchweizer/crypto-history-loader/pull/141
+Status: Merged
+
+Updated: 2026-07-25
+
+PR: PR #141: https://github.com/SergejSchweizer/crypto-history-loader/pull/141
 
 Branch: `codex/qc03-separate-spot-perp-rv`
 
@@ -1462,7 +1675,11 @@ Acceptance:
 
 Priority: P1 - contract integrity
 
-Status: Implemented - PR #141: https://github.com/SergejSchweizer/crypto-history-loader/pull/141
+Status: Merged
+
+Updated: 2026-07-25
+
+PR: PR #141: https://github.com/SergejSchweizer/crypto-history-loader/pull/141
 
 Branch: `codex/qc04-quant-semantic-contracts`
 
@@ -1491,7 +1708,11 @@ Acceptance:
 
 Priority: P1 - operational correctness
 
-Status: Implemented - PR #141: https://github.com/SergejSchweizer/crypto-history-loader/pull/141
+Status: Merged
+
+Updated: 2026-07-25
+
+PR: PR #141: https://github.com/SergejSchweizer/crypto-history-loader/pull/141
 
 Branch: `codex/qc05-executable-doc-commands`
 
@@ -1517,7 +1738,11 @@ Acceptance:
 
 Priority: P2 - governance consistency
 
-Status: Implemented - PR #141: https://github.com/SergejSchweizer/crypto-history-loader/pull/141
+Status: Merged
+
+Updated: 2026-07-25
+
+PR: PR #141: https://github.com/SergejSchweizer/crypto-history-loader/pull/141
 
 Branch: `codex/qc06-align-quality-gates`
 
@@ -1573,7 +1798,11 @@ backward-compatible reads unless a later PR explicitly documents a migration.
 
 ### PR-44: Bronze Build Request And Result Contracts
 
-Status: Done - PR #134: https://github.com/SergejSchweizer/crypto-history-loader/pull/134
+Status: Merged
+
+Updated: 2026-07-25
+
+PR: PR #134: https://github.com/SergejSchweizer/crypto-history-loader/pull/134
 
 Branch: `codex/pr44-bronze-build-contracts`
 
@@ -1621,9 +1850,11 @@ Acceptance:
 
 ### PR-45: Bronze Runtime Adapter Without Module-Global Mutation
 
-Status: Done - PR #135: https://github.com/SergejSchweizer/crypto-history-loader/pull/135
+Status: Merged
 
-PR: https://github.com/SergejSchweizer/crypto-history-loader/pull/135
+Updated: 2026-07-25
+
+PR: PR #135: https://github.com/SergejSchweizer/crypto-history-loader/pull/135
 
 Branch: `codex/pr45-bronze-runtime-adapter`
 
@@ -1673,9 +1904,11 @@ Acceptance:
 
 ### PR-46: Bronze Workflow Stage Split
 
-Status: Done - PR #137: https://github.com/SergejSchweizer/crypto-history-loader/pull/137
+Status: Merged
 
-PR: https://github.com/SergejSchweizer/crypto-history-loader/pull/137
+Updated: 2026-07-25
+
+PR: PR #137: https://github.com/SergejSchweizer/crypto-history-loader/pull/137
 
 Branch: `codex/pr46-bronze-workflow-stages`
 
@@ -1743,6 +1976,8 @@ Acceptance:
 
 Status: Planned
 
+Updated: 2026-07-25
+
 PR: TBD
 
 Branch: `codex/pr47-bronze-compat-retirement`
@@ -1761,16 +1996,12 @@ Publication `git status --short`:
 TBD
 ```
 
-Goal:
-Retire or quarantine the legacy Bronze monkeypatch and private-wrapper surface after the new request, adapter, and
-stage contracts are covered by tests.
-
-Scope:
-- Inventory every compatibility wrapper and private import used by Bronze CLI, loader, and tests.
-- Move unavoidable compatibility shims into one clearly named module with deprecation notes and tests.
-- Update tests to prefer public request/adapter/stage contracts where practical.
-- Remove stale wrappers that no test or production path uses.
-- Add a regression test that fails if new Bronze code imports private helpers from API modules.
+Description:
+- R1: Inventory compatibility wrappers and isolate every required shim with its owner, reason, and removal condition.
+- R2: Migrate Bronze tests from module-global monkeypatching to public request, adapter, and stage contracts.
+- R3: Remove unused wrappers and enforce the API/application import boundary.
+- R4: Preserve deterministic repeated command execution in one process.
+- R5: Record publication evidence in this ticket before handoff.
 
 Out of scope:
 - Do not break documented public CLI commands.
@@ -1778,15 +2009,17 @@ Out of scope:
 - Do not alter Bronze dataset behavior.
 
 Acceptance:
-- Remaining compatibility code is isolated and documented with owner, reason, and removal condition.
-- New Bronze tests target public application contracts instead of module-global monkeypatching wherever practical.
-- Import-boundary checks still pass.
-- The final Bronze refactor state is deterministic under repeated in-process command execution.
-- `git status --short` and the PR URL are recorded in this backlog entry before handoff.
+- A1 (verifies R1): Remaining compatibility code is isolated and documents its owner, reason, and removal condition.
+- A2 (verifies R2): New Bronze tests use public contracts instead of module-global monkeypatching where practical.
+- A3 (verifies R3): Unused wrappers are absent and import-boundary checks pass.
+- A4 (verifies R4): A regression test proves deterministic repeated in-process command execution.
+- A5 (verifies R5): `git status --short` and the PR URL are recorded before handoff.
 
 ### PR-48: Silver Builder Spec Completeness Audit
 
 Status: Planned
+
+Updated: 2026-07-25
 
 PR: TBD
 
@@ -1806,17 +2039,12 @@ Publication `git status --short`:
 TBD
 ```
 
-Goal:
-Audit the existing Silver build registry and monthly IO kernel against every supported Silver dataset so the next
-registry consolidation PRs can be mechanical and behavior-preserving.
-
-Scope:
-- Create or update tests proving every CLI-supported Silver dataset has exactly one builder spec or an explicit
-  documented non-buildable reason.
-- Record for each spec: source dataset family, input root policy, discovery function, build function, output dataset
-  contract, sidecar/report policy, timestamp column, dedup keys, and stable sort keys.
-- Add missing spec metadata without moving transformation code.
-- Add a deterministic fixture that compares documented spec metadata to contract helpers.
+Description:
+- R1: Expose every supported Silver builder spec in deterministic sorted order.
+- R2: Require every CLI-supported Silver dataset to have one complete builder spec or a documented non-buildable reason.
+- R3: Record deterministic output path, sorting, and deduplication semantics in every spec.
+- R4: Preserve existing Silver transformation and output behavior.
+- R5: Record publication evidence in this ticket before handoff.
 
 Out of scope:
 - Do not rewrite individual Silver builders yet.
@@ -1824,15 +2052,17 @@ Out of scope:
 - Do not add new Silver datasets.
 
 Acceptance:
-- A single test can list all supported Silver build specs in stable sorted order.
-- A new dataset cannot be exposed through CLI choices without a spec completeness test update.
-- Every spec declares deterministic output path, sorting, and deduplication semantics.
-- Existing Silver build behavior remains unchanged.
-- `git status --short` and the PR URL are recorded in this backlog entry before handoff.
+- A1 (verifies R1): One test lists all supported Silver build specs in stable sorted order.
+- A2 (verifies R2): A completeness test fails when a CLI dataset lacks a complete spec or documented exception.
+- A3 (verifies R3): Every spec declares deterministic output path, sorting, and deduplication semantics.
+- A4 (verifies R4): Existing Silver behavior and output contracts remain unchanged in regression tests.
+- A5 (verifies R5): `git status --short` and the PR URL are recorded before handoff.
 
 ### PR-49: Silver Service Coordinator Extraction
 
 Status: Planned
+
+Updated: 2026-07-25
 
 PR: TBD
 
@@ -1852,16 +2082,12 @@ Publication `git status --short`:
 TBD
 ```
 
-Goal:
-Turn the large Silver service module into a coordinator over explicit builder specs and shared monthly IO helpers,
-without changing any dataset transformation semantics.
-
-Scope:
-- Move shared path, month-discovery, write, report, and manifest utilities behind focused helper modules.
-- Keep per-dataset transformation functions import-compatible during migration.
-- Replace long handwritten dispatch paths with spec-driven coordinator calls where PR-39 left transitional code.
-- Add characterization tests for representative OHLCV, observed, feature, snapshot, and metadata datasets.
-- Keep all output columns and report fields stable.
+Description:
+- R1: Route every CLI-supported Silver dataset through one spec-driven coordinator.
+- R2: Limit dataset-specific coordinator branches to explicitly documented exceptions.
+- R3: Preserve public builder imports through coordinator delegation or documented legacy adapters.
+- R4: Preserve deterministic output files, columns, and report metadata on repeated builds.
+- R5: Record publication evidence in this ticket before handoff.
 
 Out of scope:
 - Do not optimize performance yet.
@@ -1869,15 +2095,17 @@ Out of scope:
 - Do not remove compatibility aliases that are still imported by tests or commands.
 
 Acceptance:
-- `silver-build --dataset ...` resolves every current dataset through the same coordinator path.
-- The coordinator has no dataset-specific branches except documented exceptional cases.
-- Existing public builder functions either delegate to the coordinator or are explicitly documented as legacy adapters.
-- Re-running the same build with unchanged inputs rewrites the same deterministic output files and report metadata.
-- `git status --short` and the PR URL are recorded in this backlog entry before handoff.
+- A1 (verifies R1): `silver-build --dataset ...` resolves every current dataset through the same coordinator path.
+- A2 (verifies R2): Tests or inspection show no undocumented dataset-specific coordinator branches.
+- A3 (verifies R3): Existing public builders delegate or are documented legacy adapters.
+- A4 (verifies R4): Repeated unchanged builds produce identical files, columns, and report metadata.
+- A5 (verifies R5): `git status --short` and the PR URL are recorded before handoff.
 
 ### PR-50: Silver Dataset Builder Module Boundaries
 
 Status: Planned
+
+Updated: 2026-07-25
 
 PR: TBD
 
@@ -1897,23 +2125,12 @@ Publication `git status --short`:
 TBD
 ```
 
-Goal:
-Move dataset-specific Silver transformation logic into cohesive builder modules with explicit contracts, leaving
-shared IO, discovery, and reporting in reusable infrastructure helpers.
-
-Scope:
-- Group builders by source/semantic family:
-  - OHLCV
-  - funding/open-interest
-  - trades
-  - volatility/index
-  - futures/options snapshots
-  - L2/orderbook
-  - metadata
-- Each builder module declares its accepted input columns, output columns, dedup keys, timestamp semantics, and
-  missing-data handling.
-- Add focused tests per family using minimal deterministic parquet fixtures.
-- Keep the registry as the only place that wires builder modules to CLI-exposed dataset names.
+Description:
+- R1: Remove dataset-specific transformation ownership from `silver_service.py`.
+- R2: Provide typed public entrypoints and return reports for cohesive Silver builder modules.
+- R3: Enforce each builder's declared input and output contract with deterministic tests.
+- R4: Preserve application, API, and ingestion import boundaries.
+- R5: Record publication evidence in this ticket before handoff.
 
 Out of scope:
 - Do not introduce new feature definitions.
@@ -1921,15 +2138,17 @@ Out of scope:
 - Do not change Gold requirements.
 
 Acceptance:
-- `application/services/silver_service.py` no longer owns dataset-specific transformation details.
-- Builder modules have explicit public entrypoints and typed return reports.
-- Tests fail deterministically if a builder emits columns outside its declared contract.
-- Import-linter still enforces application/API/ingestion boundaries.
-- `git status --short` and the PR URL are recorded in this backlog entry before handoff.
+- A1 (verifies R1): `silver_service.py` contains coordination but no dataset-specific transformation details.
+- A2 (verifies R2): Builder modules expose typed public entrypoints and return reports.
+- A3 (verifies R3): Tests fail when a builder emits columns outside its contract.
+- A4 (verifies R4): Import-linter passes for application, API, and ingestion boundaries.
+- A5 (verifies R5): `git status --short` and the PR URL are recorded before handoff.
 
 ### PR-51: Gold Source Preparation Module Split
 
 Status: Planned
+
+Updated: 2026-07-25
 
 PR: TBD
 
@@ -1949,19 +2168,12 @@ Publication `git status --short`:
 TBD
 ```
 
-Goal:
-Split Gold frame preparation into source-specific modules so source normalization, optional columns, lineage handling,
-and exact-time alignment rules are explicit and testable.
-
-Scope:
-- Extract source preparation logic into modules such as:
-  - `gold/source_preparation.py`
-  - `gold/optional_sources.py`
-  - `gold/source_specs.py`
-- Define typed `GoldSourceSpec` objects for required and optional sources.
-- Preserve existing `prepare_dataset_frame` compatibility by delegating to the new spec registry.
-- Add tests proving required and optional sources keep existing column order, nullability, prefixing, and lineage fields.
-- Add tests that unsupported source dataset types fail with one deterministic error message.
+Description:
+- R1: Register every Gold source requirement in a typed source preparation spec or document its exception.
+- R2: Preserve nullable optional-source columns without expanding the required time grid.
+- R3: Preserve existing Gold build behavior and source compatibility.
+- R4: Move source-specific preparation ownership out of `gold_frames.py`.
+- R5: Record publication evidence in this ticket before handoff.
 
 Out of scope:
 - Do not change Gold feature definitions, target definitions, version retention, or manifest behavior.
@@ -1969,15 +2181,17 @@ Out of scope:
 - Do not remove public Gold service entrypoints.
 
 Acceptance:
-- Every Gold contract source requirement has one registered source preparation spec or a documented exception.
-- Optional source gaps still create stable nullable columns without expanding the required time grid.
-- Existing Gold build tests continue to pass.
-- `gold_frames.py` becomes smaller and no longer owns all source-specific preparation logic.
-- `git status --short` and the PR URL are recorded in this backlog entry before handoff.
+- A1 (verifies R1): Every Gold source requirement has one typed preparation spec or documented exception.
+- A2 (verifies R2): Tests prove optional gaps create stable nullable columns without expanding the time grid.
+- A3 (verifies R3): Existing Gold build and compatibility tests pass unchanged.
+- A4 (verifies R4): `gold_frames.py` delegates source-specific preparation to focused modules.
+- A5 (verifies R5): `git status --short` and the PR URL are recorded before handoff.
 
 ### PR-52: Gold Feature And Target Family Split
 
 Status: Planned
+
+Updated: 2026-07-25
 
 PR: TBD
 
@@ -1997,20 +2211,12 @@ Publication `git status --short`:
 TBD
 ```
 
-Goal:
-Separate Gold reusable market-state features from prediction targets and labels so leakage-sensitive logic has clear
-module boundaries and focused tests.
-
-Scope:
-- Extract feature construction into modules such as:
-  - `gold/strategy_features.py`
-  - `gold/regime_features.py`
-  - `gold/microstructure_features.py`
-- Extract prediction targets and labels into `gold/prediction_targets.py`.
-- Keep feature and target functions pure with explicit input columns, output columns, lookback/lookahead windows,
-  null policy, and timestamp alignment policy.
-- Add tests that target columns are never included in reusable feature-only Gold datasets.
-- Add tests that lookahead-dependent target logic is isolated from feature construction.
+Description:
+- R1: Isolate feature-only Gold modules from prediction target and label modules.
+- R2: Declare target lookahead windows and output labels explicitly.
+- R3: Preserve existing Gold output schemas and dataset IDs.
+- R4: Enforce leakage prevention with executable tests.
+- R5: Record publication evidence in this ticket before handoff.
 
 Out of scope:
 - Do not change feature math unless an existing test proves a bug.
@@ -2018,15 +2224,17 @@ Out of scope:
 - Do not change Gold dataset IDs.
 
 Acceptance:
-- Feature-only Gold datasets do not import target-building modules.
-- Target-building modules declare lookahead windows and output labels explicitly.
-- Existing Gold output schemas remain stable.
-- Leakage prevention is enforced by tests rather than comments only.
-- `git status --short` and the PR URL are recorded in this backlog entry before handoff.
+- A1 (verifies R1): Feature-only Gold datasets do not import target-building modules.
+- A2 (verifies R2): Target modules declare lookahead windows and output labels.
+- A3 (verifies R3): Contract tests prove existing Gold schemas and dataset IDs remain stable.
+- A4 (verifies R4): Tests fail when lookahead-dependent target logic enters feature construction.
+- A5 (verifies R5): `git status --short` and the PR URL are recorded before handoff.
 
 ### PR-53: Gold Typing And Pyright Suppression Reduction
 
 Status: Planned
+
+Updated: 2026-07-25
 
 PR: TBD
 
@@ -2046,18 +2254,13 @@ Publication `git status --short`:
 TBD
 ```
 
-Goal:
-Reduce broad Gold type suppressions by introducing typed frame aliases, small DTOs, and local helper protocols where
-Polars-heavy code crosses contract boundaries.
-
-Scope:
-- Replace file-wide or broad unknown-type suppressions in Gold service modules with local typed helper wrappers where
-  practical.
-- Add typed aliases or protocols for prepared source frames, joined Gold frames, feature frames, target frames, and
-  build reports.
-- Keep public Gold service signatures explicit and import-compatible.
-- Add focused type-check tests or CI-covered examples for representative Gold build paths.
-- Document remaining unavoidable Polars typing gaps with precise local comments.
+Description:
+- R1: Remove or materially narrow broad Gold module type suppressions.
+- R2: Keep public Gold service parameters and return types explicit and compatible.
+- R3: Preserve or increase configured type-checking strictness.
+- R4: Pass Gold regression and import-boundary checks.
+- R5: Run and record the complete final quality suite.
+- R6: Record publication evidence in this ticket before handoff.
 
 Out of scope:
 - Do not attempt to type every internal Polars expression if it creates noisy casts without boundary value.
@@ -2065,11 +2268,11 @@ Out of scope:
 - Do not change Gold runtime behavior.
 
 Acceptance:
-- Broad Gold module suppressions are removed or materially narrowed.
-- Public Gold service functions have explicit parameter and return types.
-- Type-checking remains at least as strict as before.
-- Gold tests and import-boundary checks pass.
-- This final PR in the refactor architecture stack runs the complete configured quality suite:
+- A1 (verifies R1): Broad Gold module suppressions are removed or materially narrowed.
+- A2 (verifies R2): Public Gold services have explicit compatible parameter and return types.
+- A3 (verifies R3): Type-check configuration remains at least as strict as before.
+- A4 (verifies R4): Gold tests and import-boundary checks pass.
+- A5 (verifies R5): The complete configured quality suite passes:
   - `ruff check .`
   - `ruff format --check .`
   - `pyright`
@@ -2077,7 +2280,7 @@ Acceptance:
   - `coverage run -m pytest`
   - `coverage report`
   - import-linter/schema validation commands if configured in this repository
-- `git status --short` and the PR URL are recorded in this backlog entry before handoff.
+- A6 (verifies R6): `git status --short` and the PR URL are recorded before handoff.
 
 ## Completion Definition
 

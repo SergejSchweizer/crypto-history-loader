@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from datetime import date
 from pathlib import Path
 from typing import Any, cast
@@ -10,6 +11,7 @@ from typing import Any, cast
 import pytest
 
 from application.services.runtime_service import (
+    apply_repository_runtime_limits,
     configure_logging,
     enforce_log_retention,
     env_list,
@@ -76,6 +78,26 @@ def test_fetch_concurrency_uses_fetch_runtime_policy(monkeypatch: pytest.MonkeyP
     monkeypatch.setenv("DEPTH_FETCH_CONCURRENCY", "99")
 
     assert fetch_concurrency() == 8
+
+
+def test_apply_repository_runtime_limits_caps_polars_threads(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Polars parallelism should never exceed the repository ceiling."""
+
+    monkeypatch.setenv("POLARS_MAX_THREADS", "16")
+
+    apply_repository_runtime_limits()
+
+    assert os.getenv("POLARS_MAX_THREADS") == "4"
+
+
+def test_apply_repository_runtime_limits_sets_default_when_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Missing Polars limits should fall back to the repository ceiling."""
+
+    monkeypatch.delenv("POLARS_MAX_THREADS", raising=False)
+
+    apply_repository_runtime_limits()
+
+    assert os.getenv("POLARS_MAX_THREADS") == "4"
 
 
 def test_configure_logging_ignores_global_file_override_for_module_logger(
