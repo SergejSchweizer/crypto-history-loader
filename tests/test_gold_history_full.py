@@ -315,6 +315,54 @@ def test_extended_history_gold_alias_includes_historical_prediction_features(tmp
     ]
 
 
+@pytest.mark.parametrize(
+    ("dataset_id", "expected_rows"),
+    [
+        ("gold.history.extended.m5", 12),
+        ("gold.history.extended.m30", 2),
+        ("gold.history.extended.h1", 1),
+    ],
+)
+def test_extended_history_gold_derives_coarser_timeframes_from_extended_minute_artifact(
+    tmp_path: Path,
+    dataset_id: str,
+    expected_rows: int,
+) -> None:
+    """Extended history-derived datasets should resample the extended minute artifact."""
+
+    timestamps = [datetime(2026, 5, 1, 0, minute, tzinfo=UTC) for minute in range(60)]
+    silver = tmp_path / "silver"
+    gold = tmp_path / "gold-history-extended"
+    _write_history_sources(silver, timestamps, include_historical_prediction=True)
+
+    minute_report = build_gold_for_symbol(
+        silver_root=str(silver),
+        gold_root=str(gold),
+        exchange="deribit",
+        symbol="BTC",
+        dataset_id="gold.history.extended.m1",
+    )
+    assert minute_report.rows_out == 60
+
+    derived_report = build_gold_for_symbol(
+        silver_root=str(silver),
+        gold_root=str(gold),
+        exchange="deribit",
+        symbol="BTC",
+        dataset_id=dataset_id,
+    )
+    derived = pl.read_parquet(derived_report.parquet_path).sort("timestamp_m1")
+    manifest = _manifest(derived_report.manifest_path)
+
+    assert derived_report.dataset_id == dataset_id
+    assert derived_report.rows_out == expected_rows
+    assert derived["timestamp_m1"].to_list()[0] == timestamps[0]
+    assert "historical_prediction_perps_rv_1h" in derived.columns
+    assert "historical_prediction_short_stress_signal" in derived.columns
+    assert manifest["source_dataset_id"] == "gold.history.extended.m1"
+    assert manifest["required_source_datasets"] == ["gold.history.extended.m1"]
+
+
 def test_history_full_gold_derives_coarser_timeframes_from_minute_artifact(tmp_path: Path) -> None:
     """Coarser history-full datasets should be resampled from the canonical minute artifact."""
 

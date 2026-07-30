@@ -587,10 +587,15 @@ def prepare_iv_rv(pl: Any, frame: Any, symbol: str) -> Any:
 def prepare_index_price(pl: Any, frame: Any, symbol: str) -> Any:
     """Prepare index-price features for the Gold join contract."""
 
+    timestamp_expr = pl.col("timestamp_m1") if "timestamp_m1" in frame.columns else pl.col("timestamp")
+    if "index_price_is_observed" not in frame.columns:
+        frame = frame.with_columns(pl.lit(None, dtype=pl.Boolean).alias("index_price_is_observed"))
+    if "minutes_since_index_price_observation" not in frame.columns:
+        frame = frame.with_columns(pl.lit(None, dtype=pl.Int64).alias("minutes_since_index_price_observation"))
     return (
         frame.with_columns(
             [
-                pl.col("timestamp_m1").cast(pl.Datetime(time_unit="us", time_zone="UTC")),
+                timestamp_expr.cast(pl.Datetime(time_unit="us", time_zone="UTC")).alias("timestamp_m1"),
                 pl.lit(symbol).alias("symbol"),
             ]
         )
@@ -611,10 +616,19 @@ def prepare_index_price(pl: Any, frame: Any, symbol: str) -> Any:
 def prepare_futures_summary(pl: Any, frame: Any, symbol: str) -> Any:
     """Prepare futures-summary features for the Gold join contract."""
 
+    timestamp_expr = pl.col("timestamp_m1") if "timestamp_m1" in frame.columns else pl.col("timestamp")
+    for column_name, dtype in (
+        ("mark_index_spread", pl.Float64),
+        ("mark_index_ratio", pl.Float64),
+        ("summary_is_observed", pl.Boolean),
+        ("minutes_since_summary_observation", pl.Int64),
+    ):
+        if column_name not in frame.columns:
+            frame = frame.with_columns(pl.lit(None, dtype=dtype).alias(column_name))
     return (
         frame.with_columns(
             [
-                pl.col("timestamp_m1").cast(pl.Datetime(time_unit="us", time_zone="UTC")),
+                timestamp_expr.cast(pl.Datetime(time_unit="us", time_zone="UTC")).alias("timestamp_m1"),
                 pl.lit(symbol).alias("symbol"),
             ]
         )
@@ -765,6 +779,39 @@ def prepare_historical_prediction(pl: Any, frame: Any, symbol: str) -> Any:
         .select(SILVER_HISTORICAL_PREDICTION_FEATURE_COLUMNS)
         .sort("timestamp_m1")
     )
+
+
+def _prepare_live_snapshot_keys(pl: Any, frame: Any, symbol: str, timestamp_column: str) -> Any:
+    """Normalize a live snapshot to the Gold join keys only.
+
+    Some live-loader snapshots are required for lineage and minute-grid coverage
+    even when their raw columns do not contribute direct Gold features. We keep
+    only the canonical join keys so the dataset remains explicit about source
+    usage without inventing extra modeled columns.
+    """
+
+    return (
+        frame.with_columns(
+            [
+                pl.col(timestamp_column).cast(pl.Datetime(time_unit="us", time_zone="UTC")).alias("timestamp_m1"),
+                pl.lit(symbol).alias("symbol"),
+            ]
+        )
+        .select(["timestamp_m1", "exchange", "symbol"])
+        .sort("timestamp_m1")
+    )
+
+
+def prepare_recent_trade_snapshot(pl: Any, frame: Any, symbol: str) -> Any:
+    """Prepare recent-trade snapshots as lineage-only Gold inputs."""
+
+    return _prepare_live_snapshot_keys(pl, frame, symbol, "trade_time")
+
+
+def prepare_instrument_metadata_snapshot(pl: Any, frame: Any, symbol: str) -> Any:
+    """Prepare instrument-metadata snapshots as lineage-only Gold inputs."""
+
+    return _prepare_live_snapshot_keys(pl, frame, symbol, "snapshot_date")
 
 
 def prepare_options_surface(pl: Any, frame: Any, symbol: str) -> Any:
@@ -1032,6 +1079,11 @@ GOLD_FRAME_PREPARATION_SPECS: dict[str, GoldFramePreparationSpec] = {
         prepare=prepare_volatility_index_data,
         source_lineage="silver_volatility_observed",
     ),
+    "volatility_index_snapshot_1m_observed": GoldFramePreparationSpec(
+        dataset_type="volatility_index_snapshot_1m_observed",
+        prepare=prepare_volatility_index_data,
+        source_lineage="silver_volatility_observed",
+    ),
     "volatility_index_1m_feature": GoldFramePreparationSpec(
         dataset_type="volatility_index_1m_feature",
         prepare=prepare_volatility_index_feature,
@@ -1048,8 +1100,20 @@ GOLD_FRAME_PREPARATION_SPECS: dict[str, GoldFramePreparationSpec] = {
         source_lineage="silver_index_price_features",
         optional_nullable_schema=_index_price_optional_schema,
     ),
+    "index_price_snapshot_1m_observed": GoldFramePreparationSpec(
+        dataset_type="index_price_snapshot_1m_observed",
+        prepare=prepare_index_price,
+        source_lineage="silver_index_price_features",
+        optional_nullable_schema=_index_price_optional_schema,
+    ),
     "futures_summary_1m_feature": GoldFramePreparationSpec(
         dataset_type="futures_summary_1m_feature",
+        prepare=prepare_futures_summary,
+        source_lineage="silver_futures_summary_features",
+        optional_nullable_schema=_futures_summary_optional_schema,
+    ),
+    "futures_summary_snapshot_1m_observed": GoldFramePreparationSpec(
+        dataset_type="futures_summary_snapshot_1m_observed",
         prepare=prepare_futures_summary,
         source_lineage="silver_futures_summary_features",
         optional_nullable_schema=_futures_summary_optional_schema,
@@ -1065,8 +1129,26 @@ GOLD_FRAME_PREPARATION_SPECS: dict[str, GoldFramePreparationSpec] = {
         source_lineage="silver_options_surface_features",
         optional_nullable_schema=_options_surface_optional_schema,
     ),
+    "options_ticker_snapshot_1m_observed": GoldFramePreparationSpec(
+        dataset_type="options_ticker_snapshot_1m_observed",
+        prepare=prepare_options_surface,
+        source_lineage="silver_options_surface_features",
+        optional_nullable_schema=_options_surface_optional_schema,
+    ),
+    "options_instrument_ticker_snapshot_1m_observed": GoldFramePreparationSpec(
+        dataset_type="options_instrument_ticker_snapshot_1m_observed",
+        prepare=prepare_options_surface,
+        source_lineage="silver_options_surface_features",
+        optional_nullable_schema=_options_surface_optional_schema,
+    ),
     "perps_l2_1m_feature": GoldFramePreparationSpec(
         dataset_type="perps_l2_1m_feature",
+        prepare=prepare_perps_l2_feature,
+        source_lineage="silver_perps_l2_features",
+        optional_nullable_schema=_perps_l2_optional_schema,
+    ),
+    "perps_l2_snapshot_1m_observed": GoldFramePreparationSpec(
+        dataset_type="perps_l2_snapshot_1m_observed",
         prepare=prepare_perps_l2_feature,
         source_lineage="silver_perps_l2_features",
         optional_nullable_schema=_perps_l2_optional_schema,
@@ -1076,6 +1158,27 @@ GOLD_FRAME_PREPARATION_SPECS: dict[str, GoldFramePreparationSpec] = {
         prepare=prepare_options_l2_feature,
         source_lineage="silver_options_l2_features",
         optional_nullable_schema=_options_l2_optional_schema,
+    ),
+    "options_l2_snapshot_1m_observed": GoldFramePreparationSpec(
+        dataset_type="options_l2_snapshot_1m_observed",
+        prepare=prepare_options_l2_feature,
+        source_lineage="silver_options_l2_features",
+        optional_nullable_schema=_options_l2_optional_schema,
+    ),
+    "recent_trade_snapshot_1m_observed": GoldFramePreparationSpec(
+        dataset_type="recent_trade_snapshot_1m_observed",
+        prepare=prepare_recent_trade_snapshot,
+        source_lineage="silver_recent_trade_snapshot",
+    ),
+    "instrument_metadata_snapshot_daily_observed": GoldFramePreparationSpec(
+        dataset_type="instrument_metadata_snapshot_daily_observed",
+        prepare=prepare_instrument_metadata_snapshot,
+        source_lineage="silver_instrument_metadata_snapshot",
+    ),
+    "futures_instrument_metadata_snapshot_daily_observed": GoldFramePreparationSpec(
+        dataset_type="futures_instrument_metadata_snapshot_daily_observed",
+        prepare=prepare_instrument_metadata_snapshot,
+        source_lineage="silver_instrument_metadata_snapshot",
     ),
     "historical_volatility_observed": GoldFramePreparationSpec(
         dataset_type="historical_volatility_observed",
@@ -1434,6 +1537,9 @@ _HISTORY_FULL_RESAMPLE_TIMEFRAMES: dict[str, str] = {
     "gold.history.full.m5": "5m",
     "gold.history.full.m30": "30m",
     "gold.history.full.h1": "1h",
+    "gold.history.extended.m5": "5m",
+    "gold.history.extended.m30": "30m",
+    "gold.history.extended.h1": "1h",
 }
 
 

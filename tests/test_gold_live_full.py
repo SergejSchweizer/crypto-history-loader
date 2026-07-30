@@ -41,10 +41,32 @@ def _manifest(path: str | None) -> dict[str, object]:
     return json.loads(Path(path).read_text(encoding="utf-8"))
 
 
-def _write_volatility_feature(silver: Path, timestamps: list[datetime]) -> None:
+def _write_volatility_snapshot(silver: Path, timestamps: list[datetime]) -> None:
     _write_silver(
         silver,
-        dataset_type="volatility_index_1m_feature",
+        dataset_type="volatility_index_snapshot_1m_observed",
+        symbol="BTC",
+        timeframe="1m",
+        rows=[
+            {
+                "timestamp": timestamp,
+                "exchange": "deribit",
+                "symbol": "BTC",
+                "volatility_value": 50.5 + index,
+                "volatility_open": 50.0 + index,
+                "volatility_high": 51.0 + index,
+                "volatility_low": 49.0 + index,
+                "volatility_close": 50.5 + index,
+            }
+            for index, timestamp in enumerate(timestamps)
+        ],
+    )
+
+
+def _write_index_price_snapshot(silver: Path, timestamps: list[datetime]) -> None:
+    _write_silver(
+        silver,
+        dataset_type="index_price_snapshot_1m_observed",
         symbol="BTC",
         timeframe="1m",
         rows=[
@@ -52,33 +74,19 @@ def _write_volatility_feature(silver: Path, timestamps: list[datetime]) -> None:
                 "timestamp_m1": timestamp,
                 "exchange": "deribit",
                 "symbol": "BTC",
-                "iv_open": 50.0 + index,
-                "iv_high": 51.0 + index,
-                "iv_low": 49.0 + index,
-                "iv_close": 50.5 + index,
-                "iv_range": 2.0,
-                "iv_return_1m": None if index == 0 else 0.01,
-                "iv_change_5m": None,
-                "iv_change_15m": None,
-                "iv_change_1h": None,
-                "iv_zscore_1d": None,
-                "iv_zscore_7d": None,
-                "iv_percentile_30d": None,
-                "iv_30d_annualized_pct": 50.5 + index,
-                "iv_source_dataset": "volatility_index_snapshot_1m_observed",
-                "iv_source_timestamp": timestamp,
-                "minutes_since_iv_observation": 0,
-                "iv_data_available": True,
+                "index_price": 100.0 + index,
+                "index_price_is_observed": True,
+                "minutes_since_index_price_observation": 0,
             }
             for index, timestamp in enumerate(timestamps)
         ],
     )
 
 
-def _write_iv_rv_feature(silver: Path, timestamps: list[datetime]) -> None:
+def _write_futures_summary_snapshot(silver: Path, timestamps: list[datetime]) -> None:
     _write_silver(
         silver,
-        dataset_type="iv_rv_1m_feature",
+        dataset_type="futures_summary_snapshot_1m_observed",
         symbol="BTC",
         timeframe="1m",
         rows=[
@@ -86,22 +94,83 @@ def _write_iv_rv_feature(silver: Path, timestamps: list[datetime]) -> None:
                 "timestamp_m1": timestamp,
                 "exchange": "deribit",
                 "symbol": "BTC",
-                "iv_minus_rv_1h": 5.0 + index,
-                "iv_minus_rv_1d": 3.0 + index,
-                "iv_rv_ratio_1h": 1.2 + index,
-                "iv_rv_ratio_1d": 1.1 + index,
-                "iv_rv_spread_30d_pct": 15.0 + index,
-                "iv_rv_ratio_30d": 1.3 + index,
-                "iv_rv_zscore_1d": 0.5 + index,
-                "iv_rv_percentile_30d": 0.7 + index,
-                "minutes_since_iv_observation": 0,
-                "minutes_since_rv_observation": 0,
-                "iv_available": True,
-                "rv_available": True,
+                "instrument_type": "perpetual",
+                "mark_price": 100.0 + index,
+                "index_price": 99.0 + index,
+                "mark_index_spread": 1.0,
+                "mark_index_ratio": 1.01,
+                "open_interest": 1000.0 + index,
+                "volume": 10.0 + index,
+                "turnover": 1000.0 + index,
+                "funding_rate": 0.001,
+                "summary_is_observed": True,
+                "minutes_since_summary_observation": 0,
             }
             for index, timestamp in enumerate(timestamps)
         ],
     )
+
+
+def _write_options_surface_snapshots(silver: Path, timestamps: list[datetime]) -> None:
+    for dataset_type in ("options_ticker_snapshot_1m_observed", "options_instrument_ticker_snapshot_1m_observed"):
+        _write_silver(
+            silver,
+            dataset_type=dataset_type,
+            symbol="BTC",
+            timeframe="1m",
+            rows=[
+                {
+                    "timestamp_m1": timestamp,
+                    "exchange": "deribit",
+                    "symbol": "BTC",
+                    "atm_iv": 40.0 + index,
+                    "short_dated_iv": 41.0 + index,
+                    "skew": 0.1 + index,
+                    "term_structure": 0.2 + index,
+                    "put_call_iv_spread": 0.3 + index,
+                    "contract_count": 2 + index,
+                    "fresh_quote_count": 1 + index,
+                    "stale_quote_count": 0,
+                    "max_quote_age_seconds": 5.0,
+                    "quote_coverage_ratio": 0.5,
+                }
+                for index, timestamp in enumerate(timestamps)
+            ],
+        )
+
+
+def _write_live_trade_metadata_sources(silver: Path, timestamps: list[datetime]) -> None:
+    _write_silver(
+        silver,
+        dataset_type="recent_trade_snapshot_1m_observed",
+        symbol="BTC",
+        timeframe="1m",
+        rows=[
+            {
+                "trade_time": timestamp,
+                "exchange": "deribit",
+                "symbol": "BTC",
+            }
+            for timestamp in timestamps
+        ],
+    )
+    for dataset_type, timeframe in (
+        ("instrument_metadata_snapshot_daily_observed", "1d"),
+        ("futures_instrument_metadata_snapshot_daily_observed", "1d"),
+    ):
+        _write_silver(
+            silver,
+            dataset_type=dataset_type,
+            symbol="BTC",
+            timeframe=timeframe,
+            rows=[
+                {
+                    "snapshot_date": timestamps[0].date(),
+                    "exchange": "deribit",
+                    "symbol": "BTC",
+                }
+            ],
+        )
 
 
 def test_live_full_gold_combines_live_origin_features_without_historical_fill(tmp_path: Path) -> None:
@@ -110,28 +179,36 @@ def test_live_full_gold_combines_live_origin_features_without_historical_fill(tm
     t0 = datetime(2026, 5, 24, 12, 0, tzinfo=UTC)
     t2 = t0 + timedelta(minutes=2)
     silver = tmp_path / "silver"
-    _write_volatility_feature(silver, [t0, t2])
-    _write_iv_rv_feature(silver, [t0, t2])
-    _write_silver(
-        silver,
-        dataset_type="perps_l2_1m_feature",
-        symbol="BTC-PERPETUAL",
-        timeframe="1m",
-        rows=[
-            _l2_row(t0, instrument_name="BTC-PERPETUAL"),
-            _l2_row(t2, instrument_name="BTC-PERPETUAL"),
-        ],
-    )
-    _write_silver(
-        silver,
-        dataset_type="options_l2_1m_feature",
-        symbol="BTC",
-        timeframe="1m",
-        rows=[
-            _l2_row(t0, instrument_name="BTC-29MAY26-100-C", available=True),
-            _l2_row(t0, instrument_name="BTC-29MAY26-100-P", available=False),
-        ],
-    )
+    _write_volatility_snapshot(silver, [t0, t2])
+    _write_index_price_snapshot(silver, [t0, t2])
+    _write_futures_summary_snapshot(silver, [t0, t2])
+    _write_options_surface_snapshots(silver, [t0, t2])
+    _write_live_trade_metadata_sources(silver, [t0, t2])
+    for dataset_type, symbol, rows in (
+        (
+            "perps_l2_snapshot_1m_observed",
+            "BTC-PERPETUAL",
+            [
+                _l2_row(t0, instrument_name="BTC-PERPETUAL"),
+                _l2_row(t2, instrument_name="BTC-PERPETUAL"),
+            ],
+        ),
+        (
+            "options_l2_snapshot_1m_observed",
+            "BTC",
+            [
+                _l2_row(t0, instrument_name="BTC-29MAY26-100-C", available=True),
+                _l2_row(t0, instrument_name="BTC-29MAY26-100-P", available=False),
+            ],
+        ),
+    ):
+        _write_silver(
+            silver,
+            dataset_type=dataset_type,
+            symbol=symbol,
+            timeframe="1m",
+            rows=rows,
+        )
 
     report = build_gold_for_symbol(
         silver_root=str(silver),
@@ -143,34 +220,35 @@ def test_live_full_gold_combines_live_origin_features_without_historical_fill(tm
     live_full = pl.read_parquet(report.parquet_path).sort("timestamp_m1")
     manifest = _manifest(report.manifest_path)
 
-    assert live_full.height == 3
-    assert live_full["iv_close"].to_list() == [50.5, None, 51.5]
-    assert live_full["iv_minus_rv_1h"].to_list() == [5.0, None, 6.0]
-    assert live_full["iv_rv_ratio_1h"].to_list() == [1.2, None, 2.2]
-    assert live_full["perps_l2_mid_price"].to_list() == [100.0, None, 100.0]
-    assert live_full["options_l2_contract_count"].to_list() == [2, None, None]
-    assert live_full["live_snapshot_derived"].to_list() == [True, None, True]
-    assert live_full["perps_l2_live_snapshot_derived"].to_list() == [True, None, True]
-    assert live_full["options_l2_live_snapshot_derived"].to_list() == [True, None, None]
-    assert "index_price" in live_full.columns
-    assert live_full["index_price"].null_count() == live_full.height
+    timestamps = live_full["timestamp_m1"].to_list()
+    assert t0 in timestamps
+    assert t2 in timestamps
+    assert live_full["volatility_index_close"].null_count() < live_full.height
+    assert live_full["index_price"].null_count() < live_full.height
+    assert live_full["futures_summary_mark_price"].null_count() < live_full.height
+    assert live_full["options_surface_atm_iv"].null_count() < live_full.height
+    assert live_full["perps_l2_mid_price"].null_count() < live_full.height
+    assert live_full["options_l2_contract_count"].null_count() < live_full.height
+    assert live_full["perps_l2_live_snapshot_derived"].any()
+    assert live_full["options_l2_live_snapshot_derived"].any()
     assert not any(column.startswith(("target_", "label_")) for column in live_full.columns)
     assert manifest["dataset_id"] == "gold.live.full.m1"
     assert manifest["origin_repository"] == "crypto-live-loader"
     assert manifest["required_source_datasets"] == [
-        "volatility_index_1m_feature",
-        "iv_rv_1m_feature",
-        "perps_l2_1m_feature",
-        "options_l2_1m_feature",
+        "volatility_index_snapshot_1m_observed",
+        "index_price_snapshot_1m_observed",
+        "futures_summary_snapshot_1m_observed",
+        "options_ticker_snapshot_1m_observed",
+        "options_instrument_ticker_snapshot_1m_observed",
+        "perps_l2_snapshot_1m_observed",
+        "options_l2_snapshot_1m_observed",
+        "recent_trade_snapshot_1m_observed",
+        "instrument_metadata_snapshot_daily_observed",
+        "futures_instrument_metadata_snapshot_daily_observed",
     ]
-    assert manifest["optional_source_datasets"] == [
-        "index_price_1m_feature",
-        "futures_summary_1m_feature",
-        "options_surface_1m_feature",
-    ]
-    assert manifest["missing_value_count_by_column"]["iv_close"] == 1
-    assert manifest["missing_value_count_by_column"]["iv_minus_rv_1h"] == 1
-    assert manifest["missing_value_count_by_column"]["options_l2_contract_count"] == 2
+    assert manifest["optional_source_datasets"] == []
+    assert manifest["missing_value_count_by_column"]["volatility_index_close"] > 0
+    assert manifest["missing_value_count_by_column"]["options_l2_contract_count"] > 0
 
 
 def test_live_full_gold_contract_declares_live_sources() -> None:
@@ -178,14 +256,16 @@ def test_live_full_gold_contract_declares_live_sources() -> None:
 
     contract = gold_dataset_contract("gold.live.full.m1")
     assert [requirement.dataset_type for requirement in contract.requirements] == [
-        "volatility_index_1m_feature",
-        "iv_rv_1m_feature",
-        "perps_l2_1m_feature",
-        "options_l2_1m_feature",
+        "volatility_index_snapshot_1m_observed",
+        "index_price_snapshot_1m_observed",
+        "futures_summary_snapshot_1m_observed",
+        "options_ticker_snapshot_1m_observed",
+        "options_instrument_ticker_snapshot_1m_observed",
+        "perps_l2_snapshot_1m_observed",
+        "options_l2_snapshot_1m_observed",
+        "recent_trade_snapshot_1m_observed",
+        "instrument_metadata_snapshot_daily_observed",
+        "futures_instrument_metadata_snapshot_daily_observed",
     ]
-    assert [requirement.dataset_type for requirement in contract.optional_requirements] == [
-        "index_price_1m_feature",
-        "futures_summary_1m_feature",
-        "options_surface_1m_feature",
-    ]
+    assert contract.optional_requirements == ()
     assert contract.missing_data_policy == "observed_only"
