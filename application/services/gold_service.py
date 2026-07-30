@@ -764,7 +764,7 @@ def build_gold_for_symbol(
     merged = _add_prediction_targets(pl, merged, dataset_id)
     if dataset_id == "gold.history.full.m1":
         merged = _select_history_full_canonical_columns(merged)
-    elif dataset_id == "gold.history.extended_full.m1":
+    elif dataset_id in {"gold.history.extended.m1", "gold.history.extended_full.m1"}:
         merged = _select_extended_history_full_columns(merged)
     l2_validation_audit = {"l2_invalid_rows_found": 0, "l2_invalid_rows_dropped": 0}
     if _dataset_includes_l2(dataset_id):

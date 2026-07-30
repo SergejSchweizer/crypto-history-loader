@@ -171,15 +171,17 @@ uv run python main.py gold-build \
   --gold-root lake/gold \
   --exchange deribit \
   --maxprocesses 4 \
-  --dataset-id gold.history.extended_full.m1
+  --dataset-id gold.history.extended.m1
 ```
 
 Gold datasets are always named as standalone contracts; canonical and extended datasets get
 distinct IDs instead of overloading one another.
 
+`gold.history.extended.m1` and `gold.history.extended_full.m1` both keep the canonical
+`gold.history.full.m1` minute schema and add historical-prediction features.
 `gold.history.full.m5`, `gold.history.full.m30`, and `gold.history.full.h1`
 are derived from the canonical `gold.history.full.m1` artifact.
-The supported Gold build choices currently only include the History-Full family above.
+The supported Gold build choices currently include the History-Full family above.
 
 See [`DATASETS.md`](DATASETS.md) for every supported Gold dataset ID and its complete feature contract.
 

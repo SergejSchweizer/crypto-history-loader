@@ -1488,6 +1488,7 @@ def test_discover_gold_symbols_for_extended_history_full_reuses_source_contract(
     )
 
     assert discover_gold_symbols_for_dataset(str(silver), exchange, "gold.history.extended_full.m1") == ["BTC"]
+    assert discover_gold_symbols_for_dataset(str(silver), exchange, "gold.history.extended.m1") == ["BTC"]
     assert discover_gold_symbols_for_dataset(str(silver), exchange, "gold.history.full.m5") == ["BTC"]
 
 

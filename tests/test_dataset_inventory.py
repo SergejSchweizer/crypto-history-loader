@@ -165,6 +165,7 @@ def test_inventory_renders_stable_json_and_markdown(tmp_path: Path) -> None:
     assert "`abc123`" in markdown
     assert '`{"expected_days":0' in markdown
     assert "`gold.history.full.m1`" in markdown
+    assert "`gold.history.extended.m1`" in markdown
     assert "`gold.history.extended_full.m1`" in markdown
     assert "`gold.live.full.m1`" not in markdown
     history_full = next(row for row in rows if row.layer == "gold" and row.dataset == "gold.history.full.m1")

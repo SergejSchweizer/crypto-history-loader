@@ -278,11 +278,32 @@ def test_extended_history_full_gold_includes_historical_prediction_features(tmp_
         dataset_id="gold.history.extended_full.m1",
     )
     extended_history_full = pl.read_parquet(report.parquet_path).sort("timestamp_m1")
-    manifest = _manifest(report.manifest_path)
 
     assert report.dataset_id == "gold.history.extended_full.m1"
     assert "historical_prediction_perps_rv_1h" in extended_history_full.columns
     assert "historical_prediction_short_stress_signal" in extended_history_full.columns
+
+
+def test_extended_history_gold_alias_includes_historical_prediction_features(tmp_path: Path) -> None:
+    """The new extended history dataset alias should match the extended feature contract."""
+
+    timestamps = [datetime(2026, 5, 1, 0, minute, tzinfo=UTC) for minute in range(2)]
+    silver = tmp_path / "silver"
+    _write_history_sources(silver, timestamps, include_historical_prediction=True)
+
+    report = build_gold_for_symbol(
+        silver_root=str(silver),
+        gold_root=str(tmp_path / "gold-history-extended"),
+        exchange="deribit",
+        symbol="BTC",
+        dataset_id="gold.history.extended.m1",
+    )
+    extended_history = pl.read_parquet(report.parquet_path).sort("timestamp_m1")
+    manifest = _manifest(report.manifest_path)
+
+    assert report.dataset_id == "gold.history.extended.m1"
+    assert "historical_prediction_perps_rv_1h" in extended_history.columns
+    assert "historical_prediction_short_stress_signal" in extended_history.columns
     assert manifest["required_source_datasets"] == [
         "spot_ohlcv",
         "perps_ohlcv",

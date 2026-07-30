@@ -30,7 +30,7 @@ current Lake until it is built.
 - Optional source families have stable typed nullable columns when the optional artifact is absent.
 - `gold.history.full.m1` is the canonical historical market table built only from
   crypto-history-loader-owned Silver sources.
-- `gold.history.extended_full.m1` is the same canonical table plus historical-prediction
+- `gold.history.extended.m1` and `gold.history.extended_full.m1` are the same canonical table plus historical-prediction
   features from this repository.
 - `gold.history.full.m5`, `gold.history.full.m30`, and `gold.history.full.h1`
   are deterministic bucket-start resamples of `gold.history.full.m1`.
@@ -52,6 +52,7 @@ current Lake until it is built.
 | `gold.history.full.m5` | Five-minute resample of the canonical historical market table. | Derived from `gold.history.full.m1` | None | Contracted, not materialized |
 | `gold.history.full.m30` | Thirty-minute resample of the canonical historical market table. | Derived from `gold.history.full.m1` | None | Contracted, not materialized |
 | `gold.history.full.h1` | One-hour resample of the canonical historical market table. | Derived from `gold.history.full.m1` | None | Contracted, not materialized |
+| `gold.history.extended.m1` | Canonical history-full table plus historical-prediction features. | `spot_ohlcv`, `perps_ohlcv`, `funding_1m_feature`, `open_interest_1m_feature`, `perps_trades_1m_feature`, `options_trades_1m_feature`, `historical_prediction_1m_feature` | None | Contracted, not materialized |
 | `gold.history.extended_full.m1` | Canonical history-full table plus historical-prediction features. | `spot_ohlcv`, `perps_ohlcv`, `funding_1m_feature`, `open_interest_1m_feature`, `perps_trades_1m_feature`, `options_trades_1m_feature`, `historical_prediction_1m_feature` | None | Contracted, not materialized |
 
 The status column is a dated snapshot, not a runtime guarantee. Regenerate
@@ -73,6 +74,15 @@ dataset. Definitions for every feature are in [Feature dictionary](#feature-dict
   columns.
 
 ### gold.history.extended_full.m1
+
+- Origin: `crypto-history-loader`.
+- Alignment: same union-minute grid as `gold.history.full.m1`; historical-prediction
+  features remain nullable when the source family is unavailable.
+- Feature groups: **Keys**, **Spot OHLCV**, **Perpetual OHLCV**, **Funding state**,
+  **Open-interest state**, **Perpetual trade aggregates**, **Option trade aggregates**,
+  **Historical-prediction features**.
+
+### gold.history.extended.m1
 
 - Origin: `crypto-history-loader`.
 - Alignment: same union-minute grid as `gold.history.full.m1`; historical-prediction

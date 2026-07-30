@@ -61,6 +61,10 @@ EXPECTED_MEDALLION_SILVER_DATASETS = set(supported_silver_build_ids())
         ),
         (["gold-build", "--dataset-id", "gold.history.full.h1"], {"dataset_id": "gold.history.full.h1"}),
         (
+            ["gold-build", "--dataset-id", "gold.history.extended.m1"],
+            {"dataset_id": "gold.history.extended.m1"},
+        ),
+        (
             ["gold-build", "--dataset-id", "gold.history.extended_full.m1"],
             {"dataset_id": "gold.history.extended_full.m1"},
         ),

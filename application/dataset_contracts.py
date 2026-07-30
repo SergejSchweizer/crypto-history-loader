@@ -1217,6 +1217,11 @@ GOLD_DATASET_CONTRACTS: dict[str, GoldDatasetContract] = {
         requirements=(),
         include_l2=False,
     ),
+    "gold.history.extended.m1": GoldDatasetContract(
+        dataset_id="gold.history.extended.m1",
+        requirements=EXTENDED_HISTORY_FULL_GOLD_REQUIREMENTS,
+        include_l2=False,
+    ),
     "gold.history.extended_full.m1": GoldDatasetContract(
         dataset_id="gold.history.extended_full.m1",
         requirements=EXTENDED_HISTORY_FULL_GOLD_REQUIREMENTS,
@@ -1262,6 +1267,7 @@ def supported_gold_dataset_ids() -> tuple[str, ...]:
         "gold.history.full.m5",
         "gold.history.full.m30",
         "gold.history.full.h1",
+        "gold.history.extended.m1",
         "gold.history.extended_full.m1",
     }
     return tuple(sorted(dataset_id for dataset_id in GOLD_DATASET_CONTRACTS if dataset_id in supported))
