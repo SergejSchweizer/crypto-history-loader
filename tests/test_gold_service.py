@@ -1303,7 +1303,7 @@ def test_discover_gold_symbols_requires_trades_dataset(tmp_path: Path) -> None:
     assert discover_gold_symbols(str(silver), exchange) == []
 
 
-def test_discover_gold_symbols_for_derived_history_full_timeframes_reuses_minute_contract(
+def test_discover_gold_symbols_for_extended_history_full_reuses_source_contract(
     tmp_path: Path,
 ) -> None:
     silver = tmp_path / "silver"
@@ -1487,6 +1487,7 @@ def test_discover_gold_symbols_for_derived_history_full_timeframes_reuses_minute
         ],
     )
 
+    assert discover_gold_symbols_for_dataset(str(silver), exchange, "gold.market.extended_history_full.m1") == ["BTC"]
     assert discover_gold_symbols_for_dataset(str(silver), exchange, "gold.market.history_full.m5") == ["BTC"]
 
 

@@ -91,17 +91,11 @@ HISTORY_FULL_HISTORY_SOURCE_COLUMNS = (
     "options_trades_buy_trade_count",
     "options_trades_sell_trade_count",
     "options_trades_buy_volume_share",
+)
+EXTENDED_HISTORY_FULL_HISTORY_SOURCE_COLUMNS = (
+    *HISTORY_FULL_HISTORY_SOURCE_COLUMNS,
     *SILVER_HISTORICAL_PREDICTION_FEATURE_COLUMNS[3:],
 )
-_parse_semver = gold_versioning.parse_semver
-_format_semver = gold_versioning.format_semver
-_bump_semver = gold_versioning.bump_semver
-_latest_manifest_for_dataset = gold_versioning.latest_manifest_for_dataset
-_extract_feature_set_version = gold_versioning.extract_feature_set_version
-_prune_gold_versions = gold_versioning.prune_gold_versions
-_prune_gold_artifacts = gold_versioning.prune_gold_artifacts
-_contract_bump_level = gold_versioning.contract_bump_level
-
 _HISTORY_FULL_BASE_DATASET_ID = "gold.market.history_full.m1"
 _HISTORY_FULL_DERIVED_DATASET_IDS = {
     "gold.market.history_full.m5",
@@ -113,6 +107,14 @@ _HISTORY_FULL_DERIVED_INTERVALS = {
     "gold.market.history_full.m30": "30m",
     "gold.market.history_full.h1": "1h",
 }
+_parse_semver = gold_versioning.parse_semver
+_format_semver = gold_versioning.format_semver
+_bump_semver = gold_versioning.bump_semver
+_latest_manifest_for_dataset = gold_versioning.latest_manifest_for_dataset
+_extract_feature_set_version = gold_versioning.extract_feature_set_version
+_prune_gold_versions = gold_versioning.prune_gold_versions
+_prune_gold_artifacts = gold_versioning.prune_gold_artifacts
+_contract_bump_level = gold_versioning.contract_bump_level
 
 
 def validate_gold_retention_keep_versions(keep_last_versions: int) -> int:
@@ -126,10 +128,16 @@ def validate_gold_retention_keep_versions(keep_last_versions: int) -> int:
     return GOLD_RETENTION_KEEP_VERSIONS
 
 
-def _select_history_full_history_source_columns(merged: Any) -> Any:
-    """Keep only columns derived from crypto-history-loader historical datasets."""
+def _select_history_full_canonical_columns(merged: Any) -> Any:
+    """Keep only canonical history-full columns owned by this repository."""
 
     return merged.select(list(HISTORY_FULL_HISTORY_SOURCE_COLUMNS))
+
+
+def _select_extended_history_full_columns(merged: Any) -> Any:
+    """Keep canonical history-full columns plus extended history-derived features."""
+
+    return merged.select(list(EXTENDED_HISTORY_FULL_HISTORY_SOURCE_COLUMNS))
 
 
 def _history_full_derived_interval(dataset_id: str) -> str | None:
@@ -689,7 +697,6 @@ def build_gold_for_symbol(
             version_base=version_base,
             keep_last_versions=keep_last_versions,
         )
-
     pl = _require_polars()
     symbol = normalize_symbol(symbol)
     required = _dataset_requirements(dataset_id)
@@ -756,7 +763,9 @@ def build_gold_for_symbol(
     merged = _add_strategy_feature_families(pl, merged.sort("timestamp_m1"), dataset_id)
     merged = _add_prediction_targets(pl, merged, dataset_id)
     if dataset_id == "gold.market.history_full.m1":
-        merged = _select_history_full_history_source_columns(merged)
+        merged = _select_history_full_canonical_columns(merged)
+    elif dataset_id == "gold.market.extended_history_full.m1":
+        merged = _select_extended_history_full_columns(merged)
     l2_validation_audit = {"l2_invalid_rows_found": 0, "l2_invalid_rows_dropped": 0}
     if _dataset_includes_l2(dataset_id):
         merged, l2_validation_audit = _validate_or_filter_l2_quality(pl, merged, l2_validation_mode)

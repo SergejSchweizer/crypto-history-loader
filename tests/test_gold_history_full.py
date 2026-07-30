@@ -51,8 +51,13 @@ def _write_trade_features(silver: Path, timestamps: list[datetime]) -> None:
         )
 
 
-def _write_raw_history_sources(silver: Path, timestamps: list[datetime]) -> None:
-    """Write only the Silver outputs backed by raw Bronze datasets fetched by this repository."""
+def _write_history_sources(
+    silver: Path,
+    timestamps: list[datetime],
+    *,
+    include_historical_prediction: bool,
+) -> None:
+    """Write the Silver sources used by the history-full Gold contracts."""
 
     spot_timestamps = timestamps[1:]
     for dataset_type, symbol, source_timestamps, scale in (
@@ -116,24 +121,25 @@ def _write_raw_history_sources(silver: Path, timestamps: list[datetime]) -> None
         ],
     )
     _write_trade_features(silver, timestamps)
-    _write_silver(
-        silver,
-        dataset_type="historical_prediction_1m_feature",
-        symbol="BTC",
-        timeframe="1m",
-        rows=[
-            {
-                "timestamp_m1": timestamp,
-                "exchange": "deribit",
-                "symbol": "BTC",
-                **{
-                    column: float(index + offset)
-                    for offset, column in enumerate(SILVER_HISTORICAL_PREDICTION_FEATURE_COLUMNS[3:], start=1)
-                },
-            }
-            for index, timestamp in enumerate(timestamps)
-        ],
-    )
+    if include_historical_prediction:
+        _write_silver(
+            silver,
+            dataset_type="historical_prediction_1m_feature",
+            symbol="BTC",
+            timeframe="1m",
+            rows=[
+                {
+                    "timestamp_m1": timestamp,
+                    "exchange": "deribit",
+                    "symbol": "BTC",
+                    **{
+                        column: float(index + offset)
+                        for offset, column in enumerate(SILVER_HISTORICAL_PREDICTION_FEATURE_COLUMNS[3:], start=1)
+                    },
+                }
+                for index, timestamp in enumerate(timestamps)
+            ],
+        )
 
 
 def test_history_full_gold_joins_historical_sources_without_targets(tmp_path: Path) -> None:
@@ -141,7 +147,7 @@ def test_history_full_gold_joins_historical_sources_without_targets(tmp_path: Pa
 
     timestamps = [datetime(2026, 5, 1, 0, minute, tzinfo=UTC) for minute in range(2)]
     silver = tmp_path / "silver"
-    _write_raw_history_sources(silver, timestamps)
+    _write_history_sources(silver, timestamps, include_historical_prediction=False)
 
     report = build_gold_for_symbol(
         silver_root=str(silver),
@@ -214,7 +220,6 @@ def test_history_full_gold_joins_historical_sources_without_targets(tmp_path: Pa
         "options_trades_buy_trade_count",
         "options_trades_sell_trade_count",
         "options_trades_buy_volume_share",
-        *SILVER_HISTORICAL_PREDICTION_FEATURE_COLUMNS[3:],
     ]
     assert "rv_1h" not in history_full.columns
     assert "iv_minus_rv_1h" not in history_full.columns
@@ -225,7 +230,7 @@ def test_history_full_gold_joins_historical_sources_without_targets(tmp_path: Pa
     assert "options_trades_sell_trade_count" in history_full.columns
     assert "minutes_since_open_interest_observation" in history_full.columns
     assert "funding_data_available" in history_full.columns
-    assert "historical_prediction_perps_rv_1h" in history_full.columns
+    assert "historical_prediction_perps_rv_1h" not in history_full.columns
     assert history_full["spot_ohlcv_close_price"].to_list()[0] is None
     assert not any(column.startswith(("target_", "label_")) for column in history_full.columns)
     assert manifest["dataset_id"] == "gold.market.history_full.m1"
@@ -236,7 +241,6 @@ def test_history_full_gold_joins_historical_sources_without_targets(tmp_path: Pa
         "open_interest_1m_feature",
         "perps_trades_1m_feature",
         "options_trades_1m_feature",
-        "historical_prediction_1m_feature",
     ]
     assert manifest["optional_source_datasets"] == []
     assert manifest["strategy_feature_lookbacks"] == {}
@@ -255,9 +259,39 @@ def test_history_full_gold_contract_declares_canonical_historical_sources() -> N
         "open_interest_1m_feature",
         "perps_trades_1m_feature",
         "options_trades_1m_feature",
-        "historical_prediction_1m_feature",
     ]
     assert contract.optional_requirements == ()
+
+
+def test_extended_history_full_gold_includes_historical_prediction_features(tmp_path: Path) -> None:
+    """The extended history-full dataset should retain historical prediction features."""
+
+    timestamps = [datetime(2026, 5, 1, 0, minute, tzinfo=UTC) for minute in range(6)]
+    silver = tmp_path / "silver"
+    _write_history_sources(silver, timestamps, include_historical_prediction=True)
+
+    report = build_gold_for_symbol(
+        silver_root=str(silver),
+        gold_root=str(tmp_path / "gold-history-full"),
+        exchange="deribit",
+        symbol="BTC",
+        dataset_id="gold.market.extended_history_full.m1",
+    )
+    extended_history_full = pl.read_parquet(report.parquet_path).sort("timestamp_m1")
+    manifest = _manifest(report.manifest_path)
+
+    assert report.dataset_id == "gold.market.extended_history_full.m1"
+    assert "historical_prediction_perps_rv_1h" in extended_history_full.columns
+    assert "historical_prediction_short_stress_signal" in extended_history_full.columns
+    assert manifest["required_source_datasets"] == [
+        "spot_ohlcv",
+        "perps_ohlcv",
+        "funding_1m_feature",
+        "open_interest_1m_feature",
+        "perps_trades_1m_feature",
+        "options_trades_1m_feature",
+        "historical_prediction_1m_feature",
+    ]
 
 
 def test_history_full_gold_derives_coarser_timeframes_from_minute_artifact(tmp_path: Path) -> None:
@@ -266,7 +300,7 @@ def test_history_full_gold_derives_coarser_timeframes_from_minute_artifact(tmp_p
     timestamps = [datetime(2026, 5, 1, 0, minute, tzinfo=UTC) for minute in range(6)]
     silver = tmp_path / "silver"
     gold = tmp_path / "gold-history-full"
-    _write_raw_history_sources(silver, timestamps)
+    _write_history_sources(silver, timestamps, include_historical_prediction=False)
 
     minute_report = build_gold_for_symbol(
         silver_root=str(silver),

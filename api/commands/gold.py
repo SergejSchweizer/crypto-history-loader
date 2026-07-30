@@ -186,7 +186,6 @@ def run_gold_build(args: argparse.Namespace, logger: logging.Logger) -> None:
         return report.to_dict()
 
     jobs: list[Callable[[], dict[str, object] | None]] = []
-    derived_jobs: list[Callable[[], dict[str, object] | None]] = []
 
     def _make_job(selected_dataset_id: str, symbol: str) -> Callable[[], dict[str, object] | None]:
         def _job() -> dict[str, object] | None:
@@ -196,7 +195,9 @@ def run_gold_build(args: argparse.Namespace, logger: logging.Logger) -> None:
 
     for selected_dataset_id in effective_dataset_ids:
         for symbol in schedule[selected_dataset_id]:
-            target_jobs = derived_jobs if selected_dataset_id in _HISTORY_FULL_DERIVED_DATASET_IDS else jobs
+            target_jobs = jobs
+            if selected_dataset_id in _HISTORY_FULL_DERIVED_DATASET_IDS:
+                target_jobs = jobs
             target_jobs.append(_make_job(selected_dataset_id, symbol))
 
     logger.info("Gold build parallelization maxprocesses=%s jobs=%s", maxprocesses, len(jobs))
@@ -206,15 +207,6 @@ def run_gold_build(args: argparse.Namespace, logger: logging.Logger) -> None:
             payload = future.result()
             if payload is not None:
                 reports.append(payload)
-    if derived_jobs:
-        logger.info("Gold derived build schedule jobs=%s", len(derived_jobs))
-        with ThreadPoolExecutor(max_workers=maxprocesses) as executor:
-            futures = [executor.submit(job) for job in derived_jobs]
-            for future in futures:
-                payload = future.result()
-                if payload is not None:
-                    reports.append(payload)
-
     if not bool(args.no_json_output):
         print(json.dumps({"reports": reports}, indent=2))
     logger.info("Command complete: gold-build reports=%s", len(reports))

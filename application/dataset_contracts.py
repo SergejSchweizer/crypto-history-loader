@@ -1112,6 +1112,9 @@ HISTORY_FULL_GOLD_REQUIREMENTS = (
     GoldSourceRequirement("open_interest_1m_feature", "1m"),
     GoldSourceRequirement("perps_trades_1m_feature", "1m"),
     GoldSourceRequirement("options_trades_1m_feature", "1m"),
+)
+
+EXTENDED_HISTORY_FULL_GOLD_REQUIREMENTS = HISTORY_FULL_GOLD_REQUIREMENTS + (
     GoldSourceRequirement("historical_prediction_1m_feature", "1m"),
 )
 
@@ -1212,6 +1215,11 @@ GOLD_DATASET_CONTRACTS: dict[str, GoldDatasetContract] = {
     "gold.market.history_full.h1": GoldDatasetContract(
         dataset_id="gold.market.history_full.h1",
         requirements=(),
+        include_l2=False,
+    ),
+    "gold.market.extended_history_full.m1": GoldDatasetContract(
+        dataset_id="gold.market.extended_history_full.m1",
+        requirements=EXTENDED_HISTORY_FULL_GOLD_REQUIREMENTS,
         include_l2=False,
     ),
     "gold.live.volatility_features.m1": GoldDatasetContract(
