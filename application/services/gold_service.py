@@ -96,16 +96,16 @@ EXTENDED_HISTORY_FULL_HISTORY_SOURCE_COLUMNS = (
     *HISTORY_FULL_HISTORY_SOURCE_COLUMNS,
     *SILVER_HISTORICAL_PREDICTION_FEATURE_COLUMNS[3:],
 )
-_HISTORY_FULL_BASE_DATASET_ID = "gold.market.history_full.m1"
+_HISTORY_FULL_BASE_DATASET_ID = "gold.history.full.m1"
 _HISTORY_FULL_DERIVED_DATASET_IDS = {
-    "gold.market.history_full.m5",
-    "gold.market.history_full.m30",
-    "gold.market.history_full.h1",
+    "gold.history.full.m5",
+    "gold.history.full.m30",
+    "gold.history.full.h1",
 }
 _HISTORY_FULL_DERIVED_INTERVALS = {
-    "gold.market.history_full.m5": "5m",
-    "gold.market.history_full.m30": "30m",
-    "gold.market.history_full.h1": "1h",
+    "gold.history.full.m5": "5m",
+    "gold.history.full.m30": "30m",
+    "gold.history.full.h1": "1h",
 }
 _parse_semver = gold_versioning.parse_semver
 _format_semver = gold_versioning.format_semver
@@ -762,9 +762,9 @@ def build_gold_for_symbol(
             )
     merged = _add_strategy_feature_families(pl, merged.sort("timestamp_m1"), dataset_id)
     merged = _add_prediction_targets(pl, merged, dataset_id)
-    if dataset_id == "gold.market.history_full.m1":
+    if dataset_id == "gold.history.full.m1":
         merged = _select_history_full_canonical_columns(merged)
-    elif dataset_id == "gold.market.extended_history_full.m1":
+    elif dataset_id == "gold.history.extended_full.m1":
         merged = _select_extended_history_full_columns(merged)
     l2_validation_audit = {"l2_invalid_rows_found": 0, "l2_invalid_rows_dropped": 0}
     if _dataset_includes_l2(dataset_id):

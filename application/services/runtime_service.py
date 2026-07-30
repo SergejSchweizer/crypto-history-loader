@@ -30,6 +30,7 @@ DEFAULT_FETCH_CONCURRENCY = _DEFAULT_FETCH_CONCURRENCY
 MAX_FETCH_CONCURRENCY = _MAX_FETCH_CONCURRENCY
 LOG_PLAIN_DAILY_FILES = 5
 LOG_ARCHIVE_RETENTION_DAYS = 90
+POLARS_MAX_THREADS = 4
 
 _ROTATED_LOG_RE = re.compile(r"^(?P<base>.+\.log)\.(?P<date>\d{4}-\d{2}-\d{2})(?:\.(?P<time>\d{6}))?(?P<gzip>\.gz)?$")
 
@@ -202,6 +203,29 @@ def env_str(name: str, default: str) -> str:
     """Read a string environment variable with fallback."""
 
     return os.getenv(name, default)
+
+
+def apply_repository_runtime_limits() -> None:
+    """Clamp runtime parallelism to the repository-wide Polars ceiling.
+
+    Polars initializes its thread pool on first use, so this must run before
+    any Polars import or operation in the current process. The repository-wide
+    ceiling keeps batch jobs predictable and prevents local shell defaults from
+    silently expanding worker fan-out beyond the intended four cores.
+    """
+
+    raw_threads = os.getenv("POLARS_MAX_THREADS")
+    if raw_threads is None:
+        os.environ["POLARS_MAX_THREADS"] = str(POLARS_MAX_THREADS)
+        return
+
+    try:
+        configured_threads = int(raw_threads)
+    except ValueError:
+        os.environ["POLARS_MAX_THREADS"] = str(POLARS_MAX_THREADS)
+        return
+
+    os.environ["POLARS_MAX_THREADS"] = str(min(configured_threads, POLARS_MAX_THREADS))
 
 
 class SingleInstanceError(RuntimeError):

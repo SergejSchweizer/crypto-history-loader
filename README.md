@@ -159,7 +159,7 @@ uv run python main.py gold-build \
   --gold-root lake/gold \
   --exchange deribit \
   --maxprocesses 4 \
-  --dataset-id gold.market.history_full.m1
+  --dataset-id gold.history.full.m1
 ```
 
 Build the extended historical Gold dataset, which keeps the canonical schema and adds
@@ -171,27 +171,17 @@ uv run python main.py gold-build \
   --gold-root lake/gold \
   --exchange deribit \
   --maxprocesses 4 \
-  --dataset-id gold.market.extended_history_full.m1
+  --dataset-id gold.history.extended_full.m1
 ```
 
 Gold datasets are always named as standalone contracts; canonical and extended datasets get
 distinct IDs instead of overloading one another.
 
-`gold.market.history_full.m5`, `gold.market.history_full.m30`, and `gold.market.history_full.h1`
-are derived from the canonical `gold.market.history_full.m1` artifact.
+`gold.history.full.m5`, `gold.history.full.m30`, and `gold.history.full.h1`
+are derived from the canonical `gold.history.full.m1` artifact.
+The supported Gold build choices currently only include the History-Full family above.
 
 See [`DATASETS.md`](DATASETS.md) for every supported Gold dataset ID and its complete feature contract.
-
-Build the live microstructure Gold dataset:
-
-```bash
-uv run python main.py gold-build \
-  --silver-root lake/silver \
-  --gold-root lake/gold \
-  --exchange deribit \
-  --maxprocesses 4 \
-  --dataset-id gold.live.microstructure_features.m1
-```
 
 ## Inventory
 

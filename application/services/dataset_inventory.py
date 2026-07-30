@@ -14,6 +14,7 @@ from application.dataset_contracts import (
     BRONZE_TO_SILVER_DATASETS,
     GOLD_DATASET_CONTRACTS,
     SILVER_DATASET_CONTRACTS,
+    supported_gold_dataset_ids,
 )
 
 LayerName = Literal["bronze", "silver", "gold"]
@@ -131,7 +132,10 @@ def build_dataset_inventory(
             )
         )
 
+    supported_gold = set(supported_gold_dataset_ids())
     for dataset, gold_contract in sorted(GOLD_DATASET_CONTRACTS.items()):
+        if dataset not in supported_gold:
+            continue
         files = physical_gold.get(dataset, [])
         rows.append(
             _inventory_row(

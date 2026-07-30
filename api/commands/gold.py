@@ -21,11 +21,11 @@ from application.services.gold_service import (
 )
 
 _SEMVER_RE = re.compile(r"^v\d+\.\d+\.\d+$")
-_HISTORY_FULL_BASE_DATASET_ID = "gold.market.history_full.m1"
+_HISTORY_FULL_BASE_DATASET_ID = "gold.history.full.m1"
 _HISTORY_FULL_DERIVED_DATASET_IDS = {
-    "gold.market.history_full.m5",
-    "gold.market.history_full.m30",
-    "gold.market.history_full.h1",
+    "gold.history.full.m5",
+    "gold.history.full.m30",
+    "gold.history.full.h1",
 }
 
 

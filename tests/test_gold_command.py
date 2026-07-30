@@ -39,9 +39,9 @@ def gold_args(
 
 def test_resolve_dataset_ids_returns_single_when_explicit() -> None:
     assert gold_cmd._resolve_dataset_ids("gold.market.full.m1") == ["gold.market.full.m1"]
-    assert gold_cmd._resolve_dataset_ids("gold.market.history_full.m1") == ["gold.market.history_full.m1"]
-    assert gold_cmd._resolve_dataset_ids("gold.market.extended_history_full.m1") == [
-        "gold.market.extended_history_full.m1"
+    assert gold_cmd._resolve_dataset_ids("gold.history.full.m1") == ["gold.history.full.m1"]
+    assert gold_cmd._resolve_dataset_ids("gold.history.extended_full.m1") == [
+        "gold.history.extended_full.m1"
     ]
     assert gold_cmd._resolve_dataset_ids("gold.market.regime_features.m1") == ["gold.market.regime_features.m1"]
     assert gold_cmd._resolve_dataset_ids("gold.market.prediction_targets.m1") == ["gold.market.prediction_targets.m1"]
@@ -165,7 +165,7 @@ def test_run_gold_build_runs_history_full_minute_before_derived_timeframes(
     monkeypatch.setattr(
         gold_cmd,
         "_resolve_dataset_ids",
-        lambda dataset_id: [dataset_id or "gold.market.history_full.m5"],
+        lambda dataset_id: [dataset_id or "gold.history.full.m5"],
     )
     monkeypatch.setattr(gold_cmd, "_resolve_gold_symbols", lambda **kwargs: ["BTC"])
     monkeypatch.setattr(gold_cmd, "_validate_version_args", lambda **kwargs: None)
@@ -183,10 +183,10 @@ def test_run_gold_build_runs_history_full_minute_before_derived_timeframes(
 
     monkeypatch.setattr(gold_cmd, "build_gold_for_symbol", _build_gold_for_symbol)
 
-    args = gold_args(dataset_id="gold.market.history_full.m5")
+    args = gold_args(dataset_id="gold.history.full.m5")
     gold_cmd.run_gold_build(args=args, logger=logging.getLogger("test"))
 
-    assert built == ["gold.market.history_full.m1", "gold.market.history_full.m5"]
+    assert built == ["gold.history.full.m1", "gold.history.full.m5"]
 
 
 def test_run_gold_build_rejects_invalid_retention_keep_versions() -> None:

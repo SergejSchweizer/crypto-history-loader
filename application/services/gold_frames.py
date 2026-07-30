@@ -1431,9 +1431,9 @@ def _forward_log_return(current_price: float | None, future_price: float | None)
 
 
 _HISTORY_FULL_RESAMPLE_TIMEFRAMES: dict[str, str] = {
-    "gold.market.history_full.m5": "5m",
-    "gold.market.history_full.m30": "30m",
-    "gold.market.history_full.h1": "1h",
+    "gold.history.full.m5": "5m",
+    "gold.history.full.m30": "30m",
+    "gold.history.full.h1": "1h",
 }
 
 
@@ -1456,7 +1456,7 @@ def resample_history_full_frame(pl: Any, frame: Any, interval: str) -> Any:
 
     Args:
         pl: Polars module.
-        frame: Canonical ``gold.market.history_full.m1`` frame.
+        frame: Canonical ``gold.history.full.m1`` frame.
         interval: Coarser timeframe such as ``5m``, ``30m``, or ``1h``.
 
     Returns:

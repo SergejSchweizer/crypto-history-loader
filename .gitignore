@@ -16,6 +16,7 @@
 !TIMELINE.md
 !Makefile
 !main.py
+!sitecustomize.py
 !pyproject.toml
 !uv.lock
 !.pre-commit-config.yaml

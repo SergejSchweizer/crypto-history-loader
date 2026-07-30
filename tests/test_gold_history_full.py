@@ -154,7 +154,7 @@ def test_history_full_gold_joins_historical_sources_without_targets(tmp_path: Pa
         gold_root=str(tmp_path / "gold-history-full"),
         exchange="deribit",
         symbol="BTC",
-        dataset_id="gold.market.history_full.m1",
+        dataset_id="gold.history.full.m1",
     )
     history_full = pl.read_parquet(report.parquet_path).sort("timestamp_m1")
     manifest = _manifest(report.manifest_path)
@@ -233,7 +233,7 @@ def test_history_full_gold_joins_historical_sources_without_targets(tmp_path: Pa
     assert "historical_prediction_perps_rv_1h" not in history_full.columns
     assert history_full["spot_ohlcv_close_price"].to_list()[0] is None
     assert not any(column.startswith(("target_", "label_")) for column in history_full.columns)
-    assert manifest["dataset_id"] == "gold.market.history_full.m1"
+    assert manifest["dataset_id"] == "gold.history.full.m1"
     assert manifest["required_source_datasets"] == [
         "spot_ohlcv",
         "perps_ohlcv",
@@ -251,7 +251,7 @@ def test_history_full_gold_joins_historical_sources_without_targets(tmp_path: Pa
 def test_history_full_gold_contract_declares_canonical_historical_sources() -> None:
     """The typed historical full contract should declare historical sources explicitly."""
 
-    contract = gold_dataset_contract("gold.market.history_full.m1")
+    contract = gold_dataset_contract("gold.history.full.m1")
     assert [requirement.dataset_type for requirement in contract.requirements] == [
         "spot_ohlcv",
         "perps_ohlcv",
@@ -275,12 +275,12 @@ def test_extended_history_full_gold_includes_historical_prediction_features(tmp_
         gold_root=str(tmp_path / "gold-history-full"),
         exchange="deribit",
         symbol="BTC",
-        dataset_id="gold.market.extended_history_full.m1",
+        dataset_id="gold.history.extended_full.m1",
     )
     extended_history_full = pl.read_parquet(report.parquet_path).sort("timestamp_m1")
     manifest = _manifest(report.manifest_path)
 
-    assert report.dataset_id == "gold.market.extended_history_full.m1"
+    assert report.dataset_id == "gold.history.extended_full.m1"
     assert "historical_prediction_perps_rv_1h" in extended_history_full.columns
     assert "historical_prediction_short_stress_signal" in extended_history_full.columns
     assert manifest["required_source_datasets"] == [
@@ -307,7 +307,7 @@ def test_history_full_gold_derives_coarser_timeframes_from_minute_artifact(tmp_p
         gold_root=str(gold),
         exchange="deribit",
         symbol="BTC",
-        dataset_id="gold.market.history_full.m1",
+        dataset_id="gold.history.full.m1",
     )
     assert minute_report.rows_out == 6
 
@@ -316,11 +316,11 @@ def test_history_full_gold_derives_coarser_timeframes_from_minute_artifact(tmp_p
         gold_root=str(gold),
         exchange="deribit",
         symbol="BTC",
-        dataset_id="gold.market.history_full.m5",
+        dataset_id="gold.history.full.m5",
     )
     resampled = pl.read_parquet(resampled_report.parquet_path).sort("timestamp_m1")
 
-    assert resampled_report.dataset_id == "gold.market.history_full.m5"
+    assert resampled_report.dataset_id == "gold.history.full.m5"
     assert resampled_report.rows_out == 2
     assert resampled["timestamp_m1"].to_list() == [
         datetime(2026, 5, 1, 0, 0, tzinfo=UTC),

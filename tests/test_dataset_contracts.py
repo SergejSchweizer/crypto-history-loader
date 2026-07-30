@@ -94,8 +94,16 @@ def test_backlog_bronze_datasets_have_silver_destinations() -> None:
 def test_gold_contracts_are_service_compatible() -> None:
     """Gold contracts should preserve the legacy service spec surface."""
 
-    assert set(GOLD_DATASET_CONTRACTS) == gold_service.SUPPORTED_GOLD_DATASET_IDS
-    for dataset_id, contract in GOLD_DATASET_CONTRACTS.items():
+    expected_supported = {
+        "gold.history.full.m1",
+        "gold.history.full.m5",
+        "gold.history.full.m30",
+        "gold.history.full.h1",
+        "gold.history.extended_full.m1",
+    }
+    assert gold_service.SUPPORTED_GOLD_DATASET_IDS == expected_supported
+    for dataset_id in expected_supported:
+        contract = GOLD_DATASET_CONTRACTS[dataset_id]
         assert gold_service._dataset_requirements(dataset_id) == [
             requirement.as_tuple() for requirement in contract.requirements
         ]
@@ -111,7 +119,13 @@ def test_supported_dataset_helpers_are_contract_driven_and_stable() -> None:
     assert supported_silver_build_ids() == tuple(
         sorted({*BRONZE_TO_SILVER_DATASETS, *SILVER_LIVE_ORIGIN_BUILD_DATASETS})
     )
-    assert supported_gold_dataset_ids() == tuple(sorted(GOLD_DATASET_CONTRACTS))
+    assert supported_gold_dataset_ids() == (
+        "gold.history.extended_full.m1",
+        "gold.history.full.h1",
+        "gold.history.full.m1",
+        "gold.history.full.m30",
+        "gold.history.full.m5",
+    )
 
     for outputs in (*BRONZE_TO_SILVER_DATASETS.values(), *SILVER_LIVE_ORIGIN_BUILD_DATASETS.values()):
         assert outputs
@@ -121,7 +135,7 @@ def test_supported_dataset_helpers_are_contract_driven_and_stable() -> None:
 def test_gold_dataset_ids_follow_canonical_or_extended_grain_naming() -> None:
     """Gold dataset names should stay explicit about family and grain."""
 
-    pattern = re.compile(r"^gold\.(market|live|hybrid)\.[a-z0-9_]+\.(m1|m5|m30|h1)$")
+    pattern = re.compile(r"^gold\.(history|market|live|hybrid)\.[a-z0-9_]+\.(m1|m5|m30|h1)$")
 
     for dataset_id in GOLD_DATASET_CONTRACTS:
         assert pattern.fullmatch(dataset_id), dataset_id

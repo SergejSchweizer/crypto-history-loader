@@ -44,6 +44,13 @@ def test_repo_config_has_required_top_level_sections() -> None:
     assert not missing, f"config.yaml missing required section(s): {', '.join(missing)}"
 
 
+def test_repo_config_caps_polars_threads() -> None:
+    config = _load_repo_config()
+    env_config = config["env"]
+    assert isinstance(env_config, dict)
+    assert env_config["POLARS_MAX_THREADS"] == 4
+
+
 def test_repo_config_uses_only_symbol_start_dates() -> None:
     config = _load_repo_config()
     assert "global" not in config

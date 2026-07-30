@@ -1487,8 +1487,8 @@ def test_discover_gold_symbols_for_extended_history_full_reuses_source_contract(
         ],
     )
 
-    assert discover_gold_symbols_for_dataset(str(silver), exchange, "gold.market.extended_history_full.m1") == ["BTC"]
-    assert discover_gold_symbols_for_dataset(str(silver), exchange, "gold.market.history_full.m5") == ["BTC"]
+    assert discover_gold_symbols_for_dataset(str(silver), exchange, "gold.history.extended_full.m1") == ["BTC"]
+    assert discover_gold_symbols_for_dataset(str(silver), exchange, "gold.history.full.m5") == ["BTC"]
 
 
 def test_build_gold_hybrid_full_l2_contains_l2_features(tmp_path: Path) -> None:
