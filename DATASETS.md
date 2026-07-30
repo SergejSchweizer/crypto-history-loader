@@ -28,8 +28,6 @@ current Lake until it is built.
 - Trade counts, volumes, and trade-price aggregates are never forward-filled because that would
   manufacture executions.
 - Optional source families have stable typed nullable columns when the optional artifact is absent.
-- `gold.market.regime_features.m1` contains current/trailing features only. Forward-looking values
-  exist only in `gold.market.prediction_targets.m1`.
 - `gold.history.full.m1` is the canonical historical market table built only from
   crypto-history-loader-owned Silver sources.
 - `gold.history.extended_full.m1` is the same canonical table plus historical-prediction
@@ -44,32 +42,17 @@ current Lake until it is built.
 - Gold manifests record the dataset version, feature-set hash, source-data hash, Git commit, source
   lineage, coverage, and build metadata.
 - The latest three versions are retained per dataset/exchange/symbol lineage.
-- `gold.live.*` manifests use `crypto-live-loader` as origin; all other contracted IDs use
-  `crypto-history-loader`.
+- All contracted Gold IDs use `crypto-history-loader` as origin.
 
 ## Contract inventory
 
 | Dataset ID | Purpose | Required sources | Optional sources | Physical status in 2026-07-21 inventory |
 |---|---|---|---|---|
-| `gold.market.perps_trades.m1` | Per-minute perpetual trade-flow aggregate. | `perps_trades_1m_feature` | None | Materialized |
-| `gold.market.options_trades.m1` | Per-minute option trade-flow aggregate. | `options_trades_1m_feature` | None | Materialized |
-| `gold.market.core.m1` | Minimal historical spot/perpetual price and volume state. | `spot_ohlcv`, `perps_ohlcv` | None | Materialized |
-| `gold.market.core_funding.m1` | Core market state enriched with funding carry state. | `spot_ohlcv`, `perps_ohlcv`, `funding_1m_feature` | None | Materialized |
-| `gold.market.iv_rv.m1` | Historical state for unit-safe implied-versus-realized volatility research. | `spot_ohlcv`, `perps_ohlcv`, `funding_1m_feature`, `open_interest_1m_feature`, `realized_volatility_1m_feature`, `iv_rv_1m_feature` | `historical_volatility_observed` | Contracted, not materialized |
-| `gold.market.index_price.m1` | Narrow index-price/fair-value state. | `index_price_1m_feature` | None | Contracted, not materialized |
-| `gold.market.futures_summary.m1` | Narrow futures mark/index, positioning, turnover, and funding state. | `futures_summary_1m_feature` | None | Contracted, not materialized |
-| `gold.market.regime_features.m1` | Trailing-only momentum, trend, reversion, volatility, liquidity, and option-surface research table. | `spot_ohlcv`, `perps_ohlcv`, `funding_1m_feature`, `open_interest_1m_feature`, `realized_volatility_1m_feature`, `iv_rv_1m_feature` | Perpetual L2, option L2, option surface, index price, futures summary, historical volatility | Contracted, not materialized |
-| `gold.market.prediction_targets.m1` | Dedicated forward-looking targets and regime-shift labels. | `perps_ohlcv`, `funding_1m_feature`, `realized_volatility_1m_feature`, `iv_rv_1m_feature` | None | Contracted, not materialized |
 | `gold.history.full.m1` | Canonical historical table restricted to history-derived market features. | `spot_ohlcv`, `perps_ohlcv`, `funding_1m_feature`, `open_interest_1m_feature`, `perps_trades_1m_feature`, `options_trades_1m_feature` | None | Materialized |
 | `gold.history.full.m5` | Five-minute resample of the canonical historical market table. | Derived from `gold.history.full.m1` | None | Contracted, not materialized |
 | `gold.history.full.m30` | Thirty-minute resample of the canonical historical market table. | Derived from `gold.history.full.m1` | None | Contracted, not materialized |
 | `gold.history.full.h1` | One-hour resample of the canonical historical market table. | Derived from `gold.history.full.m1` | None | Contracted, not materialized |
 | `gold.history.extended_full.m1` | Canonical history-full table plus historical-prediction features. | `spot_ohlcv`, `perps_ohlcv`, `funding_1m_feature`, `open_interest_1m_feature`, `perps_trades_1m_feature`, `options_trades_1m_feature`, `historical_prediction_1m_feature` | None | Contracted, not materialized |
-| `gold.live.volatility_features.m1` | Live-origin implied-volatility features with freshness and lineage. | `volatility_index_1m_feature` | None | Contracted, not materialized |
-| `gold.live.microstructure_features.m1` | Live-origin perpetual and option order-book state. | `perps_l2_1m_feature`, `options_l2_1m_feature` | None | Contracted, not materialized |
-| `gold.live.full.m1` | Canonical live inference table combining volatility, IV/RV, and L2 state. | `volatility_index_1m_feature`, `iv_rv_1m_feature`, `perps_l2_1m_feature`, `options_l2_1m_feature` | Index price, futures summary, option surface | Materialized |
-| `gold.market.full.m1` | Broad historical price, carry, positioning, trade-flow, and observed-volatility table. | `spot_ohlcv`, `perps_ohlcv`, `open_interest_1m_feature`, `funding_1m_feature`, `perps_trades_1m_feature`, `options_trades_1m_feature`, `volatility_index_data_observed` | None | Materialized |
-| `gold.hybrid.full_l2.m1` | Historical full-market table augmented with the newest compatible external L2 Gold artifact. | Same Silver sources as `gold.market.full.m1` | External `gold.l2.micro.m1` artifact | Contracted, not materialized |
 
 The status column is a dated snapshot, not a runtime guarantee. Regenerate
 `docs/dataset_inventory.md` after Lake rebuilds.
@@ -78,68 +61,6 @@ The status column is a dated snapshot, not a runtime guarantee. Regenerate
 
 Feature groups below are closed, exact lists. Every feature in a referenced group is part of the
 dataset. Definitions for every feature are in [Feature dictionary](#feature-dictionary).
-
-### gold.market.perps_trades.m1
-
-- Origin: `crypto-history-loader`.
-- Alignment: observed trade minutes on the required-source union grid; no forward fill.
-- Feature groups: **Keys**, **Perpetual trade aggregates**.
-
-### gold.market.options_trades.m1
-
-- Origin: `crypto-history-loader`.
-- Alignment: observed trade minutes on the required-source union grid; no forward fill.
-- Feature groups: **Keys**, **Option trade aggregates**.
-
-### gold.market.core.m1
-
-- Origin: `crypto-history-loader`.
-- Alignment: spot and perpetual sources on a union minute grid; source gaps remain null.
-- Feature groups: **Keys**, **Spot OHLCV**, **Perpetual OHLCV**.
-
-### gold.market.core_funding.m1
-
-- Origin: `crypto-history-loader`.
-- Alignment: core union grid plus the explicit Silver last-known funding state.
-- Feature groups: **Keys**, **Spot OHLCV**, **Perpetual OHLCV**, **Funding state**.
-
-### gold.market.iv_rv.m1
-
-- Origin: `crypto-history-loader`.
-- Alignment: required sources on a union minute grid. External historical volatility is nullable
-  and does not expand the required-source grid.
-- Required feature groups: **Keys**, **Spot OHLCV**, **Perpetual OHLCV**, **Funding state**,
-  **Open-interest state**, **Realized volatility**, **IV/RV state**.
-- Optional nullable group: **Historical-volatility reference**.
-
-### gold.market.index_price.m1
-
-- Origin: `crypto-history-loader`.
-- Alignment: one-minute index feature grid with observation/age metadata.
-- Feature groups: **Keys**, **Index-price state**.
-
-### gold.market.futures_summary.m1
-
-- Origin: `crypto-history-loader`.
-- Alignment: one-minute futures-summary grid with observation/age metadata.
-- Feature groups: **Keys**, **Futures-summary state**.
-
-### gold.market.regime_features.m1
-
-- Origin: `crypto-history-loader`.
-- Alignment: required sources define the minute grid. Missing optional artifacts produce typed
-  null columns and never remove required rows. Strategy calculations use present and past data only.
-- Required feature groups: **Keys**, **Spot OHLCV**, **Perpetual OHLCV**, **Funding state**,
-  **Open-interest state**, **Realized volatility**, **IV/RV state**, **Strategy state**.
-- Optional nullable groups: **Perpetual L2 state**, **Option L2 state**, **Option-surface state**,
-  **Index-price state**, **Futures-summary state**, **Historical-volatility reference**.
-
-### gold.market.prediction_targets.m1
-
-- Origin: `crypto-history-loader`.
-- Alignment: output contains only keys plus target/label columns. A target is null unless its full
-  future horizon exists.
-- Feature groups: **Keys**, **Prediction targets**.
 
 ### gold.history.full.m1
 
@@ -169,48 +90,6 @@ dataset. Definitions for every feature are in [Feature dictionary](#feature-dict
 - Aggregation rule: OHLC fields use first/high/low/last semantics, additive fields are summed,
   minute-end state fields keep the last non-null observation in each bucket, and trade-volume shares
   are recomputed from the resampled bucket totals.
-
-### gold.live.volatility_features.m1
-
-- Origin: `crypto-live-loader`.
-- Alignment: observed live-origin IV feature minutes; no artificial historical filling.
-- Feature groups: **Keys**, **Live implied-volatility state**.
-
-### gold.live.microstructure_features.m1
-
-- Origin: `crypto-live-loader`.
-- Alignment: observed live-origin L2 minutes. Option contracts are aggregated to one row per
-  exchange/symbol/minute.
-- Feature groups: **Keys**, **Perpetual L2 state**, **Option L2 state**.
-
-### gold.live.full.m1
-
-- Origin: `crypto-live-loader`.
-- Alignment: observed live-origin required sources. Optional families remain typed nullable.
-- Required feature groups: **Keys**, **Live implied-volatility state**, **IV/RV state**,
-  **Perpetual L2 state**, **Option L2 state**.
-- Optional nullable groups: **Index-price state**, **Futures-summary state**,
-  **Option-surface state**.
-
-### gold.market.full.m1
-
-- Origin: `crypto-history-loader`.
-- Alignment: one-minute union grid; this contract does not add strategy, prediction-target, or L2
-  feature engineering.
-- Feature groups: **Keys**, **Spot OHLCV**, **Perpetual OHLCV**, **Open-interest state**,
-  **Funding state**, **Perpetual trade aggregates**, **Option trade aggregates**,
-  **Observed volatility index**.
-
-### gold.hybrid.full_l2.m1
-
-- Origin: `crypto-history-loader`.
-- Alignment: base schema equals `gold.market.full.m1`. Every non-key column in the selected external
-  L2 artifact is copied with an `l2_` prefix.
-- Fixed feature groups: **Keys**, **Spot OHLCV**, **Perpetual OHLCV**, **Open-interest state**,
-  **Funding state**, **Perpetual trade aggregates**, **Option trade aggregates**,
-  **Observed volatility index**.
-- Dynamic extension: **External L2 passthrough**. Its closed schema is the selected source artifact
-  and is recorded in the manifest; it is intentionally not hard-coded in the typed contract.
 
 ## Feature dictionary
 
