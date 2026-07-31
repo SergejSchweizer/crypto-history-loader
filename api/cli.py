@@ -1,5 +1,9 @@
 """Command-line interface for data ingestion tasks."""
 
+# The bootstrap call below intentionally precedes command imports so Polars
+# cannot initialize a larger thread pool. E402 is therefore expected here.
+# ruff: noqa: E402
+
 from __future__ import annotations
 
 import argparse
@@ -8,6 +12,11 @@ import stat
 import sys
 from pathlib import Path
 from typing import Any, cast
+
+from application.services.runtime_service import apply_repository_runtime_limits
+
+# Configure Polars before importing command modules that may import it.
+apply_repository_runtime_limits()
 
 from api.commands import loader as loader_cmd
 from api.commands import stats as stats_cmd
