@@ -104,6 +104,7 @@ _HISTORY_FULL_DERIVED_DATASET_IDS = {
     "gold.history.extended.m5",
     "gold.history.extended.m30",
     "gold.history.extended.h1",
+    "gold.live.extended.m1",
     "gold.live.extended.m5",
     "gold.live.extended.m30",
     "gold.live.extended.h1",
@@ -118,6 +119,7 @@ _HISTORY_FULL_DERIVED_INTERVALS = {
     "gold.history.extended.m5": "5m",
     "gold.history.extended.m30": "30m",
     "gold.history.extended.h1": "1h",
+    "gold.live.extended.m1": "1m",
     "gold.live.extended.m5": "5m",
     "gold.live.extended.m30": "30m",
     "gold.live.extended.h1": "1h",
@@ -132,6 +134,7 @@ _HISTORY_FULL_DERIVED_SOURCE_DATASET_IDS = {
     "gold.history.extended.m5": "gold.history.extended.m1",
     "gold.history.extended.m30": "gold.history.extended.m1",
     "gold.history.extended.h1": "gold.history.extended.m1",
+    "gold.live.extended.m1": "gold.live.full.m1",
     "gold.live.extended.m5": "gold.live.extended.m1",
     "gold.live.extended.m30": "gold.live.extended.m1",
     "gold.live.extended.h1": "gold.live.extended.m1",
@@ -536,6 +539,8 @@ def _build_history_full_derived_for_symbol(
         symbol=symbol,
     )
     merged = gold_frames.resample_history_full_frame(pl, source_frame, interval)
+    if dataset_id == "gold.live.extended.m1":
+        merged = gold_frames.add_live_extended_feature_families(pl, merged)
     if merged.height == 0:
         raise ValueError(f"Gold build produced zero rows for symbol={symbol} dataset_id={dataset_id}")
 

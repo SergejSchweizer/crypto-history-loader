@@ -1444,6 +1444,26 @@ def add_live_extended_feature_families(pl: Any, frame: Any) -> Any:
 
     group = ["exchange", "symbol"]
     sorted_frame = frame.sort("timestamp_m1")
+    # Live snapshots are source-aligned and may legitimately omit an entire
+    # optional feature family. Keep the extended schema stable by representing
+    # unavailable options/L2 inputs as nullable values instead of inventing data.
+    nullable_inputs = {
+        "options_surface_fresh_quote_count",
+        "options_surface_contract_count",
+        "options_surface_stale_quote_count",
+        "options_surface_skew",
+        "options_surface_term_structure",
+        "perps_l2_spread",
+        "perps_l2_mid_price",
+        "options_l2_top_bid_depth",
+        "options_l2_top_ask_depth",
+        "options_l2_quote_coverage_ratio",
+    }
+    missing_inputs = sorted(nullable_inputs.difference(sorted_frame.columns))
+    if missing_inputs:
+        sorted_frame = sorted_frame.with_columns(
+            [pl.lit(None, dtype=pl.Float64).alias(column) for column in missing_inputs]
+        )
     enriched = sorted_frame.with_columns(
         [
             _safe_log_return(pl, "volatility_index_close", 1).alias("live_extended_volatility_index_log_return_1m"),
@@ -1687,7 +1707,7 @@ def resample_history_full_frame(pl: Any, frame: Any, interval: str) -> Any:
         ValueError: If the requested interval is unsupported or the input lacks keys.
     """
 
-    if interval not in {"5m", "30m", "1h"}:
+    if interval not in {"1m", "5m", "30m", "1h"}:
         raise ValueError(f"Unsupported history_full resample interval: {interval}")
     required_keys = {"timestamp_m1", "exchange", "symbol"}
     if not required_keys.issubset(frame.columns):
@@ -1704,6 +1724,9 @@ def resample_history_full_frame(pl: Any, frame: Any, interval: str) -> Any:
         "open_interest_is_observed",
         "open_interest_is_ffill",
     }
+
+    if interval == "1m":
+        return frame.sort(["exchange", "symbol", "timestamp_m1"])
 
     bucketed = frame.with_columns(
         pl.col("timestamp_m1")

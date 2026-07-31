@@ -60,6 +60,9 @@ current Lake until it is built.
 | `gold.history.extended.h1` | One-hour resample of the extended historical market table. | Derived from `gold.history.extended.m1` | None | Contracted, not materialized |
 | `gold.history.extended_full.m1` | Canonical history-full table plus historical-prediction features. | `spot_ohlcv`, `perps_ohlcv`, `funding_1m_feature`, `open_interest_1m_feature`, `perps_trades_1m_feature`, `options_trades_1m_feature`, `historical_prediction_1m_feature` | None | Contracted, not materialized |
 | `gold.live.full.m1` | Canonical live-loader snapshot table for model-ready live features. | `volatility_index_snapshot_1m_observed`, `index_price_snapshot_1m_observed`, `futures_summary_snapshot_1m_observed`, `options_ticker_snapshot_1m_observed`, `options_instrument_ticker_snapshot_1m_observed`, `perps_l2_snapshot_1m_observed`, `options_l2_snapshot_1m_observed`, `recent_trade_snapshot_1m_observed`, `instrument_metadata_snapshot_daily_observed`, `futures_instrument_metadata_snapshot_daily_observed` | None | Contracted, not materialized |
+| `gold.live.full.m5` | Five-minute resample of the canonical live snapshot table. | Derived from `gold.live.full.m1` | None | Contracted, not materialized |
+| `gold.live.full.m30` | Thirty-minute resample of the canonical live snapshot table. | Derived from `gold.live.full.m1` | None | Contracted, not materialized |
+| `gold.live.full.h1` | One-hour resample of the canonical live snapshot table. | Derived from `gold.live.full.m1` | None | Contracted, not materialized |
 | `gold.live.extended.m1` | Live full snapshot table plus deterministic live-derived features. | Same as `gold.live.full.m1` | None | Contracted, not materialized |
 | `gold.live.extended.m5` | Five-minute resample of the live-extended live table. | Derived from `gold.live.extended.m1` | None | Contracted, not materialized |
 | `gold.live.extended.m30` | Thirty-minute resample of the live-extended live table. | Derived from `gold.live.extended.m1` | None | Contracted, not materialized |
@@ -138,6 +141,15 @@ dataset. Definitions for every feature are in [Feature dictionary](#feature-dict
   **Recent-trade snapshot keys**, **Instrument metadata snapshot keys**, plus deterministic
   live-derived momentum, spread, and liquidity summary features.
 - Deliberately excluded: historical-prediction, target, and label columns.
+
+### gold.live.full.m5 / gold.live.full.m30 / gold.live.full.h1
+
+- Origin: `crypto-live-loader`.
+- Alignment: deterministic bucket-start resample of `gold.live.full.m1` using 5m, 30m, or 1h
+  buckets.
+- Feature groups: same closed schema as `gold.live.full.m1`.
+- Aggregation rule: OHLC fields use first/high/low/last semantics, additive fields are summed,
+  and minute-end state fields keep the last non-null observation in each bucket.
 
 ### gold.live.extended.m5 / gold.live.extended.m30 / gold.live.extended.h1
 
