@@ -189,57 +189,36 @@ missing selected-source observations remain unavailable through `canonical_rv_so
 Silver manifests include `quantitative_feature_semantics` from typed contracts so units,
 horizons, annualization basis, lookback, source policy, and null policy are auditable.
 
-The Gold layer has two canonical model-ready endpoints: `gold.market.history_full.m1` for
-historical data produced by this repository, and `gold.live.full.m1` for live-origin data produced
-from `crypto-live-loader` inputs. Narrower Gold contracts remain available as internal building
-blocks and compatibility outputs, but downstream training and inference code should target the two
-canonical full datasets.
+The supported Gold layer has four minute-level source contracts and their deterministic timeframe
+derivatives:
 
-`gold.market.history_full.m1` is the full historical dataset for data this repository actually
-fetches into Bronze. It joins only spot OHLCV, perpetual OHLCV, open interest, funding,
-perpetual-trade, option-trade, and `historical_prediction_1m_feature` families through their
-Silver representations on the historical minute grid. The grid covers the union of those
-historical source timestamps; missing source values stay null. The historical prediction family is
-derived only from the 4.1-4.6 historical datasets and provides trailing returns, realized
-volatility windows, basis, funding/open-interest stress, and trade-flow pressure features. It must
-not consume volatility-index or IV/RV inputs. Realized-volatility, IV/RV, volatility-index, L2,
-index, futures-summary, option-surface, strategy, target, and label columns belong to narrower
-research-facing Gold contracts, not to `gold.market.history_full.m1`.
+- `gold.history.full.m1`: canonical historical market data owned by this repository;
+- `gold.history.extended.m1`: historical canonical data plus trailing prediction features;
+- `gold.live.full.m1`: canonical live-loader snapshot data;
+- `gold.live.extended.m1`: live full data plus causal live-derived features.
 
-`gold.market.regime_features.m1` owns the research-facing IV/RV regime contract. Its minute grid
-is determined only by required spot, perpetual, funding, open-interest, realized-volatility, and
-IV/RV sources. Perpetual L2, options L2, option surface, index price, and external historical
-volatility, and futures summary are optional left joins with stable nullable columns; their
-presence never expands the grid or changes column order. Manifests record availability, covered
-grid minutes, coverage ratio, source time range, and freshness at the required-grid end for every
-optional source. The contract contains market state only and does not create predictive labels.
-Strategy feature families in the regime contract are derived only from the joined minute state with
-trailing windows. Their declared lookbacks are emitted in the Gold manifest, and target or label
-columns remain reserved for separate forward-looking datasets.
+Each source contract has `m5`, `m30`, and `h1` derivatives where registered. The historical
+`gold.history.extended_full.m1` compatibility contract keeps the extended historical schema. Gold
+dataset IDs are standalone contracts, and the canonical/extended distinction is part of the public
+dataset interface rather than a column-level option.
 
-`gold.market.prediction_targets.m1` is the separate forward-looking training-target contract. It
-emits only timestamp keys plus `target_*` and `label_*` columns, with horizon definitions,
-transaction-cost assumptions, regime-shift thresholds, and null rules recorded in the manifest.
-These columns must never be joined back into live or historical feature outputs.
+Historical Gold joins the Spot OHLCV, perpetual OHLCV, open interest, funding, perpetual-trade,
+option-trade, and optional historical-prediction Silver families on a historical minute grid.
+Live Gold joins the live-loader snapshot families on the live minute grid. Missing source values
+remain null according to the contract; historical and live datasets are never silently mixed.
 
-`gold.live.volatility_features.m1` is the live-origin volatility-index Gold contract. It uses
-`volatility_index_1m_feature` as its only required source, preserves the overlapping historical
-`iv_*` feature names, units, minute timestamp semantics, and null rules, and adds `as_of` plus
-`live_snapshot_derived` lineage columns. Missing live minutes remain null inside the Gold grid;
-the contract does not backfill from historical datasets.
+The minute source datasets are built first. Their `m5`, `m30`, and `h1` children are then built by
+deterministic bucket-start resampling. In a multi-dataset build, dataset dependencies are
+serialized while symbols remain parallel within each dataset, bounded by the configured process
+limit. This prevents a derived build from racing its minute source artifact.
 
-`gold.live.microstructure_features.m1` exposes live L2 microstructure state from
-`perps_l2_1m_feature` and `options_l2_1m_feature`. Perpetual L2 fields keep the `perps_l2_`
-prefix, option-book aggregates keep the `options_l2_` prefix, and each source carries its own
-`*_as_of` and `*_live_snapshot_derived` lineage. Quote availability, staleness, quote age, depth,
-and option quote coverage remain explicit so live consumers can filter stale or incomplete rows
-without hidden fills.
+The live extended minute dataset is built directly from live snapshot Silver sources and adds only
+causal, same-row or trailing live-derived features. It does not read back from a materialized
+`gold.live.full.m1` artifact.
 
-`gold.live.full.m1` is the canonical live full dataset. It combines live volatility-index features,
-live IV/RV features, perpetual L2 features, and option L2 aggregates into one inference table,
-marks the manifest origin as `crypto-live-loader`, and keeps optional live index, futures-summary,
-and option-surface features nullable. Missing live minutes stay null and are never backfilled from
-historical data.
+The older `gold.market.*`, `gold.hybrid.*`, and narrow `gold.live.*` contracts are compatibility
+outputs retained in the executable registry. They are not part of the supported Gold build surface
+and must not be treated as additional canonical or extended datasets.
 
 ## Runtime And Side Effects
 

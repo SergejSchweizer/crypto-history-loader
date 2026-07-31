@@ -36,15 +36,17 @@ current Lake until it is built.
   are deterministic bucket-start resamples of `gold.history.full.m1`.
 - `gold.history.extended.m5`, `gold.history.extended.m30`, and `gold.history.extended.h1`
   are deterministic bucket-start resamples of `gold.history.extended.m1`.
-- The supported Gold build surface currently contains the History-Full, Extended-History,
-  Live-Full, and Live-Extended families above; other legacy Gold contracts remain here for
-  historical reference but are not part of the supported `gold-build` choices.
+- The supported Gold build surface contains only the History-Full, Extended-History, Live-Full,
+  and Live-Extended families listed in the contract inventory; other legacy `gold.market.*`,
+  `gold.hybrid.*`, and narrow live contracts remain in the executable registry for compatibility
+  but are not supported `gold-build` choices.
 - Gold dataset IDs are standalone contracts. Canonical datasets use the finest trusted grain for
   their family, and any independently materialized extension gets its own dataset ID.
 - Gold manifests record the dataset version, feature-set hash, source-data hash, Git commit, source
   lineage, coverage, and build metadata.
 - The latest three versions are retained per dataset/exchange/symbol lineage.
-- All contracted Gold IDs use `crypto-history-loader` as origin.
+- History Gold IDs use `crypto-history-loader` as origin. Live Gold IDs use `crypto-live-loader`
+  as origin because their required Silver inputs are produced by the live-loader pipeline.
 
 ## Contract inventory
 
@@ -135,6 +137,8 @@ dataset. Definitions for every feature are in [Feature dictionary](#feature-dict
 ### gold.live.extended.m1
 
 - Origin: `crypto-live-loader`.
+- Construction: built directly from the live snapshot Silver sources; it does not depend on a
+  materialized `gold.live.full.m1` artifact.
 - Alignment: same live-full minute grid as `gold.live.full.m1`.
 - Feature groups: **Keys**, **Volatility state**, **Index-price state**, **Futures summary state**,
   **Options-ticker snapshots**, **Perpetual L2 snapshots**, **Options L2 snapshots**,
@@ -158,6 +162,14 @@ dataset. Definitions for every feature are in [Feature dictionary](#feature-dict
   1h buckets.
 - Feature groups: same closed schema as `gold.live.extended.m1`.
 - Aggregation rule: same as `gold.live.full.m5 / gold.live.full.m30 / gold.live.full.h1`.
+
+### Build dependency order
+
+- Minute datasets are the source contracts: `gold.history.full.m1`,
+  `gold.history.extended.m1`, `gold.live.full.m1`, and `gold.live.extended.m1`.
+- Coarser datasets are deterministic resamples of their matching minute source.
+- A multi-dataset Gold build completes each source dataset before scheduling its derived
+  timeframes; symbols remain parallel within a dataset, bounded by `--maxprocesses`.
 
 ## Feature dictionary
 

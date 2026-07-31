@@ -177,15 +177,18 @@ uv run python main.py gold-build \
 Gold datasets are always named as standalone contracts; canonical and extended datasets get
 distinct IDs instead of overloading one another.
 
-`gold.history.extended.m1` and `gold.history.extended_full.m1` both keep the canonical
+The supported historical Gold family is:
+
+- `gold.history.full.m1`: canonical history-only market data;
+- `gold.history.extended.m1`: canonical historical data plus trailing historical-prediction features;
+- `gold.history.extended_full.m1`: compatibility variant of the extended historical contract;
+- `gold.history.full.m5`, `gold.history.full.m30`, and `gold.history.full.h1`: derived from
+  `gold.history.full.m1`;
+- `gold.history.extended.m5`, `gold.history.extended.m30`, and `gold.history.extended.h1`: derived
+  from `gold.history.extended.m1`.
+
+`gold.history.extended.m1` and `gold.history.extended_full.m1` keep the canonical
 `gold.history.full.m1` minute schema and add historical-prediction features.
-`gold.history.full.m5`, `gold.history.full.m30`, and `gold.history.full.h1`
-are derived from the canonical `gold.history.full.m1` artifact.
-`gold.history.extended.m5`, `gold.history.extended.m30`, and `gold.history.extended.h1`
-are derived from the canonical `gold.history.extended.m1` artifact.
-The supported Gold build choices currently include the History-Full, Extended-History,
-Live-Full, and Live-Extended families above. That includes the extended history-line resamples
-derived from `gold.history.extended.m1`.
 
 Build the extended live Gold dataset, which keeps the live-full snapshot schema and adds
 deterministic live-derived features:
@@ -199,10 +202,16 @@ uv run python main.py gold-build \
   --dataset-id gold.live.extended.m1
 ```
 
-`gold.live.extended.m1` keeps the canonical `gold.live.full.m1` surface and adds
-causal, same-row live-derived features.
+`gold.live.extended.m1` is built directly from the live snapshot Silver sources. It keeps the
+canonical `gold.live.full.m1` surface and adds causal, same-row live-derived features; it is not
+read back from a previously materialized `gold.live.full.m1` artifact.
 `gold.live.extended.m5`, `gold.live.extended.m30`, and `gold.live.extended.h1`
 are derived from the canonical `gold.live.extended.m1` artifact.
+
+The canonical live family is `gold.live.full.m1` with derived `m5`, `m30`, and `h1` datasets.
+The extended live family is `gold.live.extended.m1` with derived `m5`, `m30`, and `h1` datasets.
+When several Gold datasets are requested together, the CLI completes each source dataset before
+starting its derived children while keeping symbols parallel within a dataset.
 
 See [`DATASETS.md`](DATASETS.md) for every supported Gold dataset ID and its complete feature contract.
 
