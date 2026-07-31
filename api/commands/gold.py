@@ -29,6 +29,12 @@ _HISTORY_FULL_DERIVED_DATASET_IDS = {
     "gold.history.extended.m5",
     "gold.history.extended.m30",
     "gold.history.extended.h1",
+    "gold.live.extended.m5",
+    "gold.live.extended.m30",
+    "gold.live.extended.h1",
+    "gold.live.full.m5",
+    "gold.live.full.m30",
+    "gold.live.full.h1",
 }
 _HISTORY_FULL_DERIVED_BASE_DATASET_IDS = {
     "gold.history.full.m5": "gold.history.full.m1",
@@ -37,6 +43,12 @@ _HISTORY_FULL_DERIVED_BASE_DATASET_IDS = {
     "gold.history.extended.m5": "gold.history.extended.m1",
     "gold.history.extended.m30": "gold.history.extended.m1",
     "gold.history.extended.h1": "gold.history.extended.m1",
+    "gold.live.extended.m5": "gold.live.extended.m1",
+    "gold.live.extended.m30": "gold.live.extended.m1",
+    "gold.live.extended.h1": "gold.live.extended.m1",
+    "gold.live.full.m5": "gold.live.full.m1",
+    "gold.live.full.m30": "gold.live.full.m1",
+    "gold.live.full.h1": "gold.live.full.m1",
 }
 
 

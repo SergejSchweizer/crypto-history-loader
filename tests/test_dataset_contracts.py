@@ -102,7 +102,14 @@ def test_gold_contracts_are_service_compatible() -> None:
         "gold.history.extended.m30",
         "gold.history.extended.h1",
         "gold.history.extended_full.m1",
+        "gold.live.extended.h1",
+        "gold.live.extended.m1",
+        "gold.live.extended.m30",
+        "gold.live.extended.m5",
         "gold.live.full.m1",
+        "gold.live.full.m5",
+        "gold.live.full.m30",
+        "gold.live.full.h1",
     }
     assert gold_service.SUPPORTED_GOLD_DATASET_IDS == expected_supported
     for dataset_id in expected_supported:
@@ -132,7 +139,14 @@ def test_supported_dataset_helpers_are_contract_driven_and_stable() -> None:
         "gold.history.full.m1",
         "gold.history.full.m30",
         "gold.history.full.m5",
+        "gold.live.extended.h1",
+        "gold.live.extended.m1",
+        "gold.live.extended.m30",
+        "gold.live.extended.m5",
+        "gold.live.full.h1",
         "gold.live.full.m1",
+        "gold.live.full.m30",
+        "gold.live.full.m5",
     )
 
     for outputs in (*BRONZE_TO_SILVER_DATASETS.values(), *SILVER_LIVE_ORIGIN_BUILD_DATASETS.values()):

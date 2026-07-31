@@ -51,7 +51,14 @@ def test_resolve_dataset_ids_returns_single_when_explicit() -> None:
     assert gold_cmd._resolve_dataset_ids("gold.live.microstructure_features.m1") == [
         "gold.live.microstructure_features.m1"
     ]
+    assert gold_cmd._resolve_dataset_ids("gold.live.extended.m1") == ["gold.live.extended.m1"]
+    assert gold_cmd._resolve_dataset_ids("gold.live.extended.m5") == ["gold.live.extended.m5"]
+    assert gold_cmd._resolve_dataset_ids("gold.live.extended.m30") == ["gold.live.extended.m30"]
+    assert gold_cmd._resolve_dataset_ids("gold.live.extended.h1") == ["gold.live.extended.h1"]
     assert gold_cmd._resolve_dataset_ids("gold.live.full.m1") == ["gold.live.full.m1"]
+    assert gold_cmd._resolve_dataset_ids("gold.live.full.m5") == ["gold.live.full.m5"]
+    assert gold_cmd._resolve_dataset_ids("gold.live.full.m30") == ["gold.live.full.m30"]
+    assert gold_cmd._resolve_dataset_ids("gold.live.full.h1") == ["gold.live.full.h1"]
 
 
 def test_resolve_dataset_ids_returns_sorted_supported_when_missing() -> None:
@@ -189,6 +196,70 @@ def test_run_gold_build_runs_history_full_minute_before_derived_timeframes(
     gold_cmd.run_gold_build(args=args, logger=logging.getLogger("test"))
 
     assert built == ["gold.history.full.m1", "gold.history.full.m5"]
+
+
+def test_run_gold_build_runs_live_full_minute_before_derived_timeframes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    built: list[str] = []
+
+    monkeypatch.setattr(
+        gold_cmd,
+        "_resolve_dataset_ids",
+        lambda dataset_id: [dataset_id or "gold.live.full.m5"],
+    )
+    monkeypatch.setattr(gold_cmd, "_resolve_gold_symbols", lambda **kwargs: ["BTC"])
+    monkeypatch.setattr(gold_cmd, "_validate_version_args", lambda **kwargs: None)
+
+    class _Report:
+        rows_out = 1
+        parquet_path = "/tmp/data.parquet"
+
+        def to_dict(self) -> dict[str, object]:
+            return {"dataset_id": built[-1], "rows_out": 1}
+
+    def _build_gold_for_symbol(**kwargs: object) -> _Report:
+        built.append(str(kwargs["dataset_id"]))
+        return _Report()
+
+    monkeypatch.setattr(gold_cmd, "build_gold_for_symbol", _build_gold_for_symbol)
+
+    args = gold_args(dataset_id="gold.live.full.m5")
+    gold_cmd.run_gold_build(args=args, logger=logging.getLogger("test"))
+
+    assert built == ["gold.live.full.m1", "gold.live.full.m5"]
+
+
+def test_run_gold_build_runs_live_extended_minute_before_derived_timeframes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    built: list[str] = []
+
+    monkeypatch.setattr(
+        gold_cmd,
+        "_resolve_dataset_ids",
+        lambda dataset_id: [dataset_id or "gold.live.extended.m5"],
+    )
+    monkeypatch.setattr(gold_cmd, "_resolve_gold_symbols", lambda **kwargs: ["BTC"])
+    monkeypatch.setattr(gold_cmd, "_validate_version_args", lambda **kwargs: None)
+
+    class _Report:
+        rows_out = 1
+        parquet_path = "/tmp/data.parquet"
+
+        def to_dict(self) -> dict[str, object]:
+            return {"dataset_id": built[-1], "rows_out": 1}
+
+    def _build_gold_for_symbol(**kwargs: object) -> _Report:
+        built.append(str(kwargs["dataset_id"]))
+        return _Report()
+
+    monkeypatch.setattr(gold_cmd, "build_gold_for_symbol", _build_gold_for_symbol)
+
+    args = gold_args(dataset_id="gold.live.extended.m5")
+    gold_cmd.run_gold_build(args=args, logger=logging.getLogger("test"))
+
+    assert built == ["gold.live.extended.m1", "gold.live.extended.m5"]
 
 
 def test_run_gold_build_rejects_invalid_retention_keep_versions() -> None:

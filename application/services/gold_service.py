@@ -104,6 +104,12 @@ _HISTORY_FULL_DERIVED_DATASET_IDS = {
     "gold.history.extended.m5",
     "gold.history.extended.m30",
     "gold.history.extended.h1",
+    "gold.live.extended.m5",
+    "gold.live.extended.m30",
+    "gold.live.extended.h1",
+    "gold.live.full.m5",
+    "gold.live.full.m30",
+    "gold.live.full.h1",
 }
 _HISTORY_FULL_DERIVED_INTERVALS = {
     "gold.history.full.m5": "5m",
@@ -112,6 +118,12 @@ _HISTORY_FULL_DERIVED_INTERVALS = {
     "gold.history.extended.m5": "5m",
     "gold.history.extended.m30": "30m",
     "gold.history.extended.h1": "1h",
+    "gold.live.extended.m5": "5m",
+    "gold.live.extended.m30": "30m",
+    "gold.live.extended.h1": "1h",
+    "gold.live.full.m5": "5m",
+    "gold.live.full.m30": "30m",
+    "gold.live.full.h1": "1h",
 }
 _HISTORY_FULL_DERIVED_SOURCE_DATASET_IDS = {
     "gold.history.full.m5": "gold.history.full.m1",
@@ -120,6 +132,12 @@ _HISTORY_FULL_DERIVED_SOURCE_DATASET_IDS = {
     "gold.history.extended.m5": "gold.history.extended.m1",
     "gold.history.extended.m30": "gold.history.extended.m1",
     "gold.history.extended.h1": "gold.history.extended.m1",
+    "gold.live.extended.m5": "gold.live.extended.m1",
+    "gold.live.extended.m30": "gold.live.extended.m1",
+    "gold.live.extended.h1": "gold.live.extended.m1",
+    "gold.live.full.m5": "gold.live.full.m1",
+    "gold.live.full.m30": "gold.live.full.m1",
+    "gold.live.full.h1": "gold.live.full.m1",
 }
 _LIVE_FULL_NON_GRID_DATASETS = {
     "recent_trade_snapshot_1m_observed",
@@ -440,6 +458,12 @@ def _add_prediction_targets(pl: Any, frame: Any, dataset_id: str) -> Any:
     return frame
 
 
+def _add_live_extended_feature_families(pl: Any, frame: Any, dataset_id: str) -> Any:
+    if dataset_id == "gold.live.extended.m1":
+        return gold_frames.add_live_extended_feature_families(pl, frame)
+    return frame
+
+
 def _build_minute_grid(pl: Any, prepared: list[Any], exchange: str, symbol: str) -> Any:
     return gold_frames.build_minute_grid(pl, prepared, exchange, symbol)
 
@@ -755,7 +779,8 @@ def build_gold_for_symbol(
     grid_prepared = [
         frame
         for dataset_type, frame in required_prepared_by_dataset
-        if dataset_id != "gold.live.full.m1" or dataset_type not in _LIVE_FULL_NON_GRID_DATASETS
+        if dataset_id not in {"gold.live.full.m1", "gold.live.extended.m1"}
+        or dataset_type not in _LIVE_FULL_NON_GRID_DATASETS
     ]
     if not grid_prepared:
         grid_prepared = [frame for _dataset_type, frame in required_prepared_by_dataset]
@@ -793,6 +818,7 @@ def build_gold_for_symbol(
             )
     merged = _add_strategy_feature_families(pl, merged.sort("timestamp_m1"), dataset_id)
     merged = _add_prediction_targets(pl, merged, dataset_id)
+    merged = _add_live_extended_feature_families(pl, merged, dataset_id)
     if dataset_id == "gold.history.full.m1":
         merged = _select_history_full_canonical_columns(merged)
     elif dataset_id in {"gold.history.extended.m1", "gold.history.extended_full.m1"}:
