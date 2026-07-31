@@ -213,28 +213,24 @@ def run_gold_build(args: argparse.Namespace, logger: logging.Logger) -> None:
         )
         return report.to_dict()
 
-    jobs: list[Callable[[], dict[str, object] | None]] = []
-
     def _make_job(selected_dataset_id: str, symbol: str) -> Callable[[], dict[str, object] | None]:
         def _job() -> dict[str, object] | None:
             return _run_one(selected_dataset_id, symbol)
 
         return _job
 
+    total_jobs = sum(len(schedule[selected_dataset_id]) for selected_dataset_id in effective_dataset_ids)
+    logger.info("Gold build parallelization maxprocesses=%s jobs=%s", maxprocesses, total_jobs)
     for selected_dataset_id in effective_dataset_ids:
-        for symbol in schedule[selected_dataset_id]:
-            target_jobs = jobs
-            if selected_dataset_id in _HISTORY_FULL_DERIVED_DATASET_IDS:
-                target_jobs = jobs
-            target_jobs.append(_make_job(selected_dataset_id, symbol))
-
-    logger.info("Gold build parallelization maxprocesses=%s jobs=%s", maxprocesses, len(jobs))
-    with ThreadPoolExecutor(max_workers=maxprocesses) as executor:
-        futures = [executor.submit(job) for job in jobs]
-        for future in futures:
-            payload = future.result()
-            if payload is not None:
-                reports.append(payload)
+        # Dataset dependencies must complete before their derived children start.
+        # Symbols remain parallel within one dataset because they are independent.
+        jobs = [_make_job(selected_dataset_id, symbol) for symbol in schedule[selected_dataset_id]]
+        with ThreadPoolExecutor(max_workers=maxprocesses) as executor:
+            futures = [executor.submit(job) for job in jobs]
+            for future in futures:
+                payload = future.result()
+                if payload is not None:
+                    reports.append(payload)
     if not bool(args.no_json_output):
         print(json.dumps({"reports": reports}, indent=2))
     logger.info("Command complete: gold-build reports=%s", len(reports))
