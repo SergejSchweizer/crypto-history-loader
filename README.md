@@ -183,8 +183,26 @@ distinct IDs instead of overloading one another.
 are derived from the canonical `gold.history.full.m1` artifact.
 `gold.history.extended.m5`, `gold.history.extended.m30`, and `gold.history.extended.h1`
 are derived from the canonical `gold.history.extended.m1` artifact.
-The supported Gold build choices currently include the History-Full and Extended-History families above.
-That includes the extended history-line resamples derived from `gold.history.extended.m1`.
+The supported Gold build choices currently include the History-Full, Extended-History,
+Live-Full, and Live-Extended families above. That includes the extended history-line resamples
+derived from `gold.history.extended.m1`.
+
+Build the extended live Gold dataset, which keeps the live-full snapshot schema and adds
+deterministic live-derived features:
+
+```bash
+uv run python main.py gold-build \
+  --silver-root lake/silver \
+  --gold-root lake/gold \
+  --exchange deribit \
+  --maxprocesses 4 \
+  --dataset-id gold.live.extended.m1
+```
+
+`gold.live.extended.m1` keeps the canonical `gold.live.full.m1` surface and adds
+causal, same-row live-derived features.
+`gold.live.extended.m5`, `gold.live.extended.m30`, and `gold.live.extended.h1`
+are derived from the canonical `gold.live.extended.m1` artifact.
 
 See [`DATASETS.md`](DATASETS.md) for every supported Gold dataset ID and its complete feature contract.
 

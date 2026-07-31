@@ -1433,6 +1433,141 @@ def add_prediction_target_columns(pl: Any, frame: Any) -> Any:
     return target_frame.select(target_columns).sort("timestamp_m1")
 
 
+def add_live_extended_feature_families(pl: Any, frame: Any) -> Any:
+    """Add deterministic live-derived features on top of the live full table.
+
+    The live full contract remains the canonical snapshot of source-aligned
+    features. This helper adds causal, same-row transformations that summarize
+    spread, liquidity, and short-horizon momentum information without reaching
+    into any future rows.
+    """
+
+    group = ["exchange", "symbol"]
+    sorted_frame = frame.sort("timestamp_m1")
+    # Live snapshots are source-aligned and may legitimately omit an entire
+    # optional feature family. Keep the extended schema stable by representing
+    # unavailable options/L2 inputs as nullable values instead of inventing data.
+    nullable_inputs = {
+        "options_surface_fresh_quote_count",
+        "options_surface_contract_count",
+        "options_surface_stale_quote_count",
+        "options_surface_skew",
+        "options_surface_term_structure",
+        "perps_l2_spread",
+        "perps_l2_mid_price",
+        "options_l2_top_bid_depth",
+        "options_l2_top_ask_depth",
+        "options_l2_quote_coverage_ratio",
+    }
+    missing_inputs = sorted(nullable_inputs.difference(sorted_frame.columns))
+    if missing_inputs:
+        sorted_frame = sorted_frame.with_columns(
+            [pl.lit(None, dtype=pl.Float64).alias(column) for column in missing_inputs]
+        )
+    enriched = sorted_frame.with_columns(
+        [
+            _safe_log_return(pl, "volatility_index_close", 1).alias("live_extended_volatility_index_log_return_1m"),
+            _safe_log_return(pl, "volatility_index_close", 5).alias("live_extended_volatility_index_log_return_5m"),
+            _safe_ratio(
+                pl,
+                pl.col("volatility_index_high") - pl.col("volatility_index_low"),
+                pl.col("volatility_index_close"),
+            ).alias("live_extended_volatility_index_range_ratio"),
+            _safe_log_return(pl, "index_price", 1).alias("live_extended_index_price_log_return_1m"),
+            _safe_log_return(pl, "index_price", 5).alias("live_extended_index_price_log_return_5m"),
+            _safe_ratio(
+                pl,
+                pl.col("futures_summary_mark_price") - pl.col("futures_summary_index_price"),
+                pl.col("futures_summary_index_price"),
+            ).alias("live_extended_futures_basis_ratio"),
+            _safe_ratio(
+                pl,
+                pl.col("futures_summary_open_interest"),
+                pl.col("futures_summary_turnover"),
+            ).alias("live_extended_futures_open_interest_turnover_ratio"),
+            _safe_ratio(
+                pl,
+                pl.col("options_surface_fresh_quote_count"),
+                pl.col("options_surface_contract_count"),
+            ).alias("live_extended_options_surface_quote_fill_ratio"),
+            _safe_ratio(
+                pl,
+                pl.col("options_surface_stale_quote_count"),
+                pl.col("options_surface_contract_count"),
+            ).alias("live_extended_options_surface_stale_quote_ratio"),
+            _safe_ratio(
+                pl,
+                pl.col("options_surface_skew"),
+                pl.col("options_surface_term_structure"),
+            ).alias("live_extended_options_surface_skew_term_ratio"),
+            (
+                _safe_ratio(
+                    pl,
+                    pl.col("perps_l2_spread"),
+                    pl.col("perps_l2_mid_price"),
+                )
+                * 10000.0
+            ).alias("live_extended_perps_l2_spread_bps"),
+            _safe_ratio(
+                pl,
+                pl.col("options_l2_top_bid_depth") - pl.col("options_l2_top_ask_depth"),
+                pl.col("options_l2_top_bid_depth") + pl.col("options_l2_top_ask_depth"),
+            ).alias("live_extended_options_l2_depth_imbalance_ratio"),
+            (1.0 - pl.col("options_l2_quote_coverage_ratio")).alias("live_extended_options_l2_quote_gap_ratio"),
+        ]
+    )
+    # Rolling summaries stay causal by only using the current and prior rows in
+    # each exchange-symbol partition.
+    enriched = enriched.with_columns(
+        [
+            pl.col("futures_summary_mark_price")
+            .rolling_mean_by("timestamp_m1", window_size="15m", min_samples=2)
+            .over(group)
+            .alias("live_extended_futures_mark_price_mean_15m"),
+            pl.col("futures_summary_mark_price")
+            .rolling_std_by("timestamp_m1", window_size="15m", min_samples=2)
+            .over(group)
+            .alias("live_extended_futures_mark_price_std_15m"),
+            pl.col("perps_l2_spread")
+            .rolling_mean_by("timestamp_m1", window_size="15m", min_samples=2)
+            .over(group)
+            .alias("live_extended_perps_l2_spread_mean_15m"),
+            pl.col("perps_l2_spread")
+            .rolling_std_by("timestamp_m1", window_size="15m", min_samples=2)
+            .over(group)
+            .alias("live_extended_perps_l2_spread_std_15m"),
+            pl.col("index_price")
+            .rolling_mean_by("timestamp_m1", window_size="15m", min_samples=2)
+            .over(group)
+            .alias("live_extended_index_price_mean_15m"),
+            pl.col("index_price")
+            .rolling_std_by("timestamp_m1", window_size="15m", min_samples=2)
+            .over(group)
+            .alias("live_extended_index_price_std_15m"),
+        ]
+    )
+    enriched = enriched.with_columns(
+        [
+            _safe_ratio(
+                pl,
+                pl.col("futures_summary_mark_price") - pl.col("live_extended_futures_mark_price_mean_15m"),
+                pl.col("live_extended_futures_mark_price_std_15m"),
+            ).alias("live_extended_futures_mark_price_zscore_15m"),
+            _safe_ratio(
+                pl,
+                pl.col("perps_l2_spread") - pl.col("live_extended_perps_l2_spread_mean_15m"),
+                pl.col("live_extended_perps_l2_spread_std_15m"),
+            ).alias("live_extended_perps_l2_spread_zscore_15m"),
+            _safe_ratio(
+                pl,
+                pl.col("index_price") - pl.col("live_extended_index_price_mean_15m"),
+                pl.col("live_extended_index_price_std_15m"),
+            ).alias("live_extended_index_price_zscore_15m"),
+        ]
+    )
+    return enriched.sort("timestamp_m1")
+
+
 def _safe_log_return(pl: Any, column: str, periods: int) -> Any:
     current = pl.col(column)
     previous = pl.col(column).shift(periods).over(["exchange", "symbol"])
@@ -1572,7 +1707,7 @@ def resample_history_full_frame(pl: Any, frame: Any, interval: str) -> Any:
         ValueError: If the requested interval is unsupported or the input lacks keys.
     """
 
-    if interval not in {"5m", "30m", "1h"}:
+    if interval not in {"1m", "5m", "30m", "1h"}:
         raise ValueError(f"Unsupported history_full resample interval: {interval}")
     required_keys = {"timestamp_m1", "exchange", "symbol"}
     if not required_keys.issubset(frame.columns):
@@ -1589,6 +1724,9 @@ def resample_history_full_frame(pl: Any, frame: Any, interval: str) -> Any:
         "open_interest_is_observed",
         "open_interest_is_ffill",
     }
+
+    if interval == "1m":
+        return frame.sort(["exchange", "symbol", "timestamp_m1"])
 
     bucketed = frame.with_columns(
         pl.col("timestamp_m1")

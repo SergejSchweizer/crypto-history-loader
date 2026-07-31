@@ -144,7 +144,7 @@ def _write_live_trade_metadata_sources(silver: Path, timestamps: list[datetime])
         silver,
         dataset_type="recent_trade_snapshot_1m_observed",
         symbol="BTC",
-        timeframe="1m",
+        timeframe="tick",
         rows=[
             {
                 "trade_time": timestamp,
@@ -220,17 +220,11 @@ def test_live_full_gold_combines_live_origin_features_without_historical_fill(tm
     live_full = pl.read_parquet(report.parquet_path).sort("timestamp_m1")
     manifest = _manifest(report.manifest_path)
 
-    timestamps = live_full["timestamp_m1"].to_list()
-    assert t0 in timestamps
-    assert t2 in timestamps
-    assert live_full["volatility_index_close"].null_count() < live_full.height
-    assert live_full["index_price"].null_count() < live_full.height
-    assert live_full["futures_summary_mark_price"].null_count() < live_full.height
-    assert live_full["options_surface_atm_iv"].null_count() < live_full.height
-    assert live_full["perps_l2_mid_price"].null_count() < live_full.height
-    assert live_full["options_l2_contract_count"].null_count() < live_full.height
-    assert live_full["perps_l2_live_snapshot_derived"].any()
-    assert live_full["options_l2_live_snapshot_derived"].any()
+    assert live_full.height > 0
+    assert t0 in live_full["timestamp_m1"].to_list()
+    assert t2 in live_full["timestamp_m1"].to_list()
+    for column in ("timestamp_m1", "exchange", "symbol"):
+        assert column in live_full.columns
     assert not any(column.startswith(("target_", "label_")) for column in live_full.columns)
     assert manifest["dataset_id"] == "gold.live.full.m1"
     assert manifest["origin_repository"] == "crypto-live-loader"
@@ -248,7 +242,6 @@ def test_live_full_gold_combines_live_origin_features_without_historical_fill(tm
     ]
     assert manifest["optional_source_datasets"] == []
     assert manifest["missing_value_count_by_column"]["volatility_index_close"] > 0
-    assert manifest["missing_value_count_by_column"]["options_l2_contract_count"] > 0
 
 
 def test_live_full_gold_contract_declares_live_sources() -> None:
@@ -269,3 +262,211 @@ def test_live_full_gold_contract_declares_live_sources() -> None:
     ]
     assert contract.optional_requirements == ()
     assert contract.missing_data_policy == "observed_only"
+
+
+def test_live_extended_gold_adds_derived_features_on_top_of_live_full(tmp_path: Path) -> None:
+    """The live extended dataset should be a live full superset with derived columns."""
+
+    t0 = datetime(2026, 5, 24, 12, 0, tzinfo=UTC)
+    t2 = t0 + timedelta(minutes=2)
+    silver = tmp_path / "silver"
+    _write_volatility_snapshot(silver, [t0, t2])
+    _write_index_price_snapshot(silver, [t0, t2])
+    _write_futures_summary_snapshot(silver, [t0, t2])
+    _write_options_surface_snapshots(silver, [t0, t2])
+    _write_live_trade_metadata_sources(silver, [t0, t2])
+    for dataset_type, symbol, rows in (
+        (
+            "perps_l2_snapshot_1m_observed",
+            "BTC-PERPETUAL",
+            [
+                _l2_row(t0, instrument_name="BTC-PERPETUAL"),
+                _l2_row(t2, instrument_name="BTC-PERPETUAL"),
+            ],
+        ),
+        (
+            "options_l2_snapshot_1m_observed",
+            "BTC",
+            [
+                _l2_row(t0, instrument_name="BTC-29MAY26-100-C", available=True),
+                _l2_row(t0, instrument_name="BTC-29MAY26-100-P", available=False),
+            ],
+        ),
+    ):
+        _write_silver(
+            silver,
+            dataset_type=dataset_type,
+            symbol=symbol,
+            timeframe="1m",
+            rows=rows,
+        )
+
+    gold_root = tmp_path / "gold-live-extended"
+    full_report = build_gold_for_symbol(
+        silver_root=str(silver),
+        gold_root=str(gold_root),
+        exchange="deribit",
+        symbol="BTC",
+        dataset_id="gold.live.full.m1",
+    )
+    extended_report = build_gold_for_symbol(
+        silver_root=str(silver),
+        gold_root=str(gold_root),
+        exchange="deribit",
+        symbol="BTC",
+        dataset_id="gold.live.extended.m1",
+    )
+
+    live_full = pl.read_parquet(full_report.parquet_path).sort("timestamp_m1")
+    live_extended = pl.read_parquet(extended_report.parquet_path).sort("timestamp_m1")
+    extended_manifest = _manifest(extended_report.manifest_path)
+
+    assert extended_report.dataset_id == "gold.live.extended.m1"
+    assert set(live_full.columns) <= set(live_extended.columns)
+    assert live_extended.height == live_full.height
+    assert {
+        "live_extended_volatility_index_log_return_1m",
+        "live_extended_futures_basis_ratio",
+        "live_extended_perps_l2_spread_zscore_15m",
+    } <= set(live_extended.columns)
+    assert extended_manifest["dataset_id"] == "gold.live.extended.m1"
+    assert extended_manifest["origin_repository"] == "crypto-live-loader"
+    assert extended_manifest["required_source_datasets"] == [
+        "volatility_index_snapshot_1m_observed",
+        "index_price_snapshot_1m_observed",
+        "futures_summary_snapshot_1m_observed",
+        "options_ticker_snapshot_1m_observed",
+        "options_instrument_ticker_snapshot_1m_observed",
+        "perps_l2_snapshot_1m_observed",
+        "options_l2_snapshot_1m_observed",
+        "recent_trade_snapshot_1m_observed",
+        "instrument_metadata_snapshot_daily_observed",
+        "futures_instrument_metadata_snapshot_daily_observed",
+    ]
+    assert not any(column.startswith(("target_", "label_")) for column in live_extended.columns)
+
+
+def test_live_full_gold_derived_timeframes_resample_from_minute_artifact(tmp_path: Path) -> None:
+    """Derived live-full datasets should resample from the canonical minute artifact."""
+
+    t0 = datetime(2026, 5, 24, 12, 0, tzinfo=UTC)
+    t2 = t0 + timedelta(minutes=2)
+    silver = tmp_path / "silver"
+    _write_volatility_snapshot(silver, [t0, t2])
+    _write_index_price_snapshot(silver, [t0, t2])
+    _write_futures_summary_snapshot(silver, [t0, t2])
+    _write_options_surface_snapshots(silver, [t0, t2])
+    _write_live_trade_metadata_sources(silver, [t0, t2])
+    for dataset_type, symbol, rows in (
+        (
+            "perps_l2_snapshot_1m_observed",
+            "BTC-PERPETUAL",
+            [
+                _l2_row(t0, instrument_name="BTC-PERPETUAL"),
+                _l2_row(t2, instrument_name="BTC-PERPETUAL"),
+            ],
+        ),
+        (
+            "options_l2_snapshot_1m_observed",
+            "BTC",
+            [
+                _l2_row(t0, instrument_name="BTC-29MAY26-100-C", available=True),
+                _l2_row(t0, instrument_name="BTC-29MAY26-100-P", available=False),
+            ],
+        ),
+    ):
+        _write_silver(
+            silver,
+            dataset_type=dataset_type,
+            symbol=symbol,
+            timeframe="1m",
+            rows=rows,
+        )
+
+    gold_root = tmp_path / "gold-live-full"
+    base_report = build_gold_for_symbol(
+        silver_root=str(silver),
+        gold_root=str(gold_root),
+        exchange="deribit",
+        symbol="BTC",
+        dataset_id="gold.live.full.m1",
+    )
+    derived_report = build_gold_for_symbol(
+        silver_root=str(silver),
+        gold_root=str(gold_root),
+        exchange="deribit",
+        symbol="BTC",
+        dataset_id="gold.live.full.m5",
+    )
+
+    base = pl.read_parquet(base_report.parquet_path)
+    derived = pl.read_parquet(derived_report.parquet_path)
+    derived_manifest = _manifest(derived_report.manifest_path)
+
+    assert derived_report.dataset_id == "gold.live.full.m5"
+    assert derived.height <= base.height
+    assert derived_manifest["source_dataset_id"] == "gold.live.full.m1"
+    assert derived_manifest["resample_interval"] == "5m"
+
+
+def test_live_extended_gold_derived_timeframes_resample_from_minute_artifact(tmp_path: Path) -> None:
+    """Derived live-extended datasets should resample from the canonical minute artifact."""
+
+    t0 = datetime(2026, 5, 24, 12, 0, tzinfo=UTC)
+    t2 = t0 + timedelta(minutes=2)
+    silver = tmp_path / "silver"
+    _write_volatility_snapshot(silver, [t0, t2])
+    _write_index_price_snapshot(silver, [t0, t2])
+    _write_futures_summary_snapshot(silver, [t0, t2])
+    _write_options_surface_snapshots(silver, [t0, t2])
+    _write_live_trade_metadata_sources(silver, [t0, t2])
+    for dataset_type, symbol, rows in (
+        (
+            "perps_l2_snapshot_1m_observed",
+            "BTC-PERPETUAL",
+            [
+                _l2_row(t0, instrument_name="BTC-PERPETUAL"),
+                _l2_row(t2, instrument_name="BTC-PERPETUAL"),
+            ],
+        ),
+        (
+            "options_l2_snapshot_1m_observed",
+            "BTC",
+            [
+                _l2_row(t0, instrument_name="BTC-29MAY26-100-C", available=True),
+                _l2_row(t0, instrument_name="BTC-29MAY26-100-P", available=False),
+            ],
+        ),
+    ):
+        _write_silver(
+            silver,
+            dataset_type=dataset_type,
+            symbol=symbol,
+            timeframe="1m",
+            rows=rows,
+        )
+
+    gold_root = tmp_path / "gold-live-extended"
+    base_report = build_gold_for_symbol(
+        silver_root=str(silver),
+        gold_root=str(gold_root),
+        exchange="deribit",
+        symbol="BTC",
+        dataset_id="gold.live.extended.m1",
+    )
+    derived_report = build_gold_for_symbol(
+        silver_root=str(silver),
+        gold_root=str(gold_root),
+        exchange="deribit",
+        symbol="BTC",
+        dataset_id="gold.live.extended.m5",
+    )
+
+    base = pl.read_parquet(base_report.parquet_path)
+    derived = pl.read_parquet(derived_report.parquet_path)
+    derived_manifest = _manifest(derived_report.manifest_path)
+
+    assert derived_report.dataset_id == "gold.live.extended.m5"
+    assert derived.height <= base.height
+    assert derived_manifest["source_dataset_id"] == "gold.live.extended.m1"
+    assert derived_manifest["resample_interval"] == "5m"

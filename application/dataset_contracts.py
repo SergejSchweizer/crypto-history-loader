@@ -1133,10 +1133,11 @@ LIVE_FULL_GOLD_REQUIREMENTS = (
     GoldSourceRequirement("options_instrument_ticker_snapshot_1m_observed", "1m"),
     GoldSourceRequirement("perps_l2_snapshot_1m_observed", "1m"),
     GoldSourceRequirement("options_l2_snapshot_1m_observed", "1m"),
-    GoldSourceRequirement("recent_trade_snapshot_1m_observed", "1m"),
+    GoldSourceRequirement("recent_trade_snapshot_1m_observed", "tick"),
     GoldSourceRequirement("instrument_metadata_snapshot_daily_observed", "1d"),
     GoldSourceRequirement("futures_instrument_metadata_snapshot_daily_observed", "1d"),
 )
+LIVE_EXTENDED_GOLD_REQUIREMENTS = LIVE_FULL_GOLD_REQUIREMENTS
 
 GOLD_DATASET_CONTRACTS: dict[str, GoldDatasetContract] = {
     "gold.market.perps_trades.m1": GoldDatasetContract(
@@ -1260,6 +1261,48 @@ GOLD_DATASET_CONTRACTS: dict[str, GoldDatasetContract] = {
         include_l2=False,
         missing_data_policy="observed_only",
     ),
+    "gold.live.extended.m1": GoldDatasetContract(
+        dataset_id="gold.live.extended.m1",
+        requirements=LIVE_EXTENDED_GOLD_REQUIREMENTS,
+        include_l2=False,
+        missing_data_policy="observed_only",
+    ),
+    "gold.live.extended.m5": GoldDatasetContract(
+        dataset_id="gold.live.extended.m5",
+        requirements=(),
+        include_l2=False,
+        missing_data_policy="observed_only",
+    ),
+    "gold.live.extended.m30": GoldDatasetContract(
+        dataset_id="gold.live.extended.m30",
+        requirements=(),
+        include_l2=False,
+        missing_data_policy="observed_only",
+    ),
+    "gold.live.extended.h1": GoldDatasetContract(
+        dataset_id="gold.live.extended.h1",
+        requirements=(),
+        include_l2=False,
+        missing_data_policy="observed_only",
+    ),
+    "gold.live.full.m5": GoldDatasetContract(
+        dataset_id="gold.live.full.m5",
+        requirements=(),
+        include_l2=False,
+        missing_data_policy="observed_only",
+    ),
+    "gold.live.full.m30": GoldDatasetContract(
+        dataset_id="gold.live.full.m30",
+        requirements=(),
+        include_l2=False,
+        missing_data_policy="observed_only",
+    ),
+    "gold.live.full.h1": GoldDatasetContract(
+        dataset_id="gold.live.full.h1",
+        requirements=(),
+        include_l2=False,
+        missing_data_policy="observed_only",
+    ),
     "gold.market.full.m1": GoldDatasetContract(
         dataset_id="gold.market.full.m1",
         requirements=FULL_MARKET_GOLD_REQUIREMENTS,
@@ -1286,7 +1329,14 @@ def supported_gold_dataset_ids() -> tuple[str, ...]:
         "gold.history.extended.m30",
         "gold.history.extended.h1",
         "gold.history.extended_full.m1",
+        "gold.live.extended.h1",
+        "gold.live.extended.m1",
+        "gold.live.extended.m30",
+        "gold.live.extended.m5",
         "gold.live.full.m1",
+        "gold.live.full.m5",
+        "gold.live.full.m30",
+        "gold.live.full.h1",
     }
     return tuple(sorted(dataset_id for dataset_id in GOLD_DATASET_CONTRACTS if dataset_id in supported))
 
