@@ -62,7 +62,12 @@ Bronze domains are defined by `DATASET_REGISTRY` in `application/datasets.py`.
 | `options_trades` | `options_trades` | option | tick | Historical option executions |
 | `volatility_index_data` | `volatility_index_data` | volatility index | `1m` | Historical Deribit volatility-index OHLC observations |
 
-The physical lake may additionally contain live-origin snapshots mounted or copied from `crypto-live-loader`. Use the inventory command for the current source-of-truth list, schemas, periods, file counts, row counts, and missing days.
+Live datasets are supplied by the companion [`crypto-live-loader`](https://github.com/SergejSchweizer/crypto-live-loader)
+repository. Its live market snapshots are populated into the Bronze layer of this repository as
+live-origin source datasets, where this project applies the Silver normalization and publishes the
+supported Gold live families. The physical lake may therefore contain live-origin snapshots mounted
+or copied from `crypto-live-loader`; use the inventory command for the current source-of-truth list,
+schemas, periods, file counts, row counts, and missing days.
 
 ## Repository structure
 
