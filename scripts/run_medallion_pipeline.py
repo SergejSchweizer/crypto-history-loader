@@ -264,12 +264,18 @@ def _run_pipeline(
     for step in steps:
         _log_line(f"ACTIVE_STEP={step.name}")
         _log_line(f"START {step.name}")
-        subprocess.run(
-            [python_bin, *step.args],
-            cwd=str(repo_root),
-            env=env,
-            check=True,
-        )
+        try:
+            completed = subprocess.run(
+                [python_bin, *step.args],
+                cwd=str(repo_root),
+                env=env,
+                check=True,
+            )
+        except subprocess.CalledProcessError as exc:
+            signal_name = f" signal={-exc.returncode}" if exc.returncode < 0 else ""
+            _log_line(f"FAILED {step.name} returncode={exc.returncode}{signal_name}")
+            raise
+        _log_line(f"EXIT {step.name} returncode={completed.returncode}")
         _log_line(f"DONE {step.name}")
 
 
@@ -382,6 +388,14 @@ def main() -> int:
                 env=env,
             )
             _log_line("PIPELINE DONE")
+    except subprocess.CalledProcessError as exc:
+        with _redirect_output_to(log_path):
+            _log_line(f"PIPELINE FAILED returncode={exc.returncode}")
+        return 1
+    except Exception as exc:
+        with _redirect_output_to(log_path):
+            _log_line(f"PIPELINE FAILED exception={type(exc).__name__}: {exc}")
+        return 1
     finally:
         _release_lock(lock_fd)
 

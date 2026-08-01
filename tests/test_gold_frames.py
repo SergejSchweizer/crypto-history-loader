@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -102,6 +102,53 @@ def test_prepare_open_interest_accepts_current_oi_feature_aliases() -> None:
             "open_interest_observation_lag_sec": 3,
         }
     ]
+
+
+def test_prepare_options_snapshot_aggregates_contract_rows_to_unique_minutes() -> None:
+    """Raw live option contracts must not multiply the Gold minute-grid join."""
+
+    timestamp = datetime(2026, 5, 1, 0, 0, tzinfo=UTC)
+    frame = pl.DataFrame(
+        {
+            "timestamp": [timestamp, timestamp, timestamp],
+            "exchange": ["deribit"] * 3,
+            "symbol": ["BTC"] * 3,
+            "instrument_name": ["BTC-C", "BTC-P", "BTC-C"],
+            "implied_volatility": [0.50, 0.60, 0.55],
+            "mark_price": [1.0, 1.1, 1.2],
+            "bid_price": [0.9, None, 1.1],
+            "ask_price": [1.1, None, 1.3],
+            "ingested_at": [
+                timestamp + timedelta(seconds=1),
+                timestamp + timedelta(seconds=2),
+                timestamp + timedelta(seconds=3),
+            ],
+        }
+    )
+
+    prepared = gold_frames.prepare_options_snapshot(pl, frame, "BTC")
+
+    assert prepared.height == 1
+    assert prepared["options_surface_contract_count"].to_list() == [2]
+    assert prepared["options_surface_fresh_quote_count"].to_list() == [2]
+    assert prepared["options_surface_quote_coverage_ratio"].to_list() == [pytest.approx(2 / 3)]
+
+
+def test_prepare_recent_trade_snapshot_deduplicates_tick_rows() -> None:
+    """Multiple live executions in one minute must produce one lineage key."""
+
+    timestamp = datetime(2026, 5, 1, 0, 0, tzinfo=UTC)
+    frame = pl.DataFrame(
+        {
+            "trade_time": [timestamp, timestamp],
+            "exchange": ["deribit", "deribit"],
+            "symbol": ["BTC", "BTC"],
+        }
+    )
+
+    prepared = gold_frames.prepare_recent_trade_snapshot(pl, frame, "BTC")
+
+    assert prepared.height == 1
 
 
 def test_resample_history_full_frame_aggregates_buckets() -> None:
