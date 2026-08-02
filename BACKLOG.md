@@ -2548,7 +2548,7 @@ Acceptance:
 
 ### PR-61: Incremental Medallion Orchestrator And Freshness Audit
 
-Status: Planned
+Status: In Progress
 
 Updated: 2026-08-02
 

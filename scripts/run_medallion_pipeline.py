@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import fcntl
+import json
 import os
 import subprocess
 import sys
@@ -345,6 +346,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--main-path", default=str(repo_root / "main.py"), help="Path to main.py entrypoint")
     parser.add_argument("--lock-file", default=str(default_lock_file), help="Non-blocking lock file path")
     parser.add_argument("--log-file", help="Single append-only pipeline log file (overrides config)")
+    parser.add_argument("--dry-run", action="store_true", help="Print the deterministic pipeline plan without writing")
     return parser.parse_args()
 
 
@@ -365,6 +367,14 @@ def main() -> int:
         return 2
 
     config_data = _load_yaml(config_path)
+    steps = _build_steps(main_path=main_path, config_path=config_path, config_data=config_data)
+    if args.dry_run:
+        print(
+            json.dumps(
+                {"mode": "dry-run", "steps": [{"name": step.name, "args": step.args} for step in steps]}, indent=2
+            )
+        )
+        return 0
     config_log_path = _log_path_from_config(config_data=config_data, repo_root=repo_root)
     log_path = Path(args.log_file).resolve() if args.log_file else config_log_path
 
@@ -379,7 +389,6 @@ def main() -> int:
         with _redirect_output_to(log_path):
             _log_line("PIPELINE START script=run_medallion_pipeline.py")
             env = dict(os.environ)
-            steps = _build_steps(main_path=main_path, config_path=config_path, config_data=config_data)
             _log_line(f"SCHEDULED_STEPS={','.join(step.name for step in steps)}")
             _run_pipeline(
                 python_bin=str(args.python_bin),
