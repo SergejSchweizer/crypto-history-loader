@@ -2420,7 +2420,7 @@ Status: In Progress
 
 Updated: 2026-08-02
 
-PR: TBD
+PR: https://github.com/SergejSchweizer/crypto-history-loader/pull/162
 
 Branch: `codex/pr57-silver-shared-source-planner`
 
