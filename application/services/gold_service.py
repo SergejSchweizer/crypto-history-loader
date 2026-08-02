@@ -297,6 +297,11 @@ def _existing_gold_report_if_unchanged(
         or payload.get("source_data_hash") != source_data_hash
     ):
         return None
+    try:
+        _require_polars().read_parquet(str(parquet_path), n_rows=1)
+    except Exception:
+        # A matching manifest alone is insufficient: corrupted parquet must be rebuilt.
+        return None
     columns = payload.get("columns")
     rows_out = payload.get("rows_out")
     if not isinstance(columns, list) or not isinstance(rows_out, int):
