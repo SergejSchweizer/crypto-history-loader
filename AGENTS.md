@@ -320,6 +320,9 @@ Applies to day-to-day agent execution flow for implementation, debugging, and de
 - [MUST] Never commit directly to `main`.
 - [MUST] Always create a short-lived, task-specific feature branch from latest `main` using `codex/pr<backlog-number>-<scope>-<short-description>`.
 - [MUST] Every working branch name includes its Backlog PR number as lowercase `pr<backlog-number>`; for example, `codex/pr61-incremental-medallion-orchestrator`.
+- [MUST] Every commit on a working branch includes the same Backlog PR number in its Conventional Commit subject;
+  use `<type>[optional-scope]: PR-<backlog-number> <description>`, for example,
+  `feat(medallion): PR-61 add freshness audit`.
 - [MUST] Use lowercase letters, numbers, and hyphens only in branch names.
 - [MUST] Do not use vague branch names such as `codex/fixes`, `codex/update`, `codex/big-change`, `codex/refactor-all`, or `codex/work`.
 - [MUST] Keep one branch to one logical change.
@@ -349,8 +352,8 @@ Applies to day-to-day agent execution flow for implementation, debugging, and de
 - [MUST] Use Conventional Commit messages: `<type>[optional-scope][!]: <description>`.
 - [MUST] Allowed Conventional Commit types are `build`, `chore`, `ci`, `docs`, `feat`, `fix`, `perf`,
   `refactor`, `revert`, `style`, and `test`.
-- [MUST] Pull request titles must also use Conventional Commit format because squash merges use the PR title
-  as the final commit subject.
+- [MUST] Pull request titles must use the same `PR-<backlog-number>` Conventional Commit format because squash
+  merges use the PR title as the final commit subject.
 - [MUST] Push the feature branch and open a pull request into `main`.
 - [MUST] Never self-merge a pull request unless explicitly instructed.
 - [MUST] A finished PR must be merged into `main`; leaving a finished PR unmerged is not an allowed terminal state.

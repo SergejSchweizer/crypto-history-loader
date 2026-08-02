@@ -2599,6 +2599,26 @@ Description:
 Acceptance:
 - A1 (verifies R1): `AGENTS.md` defines the `codex/pr<backlog-number>-...` convention and examples follow it.
 
+### PR-63: Backlog PR Commit Identifier Policy
+
+Status: In Progress
+
+Updated: 2026-08-02
+
+PR: https://github.com/SergejSchweizer/crypto-history-loader/pull/170
+
+Branch: `codex/pr63-require-pr-identifiers`
+
+Depends on: PR-62
+
+Description:
+- R1: Require each working-branch commit and squash-merge title to include its Backlog PR identifier.
+
+Acceptance:
+- A1 (verifies R1): `AGENTS.md` defines the `PR-<backlog-number>` Conventional Commit subject format with an example.
+
+Handoff status: `git status --short` produced no output before this ticket update.
+
 ## Completion Definition
 
 The stack is complete when:
