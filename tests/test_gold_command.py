@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+from typing import cast
 
 import pytest
 
@@ -142,6 +143,7 @@ def test_run_gold_build_uses_helpers_and_emits_reports(
     monkeypatch.setattr(gold_cmd, "_validate_version_args", lambda **kwargs: None)
 
     class _Report:
+        dataset_id = ""
         rows_out = 1
         parquet_path = "/tmp/data.parquet"
 
@@ -210,7 +212,16 @@ def test_run_gold_build_runs_history_full_minute_before_derived_timeframes(
         built.append(str(kwargs["dataset_id"]))
         return _Report()
 
+    def _build_gold_timeframe_fanout_for_symbol(**kwargs: object) -> list[_Report]:
+        dataset_ids = cast(list[str], kwargs["dataset_ids"])
+        built.extend(dataset_ids)
+        reports = [_Report() for _ in dataset_ids]
+        for report, derived_dataset_id in zip(reports, dataset_ids, strict=True):
+            report.dataset_id = derived_dataset_id
+        return reports
+
     monkeypatch.setattr(gold_cmd, "build_gold_for_symbol", _build_gold_for_symbol)
+    monkeypatch.setattr(gold_cmd, "build_gold_timeframe_fanout_for_symbol", _build_gold_timeframe_fanout_for_symbol)
 
     args = gold_args(dataset_id="gold.history.full.m5")
     gold_cmd.run_gold_build(args=args, logger=logging.getLogger("test"))
@@ -232,6 +243,7 @@ def test_run_gold_build_runs_live_full_minute_before_derived_timeframes(
     monkeypatch.setattr(gold_cmd, "_validate_version_args", lambda **kwargs: None)
 
     class _Report:
+        dataset_id = ""
         rows_out = 1
         parquet_path = "/tmp/data.parquet"
 
@@ -242,7 +254,16 @@ def test_run_gold_build_runs_live_full_minute_before_derived_timeframes(
         built.append(str(kwargs["dataset_id"]))
         return _Report()
 
+    def _build_gold_timeframe_fanout_for_symbol(**kwargs: object) -> list[_Report]:
+        dataset_ids = cast(list[str], kwargs["dataset_ids"])
+        built.extend(dataset_ids)
+        reports = [_Report() for _ in dataset_ids]
+        for report, derived_dataset_id in zip(reports, dataset_ids, strict=True):
+            report.dataset_id = derived_dataset_id
+        return reports
+
     monkeypatch.setattr(gold_cmd, "build_gold_for_symbol", _build_gold_for_symbol)
+    monkeypatch.setattr(gold_cmd, "build_gold_timeframe_fanout_for_symbol", _build_gold_timeframe_fanout_for_symbol)
 
     args = gold_args(dataset_id="gold.live.full.m5")
     gold_cmd.run_gold_build(args=args, logger=logging.getLogger("test"))
@@ -264,6 +285,7 @@ def test_run_gold_build_runs_live_extended_minute_before_derived_timeframes(
     monkeypatch.setattr(gold_cmd, "_validate_version_args", lambda **kwargs: None)
 
     class _Report:
+        dataset_id = ""
         rows_out = 1
         parquet_path = "/tmp/data.parquet"
 
@@ -274,7 +296,16 @@ def test_run_gold_build_runs_live_extended_minute_before_derived_timeframes(
         built.append(str(kwargs["dataset_id"]))
         return _Report()
 
+    def _build_gold_timeframe_fanout_for_symbol(**kwargs: object) -> list[_Report]:
+        dataset_ids = cast(list[str], kwargs["dataset_ids"])
+        built.extend(dataset_ids)
+        reports = [_Report() for _ in dataset_ids]
+        for report, derived_dataset_id in zip(reports, dataset_ids, strict=True):
+            report.dataset_id = derived_dataset_id
+        return reports
+
     monkeypatch.setattr(gold_cmd, "build_gold_for_symbol", _build_gold_for_symbol)
+    monkeypatch.setattr(gold_cmd, "build_gold_timeframe_fanout_for_symbol", _build_gold_timeframe_fanout_for_symbol)
 
     args = gold_args(dataset_id="gold.live.extended.m5")
     gold_cmd.run_gold_build(args=args, logger=logging.getLogger("test"))

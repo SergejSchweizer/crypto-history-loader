@@ -14,6 +14,7 @@ from application.dataset_contracts import supported_gold_dataset_ids
 from application.services.gold_service import (
     GOLD_RETENTION_KEEP_VERSIONS,
     build_gold_for_symbol,
+    build_gold_timeframe_fanout_for_symbol,
     discover_gold_symbols,
     discover_gold_symbols_for_dataset,
     normalize_symbol,
@@ -245,16 +246,70 @@ def run_gold_build(args: argparse.Namespace, logger: logging.Logger) -> None:
 
         return _job
 
+    def _run_fanout(dataset_ids_for_source: list[str], symbol: str) -> list[dict[str, object]]:
+        try:
+            fanout_reports = build_gold_timeframe_fanout_for_symbol(
+                gold_root=gold_root,
+                exchange=exchange,
+                symbol=symbol,
+                dataset_ids=dataset_ids_for_source,
+                dataset_version=dataset_version,
+                auto_version=auto_version,
+                version_base=version_base,
+                keep_last_versions=keep_last_versions,
+            )
+        except ValueError as exc:
+            logger.warning(
+                "Gold timeframe fan-out skipped symbol=%s dataset_ids=%s reason=%s",
+                symbol,
+                dataset_ids_for_source,
+                exc,
+            )
+            return []
+        for report in fanout_reports:
+            logger.info(
+                "Gold dataset written symbol=%s dataset_id=%s rows_out=%s path=%s",
+                symbol,
+                report.dataset_id,
+                report.rows_out,
+                report.parquet_path,
+            )
+        return [report.to_dict() for report in fanout_reports]
+
+    def _make_fanout_job(dataset_ids_for_source: list[str], symbol: str) -> Callable[[], list[dict[str, object]]]:
+        def _job() -> list[dict[str, object]]:
+            return _run_fanout(dataset_ids_for_source, symbol)
+
+        return _job
+
     total_jobs = sum(len(schedule[selected_dataset_id]) for selected_dataset_id in effective_dataset_ids)
     logger.info("Gold build parallelization maxprocesses=%s jobs=%s", maxprocesses, total_jobs)
+    processed_derived_dataset_ids: set[str] = set()
     for selected_dataset_id in effective_dataset_ids:
+        if selected_dataset_id in processed_derived_dataset_ids:
+            continue
+        if selected_dataset_id in _HISTORY_FULL_DERIVED_DATASET_IDS:
+            source_dataset_id = _HISTORY_FULL_DERIVED_BASE_DATASET_IDS[selected_dataset_id]
+            sibling_dataset_ids = sorted(
+                dataset
+                for dataset in effective_dataset_ids
+                if _HISTORY_FULL_DERIVED_BASE_DATASET_IDS.get(dataset) == source_dataset_id
+            )
+            sibling_symbols = sorted({symbol for dataset in sibling_dataset_ids for symbol in schedule[dataset]})
+            processed_derived_dataset_ids.update(sibling_dataset_ids)
+            fanout_jobs = [_make_fanout_job(sibling_dataset_ids, symbol) for symbol in sibling_symbols]
+            with ThreadPoolExecutor(max_workers=maxprocesses) as executor:
+                fanout_futures = [executor.submit(job) for job in fanout_jobs]
+                for fanout_future in fanout_futures:
+                    reports.extend(fanout_future.result())
+            continue
         # Dataset dependencies must complete before their derived children start.
         # Symbols remain parallel within one dataset because they are independent.
         jobs = [_make_job(selected_dataset_id, symbol) for symbol in schedule[selected_dataset_id]]
         with ThreadPoolExecutor(max_workers=maxprocesses) as executor:
             futures = [executor.submit(job) for job in jobs]
-            for future in futures:
-                payload = future.result()
+            for build_future in futures:
+                payload = build_future.result()
                 if payload is not None:
                     reports.append(payload)
     if not bool(args.no_json_output):
