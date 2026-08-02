@@ -13,6 +13,8 @@ import pytest
 from application.services.runtime_service import (
     SingleInstanceError,
     SingleInstanceLock,
+    _gzip_log_file,
+    _safe_log_module_name,
     apply_repository_runtime_limits,
     configure_logging,
     enforce_log_retention,
@@ -247,3 +249,29 @@ def test_single_instance_lock_rejects_when_lock_is_held(
     with pytest.raises(SingleInstanceError):
         with SingleInstanceLock(str(tmp_path / "loader.lock")):
             pass
+
+
+def test_runtime_log_helpers_handle_existing_archive_and_unsafe_module_names(tmp_path: Path) -> None:
+    """Archive writes are idempotent and module names cannot escape the shared log directory."""
+
+    source = tmp_path / "loader.log.2026-07-01"
+    source.write_text("old\n", encoding="utf-8")
+    archive = _gzip_log_file(source)
+    assert archive.exists()
+    assert not source.exists()
+    source.write_text("duplicate\n", encoding="utf-8")
+    assert _gzip_log_file(source) == archive
+    assert not source.exists()
+    assert _safe_log_module_name(" /loader\\worker ") == "-loader-worker"
+    assert _safe_log_module_name("  ") == "crypto-history-loader"
+
+
+def test_single_instance_lock_writes_pid_and_releases_file(tmp_path: Path) -> None:
+    """A successful lock records its owner and permits a subsequent process lock."""
+
+    lock_path = tmp_path / "locks" / "loader.lock"
+    with SingleInstanceLock(str(lock_path)):
+        assert lock_path.exists()
+        assert lock_path.read_text(encoding="utf-8") == str(os.getpid())
+    with SingleInstanceLock(str(lock_path)):
+        assert lock_path.exists()
