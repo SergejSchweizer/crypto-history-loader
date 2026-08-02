@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from application.services.silver_incremental_planner import plan_incremental_months
 
 _MONTH_SEGMENT = re.compile(r"(?:^|/)month=(\d{4}-\d{2})(?:/|$)")
+_MONTH_FILENAME = re.compile(r"_(\d{4})[_-](\d{2})\.parquet$")
 
 
 @dataclass(frozen=True)
@@ -66,7 +67,12 @@ def plan_gold_m1_incremental_months(
 
 
 def _artifact_month(artifact_key: str) -> str | None:
-    """Extract a canonical month partition key from one manifest artifact key."""
+    """Extract a canonical month key from partitioned or legacy Silver artifact paths."""
 
     match = _MONTH_SEGMENT.search(artifact_key)
-    return match.group(1) if match is not None else None
+    if match is not None:
+        return match.group(1)
+    legacy_match = _MONTH_FILENAME.search(artifact_key)
+    if legacy_match is None:
+        return None
+    return f"{legacy_match.group(1)}-{legacy_match.group(2)}"

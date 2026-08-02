@@ -671,6 +671,20 @@ def test_build_gold_for_symbol_writes_hashed_parquet_and_manifest(tmp_path: Path
     assert "source_data_hash" in payload
     assert "git_commit_hash" in payload
     assert "build_id" in payload
+    assert payload["input_artifact_fingerprints"]
+    assert payload["incremental_m1_plan"]["changed_months"] == ["2026-05"]
+
+    parquet_mtime_ns = parquet_path.stat().st_mtime_ns
+    unchanged = build_gold_for_symbol(
+        silver_root=str(silver),
+        gold_root=str(gold),
+        exchange=exchange,
+        symbol=symbol,
+        manifest=True,
+    )
+    assert unchanged.parquet_path == report.parquet_path
+    assert unchanged.version_bump_reason == "unchanged_input"
+    assert parquet_path.stat().st_mtime_ns == parquet_mtime_ns
 
 
 def test_build_gold_reads_legacy_perp_silver_dataset(tmp_path: Path) -> None:

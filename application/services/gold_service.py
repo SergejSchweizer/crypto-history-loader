@@ -270,6 +270,59 @@ class GoldBuildReport:
         }
 
 
+def _existing_gold_report_if_unchanged(
+    *,
+    parquet_path: Path,
+    manifest_path: Path,
+    plot_path: Path,
+    input_fingerprint: str,
+    feature_set_hash: str,
+    source_data_hash: str,
+) -> GoldBuildReport | None:
+    """Return the published report when its validated input identity is unchanged.
+
+    The manifest is checked together with the parquet path because an interrupted old
+    build may leave an unreferenced parquet behind.  Such a file is never a cache hit.
+    """
+
+    if not parquet_path.is_file() or not manifest_path.is_file():
+        return None
+    try:
+        payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return None
+    if (
+        payload.get("input_fingerprint") != input_fingerprint
+        or payload.get("feature_set_hash") != feature_set_hash
+        or payload.get("source_data_hash") != source_data_hash
+    ):
+        return None
+    columns = payload.get("columns")
+    rows_out = payload.get("rows_out")
+    if not isinstance(columns, list) or not isinstance(rows_out, int):
+        return None
+    return GoldBuildReport(
+        exchange=str(payload.get("exchange", "")),
+        symbol=str(payload.get("symbol", "")),
+        rows_out=rows_out,
+        columns=[str(column) for column in columns],
+        min_timestamp=str(payload["min_timestamp"]) if payload.get("min_timestamp") is not None else None,
+        max_timestamp=str(payload["max_timestamp"]) if payload.get("max_timestamp") is not None else None,
+        parquet_path=str(parquet_path.resolve()),
+        manifest_path=str(manifest_path.resolve()),
+        plot_path=str(plot_path.resolve()) if plot_path.is_file() else None,
+        hash_string=f"{feature_set_hash}_{source_data_hash}",
+        dataset_id=str(payload.get("dataset_id", "")),
+        dataset_version=str(payload.get("dataset_version", "")),
+        feature_set_hash=feature_set_hash,
+        source_data_hash=source_data_hash,
+        git_commit_hash=str(payload.get("git_commit_hash", "")),
+        version_bump_level="none",
+        version_bump_reason="unchanged_input",
+        previous_version=str(payload["previous_version"]) if payload.get("previous_version") is not None else None,
+    )
+
+
 def _iso_utc(value: datetime | None) -> str | None:
     if value is None:
         return None
@@ -1028,6 +1081,17 @@ def build_gold_for_symbol(
     _ = manifest
     _ = plot
     plot_path = artifact_dir / f"{stem}.png"
+    manifest_path = artifact_dir / f"{stem}.json"
+    unchanged_report = _existing_gold_report_if_unchanged(
+        parquet_path=parquet_path,
+        manifest_path=manifest_path,
+        plot_path=plot_path,
+        input_fingerprint=input_fingerprint,
+        feature_set_hash=feature_set_hash,
+        source_data_hash=source_data_hash,
+    )
+    if unchanged_report is not None:
+        return unchanged_report
     artifact_dir.mkdir(parents=True, exist_ok=True)
     written_plot = _write_feature_distribution_plot(merged, plot_path, normalize_y=False)
     if written_plot is None:
@@ -1036,7 +1100,6 @@ def build_gold_for_symbol(
             "(missing matplotlib dependency or no plottable numeric columns)."
         )
     manifest_payload["plot_generated"] = True
-    manifest_path = artifact_dir / f"{stem}.json"
     gold_publication.publish_gold_artifact_atomically(
         frame=merged,
         parquet_path=parquet_path,
