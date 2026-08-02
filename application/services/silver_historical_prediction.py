@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from application.dataset_contracts import SILVER_HISTORICAL_PREDICTION_FEATURE_COLUMNS
+from application.services.silver_partition_manifest import publish_partition_atomically, source_fingerprint
 
 _SOURCE_FLOAT_COLUMNS = (
     "spot_close_price",
@@ -25,6 +26,7 @@ _SOURCE_FLOAT_COLUMNS = (
     "options_trade_count",
     "options_quote_volume",
 )
+_HISTORICAL_PREDICTION_FEATURE_CONTRACT_VERSION = "silver-historical-prediction-feature/v1"
 
 
 @dataclass(frozen=True)
@@ -342,6 +344,37 @@ def build_historical_prediction_1m_feature_for_symbol(
         )
 
     feature = _build_feature_frame(pl, merged)
+    input_files = [
+        path
+        for dataset_type in (
+            "spot_ohlcv",
+            "perps_ohlcv",
+            "funding_1m_feature",
+            "open_interest_1m_feature",
+            "perps_trades_1m_feature",
+            "options_trades_1m_feature",
+        )
+        for path in _source_files(
+            silver_root=silver_root,
+            dataset_type=dataset_type,
+            exchange=exchange,
+            symbol=normalized_symbol,
+            timeframe=timeframe,
+        )
+    ]
+    source_schema = {
+        path.relative_to(Path(silver_root)).as_posix(): dict(pl.scan_parquet(str(path)).collect_schema())
+        for path in input_files
+    }
+    fingerprint = source_fingerprint(
+        bronze_root=Path(silver_root),
+        source_files=[str(path) for path in input_files],
+        source_schema=source_schema,
+        exchange=exchange,
+        symbol=normalized_symbol,
+        timeframe=timeframe,
+        builder_contract_version=_HISTORICAL_PREDICTION_FEATURE_CONTRACT_VERSION,
+    )
     months = sorted(
         {value.strftime("%Y-%m") for value in feature["timestamp_m1"].to_list() if isinstance(value, datetime)}
     )
@@ -360,8 +393,15 @@ def build_historical_prediction_1m_feature_for_symbol(
             timeframe=timeframe,
             month=month,
         )
-        target.parent.mkdir(parents=True, exist_ok=True)
-        month_frame.write_parquet(target)
+        publish_partition_atomically(
+            frame=month_frame,
+            parquet_path=target,
+            input_fingerprint=fingerprint,
+            source_schema=source_schema,
+            sort_keys=("timestamp_m1",),
+            deduplication_keys=("timestamp_m1",),
+            builder_contract_version=_HISTORICAL_PREDICTION_FEATURE_CONTRACT_VERSION,
+        )
         rows_out += month_frame.height
         month_min = month_frame.select(pl.col("timestamp_m1").min()).item()
         month_max = month_frame.select(pl.col("timestamp_m1").max()).item()

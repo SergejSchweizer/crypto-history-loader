@@ -9,6 +9,13 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from application.dataset_contracts import SILVER_OPTIONS_TICKER_OBSERVED_COLUMNS
+from application.services.silver_partition_manifest import (
+    load_current_manifest,
+    publish_partition_atomically,
+    source_fingerprint,
+)
+
+_OPTIONS_TICKER_CONTRACT_VERSION = "silver-options-ticker-observed/v1"
 
 
 class SilverReportFactory(Protocol):
@@ -240,6 +247,32 @@ def build_options_ticker_observed_for_symbol(
         files = _bronze_month_files(root, month)
         if not files:
             continue
+        target = dependencies.silver_month_path(
+            silver_root=silver_root,
+            market=output_dataset_type,
+            exchange=exchange,
+            symbol=normalized_symbol,
+            timeframe=timeframe,
+            month=month,
+        )
+        source_schema = dict(pl.scan_parquet(files).collect_schema())
+        fingerprint = source_fingerprint(
+            bronze_root=Path(bronze_root),
+            source_files=files,
+            source_schema=source_schema,
+            exchange=exchange,
+            symbol=normalized_symbol,
+            timeframe=timeframe,
+            builder_contract_version=_OPTIONS_TICKER_CONTRACT_VERSION,
+        )
+        cached = load_current_manifest(
+            parquet_path=target,
+            expected_input_fingerprint=fingerprint,
+            expected_builder_contract_version=_OPTIONS_TICKER_CONTRACT_VERSION,
+        )
+        if cached is not None:
+            agg_rows_out += cached.row_count
+            continue
         frame = _collect_parquet_files(pl, files)
         rows_in = frame.height
         if rows_in == 0:
@@ -293,16 +326,15 @@ def build_options_ticker_observed_for_symbol(
             .select(SILVER_OPTIONS_TICKER_OBSERVED_COLUMNS)
         )
         duplicates_removed = cleaned.height - observed.height
-        target = dependencies.silver_month_path(
-            silver_root=silver_root,
-            market=output_dataset_type,
-            exchange=exchange,
-            symbol=normalized_symbol,
-            timeframe=timeframe,
-            month=month,
+        publish_partition_atomically(
+            frame=observed,
+            parquet_path=target,
+            input_fingerprint=fingerprint,
+            source_schema=source_schema,
+            sort_keys=("exchange", "instrument_name", "timestamp"),
+            deduplication_keys=("exchange", "instrument_name", "timestamp"),
+            builder_contract_version=_OPTIONS_TICKER_CONTRACT_VERSION,
         )
-        target.parent.mkdir(parents=True, exist_ok=True)
-        observed.write_parquet(target)
         if write_reconciliation:
             reference_path = dependencies.silver_month_path(
                 silver_root=silver_root,

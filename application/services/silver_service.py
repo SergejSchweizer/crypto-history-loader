@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import json
+import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from importlib import import_module
 from pathlib import Path
+from time import perf_counter
 from typing import Any
 
 from application.dataset_contracts import (
@@ -68,6 +71,16 @@ from application.services import (
     silver_trades,
     silver_volatility,
 )
+from application.services.silver_partition_manifest import (
+    load_current_manifest,
+    publish_partition_atomically,
+    source_fingerprint,
+)
+
+_LOGGER = logging.getLogger(__name__)
+_OHLCV_BUILDER_CONTRACT_VERSION = "silver-ohlcv/v1"
+_TRADE_OBSERVED_CONTRACT_VERSION = "silver-trades-observed/v1"
+_TRADE_FEATURE_CONTRACT_VERSION = "silver-trades-feature/v1"
 
 SILVER_FUNDING_FEATURE_COLUMNS = silver_funding.SILVER_FUNDING_FEATURE_COLUMNS
 SILVER_FUNDING_OBSERVED_COLUMNS = silver_funding.SILVER_FUNDING_OBSERVED_COLUMNS
@@ -442,6 +455,37 @@ def _iso_utc(value: datetime | None) -> str | None:
     return value.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def _performance_event(
+    event: str,
+    *,
+    market: str,
+    exchange: str,
+    symbol: str,
+    month: str,
+    fingerprint: str,
+    row_count: int = 0,
+    elapsed_ms: int = 0,
+) -> None:
+    """Emit the stable operational event contract for a Silver partition."""
+
+    _LOGGER.info(
+        json.dumps(
+            {
+                "event": event,
+                "layer": "silver",
+                "dataset": market,
+                "exchange": exchange,
+                "symbol": symbol,
+                "partition": month,
+                "source_fingerprint": fingerprint,
+                "row_count": row_count,
+                "elapsed_ms": elapsed_ms,
+            },
+            sort_keys=True,
+        )
+    )
+
+
 def _normalize_symbol_expr(pl: Any, col_name: str = "symbol") -> Any:
     return (
         pl.col(col_name)
@@ -482,6 +526,7 @@ def build_silver_for_symbol(
     )
 
     for month in months:
+        started = perf_counter()
         files = _bronze_month_files(
             bronze_root=bronze_root,
             market=market,
@@ -491,6 +536,50 @@ def build_silver_for_symbol(
             month=month,
         )
         if not files:
+            continue
+        target = _silver_month_path(
+            silver_root=silver_root,
+            market=market,
+            exchange=exchange,
+            symbol=symbol,
+            timeframe=timeframe,
+            month=month,
+        )
+        source_schema = dict(pl.scan_parquet(files).collect_schema())
+        fingerprint = source_fingerprint(
+            bronze_root=Path(bronze_root),
+            source_files=files,
+            source_schema=source_schema,
+            exchange=exchange,
+            symbol=symbol,
+            timeframe=timeframe,
+            builder_contract_version=_OHLCV_BUILDER_CONTRACT_VERSION,
+        )
+        _performance_event(
+            "planned",
+            market=market,
+            exchange=exchange,
+            symbol=symbol,
+            month=month,
+            fingerprint=fingerprint,
+        )
+        cached = load_current_manifest(
+            parquet_path=target,
+            expected_input_fingerprint=fingerprint,
+            expected_builder_contract_version=_OHLCV_BUILDER_CONTRACT_VERSION,
+        )
+        if cached is not None:
+            _performance_event(
+                "skipped_unchanged",
+                market=market,
+                exchange=exchange,
+                symbol=symbol,
+                month=month,
+                fingerprint=fingerprint,
+                row_count=cached.row_count,
+                elapsed_ms=int((perf_counter() - started) * 1000),
+            )
+            accumulator.record_month(rows_in=0, rows_out=cached.row_count)
             continue
         frame = pl.scan_parquet(files).collect()
         rows_in = frame.height
@@ -523,16 +612,48 @@ def build_silver_for_symbol(
         )
         duplicates_removed = cleaned.height - deduped.height
 
-        target = _silver_month_path(
-            silver_root=silver_root,
+        _performance_event(
+            "built",
             market=market,
             exchange=exchange,
             symbol=symbol,
-            timeframe=timeframe,
             month=month,
+            fingerprint=fingerprint,
+            row_count=deduped.height,
+            elapsed_ms=int((perf_counter() - started) * 1000),
         )
-        target.parent.mkdir(parents=True, exist_ok=True)
-        deduped.write_parquet(target)
+        try:
+            publish_partition_atomically(
+                frame=deduped,
+                parquet_path=target,
+                input_fingerprint=fingerprint,
+                source_schema=source_schema,
+                sort_keys=("open_time",),
+                deduplication_keys=("exchange", "instrument_type", "symbol", "timeframe", "open_time"),
+                builder_contract_version=_OHLCV_BUILDER_CONTRACT_VERSION,
+            )
+        except Exception:
+            _performance_event(
+                "failed",
+                market=market,
+                exchange=exchange,
+                symbol=symbol,
+                month=month,
+                fingerprint=fingerprint,
+                row_count=deduped.height,
+                elapsed_ms=int((perf_counter() - started) * 1000),
+            )
+            raise
+        _performance_event(
+            "published",
+            market=market,
+            exchange=exchange,
+            symbol=symbol,
+            month=month,
+            fingerprint=fingerprint,
+            row_count=deduped.height,
+            elapsed_ms=int((perf_counter() - started) * 1000),
+        )
 
         month_min = deduped.select(pl.col("open_time").min()).item()
         month_max = deduped.select(pl.col("open_time").max()).item()
@@ -775,8 +896,28 @@ def build_perps_trades_1m_feature_for_symbol(
             timeframe="1m",
             month=month,
         )
-        target.parent.mkdir(parents=True, exist_ok=True)
-        feature.write_parquet(target)
+        source_files = [str(path) for path in (month_file, *map(Path, empty_files)) if path.exists()]
+        source_schema: dict[str, object] = {"observed": dict(frame.schema)}
+        if empty_minutes is not None:
+            source_schema["confirmed_empty_minutes"] = dict(empty_minutes.schema)
+        fingerprint = source_fingerprint(
+            bronze_root=Path("/"),
+            source_files=source_files,
+            source_schema=source_schema,
+            exchange=exchange,
+            symbol=symbol,
+            timeframe=observed_timeframe,
+            builder_contract_version=_TRADE_FEATURE_CONTRACT_VERSION,
+        )
+        publish_partition_atomically(
+            frame=feature,
+            parquet_path=target,
+            input_fingerprint=fingerprint,
+            source_schema=source_schema,
+            sort_keys=("timestamp_m1",),
+            deduplication_keys=("exchange", "symbol", "instrument_type", "timestamp_m1"),
+            builder_contract_version=_TRADE_FEATURE_CONTRACT_VERSION,
+        )
 
         month_min = feature.select(pl.col("timestamp_m1").min()).item()
         month_max = feature.select(pl.col("timestamp_m1").max()).item()
@@ -833,12 +974,6 @@ def build_perps_trades_observed_for_symbol(
         )
         if not files:
             continue
-        frame = pl.scan_parquet(files).collect()
-        rows_in = frame.height
-        if rows_in == 0:
-            continue
-        observed, invalid_rows, cleaned_rows = _build_trade_observed_frame(pl, frame)
-        duplicates_removed = cleaned_rows - observed.height
         target = _silver_month_path(
             silver_root=silver_root,
             market=output_dataset_type,
@@ -847,8 +982,39 @@ def build_perps_trades_observed_for_symbol(
             timeframe=timeframe,
             month=month,
         )
-        target.parent.mkdir(parents=True, exist_ok=True)
-        observed.write_parquet(target)
+        source_schema = dict(pl.scan_parquet(files).collect_schema())
+        fingerprint = source_fingerprint(
+            bronze_root=Path(bronze_root),
+            source_files=files,
+            source_schema=source_schema,
+            exchange=exchange,
+            symbol=symbol,
+            timeframe=timeframe,
+            builder_contract_version=_TRADE_OBSERVED_CONTRACT_VERSION,
+        )
+        cached = load_current_manifest(
+            parquet_path=target,
+            expected_input_fingerprint=fingerprint,
+            expected_builder_contract_version=_TRADE_OBSERVED_CONTRACT_VERSION,
+        )
+        if cached is not None:
+            accumulator.record_month(rows_in=0, rows_out=cached.row_count)
+            continue
+        frame = pl.scan_parquet(files).collect()
+        rows_in = frame.height
+        if rows_in == 0:
+            continue
+        observed, invalid_rows, cleaned_rows = _build_trade_observed_frame(pl, frame)
+        duplicates_removed = cleaned_rows - observed.height
+        publish_partition_atomically(
+            frame=observed,
+            parquet_path=target,
+            input_fingerprint=fingerprint,
+            source_schema=source_schema,
+            sort_keys=("trade_time",),
+            deduplication_keys=("exchange", "instrument_type", "symbol", "trade_time", "trade_id"),
+            builder_contract_version=_TRADE_OBSERVED_CONTRACT_VERSION,
+        )
 
         month_min = observed.select(pl.col("trade_time").min()).item()
         month_max = observed.select(pl.col("trade_time").max()).item()

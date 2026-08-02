@@ -11,11 +11,17 @@ from application.dataset_contracts import (
     SILVER_OPTION_SURFACE_FEATURE_COLUMNS,
     SILVER_OPTIONS_TICKER_OBSERVED_COLUMNS,
 )
+from application.services.silver_partition_manifest import (
+    load_current_manifest,
+    publish_partition_atomically,
+    source_fingerprint,
+)
 
 ATM_LOG_MONEYNESS_LIMIT = 0.05
 SHORT_DTE_DAYS = 7.0
 LONG_DTE_DAYS = 30.0
 FRESH_QUOTE_SECONDS = 60.0
+_OPTION_SURFACE_FEATURE_CONTRACT_VERSION = "silver-options-surface-feature/v1"
 
 
 class SilverReportFactory(Protocol):
@@ -221,8 +227,41 @@ def build_options_surface_1m_feature_for_symbol(
     processed_months: list[str] = []
 
     for month in months:
-        currency = _read_source(pl, _month_file(currency_root, month, normalized_symbol), priority=1)
-        instrument = _read_source(pl, _month_file(instrument_root, month, normalized_symbol), priority=2)
+        currency_path = _month_file(currency_root, month, normalized_symbol)
+        instrument_path = _month_file(instrument_root, month, normalized_symbol)
+        source_paths = [path for path in (currency_path, instrument_path) if path is not None]
+        source_schema = {
+            path.relative_to(Path(silver_root)).as_posix(): dict(pl.scan_parquet(str(path)).collect_schema())
+            for path in source_paths
+        }
+        fingerprint = source_fingerprint(
+            bronze_root=Path(silver_root),
+            source_files=[str(path) for path in source_paths],
+            source_schema=source_schema,
+            exchange=exchange,
+            symbol=normalized_symbol,
+            timeframe=timeframe,
+            builder_contract_version=_OPTION_SURFACE_FEATURE_CONTRACT_VERSION,
+        )
+        target = dependencies.silver_month_path(
+            silver_root=silver_root,
+            market=output_dataset_type,
+            exchange=exchange,
+            symbol=normalized_symbol,
+            timeframe=timeframe,
+            month=month,
+        )
+        cached = load_current_manifest(
+            parquet_path=target,
+            expected_input_fingerprint=fingerprint,
+            expected_builder_contract_version=_OPTION_SURFACE_FEATURE_CONTRACT_VERSION,
+        )
+        if cached is not None:
+            processed_months.append(month)
+            rows_out += cached.row_count
+            continue
+        currency = _read_source(pl, currency_path, priority=1)
+        instrument = _read_source(pl, instrument_path, priority=2)
         sources = [source for source in (currency, instrument) if source is not None]
         if not sources:
             continue
@@ -232,16 +271,15 @@ def build_options_surface_1m_feature_for_symbol(
         duplicates_removed += month_duplicates
         if feature.height == 0:
             continue
-        target = dependencies.silver_month_path(
-            silver_root=silver_root,
-            market=output_dataset_type,
-            exchange=exchange,
-            symbol=normalized_symbol,
-            timeframe=timeframe,
-            month=month,
+        publish_partition_atomically(
+            frame=feature,
+            parquet_path=target,
+            input_fingerprint=fingerprint,
+            source_schema=source_schema,
+            sort_keys=("exchange", "symbol", "timestamp_m1"),
+            deduplication_keys=("exchange", "symbol", "timestamp_m1"),
+            builder_contract_version=_OPTION_SURFACE_FEATURE_CONTRACT_VERSION,
         )
-        target.parent.mkdir(parents=True, exist_ok=True)
-        feature.write_parquet(target)
         processed_months.append(month)
         rows_out += feature.height
 

@@ -9,6 +9,14 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from application.dataset_contracts import SILVER_OPEN_INTEREST_M1_FEATURE_COLUMNS, SILVER_OPEN_INTEREST_OBSERVED_COLUMNS
+from application.services.silver_partition_manifest import (
+    load_current_manifest,
+    publish_partition_atomically,
+    source_fingerprint,
+)
+
+_OPEN_INTEREST_OBSERVED_CONTRACT_VERSION = "silver-open-interest-observed/v1"
+_OPEN_INTEREST_FEATURE_CONTRACT_VERSION = "silver-open-interest-feature/v1"
 
 __all__ = [
     "OpenInterestDependencies",
@@ -98,6 +106,32 @@ def build_open_interest_observed_for_symbol(
         )
         if not files:
             continue
+        target = dependencies.silver_month_path(
+            silver_root=silver_root,
+            market="open_interest_observed",
+            exchange=exchange,
+            symbol=symbol,
+            timeframe=timeframe,
+            month=month,
+        )
+        source_schema = dict(pl.scan_parquet(files).collect_schema())
+        fingerprint = source_fingerprint(
+            bronze_root=Path(bronze_root),
+            source_files=files,
+            source_schema=source_schema,
+            exchange=exchange,
+            symbol=symbol,
+            timeframe=timeframe,
+            builder_contract_version=_OPEN_INTEREST_OBSERVED_CONTRACT_VERSION,
+        )
+        cached = load_current_manifest(
+            parquet_path=target,
+            expected_input_fingerprint=fingerprint,
+            expected_builder_contract_version=_OPEN_INTEREST_OBSERVED_CONTRACT_VERSION,
+        )
+        if cached is not None:
+            agg_rows_out += cached.row_count
+            continue
         frame = pl.scan_parquet(files).collect()
         rows_in = frame.height
         if rows_in == 0:
@@ -138,16 +172,15 @@ def build_open_interest_observed_for_symbol(
         )
         duplicates_removed = cleaned.height - observed.height
 
-        target = dependencies.silver_month_path(
-            silver_root=silver_root,
-            market="open_interest_observed",
-            exchange=exchange,
-            symbol=symbol,
-            timeframe=timeframe,
-            month=month,
+        publish_partition_atomically(
+            frame=observed,
+            parquet_path=target,
+            input_fingerprint=fingerprint,
+            source_schema=source_schema,
+            sort_keys=("exchange", "symbol", "timestamp"),
+            deduplication_keys=("exchange", "symbol", "timestamp", "open_interest"),
+            builder_contract_version=_OPEN_INTEREST_OBSERVED_CONTRACT_VERSION,
         )
-        target.parent.mkdir(parents=True, exist_ok=True)
-        observed.write_parquet(target)
 
         month_min = observed.select(pl.col("timestamp").min()).item()
         month_max = observed.select(pl.col("timestamp").max()).item()
@@ -296,8 +329,25 @@ def build_open_interest_1m_feature_for_symbol(
             symbol=symbol,
             month=month,
         )
-        target.parent.mkdir(parents=True, exist_ok=True)
-        feature.write_parquet(target)
+        feature_contract = f"{_OPEN_INTEREST_FEATURE_CONTRACT_VERSION}:{cutoff_time.isoformat()}"
+        feature_fingerprint = source_fingerprint(
+            bronze_root=Path(silver_root),
+            source_files=[str(month_file)],
+            source_schema=dict(observed.schema),
+            exchange=exchange,
+            symbol=symbol,
+            timeframe=observed_timeframe,
+            builder_contract_version=feature_contract,
+        )
+        publish_partition_atomically(
+            frame=feature,
+            parquet_path=target,
+            input_fingerprint=feature_fingerprint,
+            source_schema=dict(observed.schema),
+            sort_keys=("timestamp_m1",),
+            deduplication_keys=("exchange", "symbol", "timestamp_m1"),
+            builder_contract_version=feature_contract,
+        )
 
         month_min = feature.select(pl.col("timestamp_m1").min()).item()
         month_max = feature.select(pl.col("timestamp_m1").max()).item()

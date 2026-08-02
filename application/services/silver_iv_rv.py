@@ -15,12 +15,18 @@ from application.services.silver_monthly_lookback import (
     month_end_exclusive,
     month_start,
 )
+from application.services.silver_partition_manifest import (
+    load_current_manifest,
+    publish_partition_atomically,
+    source_fingerprint,
+)
 
 # QC-02: widest rolling window used by this builder (`iv_rv_percentile_30d`), in
 # days. Every month is calculated on a buffered frame that includes this much prior
 # context so the rolling z-score and percentile are not reset by monthly storage
 # partition boundaries.
 _REQUIRED_LOOKBACK_DAYS = 30
+_IV_RV_FEATURE_CONTRACT_VERSION = "silver-iv-rv-feature/v1"
 
 
 class SilverReportFactory(Protocol):
@@ -321,6 +327,42 @@ def build_iv_rv_1m_feature_for_symbol(
         target_start = month_start(month)
         target_end = month_end_exclusive(month)
         calculation_keys = [*lookback_month_keys(month, lookback_days=_REQUIRED_LOOKBACK_DAYS), month]
+        source_paths = [
+            path
+            for key in calculation_keys
+            for path in (_month_file(iv_root, key, normalized_symbol), _month_file(rv_root, key, normalized_symbol))
+            if path is not None
+        ]
+        source_paths = sorted(set(source_paths))
+        source_schema = {
+            path.relative_to(Path(silver_root)).as_posix(): dict(pl.scan_parquet(str(path)).collect_schema())
+            for path in source_paths
+        }
+        fingerprint = source_fingerprint(
+            bronze_root=Path(silver_root),
+            source_files=[str(path) for path in source_paths],
+            source_schema=source_schema,
+            exchange=exchange,
+            symbol=normalized_symbol,
+            timeframe=timeframe,
+            builder_contract_version=_IV_RV_FEATURE_CONTRACT_VERSION,
+        )
+        target = dependencies.silver_month_path(
+            silver_root=silver_root,
+            market=output_dataset_type,
+            exchange=exchange,
+            symbol=normalized_symbol,
+            timeframe=timeframe,
+            month=month,
+        )
+        cached = load_current_manifest(
+            parquet_path=target,
+            expected_input_fingerprint=fingerprint,
+            expected_builder_contract_version=_IV_RV_FEATURE_CONTRACT_VERSION,
+        )
+        if cached is not None:
+            agg_rows_out += cached.row_count
+            continue
 
         buffered_frames = [month_frame for key in calculation_keys if (month_frame := _cached_month(key)) is not None]
         if month not in month_cache or month_cache[month] is None:
@@ -383,16 +425,15 @@ def build_iv_rv_1m_feature_for_symbol(
             (pl.col("timestamp_m1") >= target_start) & (pl.col("timestamp_m1") < target_end)
         ).select(SILVER_IV_RV_FEATURE_COLUMNS)
 
-        target = dependencies.silver_month_path(
-            silver_root=silver_root,
-            market=output_dataset_type,
-            exchange=exchange,
-            symbol=normalized_symbol,
-            timeframe=timeframe,
-            month=month,
+        publish_partition_atomically(
+            frame=feature,
+            parquet_path=target,
+            input_fingerprint=fingerprint,
+            source_schema=source_schema,
+            sort_keys=("exchange", "symbol", "timestamp_m1"),
+            deduplication_keys=("exchange", "symbol", "timestamp_m1"),
+            builder_contract_version=_IV_RV_FEATURE_CONTRACT_VERSION,
         )
-        target.parent.mkdir(parents=True, exist_ok=True)
-        feature.write_parquet(target)
 
         month_min = feature.select(pl.col("timestamp_m1").min()).item()
         month_max = feature.select(pl.col("timestamp_m1").max()).item()
