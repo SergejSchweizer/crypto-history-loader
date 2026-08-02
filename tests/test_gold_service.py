@@ -1437,6 +1437,7 @@ def test_build_gold_for_symbol_options_trades_only_dataset(tmp_path: Path) -> No
         symbol=symbol,
         dataset_id="gold.market.options_trades.m1",
         manifest=True,
+        plot=True,
     )
 
     assert "dataset_id=gold.market.options_trades.m1" in report.parquet_path
@@ -2869,6 +2870,7 @@ def test_build_gold_prunes_to_latest_three_artifacts_with_same_version(tmp_path:
         dataset_version="v1.0.0",
         auto_version=False,
         keep_last_versions=3,
+        plot=True,
     )
 
     parquet_files = sorted(artifact_dir.glob("*.parquet"))

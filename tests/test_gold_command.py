@@ -161,6 +161,7 @@ def test_run_gold_build_uses_helpers_and_emits_reports(
     payload = capsys.readouterr().out
     assert "gold.market.full.m1" in payload
     assert captured_kwargs["keep_last_versions"] == 3
+    assert captured_kwargs["plot"] is False
 
 
 def test_run_gold_build_skips_symbol_on_value_error(

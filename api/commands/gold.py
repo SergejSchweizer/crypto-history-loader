@@ -79,7 +79,7 @@ def add_gold_build_parser(subparsers: Any) -> None:
         "--version-base", default="v1.0.0", help="Base version used when auto-version has no prior manifest"
     )
     parser.add_argument("--manifest", action="store_true", help="Deprecated: gold manifests are always generated")
-    parser.add_argument("--plot", action="store_true", help="Deprecated: gold plots are always generated")
+    parser.add_argument("--plot", action="store_true", help="Generate optional Gold distribution plots")
     parser.add_argument(
         "--l2-validation-mode",
         choices=["strict", "lenient"],
@@ -219,9 +219,9 @@ def run_gold_build(args: argparse.Namespace, logger: logging.Logger) -> None:
                 auto_version=auto_version,
                 version_base=version_base,
                 manifest=True,
-                plot=True,
                 l2_validation_mode=l2_validation_mode,
                 keep_last_versions=keep_last_versions,
+                plot=bool(getattr(args, "plot", False)),
             )
         except ValueError as exc:
             logger.warning(
@@ -257,6 +257,7 @@ def run_gold_build(args: argparse.Namespace, logger: logging.Logger) -> None:
                 auto_version=auto_version,
                 version_base=version_base,
                 keep_last_versions=keep_last_versions,
+                plot=bool(getattr(args, "plot", False)),
             )
         except ValueError as exc:
             logger.warning(
