@@ -309,6 +309,44 @@ def test_run_silver_build_defers_iv_rv_until_after_base_jobs(
     assert built == ["spot:BTC", "iv_rv:BTC"]
 
 
+def test_run_silver_build_expands_changed_months_to_safe_targets(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Pass the planner's lookback-expanded month set to the OHLCV builder."""
+
+    captured_months: list[list[str] | None] = []
+
+    def fake_discover_symbols(
+        bronze_root: str,
+        market: str,
+        exchange: str,
+        timeframe: str = "1m",
+        instrument_type: str | None = None,
+    ) -> list[str]:
+        del bronze_root, exchange, timeframe, instrument_type
+        return ["BTC"] if market == "spot_ohlcv" else []
+
+    def fake_discover_months(**kwargs: object) -> list[str]:
+        del kwargs
+        return ["2026-01", "2026-02", "2026-03"]
+
+    def fake_build_spot(**kwargs: object) -> SilverBuildReport:
+        captured_months.append(kwargs["months"])
+        return _report("spot_ohlcv")
+
+    monkeypatch.setattr(silver_cmd, "discover_symbols", fake_discover_symbols)
+    monkeypatch.setattr(silver_cmd, "discover_months", fake_discover_months)
+    monkeypatch.setattr(silver_cmd, "build_silver_for_symbol", fake_build_spot)
+    monkeypatch.setattr(silver_cmd, "write_monthly_sidecars", lambda **kwargs: ([], []))
+    args = silver_args(market=["spot_ohlcv"])
+    args.changed_months = ["2026-02"]
+    args.lookback_days = 30
+
+    silver_cmd.run_silver_build(args=args, logger=logging.getLogger("test"))
+
+    assert captured_months == [["2026-02", "2026-03"]]
+
+
 def test_run_silver_build_index_price_builds_observed_and_feature(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
