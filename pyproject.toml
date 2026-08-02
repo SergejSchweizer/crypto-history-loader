@@ -48,7 +48,7 @@ pythonpath = ["."]
 addopts = "-q -n logical --maxprocesses=4 --dist=loadscope --cov=application --cov=ingestion --cov=api --cov-report=term-missing"
 
 [tool.coverage.report]
-fail_under = 85
+fail_under = 95
 show_missing = true
 
 [tool.ruff]
