@@ -2311,7 +2311,7 @@ idempotency, and atomic-publication evidence is not an acceptable result.
 
 ### PR-54: Medallion Performance Benchmark And Stage Telemetry
 
-Status: Planned
+Status: In Progress
 
 Updated: 2026-08-02
 
