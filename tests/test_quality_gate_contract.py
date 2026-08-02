@@ -89,6 +89,7 @@ def test_pre_commit_and_ci_include_same_required_quality_gates() -> None:
     assert any("--cov=application --cov=ingestion --cov=api" in step for step in main_ci_steps)
     assert any("coverage combine coverage-shards" in step for step in main_ci_steps)
     assert any("coverage report" in step for step in main_ci_steps)
+    assert any("--cov-fail-under=95" in step for step in pr_ci_steps)
 
 
 def test_make_check_runs_required_quality_gates() -> None:
