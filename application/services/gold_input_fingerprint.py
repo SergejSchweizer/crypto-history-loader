@@ -40,6 +40,44 @@ def gold_input_fingerprint(
     return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
 
 
+def gold_input_artifact_fingerprints(
+    *,
+    root: Path,
+    required_files: dict[str, list[Path]],
+    optional_files: dict[str, list[Path]],
+) -> dict[str, str]:
+    """Return deterministic per-artifact identities used for Gold incremental planning.
+
+    Keys retain the source dataset name and a root-relative parquet path.  This makes
+    manifest comparisons independent of the machine-specific lake root while allowing
+    the planner to recover the owning Silver month partition.
+
+    Args:
+        root: Common root used to make source paths machine-independent.
+        required_files: Required dataset keys and their parquet artifacts.
+        optional_files: Optional dataset keys and any available parquet artifacts.
+
+    Returns:
+        Stable artifact-key to fingerprint mapping.
+
+    Raises:
+        ValueError: If a required dataset has no artifacts or a path is outside root.
+    """
+
+    entries: dict[str, str] = {}
+    for required, datasets in ((True, required_files), (False, optional_files)):
+        for dataset, files in sorted(datasets.items()):
+            if required and not files:
+                raise ValueError(f"Required Gold input dataset has no artifacts: {dataset}")
+            for path in sorted(files):
+                artifact = _artifact_entry(root, path)
+                key = f"{dataset}:{artifact['path']}"
+                entries[key] = hashlib.sha256(
+                    json.dumps(artifact, sort_keys=True, separators=(",", ":")).encode("utf-8")
+                ).hexdigest()
+    return entries
+
+
 def _dataset_entries(root: Path, datasets: dict[str, list[Path]], *, required: bool) -> dict[str, object]:
     entries: dict[str, object] = {}
     for dataset, files in sorted(datasets.items()):

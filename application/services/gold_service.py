@@ -26,7 +26,8 @@ from application.services import (
     gold_publication,
     gold_versioning,
 )
-from application.services.gold_input_fingerprint import gold_input_fingerprint
+from application.services.gold_incremental_planner import plan_gold_m1_incremental_months
+from application.services.gold_input_fingerprint import gold_input_artifact_fingerprints, gold_input_fingerprint
 
 _feature_hash = feature_metadata_service.feature_hash
 _feature_metadata = feature_metadata_service.feature_metadata
@@ -436,6 +437,14 @@ def _strategy_feature_lookbacks(dataset_id: str) -> dict[str, str]:
     return {}
 
 
+def _feature_lookback_minutes(dataset_id: str) -> int:
+    """Return the longest trailing Gold feature dependency for incremental M1 planning."""
+
+    lookbacks = _strategy_feature_lookbacks(dataset_id).values()
+    minutes = [int(value.removesuffix("m")) for value in lookbacks if value.endswith("m")]
+    return max(minutes, default=0)
+
+
 def _prediction_target_definitions(dataset_id: str) -> dict[str, object]:
     if dataset_id == "gold.market.prediction_targets.m1":
         return gold_frames.prediction_target_definitions()
@@ -778,6 +787,22 @@ def build_gold_for_symbol(
         dataset_id=dataset_id,
         contract_version="gold-input/v1",
     )
+    input_artifact_fingerprints = gold_input_artifact_fingerprints(
+        root=Path(silver_root),
+        required_files=required_artifacts,
+        optional_files=optional_artifacts,
+    )
+    prior_manifest_for_plan = _latest_manifest_for_dataset(Path(gold_root), exchange, symbol, dataset_id)
+    prior_artifact_fingerprints = (
+        prior_manifest_for_plan.get("input_artifact_fingerprints")
+        if isinstance(prior_manifest_for_plan, dict)
+        else None
+    )
+    incremental_m1_plan = plan_gold_m1_incremental_months(
+        current_artifacts=input_artifact_fingerprints,
+        previous_artifacts=prior_artifact_fingerprints if isinstance(prior_artifact_fingerprints, dict) else None,
+        feature_lookback_minutes=_feature_lookback_minutes(dataset_id),
+    )
     raw_by_dataset: dict[str, Any] = {}
     required_prepared_by_dataset: list[tuple[str, Any]] = []
     for dataset_type, timeframe in required:
@@ -945,6 +970,12 @@ def build_gold_for_symbol(
         "feature_set_hash": feature_set_hash,
         "source_data_hash": source_data_hash,
         "input_fingerprint": input_fingerprint,
+        "input_artifact_fingerprints": input_artifact_fingerprints,
+        "incremental_m1_plan": {
+            "changed_months": list(incremental_m1_plan.changed_months),
+            "rebuild_months": list(incremental_m1_plan.rebuild_months),
+            "feature_lookback_minutes": incremental_m1_plan.feature_lookback_minutes,
+        },
         "git_commit_hash": git_hash,
         "build_id": build_id,
         "contract_signature": contract_signature,

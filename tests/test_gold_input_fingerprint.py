@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from application.services.gold_input_fingerprint import gold_input_fingerprint
+from application.services.gold_input_fingerprint import gold_input_artifact_fingerprints, gold_input_fingerprint
 
 
 def _write(root: Path, name: str, content: str, manifest: str | None = None) -> Path:
@@ -52,3 +52,29 @@ def test_fingerprint_rejects_missing_required_artifacts(tmp_path: Path) -> None:
             dataset_id="gold.history.full.m1",
             contract_version="gold-input/v1",
         )
+
+
+def test_artifact_fingerprints_are_individual_and_content_sensitive(tmp_path: Path) -> None:
+    """Incremental planning can pinpoint the changed Silver artifact without absolute paths."""
+
+    first = _write(tmp_path, "silver/month=2026-01/first.parquet", "one")
+    second = _write(tmp_path, "silver/month=2026-02/second.parquet", "two")
+    fingerprints = gold_input_artifact_fingerprints(
+        root=tmp_path,
+        required_files={"spot_ohlcv": [first, second]},
+        optional_files={},
+    )
+    assert sorted(fingerprints) == [
+        "spot_ohlcv:silver/month=2026-01/first.parquet",
+        "spot_ohlcv:silver/month=2026-02/second.parquet",
+    ]
+    second.write_text("changed", encoding="utf-8")
+    changed = gold_input_artifact_fingerprints(
+        root=tmp_path,
+        required_files={"spot_ohlcv": [first, second]},
+        optional_files={},
+    )
+    assert (
+        changed[next(key for key in changed if "2026-02" in key)]
+        != fingerprints[next(key for key in fingerprints if "2026-02" in key)]
+    )
