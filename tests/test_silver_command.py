@@ -38,6 +38,17 @@ def test_silver_build_registry_covers_all_parser_datasets() -> None:
         assert spec.dataset == dataset
 
 
+@pytest.mark.parametrize("maxprocesses", [0, 5])
+def test_run_silver_build_rejects_worker_counts_outside_polars_limit(maxprocesses: int) -> None:
+    """Keep Silver scheduling within the repository-wide four-worker bound."""
+
+    with pytest.raises(ValueError, match="1 through 4"):
+        silver_cmd.run_silver_build(
+            args=silver_args(market=["spot_ohlcv"], maxprocesses=maxprocesses),
+            logger=logging.getLogger("test"),
+        )
+
+
 def test_run_silver_build_uses_native_funding_timeframe_for_symbol_discovery(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

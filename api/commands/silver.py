@@ -218,8 +218,8 @@ def run_silver_build(args: argparse.Namespace, logger: logging.Logger) -> None:
     if requested_months is not None and changed_months is not None:
         raise ValueError("--months and --changed-months cannot be used together")
     maxprocesses = int(getattr(args, "maxprocesses", 4))
-    if maxprocesses < 1:
-        raise ValueError(f"Invalid --maxprocesses '{maxprocesses}'. Value must be an integer >= 1")
+    if not 1 <= maxprocesses <= 4:
+        raise ValueError(f"Invalid --maxprocesses '{maxprocesses}'. Value must be an integer from 1 through 4")
     reports: list[dict[str, object]] = []
 
     def _report_payload(report_market: str, symbol_value: str, report: SilverBuildReport) -> dict[str, object]:
