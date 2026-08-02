@@ -16,6 +16,7 @@ from application.services.silver_partition_manifest import (
 )
 
 _FUNDING_OBSERVED_CONTRACT_VERSION = "silver-funding-observed/v1"
+_FUNDING_FEATURE_CONTRACT_VERSION = "silver-funding-feature/v1"
 
 __all__ = [
     "FundingDependencies",
@@ -357,8 +358,24 @@ def build_funding_1m_feature_for_symbol(
             symbol=symbol,
             month=month,
         )
-        target.parent.mkdir(parents=True, exist_ok=True)
-        feature.write_parquet(target)
+        feature_fingerprint = source_fingerprint(
+            bronze_root=Path(silver_root),
+            source_files=[str(month_file)],
+            source_schema=dict(observed.schema),
+            exchange=exchange,
+            symbol=symbol,
+            timeframe=observed_timeframe,
+            builder_contract_version=f"{_FUNDING_FEATURE_CONTRACT_VERSION}:{cutoff_time.isoformat()}",
+        )
+        publish_partition_atomically(
+            frame=feature,
+            parquet_path=target,
+            input_fingerprint=feature_fingerprint,
+            source_schema=dict(observed.schema),
+            sort_keys=("timestamp",),
+            deduplication_keys=("exchange", "symbol", "timestamp"),
+            builder_contract_version=f"{_FUNDING_FEATURE_CONTRACT_VERSION}:{cutoff_time.isoformat()}",
+        )
 
         month_min = feature.select(pl.col("timestamp").min()).item()
         month_max = feature.select(pl.col("timestamp").max()).item()
