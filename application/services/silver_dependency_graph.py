@@ -51,3 +51,42 @@ def topological_work_order(nodes: tuple[SilverWorkNode, ...]) -> tuple[SilverWor
         resolved_names.update(node.name for node in ready)
         pending = [node for node in pending if node not in ready]
     return tuple(resolved)
+
+
+def bounded_work_batches(
+    nodes: tuple[SilverWorkNode, ...],
+    *,
+    max_workers: int,
+) -> tuple[tuple[SilverWorkNode, ...], ...]:
+    """Group topologically valid work into deterministic bounded execution batches.
+
+    A node is placed only after every dependency is in an earlier batch. Independent
+    nodes retain declaration order and each batch has at most ``max_workers`` items,
+    so callers can release all batch-local source frames before the next batch.
+
+    Args:
+        nodes: Valid or invalid work graph nodes to schedule.
+        max_workers: Maximum concurrent application workers, from one through four.
+
+    Returns:
+        Ordered worker batches with dependencies published before their consumers.
+
+    Raises:
+        ValueError: If the worker bound is unsupported or the graph is invalid.
+    """
+
+    if not 1 <= max_workers <= 4:
+        raise ValueError("max_workers must be an integer from 1 through 4")
+    ordered = topological_work_order(nodes)
+    batches: list[tuple[SilverWorkNode, ...]] = []
+    completed: set[str] = set()
+    remaining = list(ordered)
+    while remaining:
+        ready = [node for node in remaining if set(node.depends_on).issubset(completed)]
+        batch = tuple(ready[:max_workers])
+        if not batch:
+            raise ValueError("Silver dependency graph cannot schedule remaining work")
+        batches.append(batch)
+        completed.update(node.name for node in batch)
+        remaining = [node for node in remaining if node not in batch]
+    return tuple(batches)
