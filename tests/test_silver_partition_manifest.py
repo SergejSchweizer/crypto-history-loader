@@ -77,6 +77,34 @@ def test_publish_partition_atomically_supports_no_op_manifest_lookup(tmp_path: P
     )
 
 
+def test_unknown_manifest_status_is_a_cache_miss(tmp_path: Path) -> None:
+    """Reject status values outside the versioned publication contract."""
+
+    parquet_path = tmp_path / "silver" / "BTC-2026-05.parquet"
+    manifests.publish_partition_atomically(
+        frame=pl.DataFrame({"open_time": [1], "close_price": [100.0]}),
+        parquet_path=parquet_path,
+        input_fingerprint="input-fingerprint",
+        source_schema={"open_time": "Int64", "close_price": "Float64"},
+        sort_keys=("open_time",),
+        deduplication_keys=("open_time",),
+        builder_contract_version="test/v1",
+    )
+    manifest_path = manifests.performance_manifest_path(parquet_path)
+    manifest_path.write_text(
+        manifest_path.read_text(encoding="utf-8").replace('"published"', '"unknown"'), encoding="utf-8"
+    )
+
+    assert (
+        manifests.load_current_manifest(
+            parquet_path=parquet_path,
+            expected_input_fingerprint="input-fingerprint",
+            expected_builder_contract_version="test/v1",
+        )
+        is None
+    )
+
+
 def test_manifest_publication_failure_restores_previous_artifact(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -104,6 +132,32 @@ def test_manifest_publication_failure_restores_previous_artifact(
 
     monkeypatch.setattr(manifests.os, "replace", fail_manifest_publish)
     with pytest.raises(OSError, match="injected"):
+        manifests.publish_partition_atomically(frame=pl.DataFrame({"open_time": [1], "close_price": [101.0]}), **kwargs)
+
+    assert parquet_path.read_bytes() == previous_parquet
+    assert manifests.performance_manifest_path(parquet_path).read_bytes() == previous_manifest
+
+
+def test_parquet_staging_failure_preserves_previous_artifact(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Leave the prior readable artifact intact when staging cannot be validated."""
+
+    parquet_path = tmp_path / "silver" / "BTC-2026-05.parquet"
+    kwargs = {
+        "parquet_path": parquet_path,
+        "input_fingerprint": "input-fingerprint",
+        "source_schema": {"open_time": "Int64", "close_price": "Float64"},
+        "sort_keys": ("open_time",),
+        "deduplication_keys": ("open_time",),
+        "builder_contract_version": "test/v1",
+    }
+    manifests.publish_partition_atomically(frame=pl.DataFrame({"open_time": [1], "close_price": [100.0]}), **kwargs)
+    previous_parquet = parquet_path.read_bytes()
+    previous_manifest = manifests.performance_manifest_path(parquet_path).read_bytes()
+
+    monkeypatch.setattr(
+        manifests, "_validate_parquet", lambda _path: (_ for _ in ()).throw(OSError("injected parquet failure"))
+    )
+    with pytest.raises(OSError, match="injected parquet failure"):
         manifests.publish_partition_atomically(frame=pl.DataFrame({"open_time": [1], "close_price": [101.0]}), **kwargs)
 
     assert parquet_path.read_bytes() == previous_parquet
