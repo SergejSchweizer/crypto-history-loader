@@ -3,7 +3,7 @@
 This backlog is the source of truth for stacked, atomic PRs that bring every Bronze dataset into a
 contracted Silver representation suitable for IV/RV and regime-change research.
 
-Last updated: 2026-07-25
+Last updated: 2026-08-02
 
 ## Policy
 
@@ -2281,6 +2281,295 @@ Acceptance:
   - `coverage report`
   - import-linter/schema validation commands if configured in this repository
 - A6 (verifies R6): `git status --short` and the PR URL are recorded before handoff.
+
+## Performance Delivery Rules
+
+PR-54 through PR-61 are a separate performance stack. They must be implemented in order and must not be
+combined into one broad optimization PR. Every ticket in this stack has the following mandatory properties:
+
+- **Idempotent:** rerunning with identical source fingerprints produces no changed data files, no duplicate rows,
+  and no version churn. A changed input produces exactly one replacement for the affected output partition.
+- **Atomic:** write to a uniquely named temporary path in the same filesystem, flush and close it, validate the
+  artifact, then publish with an atomic rename. A failed build must leave the last valid artifact and its manifest
+  untouched. Temporary paths must be cleaned only after the failure is logged.
+- **Deterministic:** use explicit source fingerprints, stable partition keys, stable sort keys, explicit deduplication
+  keys, fixed schemas, and UTC timestamps. Wall-clock time may appear only in operational metadata.
+- **Bounded:** preserve the repository-wide maximum of four Polars threads and four application workers. No ticket
+  may add nested unbounded executors or silently increase `maxprocesses`.
+- **Observable:** log one structured event for `planned`, `skipped_unchanged`, `built`, `published`, and `failed`
+  with layer, dataset, exchange, symbol, partition, source fingerprint, row count, and elapsed milliseconds.
+- **Backward compatible:** old artifacts without a performance manifest remain readable and are treated as needing
+  one rebuild; no existing canonical dataset ID or column contract is removed.
+- **Rollback-safe:** publication must be recoverable by retaining the previous valid manifest until the new manifest
+  is validated. No ticket may delete lake data as part of a normal optimization run.
+
+Each PR must include a focused benchmark fixture and report before/after wall time, rows processed, bytes read,
+bytes written, peak memory where available, and the number of skipped partitions. A speedup without correctness,
+idempotency, and atomic-publication evidence is not an acceptable result.
+
+## Performance PR Stack
+
+### PR-54: Medallion Performance Benchmark And Stage Telemetry
+
+Status: Planned
+
+Updated: 2026-08-02
+
+PR: TBD
+
+Branch: `codex/pr54-medallion-performance-benchmark`
+
+Depends on: none
+
+Description:
+- R1: Add a deterministic, read-only benchmark command or test fixture covering representative Bronze, Silver, and Gold symbol/month inputs without touching the production lake.
+- R2: Measure stage, dataset, symbol, and partition timings together with rows in/out, bytes read/written, worker count, and Polars thread count.
+- R3: Add structured performance log events for planned, skipped, built, published, and failed work without changing dataset contents.
+- R4: Record baseline measurements for the current full and representative incremental workloads in a versioned benchmark report.
+- R5: Preserve the existing CLI contracts, log root, and four-core limit.
+- R6: Record the exact planning and publication `git status --short` output and PR URL in this ticket.
+
+Out of scope:
+- No incremental processing or cache behavior.
+- No schema, partition-layout, or dataset-ID changes.
+- No production-lake writes from the benchmark.
+
+Acceptance:
+- A1 (verifies R1): The benchmark runs twice against the same fixture and leaves the production lake unchanged.
+- A2 (verifies R2): The report contains all R2 fields and distinguishes Bronze, Silver, and Gold timings.
+- A3 (verifies R3): Log tests assert all five event types and required context fields.
+- A4 (verifies R4): A checked-in baseline report contains reproducible commands, fixture size, and measured values.
+- A5 (verifies R5): CLI compatibility tests pass and telemetry reports no more than four Polars threads and workers.
+- A6 (verifies R6): The ticket contains the exact clean status output and final PR URL before merge.
+
+### PR-55: Silver Source Fingerprint Manifests And No-Op Detection
+
+Status: Planned
+
+Updated: 2026-08-02
+
+PR: TBD
+
+Branch: `codex/pr55-silver-source-fingerprint-manifests`
+
+Depends on: PR-54
+
+Description:
+- R1: Define a versioned Silver input fingerprint over the exact Bronze files, file metadata/content identity, source schema, exchange, symbol, timeframe, and builder contract version.
+- R2: Write one manifest per Silver output partition containing the input fingerprint, output fingerprint, schema signature, row count, sort/dedup contract, and build status.
+- R3: Skip an unchanged Silver partition before loading its data and emit `skipped_unchanged` telemetry.
+- R4: Treat missing, malformed, incompatible, or legacy manifests as cache misses and rebuild the affected partition.
+- R5: Publish data and manifest atomically so a crash cannot expose a new manifest with an old or missing parquet artifact.
+- R6: Record publication evidence in this ticket before handoff.
+
+Out of scope:
+- No change to Silver feature math or canonical dataset names.
+- No cross-partition incremental windowing yet; that is PR-56.
+- No deletion of legacy Silver artifacts.
+
+Acceptance:
+- A1 (verifies R1): Identical Bronze inputs produce identical fingerprints across two independent processes.
+- A2 (verifies R2): Manifest contract tests validate every required field and reject unknown status values.
+- A3 (verifies R3): A second unchanged build reads zero source rows for the skipped partition and preserves file hashes.
+- A4 (verifies R4): Tests prove legacy and corrupt manifests trigger exactly one rebuild rather than silent skipping.
+- A5 (verifies R5): Failure-injection tests prove the previous valid artifact remains readable after data or manifest publication failure.
+- A6 (verifies R6): The ticket contains the exact clean status output and final PR URL before merge.
+
+### PR-56: Silver Incremental Monthly Partitions And Lookback Windows
+
+Status: Planned
+
+Updated: 2026-08-02
+
+PR: TBD
+
+Branch: `codex/pr56-silver-incremental-monthly-builds`
+
+Depends on: PR-55
+
+Description:
+- R1: Plan Silver work at the smallest safe partition boundary, using changed Bronze months and a configurable feature lookback window rather than rescanning the complete history.
+- R2: Recompute the changed partition plus the minimum preceding lookback required by each rolling, resampling, forward-fill, or gap-tracking operation.
+- R3: Replace affected Silver partitions atomically and preserve unaffected partition hashes and manifests.
+- R4: Keep minute-gap and zero-minute tracking semantics correct across partition boundaries, including the first and last minute of each rebuilt partition.
+- R5: Make retries and interrupted runs restart-safe: a retry must converge to the same output as one successful run.
+- R6: Record publication evidence in this ticket before handoff.
+
+Out of scope:
+- No Gold changes.
+- No reduction of the configured lookback below the documented feature dependency.
+- No automatic deletion or compaction of historical partitions.
+
+Acceptance:
+- A1 (verifies R1): A fixture with one changed Bronze month plans only that month and documented dependency months.
+- A2 (verifies R2): Boundary tests prove rolling windows, resampling, forward-fill, and zero-minute tracking match a full rebuild.
+- A3 (verifies R3): Unaffected Silver partition hashes and manifests remain byte-identical after an incremental build.
+- A4 (verifies R4): Tests cover month transitions, empty Deribit minutes, and perps/options trade zero-minute rows.
+- A5 (verifies R5): Injected interruption followed by retry produces the same partition set, rows, schemas, and manifests as a clean run.
+- A6 (verifies R6): The ticket contains the exact clean status output and final PR URL before merge.
+
+### PR-57: Silver Shared Source Scan And Dependency Planner
+
+Status: Planned
+
+Updated: 2026-08-02
+
+PR: TBD
+
+Branch: `codex/pr57-silver-shared-source-planner`
+
+Depends on: PR-56
+
+Description:
+- R1: Build a typed Silver dependency graph separating source-backed, derived, and sidecar work.
+- R2: Reuse one bounded lazy Bronze scan or normalized intermediate frame when multiple Silver outputs consume the same symbol/month source.
+- R3: Schedule independent work with at most four application workers and execute derived datasets only after their declared inputs are published.
+- R4: Preserve memory bounds by evicting intermediates at partition boundaries and never retaining the complete historical lake in a global cache.
+- R5: Keep output bytes, schemas, sort keys, dedup keys, manifests, and lineage identical to the pre-planner implementation.
+- R6: Record publication evidence in this ticket before handoff.
+
+Out of scope:
+- No new Silver dataset families.
+- No Gold source-cache implementation.
+- No global process pool or unbounded in-memory cache.
+
+Acceptance:
+- A1 (verifies R1): A graph test rejects missing dependencies and cycles and lists a deterministic execution order.
+- A2 (verifies R2): Instrumented tests show duplicate source scans are eliminated for the selected shared-input families.
+- A3 (verifies R3): Scheduler tests prove dependency ordering and a maximum of four workers.
+- A4 (verifies R4): Stress fixtures demonstrate bounded intermediate lifetime and no complete-history cache.
+- A5 (verifies R5): Golden-file tests prove unchanged outputs and lineage against the pre-planner fixture.
+- A6 (verifies R6): The ticket contains the exact clean status output and final PR URL before merge.
+
+### PR-58: Gold Input Fingerprints And Incremental M1 Publication
+
+Status: Planned
+
+Updated: 2026-08-02
+
+PR: TBD
+
+Branch: `codex/pr58-gold-incremental-m1-publication`
+
+Depends on: PR-57
+
+Description:
+- R1: Define Gold source fingerprints over all required and optional Silver inputs, source manifests, Gold contract version, and feature configuration.
+- R2: Plan Gold `m1` work by changed Silver partitions and the minimum feature lookback needed by each Gold feature family.
+- R3: Rebuild only affected symbol/partition outputs and atomically publish the new canonical and extended `m1` artifacts.
+- R4: Preserve canonical-versus-extended dataset separation and all existing Gold column selection, target, and leakage contracts.
+- R5: Make missing optional sources explicit in the fingerprint and keep their nullable output columns stable.
+- R6: Record publication evidence in this ticket before handoff.
+
+Out of scope:
+- No Gold `m5`, `m30`, or `h1` fan-out yet; that is PR-59.
+- No removal of existing Gold versions or manifests.
+- No change to target lookahead semantics.
+
+Acceptance:
+- A1 (verifies R1): Identical Silver inputs and configuration yield identical Gold source fingerprints.
+- A2 (verifies R2): A fixture with one changed Silver month plans only that month plus declared feature lookback partitions.
+- A3 (verifies R3): Unchanged Gold partitions retain hashes; changed partitions are published exactly once after validation.
+- A4 (verifies R4): Canonical/extended schema, dataset-ID, and leakage regression tests pass unchanged.
+- A5 (verifies R5): Optional-source availability changes are detected and produce deterministic nullable columns without grid expansion.
+- A6 (verifies R6): The ticket contains the exact clean status output and final PR URL before merge.
+
+### PR-59: Gold Shared M1 Preparation And Multi-Timeframe Fan-Out
+
+Status: Planned
+
+Updated: 2026-08-02
+
+PR: TBD
+
+Branch: `codex/pr59-gold-shared-timeframe-fanout`
+
+Depends on: PR-58
+
+Description:
+- R1: Prepare each symbol's Gold `m1` source frame and common joins once per build transaction.
+- R2: Derive `m5`, `m30`, and `h1` from the validated `m1` frame in one deterministic fan-out while preserving each dataset contract.
+- R3: Publish all sibling timeframe artifacts only after their source `m1` artifact and all derived frames validate successfully.
+- R4: Ensure a partial fan-out failure leaves every previously valid timeframe readable and marks the failed transaction for retry.
+- R5: Preserve dependency ordering so no derived timeframe is attempted before its source dataset is available.
+- R6: Record publication evidence in this ticket before handoff.
+
+Out of scope:
+- No change to timeframe aggregation rules or bucket labels.
+- No cross-symbol shared cache.
+- No dataset-ID renaming.
+
+Acceptance:
+- A1 (verifies R1): Instrumentation proves one common `m1` preparation per symbol for a multi-timeframe build.
+- A2 (verifies R2): Golden fixtures prove identical rows, columns, timestamps, and aggregates for all three timeframes.
+- A3 (verifies R3): Transaction tests prove no child artifact is published before validated `m1` input.
+- A4 (verifies R4): Failure injection proves old artifacts remain available and retry publishes a complete sibling set.
+- A5 (verifies R5): Scheduler tests prove `m1 -> m5/m30/h1` ordering for history and live families.
+- A6 (verifies R6): The ticket contains the exact clean status output and final PR URL before merge.
+
+### PR-60: Gold Optional Artifact And Plot Decoupling
+
+Status: Planned
+
+Updated: 2026-08-02
+
+PR: TBD
+
+Branch: `codex/pr60-gold-optional-artifact-decoupling`
+
+Depends on: PR-59
+
+Description:
+- R1: Make Gold parquet and manifest publication the required production path and move plots to an explicit audit operation.
+- R2: Preserve backward-compatible CLI flags while making plot generation opt-in or separately runnable.
+- R3: Ensure plot failures cannot invalidate an otherwise valid parquet and manifest transaction.
+- R4: Emit plot status and paths as separate operational metadata without changing Gold data schemas.
+- R5: Record publication evidence in this ticket before handoff.
+
+Out of scope:
+- No feature, target, schema, or dataset-ID changes.
+- No deletion of existing plot artifacts.
+- No reduction of manifest validation.
+
+Acceptance:
+- A1 (verifies R1): A production Gold build writes valid parquet and manifest artifacts without invoking plotting.
+- A2 (verifies R2): CLI compatibility tests cover existing flags and the explicit audit invocation.
+- A3 (verifies R3): Plot failure injection leaves the validated data transaction published and retryable plot status recorded.
+- A4 (verifies R4): Logs and audit reports distinguish data publication from plot publication.
+- A5 (verifies R5): The ticket contains the exact clean status output and final PR URL before merge.
+
+### PR-61: Incremental Medallion Orchestrator And Freshness Audit
+
+Status: Planned
+
+Updated: 2026-08-02
+
+PR: TBD
+
+Branch: `codex/pr61-incremental-medallion-orchestrator`
+
+Depends on: PR-60
+
+Description:
+- R1: Add a dependency-aware medallion plan that runs only stale Bronze, Silver, and Gold partitions while preserving the complete-run mode.
+- R2: Propagate source fingerprints and publication states across layers so downstream work starts only after upstream artifacts are valid.
+- R3: Make the daily run resumable from the last successful atomic publication without duplicating rows or skipping changed inputs.
+- R4: Add a dry-run plan showing stale, unchanged, blocked, and scheduled partitions before any write occurs.
+- R5: Add a freshness audit that identifies stale or missing canonical and extended Gold timeframes.
+- R6: Record publication evidence in this ticket before handoff.
+
+Out of scope:
+- No change to cron timing or external loader ownership.
+- No silent repair of corrupt artifacts; the audit must report them for an explicit rebuild.
+- No increase above the repository-wide four-core limit.
+
+Acceptance:
+- A1 (verifies R1): A fixture with unchanged and changed inputs schedules only the expected stale partitions and leaves complete-run behavior available.
+- A2 (verifies R2): Integration tests block downstream publication when an upstream manifest is missing, invalid, or failed.
+- A3 (verifies R3): Kill-and-retry tests converge to the same lake state as a clean run with no duplicate keys.
+- A4 (verifies R4): Dry-run output is deterministic and contains every planned status without writing lake files.
+- A5 (verifies R5): Freshness audit tests detect missing `m1`, `m5`, `m30`, or `h1` artifacts and report their source lineage.
+- A6 (verifies R6): The ticket contains the exact clean status output and final PR URL before merge.
 
 ## Completion Definition
 
