@@ -8,8 +8,14 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from application.dataset_contracts import SILVER_L2_FEATURE_COLUMNS, SILVER_L2_OBSERVED_COLUMNS
+from application.services.silver_partition_manifest import (
+    load_current_manifest,
+    publish_partition_atomically,
+    source_fingerprint,
+)
 
 DEPTH_BANDS_BPS = (10, 50)
+_L2_OBSERVED_CONTRACT_VERSION = "silver-l2-observed/v1"
 
 
 class SilverReportFactory(Protocol):
@@ -323,13 +329,6 @@ def build_l2_observed_for_symbol(
         files = _month_files(root, month)
         if not files:
             continue
-        frame = _collect_files(pl, files)
-        rows_in += frame.height
-        observed, month_invalid, month_duplicates = _observed_frame(pl, frame, normalized_symbol, instrument_type)
-        invalid_rows += month_invalid
-        duplicates_removed += month_duplicates
-        if observed.height == 0:
-            continue
         target = dependencies.silver_month_path(
             silver_root=silver_root,
             market=output_dataset_type,
@@ -338,8 +337,41 @@ def build_l2_observed_for_symbol(
             timeframe=timeframe,
             month=month,
         )
-        target.parent.mkdir(parents=True, exist_ok=True)
-        observed.write_parquet(target)
+        source_schema = dict(pl.scan_parquet(files).collect_schema())
+        fingerprint = source_fingerprint(
+            bronze_root=Path(bronze_root),
+            source_files=files,
+            source_schema=source_schema,
+            exchange=exchange,
+            symbol=normalized_symbol,
+            timeframe=timeframe,
+            builder_contract_version=_L2_OBSERVED_CONTRACT_VERSION,
+        )
+        cached = load_current_manifest(
+            parquet_path=target,
+            expected_input_fingerprint=fingerprint,
+            expected_builder_contract_version=_L2_OBSERVED_CONTRACT_VERSION,
+        )
+        if cached is not None:
+            processed.append(month)
+            rows_out += cached.row_count
+            continue
+        frame = _collect_files(pl, files)
+        rows_in += frame.height
+        observed, month_invalid, month_duplicates = _observed_frame(pl, frame, normalized_symbol, instrument_type)
+        invalid_rows += month_invalid
+        duplicates_removed += month_duplicates
+        if observed.height == 0:
+            continue
+        publish_partition_atomically(
+            frame=observed,
+            parquet_path=target,
+            input_fingerprint=fingerprint,
+            source_schema=source_schema,
+            sort_keys=("timestamp",),
+            deduplication_keys=("exchange", "symbol", "instrument_type", "timestamp"),
+            builder_contract_version=_L2_OBSERVED_CONTRACT_VERSION,
+        )
         processed.append(month)
         rows_out += observed.height
         month_min = observed.select(pl.col("timestamp").min()).item()
