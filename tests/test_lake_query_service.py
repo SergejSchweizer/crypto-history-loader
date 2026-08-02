@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
 
@@ -10,7 +11,7 @@ import polars as pl
 from application.services import lake_query_service
 
 
-def test_load_combined_ohlcv_dataframe_hides_open_interest_flag(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+def test_load_combined_ohlcv_dataframe_hides_open_interest_flag(monkeypatch: Any) -> None:
     """Stats exports should query OHLCV data without exposing lake adapter flags to API code."""
 
     captured: dict[str, Any] = {}
@@ -49,3 +50,34 @@ def test_load_combined_ohlcv_dataframe_hides_open_interest_flag(monkeypatch) -> 
         "end_time": end_time,
         "include_open_interest": False,
     }
+
+
+def test_lake_query_service_delegates_all_query_variants(monkeypatch: Any) -> None:
+    """The application adapter must forward keyword arguments without changing results."""
+
+    expected_times = [datetime(2026, 1, 1, tzinfo=UTC)]
+    expected_latest = expected_times[0]
+    calls: list[tuple[str, dict[str, object]]] = []
+
+    def record(name: str, result: object) -> Callable[..., object]:
+        def _record(**kwargs: object) -> object:
+            calls.append((name, kwargs))
+            return result
+
+        return _record
+
+    monkeypatch.setattr(lake_query_service, "_open_times_in_lake", record("times", expected_times))
+    monkeypatch.setattr(lake_query_service, "_open_times_in_lake_by_dataset", record("dataset_times", expected_times))
+    monkeypatch.setattr(lake_query_service, "_latest_open_time_in_lake", record("latest", expected_latest))
+    monkeypatch.setattr(
+        lake_query_service,
+        "_latest_open_time_in_lake_by_dataset",
+        record("dataset_latest", expected_latest),
+    )
+
+    kwargs = {"lake_root": "lake", "symbol": "BTC"}
+    assert lake_query_service.open_times_in_lake(**kwargs) == expected_times
+    assert lake_query_service.open_times_in_lake_by_dataset(**kwargs) == expected_times
+    assert lake_query_service.latest_open_time_in_lake(**kwargs) == expected_latest
+    assert lake_query_service.latest_open_time_in_lake_by_dataset(**kwargs) == expected_latest
+    assert [name for name, _kwargs in calls] == ["times", "dataset_times", "latest", "dataset_latest"]

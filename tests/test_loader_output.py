@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
-from api.commands.loader_output import BronzeRunState, IncrementalPersistor
+from api.commands.loader_output import BronzeRunState, IncrementalPersistor, finalize_bronze_output
 from application.dto import (
     BronzeFetchPlanDTO,
     FundingFetchTaskDTO,
@@ -220,3 +221,82 @@ def test_incremental_persistor_persists_each_market_family_and_logs_once() -> No
     assert len(calls) == 4
     assert checkpoints == []
     assert all(call["options"].save_parquet_lake is True for call in calls)
+
+
+def test_finalize_bronze_output_populates_requested_outputs_and_sidecars() -> None:
+    """Finalization should persist, enrich output, and report trade failures in one pass."""
+
+    from types import SimpleNamespace
+
+    calls: list[str] = []
+    output: dict[str, object] = {}
+    parquet_path = "lake/dataset_type=perps_trades/date=2026-04-27/data.parquet"
+
+    def populate(name: str) -> Callable[..., None]:
+        def _populate(**kwargs: object) -> None:
+            calls.append(name)
+            assert kwargs["output"] is output
+
+        return _populate
+
+    def persist(**kwargs: object) -> _PersistResult:
+        assert cast(Any, kwargs["options"]).save_parquet_lake is True
+        return _PersistResult()
+
+    finalize_bronze_output(
+        logger=logging.getLogger("finalize-test"),
+        output=output,
+        tasks=[],
+        open_interest_tasks=[],
+        funding_tasks=[],
+        volatility_index_data_tasks=[],
+        trade_tasks=[("deribit", "perp", "BTC")],
+        task_results={},
+        task_errors={},
+        open_interest_results={},
+        open_interest_errors={},
+        funding_results={},
+        funding_errors={},
+        volatility_index_data_results={},
+        volatility_index_data_errors={},
+        trade_results={},
+        trade_errors={("deribit", "perp", "BTC"): "timeout"},
+        multi_market=False,
+        open_interest_requested=True,
+        funding_requested=True,
+        volatility_index_data_requested=True,
+        perps_trades_requested=True,
+        options_trades_requested=False,
+        candles_for_storage={},
+        open_interest_for_storage={},
+        funding_for_storage={},
+        volatility_index_data_for_storage={},
+        trades_for_storage={},
+        ohlcv_markets=["spot_ohlcv", "perp"],
+        args=SimpleNamespace(save_parquet_lake=True, lake_root="lake/bronze"),
+        incremental_parquet_on_fetch=False,
+        incremental_parquet_files=[],
+        open_interest_dataset_type="open_interest",
+        sidecar_path_list_fn=lambda paths, suffix: [f"{path}{suffix}" for path in paths],
+        ensure_bronze_sidecars_fn=lambda **kwargs: [parquet_path],
+        populate_ohlcv_output_fn=populate("ohlcv"),
+        populate_open_interest_output_fn=populate("open_interest"),
+        populate_funding_output_fn=populate("funding"),
+        populate_volatility_output_fn=populate("volatility"),
+        populate_trades_output_fn=populate("trades"),
+        symbol_progress_rows_fn=lambda **kwargs: [],
+        fairness_rows=None,
+        trade_error_breakdown_fn=lambda errors: {
+            "total": len(errors),
+            "net_unreachable": 0,
+            "net_timeout": 1,
+            "other": 0,
+        },
+        candle_serializer=lambda candle: {"open_time": candle.open_time},
+        persist_fn=persist,
+    )
+
+    assert calls == ["ohlcv", "open_interest", "funding", "trades"]
+    assert output["parquet_files"] == _PersistResult.parquet_files
+    assert output["_manifest_files"] == [f"{parquet_path}.json"]
+    assert output["_trade_error_breakdown"] == {"total": 1, "net_unreachable": 0, "net_timeout": 1, "other": 0}

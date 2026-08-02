@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import UTC, datetime
 
-from application.services.storage_service import persist_loader_outputs
+from application.dto import LoaderStorageDTO, PersistOptionsDTO
+from application.services.storage_service import persist_loader_outputs, persist_loader_outputs_dto
 from ingestion.open_interest import OpenInterestPoint
 from ingestion.spot_ohlcv import Market, SpotCandle
 
@@ -69,3 +71,48 @@ def test_persist_loader_outputs_writes_parquet_outputs() -> None:
 
     assert result["_parquet_files"] == ["spot_ohlcv.parquet", "open_interest.parquet"]
     assert calls == {"spot_ohlcv": 1, "open_interest": 1}
+
+
+def test_persist_loader_outputs_dto_dispatches_all_requested_market_families() -> None:
+    """The DTO path should dispatch every enabled writer and preserve output order."""
+
+    calls: list[tuple[str, object]] = []
+
+    def writer(name: str, result: str) -> Callable[..., list[str]]:
+        def _write(**kwargs: object) -> list[str]:
+            calls.append((name, kwargs["market"]))
+            return [result]
+
+        return _write
+
+    result = persist_loader_outputs_dto(
+        storage=LoaderStorageDTO(
+            candles={"spot_ohlcv": {"deribit": {"BTC": [_sample_candle()]}}},
+            open_interest={"perp": {"deribit": {"BTC": [_sample_open_interest()]}}},
+            funding={"perp": {"deribit": {"BTC": []}}},
+            volatility_index_data={"perp": {"deribit": {"BTC": []}}},
+            trades={"perp": {"deribit": {"BTC": []}}},
+        ),
+        options=PersistOptionsDTO(
+            save_parquet_lake=True,
+            lake_root="lake/bronze",
+            open_interest_requested=True,
+            funding_requested=True,
+            volatility_index_data_requested=True,
+            trades_requested=True,
+        ),
+        save_spot_ohlcv_lake_fn=writer("spot", "spot.parquet"),
+        save_open_interest_lake_fn=writer("oi", "oi.parquet"),
+        save_funding_lake_fn=writer("funding", "funding.parquet"),
+        save_volatility_lake_fn=writer("volatility", "volatility.parquet"),
+        save_trades_lake_fn=writer("trades", "trades.parquet"),
+    )
+
+    assert result.parquet_files == [
+        "spot.parquet",
+        "oi.parquet",
+        "funding.parquet",
+        "volatility.parquet",
+        "trades.parquet",
+    ]
+    assert [name for name, _market in calls] == ["spot", "oi", "funding", "volatility", "trades"]
