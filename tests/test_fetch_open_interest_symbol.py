@@ -74,6 +74,76 @@ def test_fetch_symbol_open_interest_full_gap_uses_day_windows() -> None:
     ]
 
 
+def test_fetch_symbol_open_interest_tail_delta_requires_reader_and_deduplicates() -> None:
+    """Tail mode resumes after the latest stored row and preserves one row per timestamp."""
+
+    latest = datetime(2026, 4, 27, 10, 0, tzinfo=UTC)
+    next_time = datetime(2026, 4, 27, 10, 1, tzinfo=UTC)
+    end_ms = int(datetime(2026, 4, 27, 10, 2, tzinfo=UTC).timestamp() * 1000)
+    with pytest.raises(ValueError, match="latest_open_time_reader"):
+        fetch_symbol_open_interest(
+            exchange="deribit",
+            market="perp",
+            symbol="BTC",
+            timeframe="1m",
+            lake_root="lake/bronze",
+            timeframe_normalizer=lambda **_kwargs: "1m",
+            symbol_normalizer=lambda **_kwargs: "BTC-PERPETUAL",
+            interval_ms_resolver=lambda **_kwargs: 60_000,
+            now_open_resolver=lambda **_kwargs: end_ms,
+            tail_delta_only=True,
+        )
+
+    calls: list[int] = []
+
+    def _range_fetcher(**kwargs: object) -> list[OpenInterestPoint]:
+        calls.append(int(cast(Any, kwargs["start_open_ms"])))
+        return [_point(open_time=next_time), _point(open_time=next_time)]
+
+    rows = fetch_symbol_open_interest(
+        exchange="deribit",
+        market="perp",
+        symbol="BTC",
+        timeframe="1m",
+        lake_root="lake/bronze",
+        timeframe_normalizer=lambda **_kwargs: "1m",
+        symbol_normalizer=lambda **_kwargs: "BTC-PERPETUAL",
+        interval_ms_resolver=lambda **_kwargs: 60_000,
+        now_open_resolver=lambda **_kwargs: end_ms,
+        latest_open_time_reader=lambda **_kwargs: latest,
+        range_fetcher=_range_fetcher,
+        tail_delta_only=True,
+    )
+
+    assert calls == [int(next_time.timestamp() * 1000)]
+    assert rows == [_point(open_time=next_time)]
+
+
+def test_fetch_symbol_open_interest_short_circuits_unsupported_and_future_ranges() -> None:
+    """Non-perpetual requests and windows before stored history require no exchange call."""
+
+    assert (
+        fetch_symbol_open_interest(
+            exchange="deribit", market="spot_ohlcv", symbol="BTC", timeframe="1m", lake_root="lake/bronze"
+        )
+        == []
+    )
+    rows = fetch_symbol_open_interest(
+        exchange="deribit",
+        market="perp",
+        symbol="BTC",
+        timeframe="1m",
+        lake_root="lake/bronze",
+        open_times_reader=lambda **_kwargs: [datetime(2026, 4, 27, 10, 0, tzinfo=UTC)],
+        timeframe_normalizer=lambda **_kwargs: "1m",
+        symbol_normalizer=lambda **_kwargs: "BTC-PERPETUAL",
+        interval_ms_resolver=lambda **_kwargs: 60_000,
+        now_open_resolver=lambda **_kwargs: 0,
+        range_fetcher=lambda **_kwargs: pytest.fail("range fetch must not run"),
+    )
+    assert rows == []
+
+
 def _point(*, open_time: datetime) -> OpenInterestPoint:
     return OpenInterestPoint(
         exchange="deribit",
