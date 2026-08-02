@@ -446,3 +446,58 @@ def test_history_full_gold_fanout_reads_once_and_publishes_siblings(
         "gold.history.full.m5",
     ]
     assert [pl.read_parquet(report.parquet_path).height for report in reports] == [1, 2, 12]
+
+
+def test_history_full_gold_fanout_restores_siblings_after_publication_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A failed sibling transaction retains readable prior artifacts and a retry completes it."""
+
+    timestamps = [datetime(2026, 5, 1, 0, minute, tzinfo=UTC) for minute in range(60)]
+    silver = tmp_path / "silver"
+    gold = tmp_path / "gold-history-fanout-retry"
+    import application.services.gold_service as gold_service
+
+    monkeypatch.setattr(gold_service, "_write_feature_distribution_plot", lambda *_args, **_kwargs: "plot.png")
+    _write_history_sources(silver, timestamps, include_historical_prediction=False)
+    build_gold_for_symbol(
+        silver_root=str(silver),
+        gold_root=str(gold),
+        exchange="deribit",
+        symbol="BTC",
+        dataset_id="gold.history.full.m1",
+    )
+    dataset_ids = ["gold.history.full.m5", "gold.history.full.m30"]
+    first_reports = build_gold_timeframe_fanout_for_symbol(
+        gold_root=str(gold), exchange="deribit", symbol="BTC", dataset_ids=dataset_ids
+    )
+    old_artifacts = {
+        Path(path): Path(path).read_bytes()
+        for report in first_reports
+        for path in (report.parquet_path, report.manifest_path)
+        if path is not None
+    }
+    import application.services.gold_publication as gold_publication
+
+    original_validate = gold_publication._validate_parquet
+    validations = 0
+
+    def _fail_second_validation(path: Path) -> None:
+        nonlocal validations
+        validations += 1
+        if validations == 2:
+            raise OSError("injected sibling validation failure")
+        original_validate(path)
+
+    with monkeypatch.context() as context:
+        context.setattr(gold_publication, "_validate_parquet", _fail_second_validation)
+        with pytest.raises(OSError, match="injected sibling"):
+            build_gold_timeframe_fanout_for_symbol(
+                gold_root=str(gold), exchange="deribit", symbol="BTC", dataset_ids=dataset_ids
+            )
+    assert {path: path.read_bytes() for path in old_artifacts} == old_artifacts
+
+    retry_reports = build_gold_timeframe_fanout_for_symbol(
+        gold_root=str(gold), exchange="deribit", symbol="BTC", dataset_ids=dataset_ids
+    )
+    assert [pl.read_parquet(report.parquet_path).height for report in retry_reports] == [2, 12]
