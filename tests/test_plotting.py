@@ -128,8 +128,8 @@ def test_plot_functions_raise_runtime_error_when_matplotlib_missing(
         fromlist: Sequence[str] = (),
         level: int = 0,
     ) -> object:
-        if name.startswith("matplotlib"):
-            raise ImportError("missing matplotlib")
+        if name.startswith("matplotlib") or name == "polars":
+            raise ImportError("optional dependency missing")
         return real_import(name, globals, locals, fromlist, level)
 
     monkeypatch.setattr(builtins, "__import__", _fake_import)
@@ -217,3 +217,36 @@ def test_feature_profile_writes_numeric_profile_and_skips_non_numeric(tmp_path: 
     assert output.exists()
     text_only = pl.DataFrame({"label": ["a", "b"]})
     assert write_feature_distribution_plot(text_only, tmp_path / "empty.png") is None
+
+
+def test_feature_profile_handles_dependency_and_axis_edge_cases(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Optional plotting dependencies and all supported time spans have explicit fallbacks."""
+
+    import ingestion.feature_profile as profile
+
+    real_import = builtins.__import__
+
+    def _missing_matplotlib(name: str, *args: object, **kwargs: object) -> object:
+        if name.startswith("matplotlib"):
+            raise ImportError("missing matplotlib")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", _missing_matplotlib)
+    assert profile.write_feature_distribution_plot({}, Path("missing.png")) is None
+    assert profile._iso_utc(None) is None
+    with pytest.raises(RuntimeError, match="polars is required"):
+        profile._require_polars()
+
+    monkeypatch.undo()
+    import matplotlib.dates as mdates
+    import matplotlib.ticker as mticker
+
+    for hours in (1, 12, 72, 24 * 30):
+        timestamps = [datetime(2026, 1, 1, tzinfo=UTC), datetime(2026, 1, 1, tzinfo=UTC)]
+        timestamps[1] = timestamps[0] + __import__("datetime").timedelta(hours=hours)
+        major, minor, formatter = profile._time_axis_style(mdates, mticker, timestamps)
+        assert major is not None
+        assert minor is not None
+        assert formatter is not None
+    major, minor, formatter = profile._time_axis_style(mdates, mticker, [])
+    assert major is not None and minor is None and formatter is not None
