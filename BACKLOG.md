@@ -2383,7 +2383,7 @@ Publication evidence:
 
 ### PR-56: Silver Incremental Monthly Partitions And Lookback Windows
 
-Status: In Progress
+Status: Merged
 
 Updated: 2026-08-02
 
