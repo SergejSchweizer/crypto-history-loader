@@ -2,14 +2,22 @@
 
 from __future__ import annotations
 
+import builtins
 import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any, cast
 
 import polars as pl
+import pytest
 
-from application.services.silver_sidecars import _iso_utc, _with_timestamp_m1, write_monthly_sidecars
+from application.services.silver_sidecars import (
+    _iso_utc,
+    _with_timestamp_m1,
+    _write_silver_plot,
+    write_monthly_sidecars,
+)
 
 
 @dataclass(frozen=True)
@@ -125,3 +133,26 @@ def test_write_monthly_sidecars_handles_empty_frame_without_timestamp(tmp_path: 
     assert plots == []
     payload = json.loads(Path(manifests[0]).read_text(encoding="utf-8"))
     assert payload["min_timestamp"] is None
+
+
+def test_silver_sidecar_helpers_handle_missing_dependencies_and_plot_schema(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Optional plotting and Polars diagnostics have clear fallbacks for operations."""
+
+    from application.services import silver_sidecars
+
+    real_import = builtins.__import__
+
+    def missing_polars(name: str, *args: object, **kwargs: object) -> object:
+        if name == "polars":
+            raise ImportError("missing polars")
+        return cast(Any, real_import)(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", missing_polars)
+    with pytest.raises(RuntimeError, match="polars is required"):
+        silver_sidecars._require_polars()
+    monkeypatch.undo()
+
+    no_time = pl.DataFrame({"value": [1.0]})
+    assert _write_silver_plot(no_time, tmp_path / "missing.png") is None

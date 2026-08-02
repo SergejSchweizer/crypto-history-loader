@@ -7,6 +7,8 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any, cast
 
+import pytest
+
 from api.commands.loader_output import BronzeRunState, IncrementalPersistor, finalize_bronze_output
 from application.dto import (
     BronzeFetchPlanDTO,
@@ -300,3 +302,89 @@ def test_finalize_bronze_output_populates_requested_outputs_and_sidecars() -> No
     assert output["parquet_files"] == _PersistResult.parquet_files
     assert output["_manifest_files"] == [f"{parquet_path}.json"]
     assert output["_trade_error_breakdown"] == {"total": 1, "net_unreachable": 0, "net_timeout": 1, "other": 0}
+
+
+def test_incremental_persistor_ignores_empty_and_completed_task_results() -> None:
+    """Empty chunks and already streamed tasks must never create duplicate parquet writes."""
+
+    persistor = IncrementalPersistor(
+        lake_root="lake",
+        mark_checkpoint_complete=lambda _dataset, _key: None,
+        persist_fn=lambda **_kwargs: pytest.fail("persistence should not run"),
+    )
+    logger = logging.getLogger("empty-persistor-test")
+    candle_task = type(
+        "CandleTask", (), {"exchange": "deribit", "market": "spot_ohlcv", "symbol": "BTC", "timeframe": "1m"}
+    )()
+    open_interest_task = OpenInterestFetchTaskDTO("deribit", "BTC", "1m")
+    funding_task = FundingFetchTaskDTO("deribit", "BTC", "8h")
+    trade_task = TradeFetchTaskDTO("deribit", "perp", "BTC")
+
+    persistor.on_candle_task_chunk(candle_task, [], logger)
+    persistor.on_open_interest_task_chunk(open_interest_task, [], logger)
+    persistor.on_funding_task_chunk(funding_task, [], logger)
+    persistor.on_trade_task_chunk(trade_task, [], logger)
+    persistor.streamed_candle_tasks.add(("deribit", "spot_ohlcv", "BTC", "1m"))
+    persistor.streamed_open_interest_tasks.add(("deribit", "BTC", "1m"))
+    persistor.streamed_funding_tasks.add(("deribit", "BTC", "8h"))
+    persistor.streamed_trade_tasks.add(("deribit", "perp", "BTC"))
+    persistor.on_candle_task_complete(candle_task, [], logger)
+    persistor.on_open_interest_task_complete(open_interest_task, [], logger)
+    persistor.on_funding_task_complete(funding_task, [], logger)
+    persistor.on_trade_task_complete(trade_task, [], logger)
+
+
+def test_finalize_bronze_output_records_parquet_write_failure() -> None:
+    """A parquet failure is surfaced in output while fetch results remain available."""
+
+    from types import SimpleNamespace
+
+    output: dict[str, object] = {}
+    finalize_bronze_output(
+        logger=logging.getLogger("finalize-failure-test"),
+        output=output,
+        tasks=[],
+        open_interest_tasks=[],
+        funding_tasks=[],
+        volatility_index_data_tasks=[],
+        trade_tasks=[],
+        task_results={},
+        task_errors={},
+        open_interest_results={},
+        open_interest_errors={},
+        funding_results={},
+        funding_errors={},
+        volatility_index_data_results={},
+        volatility_index_data_errors={},
+        trade_results={},
+        trade_errors={},
+        multi_market=False,
+        open_interest_requested=False,
+        funding_requested=False,
+        volatility_index_data_requested=False,
+        perps_trades_requested=False,
+        options_trades_requested=False,
+        candles_for_storage={},
+        open_interest_for_storage={},
+        funding_for_storage={},
+        volatility_index_data_for_storage={},
+        trades_for_storage={},
+        ohlcv_markets=[],
+        args=SimpleNamespace(save_parquet_lake=True, lake_root="lake"),
+        incremental_parquet_on_fetch=False,
+        incremental_parquet_files=[],
+        open_interest_dataset_type="open_interest",
+        sidecar_path_list_fn=lambda _paths, _suffix: [],
+        ensure_bronze_sidecars_fn=lambda **_kwargs: [],
+        populate_ohlcv_output_fn=lambda **_kwargs: None,
+        populate_open_interest_output_fn=lambda **_kwargs: None,
+        populate_funding_output_fn=lambda **_kwargs: None,
+        populate_volatility_output_fn=lambda **_kwargs: None,
+        populate_trades_output_fn=lambda **_kwargs: None,
+        symbol_progress_rows_fn=lambda **_kwargs: [],
+        fairness_rows=[],
+        trade_error_breakdown_fn=lambda _errors: {"total": 0, "net_unreachable": 0, "net_timeout": 0, "other": 0},
+        candle_serializer=lambda _candle: {},
+        persist_fn=lambda **_kwargs: (_ for _ in ()).throw(OSError("disk full")),
+    )
+    assert output["_parquet_error"] == "disk full"
