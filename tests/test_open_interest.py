@@ -246,3 +246,27 @@ def test_fetch_open_interest_all_history_streams_pages_and_retries_legacy_collec
     assert rows == []
     assert len(chunks) == 1
     assert chunks[0][0].open_interest == 10.0  # type: ignore[index,union-attr]
+
+
+def test_open_interest_adapter_normalizes_tokens_and_uses_range_cache(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The range adapter retains one cached history per instrument and filters inclusively."""
+
+    assert deribit_open_interest._normalize_continuation_token(" token ") == "token"
+    assert deribit_open_interest._normalize_continuation_token("none") is None
+    assert deribit_open_interest._normalize_continuation_token(1) is None
+    assert deribit_open_interest._normalize_open_interest_instrument("SOL-PERPETUAL") == "SOL_USDC-PERPETUAL"
+
+    deribit_open_interest._OPEN_INTEREST_HISTORY_CACHE.clear()
+    calls: list[str] = []
+
+    def _history(*, symbol: str, period: str) -> list[dict[str, object]]:
+        calls.append(f"{symbol}:{period}")
+        return [{"timestamp": 1}, {"timestamp": 2}, {"timestamp": 3}]
+
+    monkeypatch.setattr(deribit_open_interest, "fetch_open_interest_all", _history)
+    assert deribit_open_interest.fetch_open_interest_range("BTC-PERPETUAL", "1m", 2, 3) == [
+        {"timestamp": 2},
+        {"timestamp": 3},
+    ]
+    assert deribit_open_interest.fetch_open_interest_range("BTC-PERPETUAL", "1m", 1, 1) == [{"timestamp": 1}]
+    assert calls == ["BTC-PERPETUAL:1m"]
