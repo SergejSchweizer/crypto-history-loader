@@ -28,6 +28,7 @@ from application.services.silver_partition_manifest import (
 # monthly storage partition boundaries.
 _REQUIRED_LOOKBACK_DAYS = 30
 _VOLATILITY_OBSERVED_CONTRACT_VERSION = "silver-volatility-observed/v1"
+_VOLATILITY_FEATURE_CONTRACT_VERSION = "silver-volatility-feature/v1"
 
 
 class SilverReportFactory(Protocol):
@@ -648,8 +649,43 @@ def build_volatility_index_1m_feature_for_symbol(
             timeframe=timeframe,
             month=month,
         )
-        target.parent.mkdir(parents=True, exist_ok=True)
-        feature.write_parquet(target)
+        source_paths = [
+            path
+            for key in calculation_keys
+            for dataset_type in (historical_dataset_type, snapshot_dataset_type)
+            if (
+                path := _observed_month_file(
+                    silver_root=silver_root,
+                    dataset_type=dataset_type,
+                    exchange=exchange,
+                    symbol=normalized_symbol,
+                    timeframe=timeframe,
+                    month=key,
+                )
+            ).exists()
+        ]
+        source_schema = {
+            path.relative_to(Path(silver_root)).as_posix(): dict(pl.scan_parquet(str(path)).collect_schema())
+            for path in sorted(set(source_paths))
+        }
+        fingerprint = source_fingerprint(
+            bronze_root=Path(silver_root),
+            source_files=[str(path) for path in sorted(set(source_paths))],
+            source_schema=source_schema,
+            exchange=exchange,
+            symbol=normalized_symbol,
+            timeframe=timeframe,
+            builder_contract_version=_VOLATILITY_FEATURE_CONTRACT_VERSION,
+        )
+        publish_partition_atomically(
+            frame=feature,
+            parquet_path=target,
+            input_fingerprint=fingerprint,
+            source_schema=source_schema,
+            sort_keys=("exchange", "symbol", "timestamp_m1"),
+            deduplication_keys=("exchange", "symbol", "timestamp_m1"),
+            builder_contract_version=_VOLATILITY_FEATURE_CONTRACT_VERSION,
+        )
 
         month_min = feature.select(pl.col("timestamp_m1").min()).item()
         month_max = feature.select(pl.col("timestamp_m1").max()).item()

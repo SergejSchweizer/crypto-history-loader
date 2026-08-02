@@ -16,6 +16,7 @@ from application.services.silver_partition_manifest import (
 
 DEPTH_BANDS_BPS = (10, 50)
 _L2_OBSERVED_CONTRACT_VERSION = "silver-l2-observed/v1"
+_L2_FEATURE_CONTRACT_VERSION = "silver-l2-feature/v1"
 
 
 class SilverReportFactory(Protocol):
@@ -454,8 +455,25 @@ def build_l2_1m_feature_for_symbol(
             timeframe=timeframe,
             month=month,
         )
-        target.parent.mkdir(parents=True, exist_ok=True)
-        feature.write_parquet(target)
+        source_schema = dict(pl.scan_parquet(str(source)).collect_schema())
+        fingerprint = source_fingerprint(
+            bronze_root=Path(silver_root),
+            source_files=[str(source)],
+            source_schema=source_schema,
+            exchange=exchange,
+            symbol=normalized_symbol,
+            timeframe=timeframe,
+            builder_contract_version=_L2_FEATURE_CONTRACT_VERSION,
+        )
+        publish_partition_atomically(
+            frame=feature,
+            parquet_path=target,
+            input_fingerprint=fingerprint,
+            source_schema=source_schema,
+            sort_keys=("exchange", "symbol", "timestamp_m1"),
+            deduplication_keys=("exchange", "symbol", "timestamp_m1"),
+            builder_contract_version=_L2_FEATURE_CONTRACT_VERSION,
+        )
         processed.append(month)
         rows_out += feature.height
         month_min = feature.select(pl.col("timestamp_m1").min()).item()

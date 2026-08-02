@@ -13,6 +13,7 @@ from application.services.silver_monthly_lookback import (
     month_end_exclusive,
     month_start,
 )
+from application.services.silver_partition_manifest import publish_partition_atomically, source_fingerprint
 
 # QC-01: canonical annualization basis for crypto calendar-time volatility (365
 # calendar days per year, expressed in minutes) shared by every annualized RV field.
@@ -23,6 +24,7 @@ _ANNUALIZATION_MINUTES_PER_YEAR = 365 * 24 * 60
 # windows, the previous close, and the log-return at the start of a month are not
 # reset by monthly storage partition boundaries.
 _REQUIRED_LOOKBACK_DAYS = 30
+_REALIZED_VOLATILITY_FEATURE_CONTRACT_VERSION = "silver-realized-volatility-feature/v1"
 
 # QC-01: raw RV window -> window length in minutes, used to scale each raw
 # (non-annualized) RV window into an annualized volatility percentage point.
@@ -454,8 +456,34 @@ def build_realized_volatility_1m_feature_for_symbol(
             timeframe=timeframe,
             month=month,
         )
-        target.parent.mkdir(parents=True, exist_ok=True)
-        feature.write_parquet(target)
+        source_paths = [
+            path
+            for key in calculation_keys
+            for directory in (*spot_paths, *perps_paths)
+            if (path := _month_file(directory, key)) is not None
+        ]
+        source_schema = {
+            path.relative_to(Path(silver_root)).as_posix(): dict(pl.scan_parquet(str(path)).collect_schema())
+            for path in sorted(set(source_paths))
+        }
+        fingerprint = source_fingerprint(
+            bronze_root=Path(silver_root),
+            source_files=[str(path) for path in sorted(set(source_paths))],
+            source_schema=source_schema,
+            exchange=exchange,
+            symbol=normalized_symbol,
+            timeframe=timeframe,
+            builder_contract_version=_REALIZED_VOLATILITY_FEATURE_CONTRACT_VERSION,
+        )
+        publish_partition_atomically(
+            frame=feature,
+            parquet_path=target,
+            input_fingerprint=fingerprint,
+            source_schema=source_schema,
+            sort_keys=("exchange", "symbol", "timestamp_m1"),
+            deduplication_keys=("exchange", "symbol", "timestamp_m1"),
+            builder_contract_version=_REALIZED_VOLATILITY_FEATURE_CONTRACT_VERSION,
+        )
 
         month_min = feature.select(pl.col("timestamp_m1").min()).item()
         month_max = feature.select(pl.col("timestamp_m1").max()).item()

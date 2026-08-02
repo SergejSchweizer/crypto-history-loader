@@ -15,6 +15,7 @@ from application.services.silver_partition_manifest import (
 )
 
 _INDEX_PRICE_CONTRACT_VERSION = "silver-index-price-observed/v1"
+_INDEX_PRICE_FEATURE_CONTRACT_VERSION = "silver-index-price-feature/v1"
 
 
 class SilverReportFactory(Protocol):
@@ -377,8 +378,25 @@ def build_index_price_1m_feature_for_symbol(
             timeframe=timeframe,
             month=month,
         )
-        target.parent.mkdir(parents=True, exist_ok=True)
-        feature.write_parquet(target)
+        source_schema = dict(pl.scan_parquet(str(path)).collect_schema())
+        fingerprint = source_fingerprint(
+            bronze_root=Path(silver_root),
+            source_files=[str(path)],
+            source_schema=source_schema,
+            exchange=exchange,
+            symbol=normalized_symbol,
+            timeframe=timeframe,
+            builder_contract_version=_INDEX_PRICE_FEATURE_CONTRACT_VERSION,
+        )
+        publish_partition_atomically(
+            frame=feature,
+            parquet_path=target,
+            input_fingerprint=fingerprint,
+            source_schema=source_schema,
+            sort_keys=("exchange", "symbol", "timestamp_m1"),
+            deduplication_keys=("exchange", "symbol", "timestamp_m1"),
+            builder_contract_version=_INDEX_PRICE_FEATURE_CONTRACT_VERSION,
+        )
 
         month_min = feature.select(pl.col("timestamp_m1").min()).item()
         month_max = feature.select(pl.col("timestamp_m1").max()).item()
