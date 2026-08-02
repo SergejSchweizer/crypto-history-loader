@@ -66,6 +66,26 @@ def test_resolve_dataset_ids_returns_sorted_supported_when_missing() -> None:
     assert gold_cmd._resolve_dataset_ids(None) == expected
 
 
+def test_order_dataset_ids_with_dependencies_runs_sources_first() -> None:
+    dataset_ids = [
+        "gold.live.extended.h1",
+        "gold.live.extended.m1",
+        "gold.live.extended.m30",
+        "gold.live.extended.m5",
+    ]
+    dependencies = {
+        "gold.live.extended.h1": "gold.live.extended.m1",
+        "gold.live.extended.m30": "gold.live.extended.m1",
+        "gold.live.extended.m5": "gold.live.extended.m1",
+    }
+
+    ordered = gold_cmd._order_dataset_ids_with_dependencies(dataset_ids, dependencies)
+    assert ordered[0] == "gold.live.extended.m1"
+    assert ordered.index("gold.live.extended.m1") < ordered.index("gold.live.extended.h1")
+    assert ordered.index("gold.live.extended.m1") < ordered.index("gold.live.extended.m30")
+    assert ordered.index("gold.live.extended.m1") < ordered.index("gold.live.extended.m5")
+
+
 def test_resolve_gold_symbols_normalizes_and_deduplicates() -> None:
     symbols = gold_cmd._resolve_gold_symbols(
         symbols=["btc", "BTC-PERPETUAL", "BTC_USDC", "ETH"],

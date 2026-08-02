@@ -217,6 +217,9 @@ Contract-level live option ticker snapshots are aggregated to one minute-level
 surface row before Gold joins. Tick and daily metadata sources are likewise
 deduplicated to one `(timestamp_m1, exchange, symbol)` row, preventing duplicate-key
 joins and keeping live Gold builds bounded in memory.
+Raw Silver L2 snapshots are normalized from their source `timestamp` contract into the
+Gold minute-level L2 feature contract; perpetual snapshots remain one row per minute,
+while option snapshots are aggregated across contracts before the join.
 
 The canonical live family is `gold.live.full.m1` with derived `m5`, `m30`, and `h1` datasets.
 The extended live family is `gold.live.extended.m1` with derived `m5`, `m30`, and `h1` datasets.

@@ -291,7 +291,10 @@ def read_dataset_frame(
     frame = pl.concat(frames, how="diagonal_relaxed")
     for timestamp_column in ("open_time", "timestamp_m1", "timestamp", "trade_time"):
         if timestamp_column in frame.columns:
-            if dataset_type == "options_l2_1m_feature" and "instrument_name" in frame.columns:
+            if (
+                dataset_type in {"options_l2_1m_feature", "options_l2_snapshot_1m_observed"}
+                and "instrument_name" in frame.columns
+            ):
                 # Options L2 has one row per contract and minute. Deduplicating only by
                 # minute would discard contracts before Gold computes market coverage.
                 return frame.unique(
@@ -962,6 +965,9 @@ def prepare_options_snapshot(pl: Any, frame: Any, symbol: str) -> Any:
 def prepare_perps_l2_feature(pl: Any, frame: Any, symbol: str) -> Any:
     """Prepare perpetual L2 liquidity features for the regime contract."""
 
+    if "timestamp_m1" not in frame.columns:
+        return prepare_perps_l2_snapshot(pl, frame, symbol)
+
     numeric = (
         "best_bid_price",
         "best_ask_price",
@@ -1004,6 +1010,9 @@ def prepare_perps_l2_feature(pl: Any, frame: Any, symbol: str) -> Any:
 def prepare_options_l2_feature(pl: Any, frame: Any, symbol: str) -> Any:
     """Aggregate contract-level option liquidity into one regime row per minute."""
 
+    if "timestamp_m1" not in frame.columns:
+        return prepare_options_l2_snapshot(pl, frame, symbol)
+
     normalized = frame.with_columns(
         [
             pl.col("timestamp_m1").cast(pl.Datetime(time_unit="us", time_zone="UTC")),
@@ -1025,6 +1034,110 @@ def prepare_options_l2_feature(pl: Any, frame: Any, symbol: str) -> Any:
                 pl.col("bid_depth_50bps").sum().cast(pl.Float64).alias("options_l2_bid_depth_50bps"),
                 pl.col("ask_depth_50bps").sum().cast(pl.Float64).alias("options_l2_ask_depth_50bps"),
                 pl.col("quote_age_seconds").max().cast(pl.Float64).alias("options_l2_max_quote_age_seconds"),
+                pl.col("timestamp_m1").max().alias("options_l2_as_of"),
+                pl.lit(True).alias("options_l2_live_snapshot_derived"),
+            ]
+        )
+        .sort("timestamp_m1")
+    )
+
+
+def prepare_perps_l2_snapshot(pl: Any, frame: Any, symbol: str) -> Any:
+    """Convert raw perpetual L2 snapshots into one Gold row per minute."""
+
+    timestamp_column = "timestamp_m1" if "timestamp_m1" in frame.columns else "timestamp"
+    bid = pl.col("best_bid_price").cast(pl.Float64)
+    ask = pl.col("best_ask_price").cast(pl.Float64)
+    bid_size = pl.col("best_bid_size").cast(pl.Float64)
+    ask_size = pl.col("best_ask_size").cast(pl.Float64)
+    quote_available = bid.is_not_null() & ask.is_not_null()
+    quote_age = (
+        (pl.col("ingested_at") - pl.col(timestamp_column)).dt.total_seconds().abs().cast(pl.Float64)
+        if "ingested_at" in frame.columns
+        else pl.lit(None, dtype=pl.Float64)
+    )
+    return (
+        frame.with_columns(
+            [
+                pl.col(timestamp_column).cast(pl.Datetime(time_unit="us", time_zone="UTC")).alias("timestamp_m1"),
+                pl.lit(symbol).alias("symbol"),
+                ((bid + ask) / 2.0).alias("mid_price"),
+                (ask - bid).alias("spread"),
+                pl.when((bid_size + ask_size) > 0.0)
+                .then((bid_size - ask_size) / (bid_size + ask_size))
+                .otherwise(None)
+                .alias("top_of_book_imbalance"),
+                quote_available.alias("quote_available"),
+                quote_age.alias("quote_age_seconds"),
+            ]
+        )
+        .select(
+            [
+                "timestamp_m1",
+                "exchange",
+                "symbol",
+                bid.alias("perps_l2_best_bid_price"),
+                ask.alias("perps_l2_best_ask_price"),
+                pl.col("mid_price").alias("perps_l2_mid_price"),
+                pl.col("spread").alias("perps_l2_spread"),
+                bid_size.alias("perps_l2_top_bid_size"),
+                ask_size.alias("perps_l2_top_ask_size"),
+                pl.col("top_of_book_imbalance").alias("perps_l2_top_of_book_imbalance"),
+                pl.lit(None, dtype=pl.Float64).alias("perps_l2_bid_depth_10bps"),
+                pl.lit(None, dtype=pl.Float64).alias("perps_l2_ask_depth_10bps"),
+                pl.lit(None, dtype=pl.Float64).alias("perps_l2_bid_depth_50bps"),
+                pl.lit(None, dtype=pl.Float64).alias("perps_l2_ask_depth_50bps"),
+                pl.col("quote_available").alias("perps_l2_quote_available"),
+                pl.lit(False).alias("perps_l2_stale_quote"),
+                pl.lit(None, dtype=pl.Int64).alias("perps_l2_minutes_since_observation"),
+                pl.col("quote_age_seconds").alias("perps_l2_quote_age_seconds"),
+                pl.col("timestamp_m1").alias("perps_l2_as_of"),
+                pl.lit(True).alias("perps_l2_live_snapshot_derived"),
+            ]
+        )
+        .unique(subset=["timestamp_m1", "exchange", "symbol"], keep="last", maintain_order=False)
+        .sort("timestamp_m1")
+    )
+
+
+def prepare_options_l2_snapshot(pl: Any, frame: Any, symbol: str) -> Any:
+    """Aggregate raw contract-level option L2 snapshots by minute."""
+
+    timestamp_column = "timestamp_m1" if "timestamp_m1" in frame.columns else "timestamp"
+    bid = pl.col("best_bid_price").cast(pl.Float64)
+    ask = pl.col("best_ask_price").cast(pl.Float64)
+    bid_size = pl.col("best_bid_size").cast(pl.Float64)
+    ask_size = pl.col("best_ask_size").cast(pl.Float64)
+    quote_available = bid.is_not_null() & ask.is_not_null()
+    quote_age = (
+        (pl.col("ingested_at") - pl.col(timestamp_column)).dt.total_seconds().abs().cast(pl.Float64)
+        if "ingested_at" in frame.columns
+        else pl.lit(None, dtype=pl.Float64)
+    )
+    normalized = frame.with_columns(
+        [
+            pl.col(timestamp_column).cast(pl.Datetime(time_unit="us", time_zone="UTC")).alias("timestamp_m1"),
+            pl.lit(symbol).alias("symbol"),
+            (ask - bid).alias("spread"),
+            quote_available.alias("quote_available"),
+            quote_age.alias("quote_age_seconds"),
+        ]
+    )
+    return (
+        normalized.group_by(["timestamp_m1", "exchange", "symbol"], maintain_order=True)
+        .agg(
+            [
+                pl.col("instrument_name").n_unique().cast(pl.Int64).alias("options_l2_contract_count"),
+                pl.col("quote_available").cast(pl.Float64).mean().alias("options_l2_quote_coverage_ratio"),
+                pl.lit(0.0).alias("options_l2_stale_quote_ratio"),
+                pl.col("spread").median().cast(pl.Float64).alias("options_l2_median_spread"),
+                bid_size.sum().cast(pl.Float64).alias("options_l2_top_bid_depth"),
+                ask_size.sum().cast(pl.Float64).alias("options_l2_top_ask_depth"),
+                pl.lit(None, dtype=pl.Float64).alias("options_l2_bid_depth_10bps"),
+                pl.lit(None, dtype=pl.Float64).alias("options_l2_ask_depth_10bps"),
+                pl.lit(None, dtype=pl.Float64).alias("options_l2_bid_depth_50bps"),
+                pl.lit(None, dtype=pl.Float64).alias("options_l2_ask_depth_50bps"),
+                quote_age.max().alias("options_l2_max_quote_age_seconds"),
                 pl.col("timestamp_m1").max().alias("options_l2_as_of"),
                 pl.lit(True).alias("options_l2_live_snapshot_derived"),
             ]

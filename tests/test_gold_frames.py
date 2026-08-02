@@ -151,6 +151,44 @@ def test_prepare_recent_trade_snapshot_deduplicates_tick_rows() -> None:
     assert prepared.height == 1
 
 
+def test_prepare_raw_l2_snapshots_normalizes_timestamp_and_aggregates_contracts() -> None:
+    """Live observed L2 schemas should be usable by Gold without feature columns."""
+
+    timestamp = datetime(2026, 5, 1, 0, 0, tzinfo=UTC)
+    common = {
+        "timestamp": timestamp,
+        "exchange": "deribit",
+        "symbol": "BTC",
+        "instrument_type": "option",
+        "underlying": "BTC",
+        "expiry": None,
+        "strike": None,
+        "option_type": None,
+        "best_bid_price": 99.0,
+        "best_bid_size": 5.0,
+        "best_ask_price": 101.0,
+        "best_ask_size": 4.0,
+    }
+    raw_options = pl.DataFrame(
+        [
+            {**common, "instrument_name": "BTC-C"},
+            {**common, "instrument_name": "BTC-P"},
+        ]
+    )
+
+    prepared_perps = gold_frames.prepare_perps_l2_snapshot(
+        pl,
+        raw_options.with_columns(pl.lit("BTC-PERPETUAL").alias("instrument_name")),
+        "BTC",
+    )
+    prepared_options = gold_frames.prepare_options_l2_snapshot(pl, raw_options, "BTC")
+
+    assert prepared_perps.height == 1
+    assert prepared_perps["timestamp_m1"].to_list() == [timestamp]
+    assert prepared_options.height == 1
+    assert prepared_options["options_l2_contract_count"].to_list() == [2]
+
+
 def test_resample_history_full_frame_aggregates_buckets() -> None:
     timestamps = [datetime(2026, 1, 1, 0, minute, tzinfo=UTC) for minute in range(6)]
     frame = pl.DataFrame(
