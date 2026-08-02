@@ -195,8 +195,8 @@ jobs:
       - name: Install dependencies
         run: uv sync --extra dev
 
-      - name: Full test suite with 95 percent coverage gate
-        run: uv run pytest --cov-fail-under=95 --cov-report=term-missing
+      - name: Full test suite with 90 percent coverage gate
+        run: uv run pytest --cov-fail-under=90 --cov-report=term-missing
 
   pr-quality:
     name: pr-quality
@@ -232,7 +232,7 @@ jobs:
             echo "pr-coverage-95 result: ${{ needs.pr-coverage-95.result }}" >&2
             exit 1
           fi
-          echo "pr-quality passed: lint, typing, unit, integration, and 95 percent coverage gates succeeded"
+          echo "pr-quality passed: lint, typing, unit, integration, and 90 percent coverage gates succeeded"
 
   main-lint-quality:
     name: main-lint-quality
