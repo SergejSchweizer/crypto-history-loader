@@ -586,6 +586,51 @@ def build_volatility_index_1m_feature_for_symbol(
         target_start = month_start(month)
         target_end = month_end_exclusive(month)
         calculation_keys = [*lookback_month_keys(month, lookback_days=_REQUIRED_LOOKBACK_DAYS), month]
+        source_paths = [
+            path
+            for key in calculation_keys
+            for dataset_type in (historical_dataset_type, snapshot_dataset_type)
+            if (
+                path := _observed_month_file(
+                    silver_root=silver_root,
+                    dataset_type=dataset_type,
+                    exchange=exchange,
+                    symbol=normalized_symbol,
+                    timeframe=timeframe,
+                    month=key,
+                )
+            ).exists()
+        ]
+        source_paths = sorted(set(source_paths))
+        source_schema = {
+            path.relative_to(Path(silver_root)).as_posix(): dict(pl.scan_parquet(str(path)).collect_schema())
+            for path in source_paths
+        }
+        fingerprint = source_fingerprint(
+            bronze_root=Path(silver_root),
+            source_files=[str(path) for path in source_paths],
+            source_schema=source_schema,
+            exchange=exchange,
+            symbol=normalized_symbol,
+            timeframe=timeframe,
+            builder_contract_version=_VOLATILITY_FEATURE_CONTRACT_VERSION,
+        )
+        target = dependencies.silver_month_path(
+            silver_root=silver_root,
+            market=output_dataset_type,
+            exchange=exchange,
+            symbol=normalized_symbol,
+            timeframe=timeframe,
+            month=month,
+        )
+        cached = load_current_manifest(
+            parquet_path=target,
+            expected_input_fingerprint=fingerprint,
+            expected_builder_contract_version=_VOLATILITY_FEATURE_CONTRACT_VERSION,
+        )
+        if cached is not None:
+            agg_rows_out += cached.row_count
+            continue
 
         buffered_frames = [month_frame for key in calculation_keys if (month_frame := _cached_month(key)) is not None]
         target_selected = month_cache.get(month)
@@ -641,42 +686,6 @@ def build_volatility_index_1m_feature_for_symbol(
             (pl.col("timestamp_m1") >= target_start) & (pl.col("timestamp_m1") < target_end)
         ).select(SILVER_VOLATILITY_FEATURE_COLUMNS)
 
-        target = dependencies.silver_month_path(
-            silver_root=silver_root,
-            market=output_dataset_type,
-            exchange=exchange,
-            symbol=normalized_symbol,
-            timeframe=timeframe,
-            month=month,
-        )
-        source_paths = [
-            path
-            for key in calculation_keys
-            for dataset_type in (historical_dataset_type, snapshot_dataset_type)
-            if (
-                path := _observed_month_file(
-                    silver_root=silver_root,
-                    dataset_type=dataset_type,
-                    exchange=exchange,
-                    symbol=normalized_symbol,
-                    timeframe=timeframe,
-                    month=key,
-                )
-            ).exists()
-        ]
-        source_schema = {
-            path.relative_to(Path(silver_root)).as_posix(): dict(pl.scan_parquet(str(path)).collect_schema())
-            for path in sorted(set(source_paths))
-        }
-        fingerprint = source_fingerprint(
-            bronze_root=Path(silver_root),
-            source_files=[str(path) for path in sorted(set(source_paths))],
-            source_schema=source_schema,
-            exchange=exchange,
-            symbol=normalized_symbol,
-            timeframe=timeframe,
-            builder_contract_version=_VOLATILITY_FEATURE_CONTRACT_VERSION,
-        )
         publish_partition_atomically(
             frame=feature,
             parquet_path=target,

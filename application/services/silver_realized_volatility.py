@@ -13,7 +13,11 @@ from application.services.silver_monthly_lookback import (
     month_end_exclusive,
     month_start,
 )
-from application.services.silver_partition_manifest import publish_partition_atomically, source_fingerprint
+from application.services.silver_partition_manifest import (
+    load_current_manifest,
+    publish_partition_atomically,
+    source_fingerprint,
+)
 
 # QC-01: canonical annualization basis for crypto calendar-time volatility (365
 # calendar days per year, expressed in minutes) shared by every annualized RV field.
@@ -321,6 +325,42 @@ def build_realized_volatility_1m_feature_for_symbol(
         target_start = month_start(month)
         target_end = month_end_exclusive(month)
         calculation_keys = [*lookback_month_keys(month, lookback_days=_REQUIRED_LOOKBACK_DAYS), month]
+        source_paths = [
+            path
+            for key in calculation_keys
+            for directory in (*spot_paths, *perps_paths)
+            if (path := _month_file(directory, key)) is not None
+        ]
+        source_paths = sorted(set(source_paths))
+        source_schema = {
+            path.relative_to(Path(silver_root)).as_posix(): dict(pl.scan_parquet(str(path)).collect_schema())
+            for path in source_paths
+        }
+        fingerprint = source_fingerprint(
+            bronze_root=Path(silver_root),
+            source_files=[str(path) for path in source_paths],
+            source_schema=source_schema,
+            exchange=exchange,
+            symbol=normalized_symbol,
+            timeframe=timeframe,
+            builder_contract_version=_REALIZED_VOLATILITY_FEATURE_CONTRACT_VERSION,
+        )
+        target = dependencies.silver_month_path(
+            silver_root=silver_root,
+            market=output_dataset_type,
+            exchange=exchange,
+            symbol=normalized_symbol,
+            timeframe=timeframe,
+            month=month,
+        )
+        cached = load_current_manifest(
+            parquet_path=target,
+            expected_input_fingerprint=fingerprint,
+            expected_builder_contract_version=_REALIZED_VOLATILITY_FEATURE_CONTRACT_VERSION,
+        )
+        if cached is not None:
+            agg_rows_out += cached.row_count
+            continue
 
         spot_frames = []
         perps_frames = []
@@ -448,33 +488,6 @@ def build_realized_volatility_1m_feature_for_symbol(
         frame = frame.filter((pl.col("timestamp_m1") >= target_start) & (pl.col("timestamp_m1") < target_end))
         feature = frame.select(SILVER_REALIZED_VOLATILITY_FEATURE_COLUMNS)
 
-        target = dependencies.silver_month_path(
-            silver_root=silver_root,
-            market=output_dataset_type,
-            exchange=exchange,
-            symbol=normalized_symbol,
-            timeframe=timeframe,
-            month=month,
-        )
-        source_paths = [
-            path
-            for key in calculation_keys
-            for directory in (*spot_paths, *perps_paths)
-            if (path := _month_file(directory, key)) is not None
-        ]
-        source_schema = {
-            path.relative_to(Path(silver_root)).as_posix(): dict(pl.scan_parquet(str(path)).collect_schema())
-            for path in sorted(set(source_paths))
-        }
-        fingerprint = source_fingerprint(
-            bronze_root=Path(silver_root),
-            source_files=[str(path) for path in sorted(set(source_paths))],
-            source_schema=source_schema,
-            exchange=exchange,
-            symbol=normalized_symbol,
-            timeframe=timeframe,
-            builder_contract_version=_REALIZED_VOLATILITY_FEATURE_CONTRACT_VERSION,
-        )
         publish_partition_atomically(
             frame=feature,
             parquet_path=target,
