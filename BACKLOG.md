@@ -2515,11 +2515,11 @@ Acceptance:
 
 ### PR-60: Gold Optional Artifact And Plot Decoupling
 
-Status: Planned
+Status: In Progress
 
 Updated: 2026-08-02
 
-PR: TBD
+PR: https://github.com/SergejSchweizer/crypto-history-loader/pull/TBD
 
 Branch: `codex/pr60-gold-optional-artifact-decoupling`
 
