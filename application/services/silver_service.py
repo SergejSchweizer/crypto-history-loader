@@ -80,6 +80,7 @@ from application.services.silver_partition_manifest import (
 _LOGGER = logging.getLogger(__name__)
 _OHLCV_BUILDER_CONTRACT_VERSION = "silver-ohlcv/v1"
 _TRADE_OBSERVED_CONTRACT_VERSION = "silver-trades-observed/v1"
+_TRADE_FEATURE_CONTRACT_VERSION = "silver-trades-feature/v1"
 
 SILVER_FUNDING_FEATURE_COLUMNS = silver_funding.SILVER_FUNDING_FEATURE_COLUMNS
 SILVER_FUNDING_OBSERVED_COLUMNS = silver_funding.SILVER_FUNDING_OBSERVED_COLUMNS
@@ -895,8 +896,28 @@ def build_perps_trades_1m_feature_for_symbol(
             timeframe="1m",
             month=month,
         )
-        target.parent.mkdir(parents=True, exist_ok=True)
-        feature.write_parquet(target)
+        source_files = [str(path) for path in (month_file, *map(Path, empty_files)) if path.exists()]
+        source_schema: dict[str, object] = {"observed": dict(frame.schema)}
+        if empty_minutes is not None:
+            source_schema["confirmed_empty_minutes"] = dict(empty_minutes.schema)
+        fingerprint = source_fingerprint(
+            bronze_root=Path("/"),
+            source_files=source_files,
+            source_schema=source_schema,
+            exchange=exchange,
+            symbol=symbol,
+            timeframe=observed_timeframe,
+            builder_contract_version=_TRADE_FEATURE_CONTRACT_VERSION,
+        )
+        publish_partition_atomically(
+            frame=feature,
+            parquet_path=target,
+            input_fingerprint=fingerprint,
+            source_schema=source_schema,
+            sort_keys=("timestamp_m1",),
+            deduplication_keys=("exchange", "symbol", "instrument_type", "timestamp_m1"),
+            builder_contract_version=_TRADE_FEATURE_CONTRACT_VERSION,
+        )
 
         month_min = feature.select(pl.col("timestamp_m1").min()).item()
         month_max = feature.select(pl.col("timestamp_m1").max()).item()
