@@ -4,10 +4,24 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from ingestion.funding import FundingPoint
 from ingestion.lake_datasets import bronze_trade_dataset_type_for_market
-from ingestion.lake_records import candle_partition_key, candle_record, trade_partition_key, trade_record
+from ingestion.lake_records import (
+    candle_partition_key,
+    candle_record,
+    funding_partition_key,
+    funding_record,
+    open_interest_partition_key,
+    open_interest_record,
+    trade_partition_key,
+    trade_record,
+    volatility_partition_key,
+    volatility_record,
+)
+from ingestion.open_interest import OpenInterestPoint
 from ingestion.spot_ohlcv import SpotCandle
 from ingestion.trades import OptionTradeTick, TradeTick
+from ingestion.volatility import VolatilityPoint
 
 
 def _sample_candle() -> SpotCandle:
@@ -107,3 +121,30 @@ def test_trade_record_mapping_includes_option_fields_only_for_options() -> None:
     assert option_row["dataset_type"] == "options_trades"
     assert option_row["instrument_name"] == "BTC-1JAN26-100000-C"
     assert option_row["option_type"] == "call"
+
+
+def test_non_ohlcv_record_mappers_preserve_partition_and_source_values() -> None:
+    """Funding, open-interest, and volatility rows retain their source-specific values."""
+
+    opened = datetime(2026, 5, 1, 0, 0, tzinfo=UTC)
+    ingested = datetime(2026, 5, 1, 0, 1, tzinfo=UTC)
+    open_interest = OpenInterestPoint("deribit", "BTC-PERPETUAL", "1m", opened, opened, 10.0, 100.0)
+    funding = FundingPoint("deribit", "BTC-PERPETUAL", "8h", opened, opened, 0.001, 101.0, 102.0)
+    volatility = VolatilityPoint(
+        "deribit", "BTC", "1m", opened, opened, 50.0, "public_volatility", "volatility_index_data"
+    )
+
+    assert open_interest_partition_key(open_interest, "perp") == (
+        "deribit",
+        "perp",
+        "BTC-PERPETUAL",
+        "1m",
+        "2026-05-01",
+    )
+    assert funding_partition_key(funding, "perp") == ("deribit", "perp", "BTC-PERPETUAL", "8h", "2026-05-01")
+    assert volatility_partition_key(volatility, "perp") == ("deribit", "perp", "BTC", "1m", "2026-05-01")
+    assert open_interest_record(open_interest, "perp", "run", ingested)["open_interest_value"] == 100.0
+    assert funding_record(funding, "perp", "run", ingested)["funding_rate"] == 0.001
+    volatility_row = volatility_record(volatility, "perp", "run", ingested)
+    assert volatility_row["dataset_type"] == "volatility_index_data"
+    assert volatility_row["open"] == volatility_row["close"] == 50.0
