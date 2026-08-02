@@ -634,6 +634,25 @@ def test_build_perps_trades_1m_feature_for_symbol(tmp_path: Path) -> None:
     assert out_file.exists()
 
 
+def test_silver_discovery_helpers_cover_missing_and_legacy_layouts(tmp_path: Path) -> None:
+    """Silver discovery should handle absent roots and both month directory layouts."""
+
+    assert discover_symbols(str(tmp_path / "missing"), "perps_ohlcv", "deribit") == []
+    assert discover_months(str(tmp_path / "missing"), "perps_ohlcv", "deribit", "BTC") == []
+    root = (
+        tmp_path
+        / "dataset_type=perps_ohlcv"
+        / "exchange=deribit"
+        / "instrument_type=perp"
+        / "symbol=BTC"
+        / "timeframe=1m"
+    )
+    (root / "year=2026" / "month=2026-05").mkdir(parents=True)
+    (root / "month=2026-06").mkdir(parents=True)
+    assert discover_symbols(str(tmp_path), "perps_ohlcv", "deribit") == ["BTC"]
+    assert discover_months(str(tmp_path), "perps_ohlcv", "deribit", "BTC") == ["2026-05", "2026-06"]
+
+
 def test_build_trade_observed_frame_filters_invalid_and_deduplicates() -> None:
     ts = datetime(2026, 5, 1, 0, 0, 10, tzinfo=UTC)
     frame = pl.DataFrame(
