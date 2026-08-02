@@ -11,7 +11,11 @@ from application.dataset_contracts import (
     SILVER_OPTION_SURFACE_FEATURE_COLUMNS,
     SILVER_OPTIONS_TICKER_OBSERVED_COLUMNS,
 )
-from application.services.silver_partition_manifest import publish_partition_atomically, source_fingerprint
+from application.services.silver_partition_manifest import (
+    load_current_manifest,
+    publish_partition_atomically,
+    source_fingerprint,
+)
 
 ATM_LOG_MONEYNESS_LIMIT = 0.05
 SHORT_DTE_DAYS = 7.0
@@ -225,25 +229,6 @@ def build_options_surface_1m_feature_for_symbol(
     for month in months:
         currency_path = _month_file(currency_root, month, normalized_symbol)
         instrument_path = _month_file(instrument_root, month, normalized_symbol)
-        currency = _read_source(pl, currency_path, priority=1)
-        instrument = _read_source(pl, instrument_path, priority=2)
-        sources = [source for source in (currency, instrument) if source is not None]
-        if not sources:
-            continue
-        frame = pl.concat(sources, how="diagonal_relaxed")
-        rows_in += frame.height
-        feature, month_duplicates = _surface_frame(pl, frame, normalized_symbol)
-        duplicates_removed += month_duplicates
-        if feature.height == 0:
-            continue
-        target = dependencies.silver_month_path(
-            silver_root=silver_root,
-            market=output_dataset_type,
-            exchange=exchange,
-            symbol=normalized_symbol,
-            timeframe=timeframe,
-            month=month,
-        )
         source_paths = [path for path in (currency_path, instrument_path) if path is not None]
         source_schema = {
             path.relative_to(Path(silver_root)).as_posix(): dict(pl.scan_parquet(str(path)).collect_schema())
@@ -258,6 +243,34 @@ def build_options_surface_1m_feature_for_symbol(
             timeframe=timeframe,
             builder_contract_version=_OPTION_SURFACE_FEATURE_CONTRACT_VERSION,
         )
+        target = dependencies.silver_month_path(
+            silver_root=silver_root,
+            market=output_dataset_type,
+            exchange=exchange,
+            symbol=normalized_symbol,
+            timeframe=timeframe,
+            month=month,
+        )
+        cached = load_current_manifest(
+            parquet_path=target,
+            expected_input_fingerprint=fingerprint,
+            expected_builder_contract_version=_OPTION_SURFACE_FEATURE_CONTRACT_VERSION,
+        )
+        if cached is not None:
+            processed_months.append(month)
+            rows_out += cached.row_count
+            continue
+        currency = _read_source(pl, currency_path, priority=1)
+        instrument = _read_source(pl, instrument_path, priority=2)
+        sources = [source for source in (currency, instrument) if source is not None]
+        if not sources:
+            continue
+        frame = pl.concat(sources, how="diagonal_relaxed")
+        rows_in += frame.height
+        feature, month_duplicates = _surface_frame(pl, frame, normalized_symbol)
+        duplicates_removed += month_duplicates
+        if feature.height == 0:
+            continue
         publish_partition_atomically(
             frame=feature,
             parquet_path=target,

@@ -325,6 +325,32 @@ def build_index_price_1m_feature_for_symbol(
         )
         if not path.exists():
             continue
+        source_schema = dict(pl.scan_parquet(str(path)).collect_schema())
+        fingerprint = source_fingerprint(
+            bronze_root=Path(silver_root),
+            source_files=[str(path)],
+            source_schema=source_schema,
+            exchange=exchange,
+            symbol=normalized_symbol,
+            timeframe=timeframe,
+            builder_contract_version=_INDEX_PRICE_FEATURE_CONTRACT_VERSION,
+        )
+        target = dependencies.silver_month_path(
+            silver_root=silver_root,
+            market=output_dataset_type,
+            exchange=exchange,
+            symbol=normalized_symbol,
+            timeframe=timeframe,
+            month=month,
+        )
+        cached = load_current_manifest(
+            parquet_path=target,
+            expected_input_fingerprint=fingerprint,
+            expected_builder_contract_version=_INDEX_PRICE_FEATURE_CONTRACT_VERSION,
+        )
+        if cached is not None:
+            agg_rows_out += cached.row_count
+            continue
         observed = pl.read_parquet(path).sort(["exchange", "symbol", "timestamp"])
         rows_in = observed.height
         if rows_in == 0:
@@ -370,24 +396,6 @@ def build_index_price_1m_feature_for_symbol(
             .select(SILVER_INDEX_PRICE_FEATURE_COLUMNS)
         )
 
-        target = dependencies.silver_month_path(
-            silver_root=silver_root,
-            market=output_dataset_type,
-            exchange=exchange,
-            symbol=normalized_symbol,
-            timeframe=timeframe,
-            month=month,
-        )
-        source_schema = dict(pl.scan_parquet(str(path)).collect_schema())
-        fingerprint = source_fingerprint(
-            bronze_root=Path(silver_root),
-            source_files=[str(path)],
-            source_schema=source_schema,
-            exchange=exchange,
-            symbol=normalized_symbol,
-            timeframe=timeframe,
-            builder_contract_version=_INDEX_PRICE_FEATURE_CONTRACT_VERSION,
-        )
         publish_partition_atomically(
             frame=feature,
             parquet_path=target,

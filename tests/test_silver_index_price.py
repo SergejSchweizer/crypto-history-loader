@@ -147,3 +147,11 @@ def test_build_index_price_observed_deduplicates_and_feature_forward_fills(tmp_p
     assert feature["index_price"].to_list() == [101.0, 101.0, 110.0]
     assert feature["index_price_is_observed"].to_list() == [True, False, True]
     assert feature["minutes_since_index_price_observation"].to_list() == [0, 1, 0]
+
+    repeated_feature_report = build_index_price_1m_feature_for_symbol(
+        silver_root=str(silver),
+        exchange="deribit",
+        symbol="BTC",
+    )
+    assert repeated_feature_report.rows_in == 0
+    assert repeated_feature_report.rows_out == 3

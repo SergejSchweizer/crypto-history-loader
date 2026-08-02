@@ -441,20 +441,6 @@ def build_l2_1m_feature_for_symbol(
         )
         if not source.exists():
             continue
-        observed = pl.read_parquet(source).select(SILVER_L2_OBSERVED_COLUMNS)
-        rows_in += observed.height
-        feature, month_duplicates = _feature_frame(pl, observed)
-        duplicates_removed += month_duplicates
-        if feature.height == 0:
-            continue
-        target = dependencies.silver_month_path(
-            silver_root=silver_root,
-            market=output_dataset_type,
-            exchange=exchange,
-            symbol=normalized_symbol,
-            timeframe=timeframe,
-            month=month,
-        )
         source_schema = dict(pl.scan_parquet(str(source)).collect_schema())
         fingerprint = source_fingerprint(
             bronze_root=Path(silver_root),
@@ -465,6 +451,29 @@ def build_l2_1m_feature_for_symbol(
             timeframe=timeframe,
             builder_contract_version=_L2_FEATURE_CONTRACT_VERSION,
         )
+        target = dependencies.silver_month_path(
+            silver_root=silver_root,
+            market=output_dataset_type,
+            exchange=exchange,
+            symbol=normalized_symbol,
+            timeframe=timeframe,
+            month=month,
+        )
+        cached = load_current_manifest(
+            parquet_path=target,
+            expected_input_fingerprint=fingerprint,
+            expected_builder_contract_version=_L2_FEATURE_CONTRACT_VERSION,
+        )
+        if cached is not None:
+            rows_out += cached.row_count
+            processed.append(month)
+            continue
+        observed = pl.read_parquet(source).select(SILVER_L2_OBSERVED_COLUMNS)
+        rows_in += observed.height
+        feature, month_duplicates = _feature_frame(pl, observed)
+        duplicates_removed += month_duplicates
+        if feature.height == 0:
+            continue
         publish_partition_atomically(
             frame=feature,
             parquet_path=target,
