@@ -2486,7 +2486,7 @@ Status: In Progress
 
 Updated: 2026-08-02
 
-PR: https://github.com/SergejSchweizer/crypto-history-loader/pull/164
+PR: https://github.com/SergejSchweizer/crypto-history-loader/pull/165
 
 Branch: `codex/pr59-gold-shared-timeframe-fanout`
 
