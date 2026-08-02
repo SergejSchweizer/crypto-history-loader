@@ -222,3 +222,27 @@ def test_parse_open_interest_row_preserves_raw_timestamp() -> None:
     )
     assert parsed["open_time"] == datetime(2026, 4, 28, 12, 8, 34, tzinfo=UTC)
     assert parsed["close_time"] == datetime(2026, 4, 28, 12, 8, 34, tzinfo=UTC)
+
+
+def test_fetch_open_interest_all_history_streams_pages_and_retries_legacy_collect_signature(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Chunked open-interest reads work with both current and legacy exchange adapters."""
+
+    timestamp = int(datetime(2026, 4, 28, 12, 0, tzinfo=UTC).timestamp() * 1000)
+
+    def _legacy_fetcher(**kwargs: object) -> list[dict[str, object]]:
+        if "collect" in kwargs:
+            raise TypeError("unexpected keyword argument 'collect'")
+        callback = kwargs["on_page"]
+        assert callable(callback)
+        callback([{"timestamp": timestamp, "open_interest": 10.0}])
+        return []
+
+    monkeypatch.setattr(deribit_open_interest, "fetch_open_interest_all", _legacy_fetcher)
+    chunks: list[object] = []
+    rows = open_interest.fetch_open_interest_all_history("deribit", "BTC", "1m", "perp", on_history_chunk=chunks.append)
+
+    assert rows == []
+    assert len(chunks) == 1
+    assert chunks[0][0].open_interest == 10.0  # type: ignore[index,union-attr]
