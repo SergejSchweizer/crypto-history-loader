@@ -25,6 +25,7 @@ from application.services import (
     gold_frames,
     gold_versioning,
 )
+from application.services.gold_input_fingerprint import gold_input_fingerprint
 
 _feature_hash = feature_metadata_service.feature_hash
 _feature_metadata = feature_metadata_service.feature_metadata
@@ -745,6 +746,33 @@ def build_gold_for_symbol(
     symbol = normalize_symbol(symbol)
     required = _dataset_requirements(dataset_id)
     optional = _dataset_optional_requirements(dataset_id)
+    required_artifacts = {
+        dataset_type: gold_frames.dataset_artifact_paths(
+            silver_root=silver_root,
+            exchange=exchange,
+            symbol=symbol,
+            dataset_type=dataset_type,
+            timeframe=timeframe,
+        )
+        for dataset_type, timeframe in required
+    }
+    optional_artifacts = {
+        dataset_type: gold_frames.dataset_artifact_paths(
+            silver_root=silver_root,
+            exchange=exchange,
+            symbol=symbol,
+            dataset_type=dataset_type,
+            timeframe=timeframe,
+        )
+        for dataset_type, timeframe in optional
+    }
+    input_fingerprint = gold_input_fingerprint(
+        root=Path(silver_root),
+        required_files=required_artifacts,
+        optional_files=optional_artifacts,
+        dataset_id=dataset_id,
+        contract_version="gold-input/v1",
+    )
     raw_by_dataset: dict[str, Any] = {}
     required_prepared_by_dataset: list[tuple[str, Any]] = []
     for dataset_type, timeframe in required:
@@ -847,6 +875,7 @@ def build_gold_for_symbol(
         source_summary["available"] = bool(optional_source_availability[dataset_type]["available"])
     source_data_hash = _json_payload_hash(
         {
+            "input_fingerprint": input_fingerprint,
             "source_silver_datasets": source_silver_datasets,
             "optional_source_availability": optional_source_availability,
         }
@@ -910,6 +939,7 @@ def build_gold_for_symbol(
         "dataset_version": resolved_version,
         "feature_set_hash": feature_set_hash,
         "source_data_hash": source_data_hash,
+        "input_fingerprint": input_fingerprint,
         "git_commit_hash": git_hash,
         "build_id": build_id,
         "contract_signature": contract_signature,
