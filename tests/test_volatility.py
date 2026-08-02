@@ -8,6 +8,7 @@ import pytest
 
 from ingestion.http_client import HttpClientError
 from ingestion.volatility import (
+    _canonical_currency,
     deribit_volatility_resolution,
     fetch_volatility_index_all_history,
     fetch_volatility_index_range,
@@ -115,3 +116,28 @@ def test_volatility_range_returns_empty_for_unsupported_market_and_http_error(mo
         lambda **_kwargs: (_ for _ in ()).throw(HttpClientError("offline")),
     )
     assert fetch_volatility_index_range("deribit", "BTC", "1m", 0, 1, "perp") == []
+
+
+@pytest.mark.parametrize(
+    ("symbol", "currency"),
+    [
+        ("BTC-PERPETUAL", "BTC"),
+        ("SOL_USDC-PERPETUAL", "SOL_USDC"),
+        ("SOL_USDC", "SOL"),
+        ("ETHUSDC", "ETH"),
+        ("BTCUSDT", "BTC"),
+        ("ETHUSD", "ETH"),
+        ("sol", "SOL"),
+    ],
+)
+def test_canonical_currency_normalizes_deribit_symbol_forms(symbol: str, currency: str) -> None:
+    """Volatility endpoints use the currency root for every supported instrument spelling."""
+
+    assert _canonical_currency(symbol) == currency
+
+
+def test_canonical_currency_rejects_empty_symbol() -> None:
+    """The exchange request cannot be constructed from an empty currency."""
+
+    with pytest.raises(ValueError, match="cannot be empty"):
+        _canonical_currency("  ")
