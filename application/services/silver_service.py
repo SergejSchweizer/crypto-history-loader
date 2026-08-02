@@ -79,6 +79,7 @@ from application.services.silver_partition_manifest import (
 
 _LOGGER = logging.getLogger(__name__)
 _OHLCV_BUILDER_CONTRACT_VERSION = "silver-ohlcv/v1"
+_TRADE_OBSERVED_CONTRACT_VERSION = "silver-trades-observed/v1"
 
 SILVER_FUNDING_FEATURE_COLUMNS = silver_funding.SILVER_FUNDING_FEATURE_COLUMNS
 SILVER_FUNDING_OBSERVED_COLUMNS = silver_funding.SILVER_FUNDING_OBSERVED_COLUMNS
@@ -952,12 +953,6 @@ def build_perps_trades_observed_for_symbol(
         )
         if not files:
             continue
-        frame = pl.scan_parquet(files).collect()
-        rows_in = frame.height
-        if rows_in == 0:
-            continue
-        observed, invalid_rows, cleaned_rows = _build_trade_observed_frame(pl, frame)
-        duplicates_removed = cleaned_rows - observed.height
         target = _silver_month_path(
             silver_root=silver_root,
             market=output_dataset_type,
@@ -966,8 +961,39 @@ def build_perps_trades_observed_for_symbol(
             timeframe=timeframe,
             month=month,
         )
-        target.parent.mkdir(parents=True, exist_ok=True)
-        observed.write_parquet(target)
+        source_schema = dict(pl.scan_parquet(files).collect_schema())
+        fingerprint = source_fingerprint(
+            bronze_root=Path(bronze_root),
+            source_files=files,
+            source_schema=source_schema,
+            exchange=exchange,
+            symbol=symbol,
+            timeframe=timeframe,
+            builder_contract_version=_TRADE_OBSERVED_CONTRACT_VERSION,
+        )
+        cached = load_current_manifest(
+            parquet_path=target,
+            expected_input_fingerprint=fingerprint,
+            expected_builder_contract_version=_TRADE_OBSERVED_CONTRACT_VERSION,
+        )
+        if cached is not None:
+            accumulator.record_month(rows_in=0, rows_out=cached.row_count)
+            continue
+        frame = pl.scan_parquet(files).collect()
+        rows_in = frame.height
+        if rows_in == 0:
+            continue
+        observed, invalid_rows, cleaned_rows = _build_trade_observed_frame(pl, frame)
+        duplicates_removed = cleaned_rows - observed.height
+        publish_partition_atomically(
+            frame=observed,
+            parquet_path=target,
+            input_fingerprint=fingerprint,
+            source_schema=source_schema,
+            sort_keys=("trade_time",),
+            deduplication_keys=("exchange", "instrument_type", "symbol", "trade_time", "trade_id"),
+            builder_contract_version=_TRADE_OBSERVED_CONTRACT_VERSION,
+        )
 
         month_min = observed.select(pl.col("trade_time").min()).item()
         month_max = observed.select(pl.col("trade_time").max()).item()
