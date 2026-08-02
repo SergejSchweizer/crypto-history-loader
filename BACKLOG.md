@@ -2348,7 +2348,7 @@ Status: In Progress
 
 Updated: 2026-08-02
 
-PR: TBD
+PR: https://github.com/SergejSchweizer/crypto-history-loader/pull/160
 
 Branch: `codex/pr55-silver-source-fingerprint-manifests`
 
