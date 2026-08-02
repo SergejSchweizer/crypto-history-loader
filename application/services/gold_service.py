@@ -886,6 +886,11 @@ def build_gold_for_symbol(
         )
         for dataset_type, timeframe in optional
     }
+    for dataset_type, _timeframe in required:
+        if not required_artifacts[dataset_type]:
+            # Preserve the established Gold error contract while failing before any
+            # fingerprint or partial artifact can make a missing source look valid.
+            raise ValueError(f"Missing silver dataset for symbol={symbol}: {dataset_type}")
     feature_configuration: dict[str, object] = {
         "strategy_feature_lookbacks": _strategy_feature_lookbacks(dataset_id),
         "prediction_target_definitions": _prediction_target_definitions(dataset_id),
