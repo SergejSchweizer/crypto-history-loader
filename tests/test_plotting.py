@@ -227,7 +227,7 @@ def test_feature_profile_handles_dependency_and_axis_edge_cases(monkeypatch: pyt
     real_import = builtins.__import__
 
     def _missing_matplotlib(name: str, *args: object, **kwargs: object) -> object:
-        if name.startswith("matplotlib"):
+        if name.startswith("matplotlib") or name == "polars":
             raise ImportError("missing matplotlib")
         return real_import(name, *args, **kwargs)
 
@@ -242,8 +242,9 @@ def test_feature_profile_handles_dependency_and_axis_edge_cases(monkeypatch: pyt
     import matplotlib.ticker as mticker
 
     for hours in (1, 12, 72, 24 * 30):
-        timestamps = [datetime(2026, 1, 1, tzinfo=UTC), datetime(2026, 1, 1, tzinfo=UTC)]
-        timestamps[1] = timestamps[0] + __import__("datetime").timedelta(hours=hours)
+        start = datetime(2026, 1, 1, tzinfo=UTC)
+        end = start + __import__("datetime").timedelta(hours=hours)
+        timestamps = [start, start + (end - start) / 2, end]
         major, minor, formatter = profile._time_axis_style(mdates, mticker, timestamps)
         assert major is not None
         assert minor is not None
