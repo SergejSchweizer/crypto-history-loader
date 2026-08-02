@@ -41,7 +41,7 @@ Status: In Progress
 
 Updated: YYYY-MM-DD
 
-PR: https://github.com/SergejSchweizer/crypto-history-loader/pull/170
+PR: TBD
 
 Branch: `codex/prxx-short-ticket-title`
 
@@ -2605,7 +2605,7 @@ Status: In Progress
 
 Updated: 2026-08-02
 
-PR: TBD
+PR: https://github.com/SergejSchweizer/crypto-history-loader/pull/170
 
 Branch: `codex/pr63-require-pr-identifiers`
 
