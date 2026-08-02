@@ -270,6 +270,81 @@ class GoldBuildReport:
         }
 
 
+@dataclass(frozen=True)
+class GoldTimeframeFanout:
+    """Validated M1 source and deterministic derived frames for one Gold symbol."""
+
+    source_dataset_id: str
+    source_frame: Any
+    source_parquet_path: Path
+    source_manifest: dict[str, object]
+    frames_by_dataset_id: dict[str, Any]
+
+
+def prepare_gold_timeframe_fanout(
+    *,
+    gold_root: str,
+    exchange: str,
+    symbol: str,
+    dataset_ids: list[str],
+) -> GoldTimeframeFanout:
+    """Read one M1 Gold source and derive all requested sibling timeframes once.
+
+    Every requested dataset must share the same declared M1 source.  Keeping this
+    preparation separate from publication lets the caller validate the complete
+    sibling set before it exposes any child artifact.
+
+    Args:
+        gold_root: Gold lake root containing the published M1 source artifact.
+        exchange: Exchange partition identifier.
+        symbol: Canonical or exchange-specific symbol to normalize.
+        dataset_ids: Derived timeframe dataset IDs to prepare.
+
+    Returns:
+        Shared source lineage and one derived frame per requested dataset ID.
+
+    Raises:
+        ValueError: If no dataset IDs are supplied or their source lineage differs.
+    """
+
+    if not dataset_ids:
+        raise ValueError("Gold timeframe fan-out requires at least one derived dataset ID")
+    source_ids: set[str] = set()
+    intervals: dict[str, str] = {}
+    for dataset_id in sorted(set(dataset_ids)):
+        source_dataset_id = _history_full_source_dataset_id(dataset_id)
+        interval = _history_full_derived_interval(dataset_id)
+        if source_dataset_id is None or interval is None:
+            raise ValueError(f"Unsupported derived history_full dataset_id: {dataset_id}")
+        source_ids.add(source_dataset_id)
+        intervals[dataset_id] = interval
+    if len(source_ids) != 1:
+        raise ValueError("Gold timeframe fan-out datasets must share one M1 source")
+
+    normalized_symbol = normalize_symbol(symbol)
+    source_dataset_id = next(iter(source_ids))
+    source_frame, source_parquet_path, source_manifest = _read_latest_gold_dataset_artifact(
+        gold_root=gold_root,
+        dataset_id=source_dataset_id,
+        exchange=exchange,
+        symbol=normalized_symbol,
+    )
+    pl = _require_polars()
+    frames_by_dataset_id = {
+        dataset_id: gold_frames.resample_history_full_frame(pl, source_frame, intervals[dataset_id])
+        for dataset_id in sorted(intervals)
+    }
+    if any(frame.height == 0 for frame in frames_by_dataset_id.values()):
+        raise ValueError(f"Gold timeframe fan-out produced zero rows for symbol={normalized_symbol}")
+    return GoldTimeframeFanout(
+        source_dataset_id=source_dataset_id,
+        source_frame=source_frame,
+        source_parquet_path=source_parquet_path,
+        source_manifest=source_manifest,
+        frames_by_dataset_id=frames_by_dataset_id,
+    )
+
+
 def _existing_gold_report_if_unchanged(
     *,
     parquet_path: Path,
@@ -635,6 +710,8 @@ def _build_history_full_derived_for_symbol(
     auto_version: bool,
     version_base: str,
     keep_last_versions: int,
+    prepared_fanout: GoldTimeframeFanout | None = None,
+    publication_requests: list[gold_publication.GoldArtifactPublishRequest] | None = None,
 ) -> GoldBuildReport:
     """Build a coarser history-full Gold dataset from the canonical minute artifact."""
 
@@ -644,15 +721,27 @@ def _build_history_full_derived_for_symbol(
     source_dataset_id = _history_full_source_dataset_id(dataset_id)
     if source_dataset_id is None:
         raise ValueError(f"Unsupported derived history_full dataset_id: {dataset_id}")
-    pl = _require_polars()
     symbol = normalize_symbol(symbol)
-    source_frame, source_parquet_path, source_manifest = _read_latest_gold_dataset_artifact(
-        gold_root=gold_root,
-        dataset_id=source_dataset_id,
-        exchange=exchange,
-        symbol=symbol,
-    )
-    merged = gold_frames.resample_history_full_frame(pl, source_frame, interval)
+    if prepared_fanout is None:
+        source_frame, source_parquet_path, source_manifest = _read_latest_gold_dataset_artifact(
+            gold_root=gold_root,
+            dataset_id=source_dataset_id,
+            exchange=exchange,
+            symbol=symbol,
+        )
+        pl = _require_polars()
+        merged = gold_frames.resample_history_full_frame(pl, source_frame, interval)
+    else:
+        if prepared_fanout.source_dataset_id != source_dataset_id:
+            raise ValueError("Gold timeframe fan-out source lineage does not match derived dataset")
+        source_frame = prepared_fanout.source_frame
+        source_parquet_path = prepared_fanout.source_parquet_path
+        source_manifest = prepared_fanout.source_manifest
+        try:
+            merged = prepared_fanout.frames_by_dataset_id[dataset_id]
+        except KeyError as exc:
+            raise ValueError(f"Gold timeframe fan-out did not prepare dataset_id={dataset_id}") from exc
+        pl = _require_polars()
     if merged.height == 0:
         raise ValueError(f"Gold build produced zero rows for symbol={symbol} dataset_id={dataset_id}")
 
@@ -784,27 +873,37 @@ def _build_history_full_derived_for_symbol(
         )
     manifest_payload["plot_generated"] = True
     manifest_path = artifact_dir / f"{stem}.json"
-    gold_publication.publish_gold_artifact_atomically(
+    publish_request = gold_publication.GoldArtifactPublishRequest(
         frame=merged,
         parquet_path=parquet_path,
         manifest_path=manifest_path,
         manifest_payload=manifest_payload,
     )
+    if publication_requests is None:
+        gold_publication.publish_gold_artifact_atomically(
+            frame=merged,
+            parquet_path=parquet_path,
+            manifest_path=manifest_path,
+            manifest_payload=manifest_payload,
+        )
+    else:
+        publication_requests.append(publish_request)
     written_manifest: str | None = str(manifest_path.resolve())
-    _prune_gold_versions(
-        gold_root=root,
-        dataset_id=dataset_id,
-        exchange=exchange,
-        symbol=symbol,
-        keep_last_versions=keep_last_versions,
-    )
-    _prune_gold_artifacts(
-        gold_root=root,
-        dataset_id=dataset_id,
-        exchange=exchange,
-        symbol=symbol,
-        keep_last_versions=keep_last_versions,
-    )
+    if publication_requests is None:
+        _prune_gold_versions(
+            gold_root=root,
+            dataset_id=dataset_id,
+            exchange=exchange,
+            symbol=symbol,
+            keep_last_versions=keep_last_versions,
+        )
+        _prune_gold_artifacts(
+            gold_root=root,
+            dataset_id=dataset_id,
+            exchange=exchange,
+            symbol=symbol,
+            keep_last_versions=keep_last_versions,
+        )
 
     return GoldBuildReport(
         exchange=exchange,
@@ -826,6 +925,81 @@ def _build_history_full_derived_for_symbol(
         version_bump_reason=version_bump_reason,
         previous_version=previous_version,
     )
+
+
+def build_gold_timeframe_fanout_for_symbol(
+    *,
+    gold_root: str,
+    exchange: str,
+    symbol: str,
+    dataset_ids: list[str],
+    dataset_version: str = "v1.0.0",
+    auto_version: bool = False,
+    version_base: str = "v1.0.0",
+    keep_last_versions: int = GOLD_RETENTION_KEEP_VERSIONS,
+) -> list[GoldBuildReport]:
+    """Build and atomically publish sibling Gold timeframes from one validated M1 source.
+
+    Args:
+        gold_root: Gold lake root containing the source and derived artifacts.
+        exchange: Exchange partition identifier.
+        symbol: Asset symbol whose siblings are built.
+        dataset_ids: Derived sibling dataset IDs sharing one M1 source.
+        dataset_version: Explicit semantic version when automatic versioning is disabled.
+        auto_version: Whether to derive each sibling version from its latest manifest.
+        version_base: Semantic version for each sibling's initial automatic publication.
+        keep_last_versions: Fixed Gold retention count.
+
+    Returns:
+        Reports for all published sibling artifacts in deterministic dataset-ID order.
+
+    Raises:
+        ValueError: If the sibling set is invalid or any prepared frame is empty.
+    """
+
+    keep_last_versions = validate_gold_retention_keep_versions(keep_last_versions)
+    normalized_symbol = normalize_symbol(symbol)
+    ordered_dataset_ids = sorted(set(dataset_ids))
+    fanout = prepare_gold_timeframe_fanout(
+        gold_root=gold_root,
+        exchange=exchange,
+        symbol=normalized_symbol,
+        dataset_ids=ordered_dataset_ids,
+    )
+    publication_requests: list[gold_publication.GoldArtifactPublishRequest] = []
+    reports = [
+        _build_history_full_derived_for_symbol(
+            gold_root=gold_root,
+            exchange=exchange,
+            symbol=normalized_symbol,
+            dataset_id=dataset_id,
+            dataset_version=dataset_version,
+            auto_version=auto_version,
+            version_base=version_base,
+            keep_last_versions=keep_last_versions,
+            prepared_fanout=fanout,
+            publication_requests=publication_requests,
+        )
+        for dataset_id in ordered_dataset_ids
+    ]
+    gold_publication.publish_gold_artifacts_atomically(requests=publication_requests)
+    root = Path(gold_root)
+    for dataset_id in ordered_dataset_ids:
+        _prune_gold_versions(
+            gold_root=root,
+            dataset_id=dataset_id,
+            exchange=exchange,
+            symbol=normalized_symbol,
+            keep_last_versions=keep_last_versions,
+        )
+        _prune_gold_artifacts(
+            gold_root=root,
+            dataset_id=dataset_id,
+            exchange=exchange,
+            symbol=normalized_symbol,
+            keep_last_versions=keep_last_versions,
+        )
+    return reports
 
 
 def build_gold_for_symbol(

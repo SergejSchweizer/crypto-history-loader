@@ -2449,7 +2449,7 @@ Acceptance:
 
 ### PR-58: Gold Input Fingerprints And Incremental M1 Publication
 
-Status: In Progress
+Status: Merged
 
 Updated: 2026-08-02
 
@@ -2482,11 +2482,11 @@ Acceptance:
 
 ### PR-59: Gold Shared M1 Preparation And Multi-Timeframe Fan-Out
 
-Status: Planned
+Status: In Progress
 
 Updated: 2026-08-02
 
-PR: TBD
+PR: https://github.com/SergejSchweizer/crypto-history-loader/pull/165
 
 Branch: `codex/pr59-gold-shared-timeframe-fanout`
 
