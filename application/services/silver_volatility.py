@@ -207,7 +207,7 @@ def build_volatility_snapshot_observed_for_symbol(
             silver_root=silver_root,
             market=output_dataset_type,
             exchange=exchange,
-            symbol=symbol,
+            symbol=normalized_symbol,
             timeframe=timeframe,
             month=month,
         )
@@ -276,16 +276,15 @@ def build_volatility_snapshot_observed_for_symbol(
         )
         duplicates_removed = cleaned.height - observed.height
 
-        target = dependencies.silver_month_path(
-            silver_root=silver_root,
-            market=output_dataset_type,
-            exchange=exchange,
-            symbol=normalized_symbol,
-            timeframe=timeframe,
-            month=month,
+        publish_partition_atomically(
+            frame=observed,
+            parquet_path=target,
+            input_fingerprint=fingerprint,
+            source_schema=source_schema,
+            sort_keys=("exchange", "symbol", "timestamp"),
+            deduplication_keys=("exchange", "symbol", "dataset_type", "timestamp"),
+            builder_contract_version=_VOLATILITY_OBSERVED_CONTRACT_VERSION,
         )
-        target.parent.mkdir(parents=True, exist_ok=True)
-        observed.write_parquet(target)
 
         month_min = observed.select(pl.col("timestamp").min()).item()
         month_max = observed.select(pl.col("timestamp").max()).item()
