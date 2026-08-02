@@ -8,7 +8,7 @@ from dataclasses import dataclass
 
 from application.services.silver_incremental_planner import plan_incremental_months
 
-_MONTH_SEGMENT = re.compile(r"(?:^|/)month=(\d{4}-\d{2})(?:/|$)")
+_MONTH_SEGMENT = re.compile(r"month=(\d{4}-\d{2})(?:/|$)")
 _MONTH_FILENAME = re.compile(r"_(\d{4})[_-](\d{2})\.parquet$")
 
 

@@ -336,10 +336,13 @@ def _unchanged_gold_report_from_manifest(
     dataset_id: str,
     input_fingerprint: str,
     manifest_payload: dict[str, object] | None,
+    expected_dataset_version: str | None,
 ) -> GoldBuildReport | None:
     """Resolve a valid unchanged Gold artifact before expensive frame preparation."""
 
     if manifest_payload is None or manifest_payload.get("input_fingerprint") != input_fingerprint:
+        return None
+    if expected_dataset_version is not None and manifest_payload.get("dataset_version") != expected_dataset_version:
         return None
     feature_set_hash = manifest_payload.get("feature_set_hash")
     source_data_hash = manifest_payload.get("source_data_hash")
@@ -909,6 +912,7 @@ def build_gold_for_symbol(
         dataset_id=dataset_id,
         input_fingerprint=input_fingerprint,
         manifest_payload=prior_manifest_for_plan,
+        expected_dataset_version=None if auto_version else dataset_version,
     )
     if unchanged_report is not None:
         return unchanged_report
