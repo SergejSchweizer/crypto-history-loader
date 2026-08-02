@@ -86,3 +86,56 @@ def _point(*, open_time: datetime) -> VolatilityPoint:
         source_endpoint="public_get_volatility_index_data",
         dataset_type="volatility_index_data",
     )
+
+
+def test_fetch_symbol_volatility_rejects_non_perpetual_and_invalid_tail_setup() -> None:
+    """Volatility fetches are perpetual-only and tail mode requires a lake cursor."""
+
+    common = cast(
+        Any,
+        {
+            "exchange": "deribit",
+            "symbol": "BTC",
+            "timeframe": "1m",
+            "lake_root": "lake",
+            "dataset_type": "volatility_index_data",
+            "history_fetcher": lambda **_kwargs: [],
+            "range_fetcher": lambda **_kwargs: [],
+        },
+    )
+    assert fetch_symbol_volatility(market="spot_ohlcv", tail_delta_only=False, **common) == []
+    with pytest.raises(ValueError, match="latest_open_time_reader"):
+        fetch_symbol_volatility(market="perp", tail_delta_only=True, **common)
+
+
+def test_fetch_symbol_volatility_tail_bootstrap_and_bounds() -> None:
+    """Tail bootstrap honors an explicit bound and returns no rows for a future bound."""
+
+    start = int(datetime(2026, 4, 27, 10, 0, tzinfo=UTC).timestamp() * 1000)
+    end = start + 60_000
+    calls: list[tuple[int, int]] = []
+
+    def fetcher(**kwargs: object) -> list[VolatilityPoint]:
+        calls.append((int(cast(Any, kwargs["start_open_ms"])), int(cast(Any, kwargs["end_open_ms"]))))
+        return [_point(open_time=datetime.fromtimestamp(start / 1000, tz=UTC))]
+
+    kwargs = {
+        "exchange": "deribit",
+        "market": "perp",
+        "symbol": "BTC",
+        "timeframe": "1m",
+        "lake_root": "lake",
+        "dataset_type": "volatility_index_data",
+        "latest_open_time_reader": lambda **_kwargs: None,
+        "history_fetcher": lambda **_kwargs: pytest.fail("history should not be used"),
+        "range_fetcher": fetcher,
+        "timeframe_normalizer": lambda **_kwargs: "1m",
+        "interval_ms_resolver": lambda **_kwargs: 60_000,
+        "now_open_resolver": lambda **_kwargs: end,
+        "tail_delta_only": True,
+        "start_open_ms_bound": start,
+    }
+    expected = [_point(open_time=datetime.fromtimestamp(start / 1000, tz=UTC))]
+    assert fetch_symbol_volatility(**cast(Any, kwargs)) == expected
+    assert calls == [(start, end)]
+    assert fetch_symbol_volatility(**cast(Any, {**kwargs, "start_open_ms_bound": end + 60_000})) == []
