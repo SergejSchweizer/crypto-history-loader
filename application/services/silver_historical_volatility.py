@@ -4,9 +4,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Protocol
 
 from application.dataset_contracts import SILVER_HISTORICAL_VOLATILITY_OBSERVED_COLUMNS
+from application.services.silver_partition_manifest import (
+    load_current_manifest,
+    publish_partition_atomically,
+    source_fingerprint,
+)
+
+_HISTORICAL_VOLATILITY_CONTRACT_VERSION = "silver-historical-volatility-observed/v1"
 
 
 class SilverReportFactory(Protocol):
@@ -89,6 +97,33 @@ def build_historical_volatility_observed_for_symbol(
         )
         if not files:
             continue
+        target = dependencies.silver_month_path(
+            silver_root=silver_root,
+            market=output_dataset_type,
+            exchange=exchange,
+            symbol=normalized_symbol,
+            timeframe=timeframe,
+            month=month,
+        )
+        source_schema = dict(pl.scan_parquet(files).collect_schema())
+        fingerprint = source_fingerprint(
+            bronze_root=Path(bronze_root),
+            source_files=files,
+            source_schema=source_schema,
+            exchange=exchange,
+            symbol=normalized_symbol,
+            timeframe=timeframe,
+            builder_contract_version=_HISTORICAL_VOLATILITY_CONTRACT_VERSION,
+        )
+        cached = load_current_manifest(
+            parquet_path=target,
+            expected_input_fingerprint=fingerprint,
+            expected_builder_contract_version=_HISTORICAL_VOLATILITY_CONTRACT_VERSION,
+        )
+        if cached is not None:
+            processed.append(month)
+            rows_out += cached.row_count
+            continue
         frame = pl.scan_parquet(files).collect()
         rows_in += frame.height
         typed = frame.with_columns(
@@ -123,16 +158,15 @@ def build_historical_volatility_observed_for_symbol(
         duplicates_removed += cleaned.height - observed.height
         if observed.height == 0:
             continue
-        target = dependencies.silver_month_path(
-            silver_root=silver_root,
-            market=output_dataset_type,
-            exchange=exchange,
-            symbol=normalized_symbol,
-            timeframe=timeframe,
-            month=month,
+        publish_partition_atomically(
+            frame=observed,
+            parquet_path=target,
+            input_fingerprint=fingerprint,
+            source_schema=source_schema,
+            sort_keys=("exchange", "symbol", "timestamp"),
+            deduplication_keys=("exchange", "symbol", "timestamp"),
+            builder_contract_version=_HISTORICAL_VOLATILITY_CONTRACT_VERSION,
         )
-        target.parent.mkdir(parents=True, exist_ok=True)
-        observed.write_parquet(target)
         processed.append(month)
         rows_out += observed.height
         month_min = observed.select(pl.col("timestamp").min()).item()
