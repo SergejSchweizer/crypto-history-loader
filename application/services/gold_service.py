@@ -23,6 +23,7 @@ from application.services import (
     feature_plot_service,
     gold_audit,
     gold_frames,
+    gold_publication,
     gold_versioning,
 )
 from application.services.gold_input_fingerprint import gold_input_fingerprint
@@ -657,10 +658,9 @@ def _build_history_full_derived_for_symbol(
         / f"exchange={exchange}"
         / f"symbol={symbol}"
     )
-    artifact_dir.mkdir(parents=True, exist_ok=True)
     parquet_path = artifact_dir / f"{stem}.parquet"
-    merged.write_parquet(parquet_path)
     plot_path = artifact_dir / f"{stem}.png"
+    artifact_dir.mkdir(parents=True, exist_ok=True)
     written_plot = _write_feature_distribution_plot(merged, plot_path, normalize_y=False)
     if written_plot is None:
         raise ValueError(
@@ -669,7 +669,12 @@ def _build_history_full_derived_for_symbol(
         )
     manifest_payload["plot_generated"] = True
     manifest_path = artifact_dir / f"{stem}.json"
-    manifest_path.write_text(json.dumps(manifest_payload, indent=2), encoding="utf-8")
+    gold_publication.publish_gold_artifact_atomically(
+        frame=merged,
+        parquet_path=parquet_path,
+        manifest_path=manifest_path,
+        manifest_payload=manifest_payload,
+    )
     written_manifest: str | None = str(manifest_path.resolve())
     _prune_gold_versions(
         gold_root=root,
@@ -987,13 +992,12 @@ def build_gold_for_symbol(
         / f"exchange={exchange}"
         / f"symbol={symbol}"
     )
-    artifact_dir.mkdir(parents=True, exist_ok=True)
     parquet_path = artifact_dir / f"{stem}.parquet"
-    merged.write_parquet(parquet_path)
     # Gold policy: always emit plot + manifest for every dataset artifact.
     _ = manifest
     _ = plot
     plot_path = artifact_dir / f"{stem}.png"
+    artifact_dir.mkdir(parents=True, exist_ok=True)
     written_plot = _write_feature_distribution_plot(merged, plot_path, normalize_y=False)
     if written_plot is None:
         raise ValueError(
@@ -1002,7 +1006,12 @@ def build_gold_for_symbol(
         )
     manifest_payload["plot_generated"] = True
     manifest_path = artifact_dir / f"{stem}.json"
-    manifest_path.write_text(json.dumps(manifest_payload, indent=2), encoding="utf-8")
+    gold_publication.publish_gold_artifact_atomically(
+        frame=merged,
+        parquet_path=parquet_path,
+        manifest_path=manifest_path,
+        manifest_payload=manifest_payload,
+    )
     written_manifest: str | None = str(manifest_path.resolve())
     _prune_gold_versions(
         gold_root=root,
