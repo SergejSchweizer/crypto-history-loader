@@ -2552,7 +2552,7 @@ Status: In Progress
 
 Updated: 2026-08-02
 
-PR: TBD
+PR: https://github.com/SergejSchweizer/crypto-history-loader/pull/168
 
 Branch: `codex/pr61-incremental-medallion-orchestrator`
 
