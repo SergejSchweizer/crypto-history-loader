@@ -16,6 +16,7 @@ from application.services.silver_partition_manifest import (
 )
 
 _OPEN_INTEREST_OBSERVED_CONTRACT_VERSION = "silver-open-interest-observed/v1"
+_OPEN_INTEREST_FEATURE_CONTRACT_VERSION = "silver-open-interest-feature/v1"
 
 __all__ = [
     "OpenInterestDependencies",
@@ -328,8 +329,25 @@ def build_open_interest_1m_feature_for_symbol(
             symbol=symbol,
             month=month,
         )
-        target.parent.mkdir(parents=True, exist_ok=True)
-        feature.write_parquet(target)
+        feature_contract = f"{_OPEN_INTEREST_FEATURE_CONTRACT_VERSION}:{cutoff_time.isoformat()}"
+        feature_fingerprint = source_fingerprint(
+            bronze_root=Path(silver_root),
+            source_files=[str(month_file)],
+            source_schema=dict(observed.schema),
+            exchange=exchange,
+            symbol=symbol,
+            timeframe=observed_timeframe,
+            builder_contract_version=feature_contract,
+        )
+        publish_partition_atomically(
+            frame=feature,
+            parquet_path=target,
+            input_fingerprint=feature_fingerprint,
+            source_schema=dict(observed.schema),
+            sort_keys=("timestamp_m1",),
+            deduplication_keys=("exchange", "symbol", "timestamp_m1"),
+            builder_contract_version=feature_contract,
+        )
 
         month_min = feature.select(pl.col("timestamp_m1").min()).item()
         month_max = feature.select(pl.col("timestamp_m1").max()).item()
