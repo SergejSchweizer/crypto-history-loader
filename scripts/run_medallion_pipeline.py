@@ -378,7 +378,7 @@ def main() -> int:
 
     config_data = _load_yaml(config_path)
     steps = _build_steps(main_path=main_path, config_path=config_path, config_data=config_data)
-    if args.dry_run:
+    if getattr(args, "dry_run", False):
         bronze_step = next((step for step in steps if step.name == "bronze"), None)
         symbols = _option_values(bronze_step.args, "--symbols") if bronze_step is not None else []
         gold_root = repo_root / "lake" / "gold"
