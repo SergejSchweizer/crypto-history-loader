@@ -912,9 +912,14 @@ def build_gold_for_symbol(
         if isinstance(prior_manifest_for_plan, dict)
         else None
     )
+    previous_artifact_fingerprints: dict[str, str] | None = None
+    if isinstance(prior_artifact_fingerprints, dict) and all(
+        isinstance(key, str) and isinstance(value, str) for key, value in prior_artifact_fingerprints.items()
+    ):
+        previous_artifact_fingerprints = {str(key): str(value) for key, value in prior_artifact_fingerprints.items()}
     incremental_m1_plan = plan_gold_m1_incremental_months(
         current_artifacts=input_artifact_fingerprints,
-        previous_artifacts=prior_artifact_fingerprints if isinstance(prior_artifact_fingerprints, dict) else None,
+        previous_artifacts=previous_artifact_fingerprints,
         feature_lookback_minutes=_feature_lookback_minutes(dataset_id),
     )
     raw_by_dataset: dict[str, Any] = {}
