@@ -2581,6 +2581,24 @@ Acceptance:
 - A5 (verifies R5): Freshness audit tests detect missing `m1`, `m5`, `m30`, or `h1` artifacts and report their source lineage.
 - A6 (verifies R6): The ticket contains the exact clean status output and final PR URL before merge.
 
+### PR-62: Backlog PR Branch Naming Policy
+
+Status: In Progress
+
+Updated: 2026-08-02
+
+PR: https://github.com/SergejSchweizer/crypto-history-loader/pull/169
+
+Branch: `codex/pr62-enforce-pr-branch-names`
+
+Depends on: None
+
+Description:
+- R1: Require every new working branch to include its Backlog PR number in a deterministic lowercase form.
+
+Acceptance:
+- A1 (verifies R1): `AGENTS.md` defines the `codex/pr<backlog-number>-...` convention and examples follow it.
+
 ## Completion Definition
 
 The stack is complete when:
