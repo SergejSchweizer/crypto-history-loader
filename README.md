@@ -213,6 +213,14 @@ read back from a previously materialized `gold.live.full.m1` artifact.
 `gold.live.extended.m5`, `gold.live.extended.m30`, and `gold.live.extended.h1`
 are derived from the canonical `gold.live.extended.m1` artifact.
 
+Contract-level live option ticker snapshots are aggregated to one minute-level
+surface row before Gold joins. Tick and daily metadata sources are likewise
+deduplicated to one `(timestamp_m1, exchange, symbol)` row, preventing duplicate-key
+joins and keeping live Gold builds bounded in memory.
+Raw Silver L2 snapshots are normalized from their source `timestamp` contract into the
+Gold minute-level L2 feature contract; perpetual snapshots remain one row per minute,
+while option snapshots are aggregated across contracts before the join.
+
 The canonical live family is `gold.live.full.m1` with derived `m5`, `m30`, and `h1` datasets.
 The extended live family is `gold.live.extended.m1` with derived `m5`, `m30`, and `h1` datasets.
 When several Gold datasets are requested together, the CLI completes each source dataset before

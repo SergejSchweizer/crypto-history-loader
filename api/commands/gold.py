@@ -117,6 +117,28 @@ def _resolve_dataset_ids(dataset_id: str | None) -> list[str]:
     return [dataset_id] if dataset_id else list(supported_gold_dataset_ids())
 
 
+def _order_dataset_ids_with_dependencies(
+    dataset_ids: list[str],
+    dependencies: dict[str, str],
+) -> list[str]:
+    """Order Gold datasets so every derived dataset follows its source."""
+
+    ordered: list[str] = []
+    pending = list(dict.fromkeys(dataset_ids))
+    while pending:
+        progressed = False
+        for selected_dataset_id in pending.copy():
+            source_dataset_id = dependencies.get(selected_dataset_id)
+            if source_dataset_id is not None and source_dataset_id not in ordered:
+                continue
+            ordered.append(selected_dataset_id)
+            pending.remove(selected_dataset_id)
+            progressed = True
+        if not progressed:
+            raise ValueError(f"Cyclic or unresolved Gold dataset dependency: {pending}")
+    return ordered
+
+
 def _validate_version_args(*, auto_version: bool, dataset_version: str, version_base: str) -> None:
     """Validate version arguments against semantic version policy."""
 
@@ -175,7 +197,11 @@ def run_gold_build(args: argparse.Namespace, logger: logging.Logger) -> None:
     effective_dataset_ids = list(dataset_ids)
     for base_dataset_id in sorted(base_dataset_ids):
         if base_dataset_id not in effective_dataset_ids:
-            effective_dataset_ids.insert(0, base_dataset_id)
+            effective_dataset_ids.append(base_dataset_id)
+    effective_dataset_ids = _order_dataset_ids_with_dependencies(
+        effective_dataset_ids,
+        _HISTORY_FULL_DERIVED_BASE_DATASET_IDS,
+    )
     logger.info("Gold build schedule dataset_symbols=%s", schedule)
     _validate_version_args(auto_version=auto_version, dataset_version=dataset_version, version_base=version_base)
 
