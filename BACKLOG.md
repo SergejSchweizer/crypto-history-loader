@@ -2344,7 +2344,7 @@ Acceptance:
 
 ### PR-55: Silver Source Fingerprint Manifests And No-Op Detection
 
-Status: In Progress
+Status: Ready
 
 Updated: 2026-08-02
 
@@ -2374,6 +2374,12 @@ Acceptance:
 - A4 (verifies R4): Tests prove legacy and corrupt manifests trigger exactly one rebuild rather than silent skipping.
 - A5 (verifies R5): Failure-injection tests prove the previous valid artifact remains readable after data or manifest publication failure.
 - A6 (verifies R6): The ticket contains the exact clean status output and final PR URL before merge.
+
+Publication evidence:
+- Pull request: https://github.com/SergejSchweizer/crypto-history-loader/pull/160
+- `git status --short`: *(empty)*
+- GitHub required checks: `pr-lint-quality`, `pr-typing-quality`, all four unit shards, all four integration shards,
+  `pr-coverage-95`, and `pr-quality` passed on 2026-08-02.
 
 ### PR-56: Silver Incremental Monthly Partitions And Lookback Windows
 
