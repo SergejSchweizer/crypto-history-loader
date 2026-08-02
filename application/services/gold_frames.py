@@ -245,6 +245,32 @@ def validate_or_filter_l2_quality(pl: Any, frame: Any, mode: str) -> tuple[Any, 
     return filtered, {"l2_invalid_rows_found": invalid_rows, "l2_invalid_rows_dropped": dropped}
 
 
+def dataset_artifact_paths(
+    *,
+    silver_root: str,
+    exchange: str,
+    symbol: str,
+    dataset_type: str,
+    timeframe: str,
+) -> list[Path]:
+    """Return ordered Silver parquet artifacts for one normalized Gold input."""
+
+    candidate_files: list[Path] = []
+    for dataset_root in _silver_dataset_roots(silver_root=silver_root, exchange=exchange, dataset_type=dataset_type):
+        symbol_dirs = sorted(dataset_root.glob(f"symbol=*/timeframe={timeframe}"))
+        for sym_dir in symbol_dirs:
+            sym_segment = sym_dir.parent.name
+            if not sym_segment.startswith("symbol="):
+                continue
+            raw_symbol = sym_segment.split("=", 1)[1]
+            if normalize_symbol(raw_symbol) != symbol:
+                continue
+            candidate_files.extend(path for path in sorted(sym_dir.glob("**/*.parquet")) if path.is_file())
+        if candidate_files:
+            break
+    return sorted(candidate_files, key=lambda path: (path.stat().st_mtime, str(path)))
+
+
 def read_dataset_frame(
     *,
     silver_root: str,
@@ -260,25 +286,19 @@ def read_dataset_frame(
     """
 
     pl = require_polars()
-    candidate_files: list[Path] = []
-    for dataset_root in _silver_dataset_roots(silver_root=silver_root, exchange=exchange, dataset_type=dataset_type):
-        symbol_dirs = sorted(dataset_root.glob(f"symbol=*/timeframe={timeframe}"))
-        for sym_dir in symbol_dirs:
-            sym_segment = sym_dir.parent.name
-            if not sym_segment.startswith("symbol="):
-                continue
-            raw_symbol = sym_segment.split("=", 1)[1]
-            if normalize_symbol(raw_symbol) != symbol:
-                continue
-            candidate_files.extend(path for path in sorted(sym_dir.glob("**/*.parquet")) if path.is_file())
-        if candidate_files:
-            break
+    candidate_files = dataset_artifact_paths(
+        silver_root=silver_root,
+        exchange=exchange,
+        symbol=symbol,
+        dataset_type=dataset_type,
+        timeframe=timeframe,
+    )
     if not candidate_files:
         raise ValueError(f"Missing silver dataset for symbol={symbol}: {dataset_type}")
     # Sort by mtime (oldest first) so that when overlapping/duplicate periods exist across
     # partition files (for example a legacy symbol-name variant reprocessed under a new file),
     # the freshest write wins once deduplicated by timestamp below.
-    ordered_files = sorted(candidate_files, key=lambda path: (path.stat().st_mtime, str(path)))
+    ordered_files = candidate_files
     if dataset_type in {
         "options_ticker_snapshot_1m_observed",
         "options_instrument_ticker_snapshot_1m_observed",

@@ -17,6 +17,7 @@ from application.services.gold_service import (
     _contract_bump_level,
     _dataset_includes_l2,
     _dataset_requirements,
+    _existing_gold_report_if_unchanged,
     _feature_hash,
     _feature_source_dataset,
     _git_commit_hash,
@@ -207,6 +208,38 @@ def test_gold_service_small_contract_helpers_and_artifact_errors(
         lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("git unavailable")),
     )
     assert _git_commit_hash() == "nogit"
+
+
+def test_unchanged_gold_report_rejects_corrupt_parquet(tmp_path: Path) -> None:
+    """A matching manifest cannot turn an unreadable Gold parquet into a cache hit."""
+
+    parquet_path = tmp_path / "corrupt.parquet"
+    manifest_path = tmp_path / "corrupt.json"
+    parquet_path.write_text("not parquet", encoding="utf-8")
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "input_fingerprint": "input",
+                "feature_set_hash": "feature",
+                "source_data_hash": "source",
+                "columns": [],
+                "rows_out": 0,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert (
+        _existing_gold_report_if_unchanged(
+            parquet_path=parquet_path,
+            manifest_path=manifest_path,
+            plot_path=tmp_path / "plot.png",
+            input_fingerprint="input",
+            feature_set_hash="feature",
+            source_data_hash="source",
+        )
+        is None
+    )
 
 
 def test_gold_service_rejects_invalid_derived_dataset_ids() -> None:
@@ -462,7 +495,9 @@ def _write_volatility_observed_month(
     )
 
 
-def test_build_gold_for_symbol_writes_hashed_parquet_and_manifest(tmp_path: Path) -> None:
+def test_build_gold_for_symbol_writes_hashed_parquet_and_manifest(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     silver = tmp_path / "silver"
     gold = tmp_path / "gold"
     symbol = "BTC"
@@ -671,6 +706,24 @@ def test_build_gold_for_symbol_writes_hashed_parquet_and_manifest(tmp_path: Path
     assert "source_data_hash" in payload
     assert "git_commit_hash" in payload
     assert "build_id" in payload
+    assert payload["input_artifact_fingerprints"]
+    assert payload["incremental_m1_plan"]["changed_months"] == ["2026-05"]
+
+    parquet_mtime_ns = parquet_path.stat().st_mtime_ns
+    monkeypatch.setattr(
+        "application.services.gold_service._read_dataset_frame",
+        lambda **_kwargs: (_ for _ in ()).throw(AssertionError("unchanged build must not read Silver")),
+    )
+    unchanged = build_gold_for_symbol(
+        silver_root=str(silver),
+        gold_root=str(gold),
+        exchange=exchange,
+        symbol=symbol,
+        manifest=True,
+    )
+    assert unchanged.parquet_path == report.parquet_path
+    assert unchanged.version_bump_reason == "unchanged_input"
+    assert parquet_path.stat().st_mtime_ns == parquet_mtime_ns
 
 
 def test_build_gold_reads_legacy_perp_silver_dataset(tmp_path: Path) -> None:

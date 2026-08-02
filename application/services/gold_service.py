@@ -23,8 +23,11 @@ from application.services import (
     feature_plot_service,
     gold_audit,
     gold_frames,
+    gold_publication,
     gold_versioning,
 )
+from application.services.gold_incremental_planner import plan_gold_m1_incremental_months
+from application.services.gold_input_fingerprint import gold_input_artifact_fingerprints, gold_input_fingerprint
 
 _feature_hash = feature_metadata_service.feature_hash
 _feature_metadata = feature_metadata_service.feature_metadata
@@ -267,6 +270,112 @@ class GoldBuildReport:
         }
 
 
+def _existing_gold_report_if_unchanged(
+    *,
+    parquet_path: Path,
+    manifest_path: Path,
+    plot_path: Path,
+    input_fingerprint: str,
+    feature_set_hash: str,
+    source_data_hash: str,
+) -> GoldBuildReport | None:
+    """Return the published report when its validated input identity is unchanged.
+
+    The manifest is checked together with the parquet path because an interrupted old
+    build may leave an unreferenced parquet behind.  Such a file is never a cache hit.
+    """
+
+    if not parquet_path.is_file() or not manifest_path.is_file():
+        return None
+    try:
+        payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return None
+    if (
+        payload.get("input_fingerprint") != input_fingerprint
+        or payload.get("feature_set_hash") != feature_set_hash
+        or payload.get("source_data_hash") != source_data_hash
+    ):
+        return None
+    try:
+        _require_polars().read_parquet(str(parquet_path), n_rows=1)
+    except Exception:
+        # A matching manifest alone is insufficient: corrupted parquet must be rebuilt.
+        return None
+    columns = payload.get("columns")
+    rows_out = payload.get("rows_out")
+    if not isinstance(columns, list) or not isinstance(rows_out, int):
+        return None
+    return GoldBuildReport(
+        exchange=str(payload.get("exchange", "")),
+        symbol=str(payload.get("symbol", "")),
+        rows_out=rows_out,
+        columns=[str(column) for column in columns],
+        min_timestamp=str(payload["min_timestamp"]) if payload.get("min_timestamp") is not None else None,
+        max_timestamp=str(payload["max_timestamp"]) if payload.get("max_timestamp") is not None else None,
+        parquet_path=str(parquet_path.resolve()),
+        manifest_path=str(manifest_path.resolve()),
+        plot_path=str(plot_path.resolve()) if plot_path.is_file() else None,
+        hash_string=f"{feature_set_hash}_{source_data_hash}",
+        dataset_id=str(payload.get("dataset_id", "")),
+        dataset_version=str(payload.get("dataset_version", "")),
+        feature_set_hash=feature_set_hash,
+        source_data_hash=source_data_hash,
+        git_commit_hash=str(payload.get("git_commit_hash", "")),
+        version_bump_level="none",
+        version_bump_reason="unchanged_input",
+        previous_version=str(payload["previous_version"]) if payload.get("previous_version") is not None else None,
+    )
+
+
+def _unchanged_gold_report_from_manifest(
+    *,
+    gold_root: Path,
+    exchange: str,
+    symbol: str,
+    dataset_id: str,
+    input_fingerprint: str,
+    manifest_payload: dict[str, object] | None,
+    expected_dataset_version: str | None,
+) -> GoldBuildReport | None:
+    """Resolve a valid unchanged Gold artifact before expensive frame preparation."""
+
+    if manifest_payload is None or manifest_payload.get("input_fingerprint") != input_fingerprint:
+        return None
+    if expected_dataset_version is not None and manifest_payload.get("dataset_version") != expected_dataset_version:
+        return None
+    feature_set_hash = manifest_payload.get("feature_set_hash")
+    source_data_hash = manifest_payload.get("source_data_hash")
+    dataset_version = manifest_payload.get("dataset_version")
+    if (
+        not isinstance(feature_set_hash, str)
+        or not feature_set_hash
+        or not isinstance(source_data_hash, str)
+        or not source_data_hash
+        or not isinstance(dataset_version, str)
+        or not dataset_version
+    ):
+        return None
+    symbol_file = symbol.replace("-", "_")
+    artifact_dir = (
+        gold_root
+        / f"dataset_id={dataset_id}"
+        / "dataset_type=gold_symbol_dataset"
+        / f"feature_set_version={dataset_version}"
+        / f"exchange={exchange}"
+        / f"symbol={symbol}"
+    )
+    stem = f"{symbol_file}_GOLD_{feature_set_hash}_{source_data_hash}"
+    return _existing_gold_report_if_unchanged(
+        parquet_path=artifact_dir / f"{stem}.parquet",
+        manifest_path=artifact_dir / f"{stem}.json",
+        plot_path=artifact_dir / f"{stem}.png",
+        input_fingerprint=input_fingerprint,
+        feature_set_hash=feature_set_hash,
+        source_data_hash=source_data_hash,
+    )
+
+
 def _iso_utc(value: datetime | None) -> str | None:
     if value is None:
         return None
@@ -432,6 +541,14 @@ def _strategy_feature_lookbacks(dataset_id: str) -> dict[str, str]:
     if dataset_id == "gold.market.regime_features.m1":
         return gold_frames.strategy_feature_lookbacks()
     return {}
+
+
+def _feature_lookback_minutes(dataset_id: str) -> int:
+    """Return the longest trailing Gold feature dependency for incremental M1 planning."""
+
+    lookbacks = _strategy_feature_lookbacks(dataset_id).values()
+    minutes = [int(value.removesuffix("m")) for value in lookbacks if value.endswith("m")]
+    return max(minutes, default=0)
 
 
 def _prediction_target_definitions(dataset_id: str) -> dict[str, object]:
@@ -656,10 +773,9 @@ def _build_history_full_derived_for_symbol(
         / f"exchange={exchange}"
         / f"symbol={symbol}"
     )
-    artifact_dir.mkdir(parents=True, exist_ok=True)
     parquet_path = artifact_dir / f"{stem}.parquet"
-    merged.write_parquet(parquet_path)
     plot_path = artifact_dir / f"{stem}.png"
+    artifact_dir.mkdir(parents=True, exist_ok=True)
     written_plot = _write_feature_distribution_plot(merged, plot_path, normalize_y=False)
     if written_plot is None:
         raise ValueError(
@@ -668,7 +784,12 @@ def _build_history_full_derived_for_symbol(
         )
     manifest_payload["plot_generated"] = True
     manifest_path = artifact_dir / f"{stem}.json"
-    manifest_path.write_text(json.dumps(manifest_payload, indent=2), encoding="utf-8")
+    gold_publication.publish_gold_artifact_atomically(
+        frame=merged,
+        parquet_path=parquet_path,
+        manifest_path=manifest_path,
+        manifest_payload=manifest_payload,
+    )
     written_manifest: str | None = str(manifest_path.resolve())
     _prune_gold_versions(
         gold_root=root,
@@ -745,6 +866,76 @@ def build_gold_for_symbol(
     symbol = normalize_symbol(symbol)
     required = _dataset_requirements(dataset_id)
     optional = _dataset_optional_requirements(dataset_id)
+    required_artifacts = {
+        dataset_type: gold_frames.dataset_artifact_paths(
+            silver_root=silver_root,
+            exchange=exchange,
+            symbol=symbol,
+            dataset_type=dataset_type,
+            timeframe=timeframe,
+        )
+        for dataset_type, timeframe in required
+    }
+    optional_artifacts = {
+        dataset_type: gold_frames.dataset_artifact_paths(
+            silver_root=silver_root,
+            exchange=exchange,
+            symbol=symbol,
+            dataset_type=dataset_type,
+            timeframe=timeframe,
+        )
+        for dataset_type, timeframe in optional
+    }
+    for dataset_type, _timeframe in required:
+        if not required_artifacts[dataset_type]:
+            # Preserve the established Gold error contract while failing before any
+            # fingerprint or partial artifact can make a missing source look valid.
+            raise ValueError(f"Missing silver dataset for symbol={symbol}: {dataset_type}")
+    feature_configuration: dict[str, object] = {
+        "strategy_feature_lookbacks": _strategy_feature_lookbacks(dataset_id),
+        "prediction_target_definitions": _prediction_target_definitions(dataset_id),
+        "live_extended_feature_families": dataset_id == "gold.live.extended.m1",
+    }
+    input_fingerprint = gold_input_fingerprint(
+        root=Path(silver_root),
+        required_files=required_artifacts,
+        optional_files=optional_artifacts,
+        dataset_id=dataset_id,
+        contract_version="gold-input/v1",
+        feature_configuration=feature_configuration,
+    )
+    input_artifact_fingerprints = gold_input_artifact_fingerprints(
+        root=Path(silver_root),
+        required_files=required_artifacts,
+        optional_files=optional_artifacts,
+    )
+    prior_manifest_for_plan = _latest_manifest_for_dataset(Path(gold_root), exchange, symbol, dataset_id)
+    unchanged_report = _unchanged_gold_report_from_manifest(
+        gold_root=Path(gold_root),
+        exchange=exchange,
+        symbol=symbol,
+        dataset_id=dataset_id,
+        input_fingerprint=input_fingerprint,
+        manifest_payload=prior_manifest_for_plan,
+        expected_dataset_version=None if auto_version else dataset_version,
+    )
+    if unchanged_report is not None:
+        return unchanged_report
+    prior_artifact_fingerprints = (
+        prior_manifest_for_plan.get("input_artifact_fingerprints")
+        if isinstance(prior_manifest_for_plan, dict)
+        else None
+    )
+    previous_artifact_fingerprints: dict[str, str] | None = None
+    if isinstance(prior_artifact_fingerprints, dict) and all(
+        isinstance(key, str) and isinstance(value, str) for key, value in prior_artifact_fingerprints.items()
+    ):
+        previous_artifact_fingerprints = {str(key): str(value) for key, value in prior_artifact_fingerprints.items()}
+    incremental_m1_plan = plan_gold_m1_incremental_months(
+        current_artifacts=input_artifact_fingerprints,
+        previous_artifacts=previous_artifact_fingerprints,
+        feature_lookback_minutes=_feature_lookback_minutes(dataset_id),
+    )
     raw_by_dataset: dict[str, Any] = {}
     required_prepared_by_dataset: list[tuple[str, Any]] = []
     for dataset_type, timeframe in required:
@@ -847,6 +1038,7 @@ def build_gold_for_symbol(
         source_summary["available"] = bool(optional_source_availability[dataset_type]["available"])
     source_data_hash = _json_payload_hash(
         {
+            "input_fingerprint": input_fingerprint,
             "source_silver_datasets": source_silver_datasets,
             "optional_source_availability": optional_source_availability,
         }
@@ -910,6 +1102,13 @@ def build_gold_for_symbol(
         "dataset_version": resolved_version,
         "feature_set_hash": feature_set_hash,
         "source_data_hash": source_data_hash,
+        "input_fingerprint": input_fingerprint,
+        "input_artifact_fingerprints": input_artifact_fingerprints,
+        "incremental_m1_plan": {
+            "changed_months": list(incremental_m1_plan.changed_months),
+            "rebuild_months": list(incremental_m1_plan.rebuild_months),
+            "feature_lookback_minutes": incremental_m1_plan.feature_lookback_minutes,
+        },
         "git_commit_hash": git_hash,
         "build_id": build_id,
         "contract_signature": contract_signature,
@@ -957,13 +1156,23 @@ def build_gold_for_symbol(
         / f"exchange={exchange}"
         / f"symbol={symbol}"
     )
-    artifact_dir.mkdir(parents=True, exist_ok=True)
     parquet_path = artifact_dir / f"{stem}.parquet"
-    merged.write_parquet(parquet_path)
     # Gold policy: always emit plot + manifest for every dataset artifact.
     _ = manifest
     _ = plot
     plot_path = artifact_dir / f"{stem}.png"
+    manifest_path = artifact_dir / f"{stem}.json"
+    unchanged_report = _existing_gold_report_if_unchanged(
+        parquet_path=parquet_path,
+        manifest_path=manifest_path,
+        plot_path=plot_path,
+        input_fingerprint=input_fingerprint,
+        feature_set_hash=feature_set_hash,
+        source_data_hash=source_data_hash,
+    )
+    if unchanged_report is not None:
+        return unchanged_report
+    artifact_dir.mkdir(parents=True, exist_ok=True)
     written_plot = _write_feature_distribution_plot(merged, plot_path, normalize_y=False)
     if written_plot is None:
         raise ValueError(
@@ -971,8 +1180,12 @@ def build_gold_for_symbol(
             "(missing matplotlib dependency or no plottable numeric columns)."
         )
     manifest_payload["plot_generated"] = True
-    manifest_path = artifact_dir / f"{stem}.json"
-    manifest_path.write_text(json.dumps(manifest_payload, indent=2), encoding="utf-8")
+    gold_publication.publish_gold_artifact_atomically(
+        frame=merged,
+        parquet_path=parquet_path,
+        manifest_path=manifest_path,
+        manifest_payload=manifest_payload,
+    )
     written_manifest: str | None = str(manifest_path.resolve())
     _prune_gold_versions(
         gold_root=root,
