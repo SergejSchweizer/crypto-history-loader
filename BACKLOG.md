@@ -2517,7 +2517,7 @@ Acceptance:
 
 ### PR-60: Gold Optional Artifact And Plot Decoupling
 
-Status: In Progress
+Status: Merged
 
 Updated: 2026-08-02
 
@@ -2526,6 +2526,8 @@ PR: https://github.com/SergejSchweizer/crypto-history-loader/pull/167
 Branch: `codex/pr60-gold-optional-artifact-decoupling`
 
 Depends on: PR-59
+
+Handoff status: merged into `main` as `d136ce7` on 2026-08-02; feature branch deleted by GitHub.
 
 Description:
 - R1: Make Gold parquet and manifest publication the required production path and move plots to an explicit audit operation.
@@ -2548,11 +2550,11 @@ Acceptance:
 
 ### PR-61: Incremental Medallion Orchestrator And Freshness Audit
 
-Status: Planned
+Status: In Progress
 
 Updated: 2026-08-02
 
-PR: TBD
+PR: https://github.com/SergejSchweizer/crypto-history-loader/pull/168
 
 Branch: `codex/pr61-incremental-medallion-orchestrator`
 
