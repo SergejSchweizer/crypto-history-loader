@@ -462,7 +462,9 @@ def _write_volatility_observed_month(
     )
 
 
-def test_build_gold_for_symbol_writes_hashed_parquet_and_manifest(tmp_path: Path) -> None:
+def test_build_gold_for_symbol_writes_hashed_parquet_and_manifest(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     silver = tmp_path / "silver"
     gold = tmp_path / "gold"
     symbol = "BTC"
@@ -675,6 +677,10 @@ def test_build_gold_for_symbol_writes_hashed_parquet_and_manifest(tmp_path: Path
     assert payload["incremental_m1_plan"]["changed_months"] == ["2026-05"]
 
     parquet_mtime_ns = parquet_path.stat().st_mtime_ns
+    monkeypatch.setattr(
+        "application.services.gold_service._read_dataset_frame",
+        lambda **_kwargs: (_ for _ in ()).throw(AssertionError("unchanged build must not read Silver")),
+    )
     unchanged = build_gold_for_symbol(
         silver_root=str(silver),
         gold_root=str(gold),

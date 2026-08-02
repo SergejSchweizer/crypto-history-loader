@@ -46,14 +46,20 @@ def latest_manifest_for_dataset(
 ) -> dict[str, object] | None:
     """Return the newest manifest payload for one Gold dataset lineage."""
 
-    dataset_root = gold_root / f"dataset_id={dataset_id}" / f"exchange={exchange}" / f"symbol={symbol}"
-    if not dataset_root.exists():
+    dataset_base = gold_root / f"dataset_id={dataset_id}"
+    if not dataset_base.exists():
         return None
+    legacy_symbol_root = dataset_base / f"exchange={exchange}" / f"symbol={symbol}"
     latest_payload: dict[str, object] | None = None
     latest_mtime = -1.0
-    candidate_paths = list(dataset_root.glob("version=*/build_id=*/manifest.json"))
+    candidate_paths = list(dataset_base.glob(f"exchange={exchange}/symbol={symbol}/version=*/build_id=*/manifest.json"))
     candidate_paths.extend(
-        dataset_root.glob("dataset_type=gold_symbol_dataset/feature_set_version=*/exchange=*/symbol=*/*.json")
+        dataset_base.glob(
+            f"dataset_type=gold_symbol_dataset/feature_set_version=*/exchange={exchange}/symbol={symbol}/*.json"
+        )
+    )
+    candidate_paths.extend(
+        legacy_symbol_root.glob("dataset_type=gold_symbol_dataset/feature_set_version=*/exchange=*/symbol=*/*.json")
     )
     for path in candidate_paths:
         try:

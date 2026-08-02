@@ -14,6 +14,7 @@ def gold_input_fingerprint(
     optional_files: dict[str, list[Path]],
     dataset_id: str,
     contract_version: str,
+    feature_configuration: dict[str, object] | None = None,
 ) -> str:
     """Hash exact required and optional Silver artifact identity for one Gold build.
 
@@ -23,6 +24,7 @@ def gold_input_fingerprint(
         optional_files: Optional dataset keys and any available parquet artifacts.
         dataset_id: Gold output dataset identifier.
         contract_version: Versioned Gold input contract.
+        feature_configuration: Effective versioned configuration of Gold feature families.
 
     Returns:
         Stable SHA-256 fingerprint that represents source contents and availability.
@@ -34,6 +36,7 @@ def gold_input_fingerprint(
     payload = {
         "dataset_id": dataset_id,
         "contract_version": contract_version,
+        "feature_configuration": feature_configuration or {},
         "required": _dataset_entries(root, required_files, required=True),
         "optional": _dataset_entries(root, optional_files, required=False),
     }

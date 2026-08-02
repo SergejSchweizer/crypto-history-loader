@@ -323,6 +323,51 @@ def _existing_gold_report_if_unchanged(
     )
 
 
+def _unchanged_gold_report_from_manifest(
+    *,
+    gold_root: Path,
+    exchange: str,
+    symbol: str,
+    dataset_id: str,
+    input_fingerprint: str,
+    manifest_payload: dict[str, object] | None,
+) -> GoldBuildReport | None:
+    """Resolve a valid unchanged Gold artifact before expensive frame preparation."""
+
+    if manifest_payload is None or manifest_payload.get("input_fingerprint") != input_fingerprint:
+        return None
+    feature_set_hash = manifest_payload.get("feature_set_hash")
+    source_data_hash = manifest_payload.get("source_data_hash")
+    dataset_version = manifest_payload.get("dataset_version")
+    if (
+        not isinstance(feature_set_hash, str)
+        or not feature_set_hash
+        or not isinstance(source_data_hash, str)
+        or not source_data_hash
+        or not isinstance(dataset_version, str)
+        or not dataset_version
+    ):
+        return None
+    symbol_file = symbol.replace("-", "_")
+    artifact_dir = (
+        gold_root
+        / f"dataset_id={dataset_id}"
+        / "dataset_type=gold_symbol_dataset"
+        / f"feature_set_version={dataset_version}"
+        / f"exchange={exchange}"
+        / f"symbol={symbol}"
+    )
+    stem = f"{symbol_file}_GOLD_{feature_set_hash}_{source_data_hash}"
+    return _existing_gold_report_if_unchanged(
+        parquet_path=artifact_dir / f"{stem}.parquet",
+        manifest_path=artifact_dir / f"{stem}.json",
+        plot_path=artifact_dir / f"{stem}.png",
+        input_fingerprint=input_fingerprint,
+        feature_set_hash=feature_set_hash,
+        source_data_hash=source_data_hash,
+    )
+
+
 def _iso_utc(value: datetime | None) -> str | None:
     if value is None:
         return None
@@ -833,12 +878,18 @@ def build_gold_for_symbol(
         )
         for dataset_type, timeframe in optional
     }
+    feature_configuration: dict[str, object] = {
+        "strategy_feature_lookbacks": _strategy_feature_lookbacks(dataset_id),
+        "prediction_target_definitions": _prediction_target_definitions(dataset_id),
+        "live_extended_feature_families": dataset_id == "gold.live.extended.m1",
+    }
     input_fingerprint = gold_input_fingerprint(
         root=Path(silver_root),
         required_files=required_artifacts,
         optional_files=optional_artifacts,
         dataset_id=dataset_id,
         contract_version="gold-input/v1",
+        feature_configuration=feature_configuration,
     )
     input_artifact_fingerprints = gold_input_artifact_fingerprints(
         root=Path(silver_root),
@@ -846,6 +897,16 @@ def build_gold_for_symbol(
         optional_files=optional_artifacts,
     )
     prior_manifest_for_plan = _latest_manifest_for_dataset(Path(gold_root), exchange, symbol, dataset_id)
+    unchanged_report = _unchanged_gold_report_from_manifest(
+        gold_root=Path(gold_root),
+        exchange=exchange,
+        symbol=symbol,
+        dataset_id=dataset_id,
+        input_fingerprint=input_fingerprint,
+        manifest_payload=prior_manifest_for_plan,
+    )
+    if unchanged_report is not None:
+        return unchanged_report
     prior_artifact_fingerprints = (
         prior_manifest_for_plan.get("input_artifact_fingerprints")
         if isinstance(prior_manifest_for_plan, dict)

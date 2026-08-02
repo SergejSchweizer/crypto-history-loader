@@ -40,6 +40,10 @@ def test_fingerprint_is_content_sensitive_and_tracks_missing_optionals(tmp_path:
     required.write_text("v2", encoding="utf-8")
     assert gold_input_fingerprint(**kwargs) != missing
 
+    assert gold_input_fingerprint(**{**kwargs, "feature_configuration": {"window": 15}}) != gold_input_fingerprint(
+        **{**kwargs, "feature_configuration": {"window": 30}}
+    )
+
 
 def test_fingerprint_rejects_missing_required_artifacts(tmp_path: Path) -> None:
     """Fail planning before a Gold build can silently omit a contract source."""
