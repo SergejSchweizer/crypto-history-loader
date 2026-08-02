@@ -270,6 +270,81 @@ class GoldBuildReport:
         }
 
 
+@dataclass(frozen=True)
+class GoldTimeframeFanout:
+    """Validated M1 source and deterministic derived frames for one Gold symbol."""
+
+    source_dataset_id: str
+    source_frame: Any
+    source_parquet_path: Path
+    source_manifest: dict[str, object]
+    frames_by_dataset_id: dict[str, Any]
+
+
+def prepare_gold_timeframe_fanout(
+    *,
+    gold_root: str,
+    exchange: str,
+    symbol: str,
+    dataset_ids: list[str],
+) -> GoldTimeframeFanout:
+    """Read one M1 Gold source and derive all requested sibling timeframes once.
+
+    Every requested dataset must share the same declared M1 source.  Keeping this
+    preparation separate from publication lets the caller validate the complete
+    sibling set before it exposes any child artifact.
+
+    Args:
+        gold_root: Gold lake root containing the published M1 source artifact.
+        exchange: Exchange partition identifier.
+        symbol: Canonical or exchange-specific symbol to normalize.
+        dataset_ids: Derived timeframe dataset IDs to prepare.
+
+    Returns:
+        Shared source lineage and one derived frame per requested dataset ID.
+
+    Raises:
+        ValueError: If no dataset IDs are supplied or their source lineage differs.
+    """
+
+    if not dataset_ids:
+        raise ValueError("Gold timeframe fan-out requires at least one derived dataset ID")
+    source_ids: set[str] = set()
+    intervals: dict[str, str] = {}
+    for dataset_id in sorted(set(dataset_ids)):
+        source_dataset_id = _history_full_source_dataset_id(dataset_id)
+        interval = _history_full_derived_interval(dataset_id)
+        if source_dataset_id is None or interval is None:
+            raise ValueError(f"Unsupported derived history_full dataset_id: {dataset_id}")
+        source_ids.add(source_dataset_id)
+        intervals[dataset_id] = interval
+    if len(source_ids) != 1:
+        raise ValueError("Gold timeframe fan-out datasets must share one M1 source")
+
+    normalized_symbol = normalize_symbol(symbol)
+    source_dataset_id = next(iter(source_ids))
+    source_frame, source_parquet_path, source_manifest = _read_latest_gold_dataset_artifact(
+        gold_root=gold_root,
+        dataset_id=source_dataset_id,
+        exchange=exchange,
+        symbol=normalized_symbol,
+    )
+    pl = _require_polars()
+    frames_by_dataset_id = {
+        dataset_id: gold_frames.resample_history_full_frame(pl, source_frame, intervals[dataset_id])
+        for dataset_id in sorted(intervals)
+    }
+    if any(frame.height == 0 for frame in frames_by_dataset_id.values()):
+        raise ValueError(f"Gold timeframe fan-out produced zero rows for symbol={normalized_symbol}")
+    return GoldTimeframeFanout(
+        source_dataset_id=source_dataset_id,
+        source_frame=source_frame,
+        source_parquet_path=source_parquet_path,
+        source_manifest=source_manifest,
+        frames_by_dataset_id=frames_by_dataset_id,
+    )
+
+
 def _existing_gold_report_if_unchanged(
     *,
     parquet_path: Path,

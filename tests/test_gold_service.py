@@ -12,6 +12,7 @@ import pytest
 
 from application.services.gold_service import (
     GoldBuildReport,
+    GoldTimeframeFanout,
     _build_history_full_derived_for_symbol,
     _bump_semver,
     _contract_bump_level,
@@ -256,6 +257,46 @@ def test_gold_service_rejects_invalid_derived_dataset_ids() -> None:
             version_base="v1.0.0",
             keep_last_versions=3,
         )
+
+
+def test_prepare_gold_timeframe_fanout_reads_shared_m1_source_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Sibling timeframes reuse one validated M1 source read for the same symbol."""
+
+    import application.services.gold_service as service
+
+    source = pl.DataFrame(
+        {"timestamp_m1": [datetime(2026, 5, 1, tzinfo=UTC)], "exchange": ["deribit"], "symbol": ["BTC"]}
+    )
+    reads: list[dict[str, object]] = []
+    intervals: list[str] = []
+
+    def _read(**kwargs: object) -> tuple[object, Path, dict[str, object]]:
+        reads.append(kwargs)
+        return source, Path("/tmp/source.parquet"), {"dataset_version": "v1.0.0"}
+
+    def _resample(_pl: object, frame: object, interval: str) -> object:
+        intervals.append(interval)
+        assert frame is source
+        return source
+
+    monkeypatch.setattr(service, "_read_latest_gold_dataset_artifact", _read)
+    monkeypatch.setattr(service.gold_frames, "resample_history_full_frame", _resample)
+
+    fanout = service.prepare_gold_timeframe_fanout(
+        gold_root="gold",
+        exchange="deribit",
+        symbol="BTC-PERPETUAL",
+        dataset_ids=["gold.history.full.h1", "gold.history.full.m5", "gold.history.full.m30"],
+    )
+
+    assert isinstance(fanout, GoldTimeframeFanout)
+    assert len(reads) == 1
+    assert intervals == ["1h", "30m", "5m"]
+    assert list(fanout.frames_by_dataset_id) == [
+        "gold.history.full.h1",
+        "gold.history.full.m30",
+        "gold.history.full.m5",
+    ]
 
 
 def test_gold_service_delegation_boundaries(monkeypatch: pytest.MonkeyPatch) -> None:
