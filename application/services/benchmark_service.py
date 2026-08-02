@@ -47,7 +47,7 @@ def _parquet_rows(path: Path) -> int:
         from pyarrow.parquet import ParquetFile
     except ImportError as exc:
         raise RuntimeError("pyarrow is required for benchmark-build. Install project dependencies.") from exc
-    return ParquetFile(path).metadata.num_rows
+    return int(ParquetFile(path).metadata.num_rows)
 
 
 def _identity_from_path(root: Path, artifact: Path) -> tuple[str, str | None, str | None]:
