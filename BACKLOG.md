@@ -2482,7 +2482,7 @@ Acceptance:
 
 ### PR-59: Gold Shared M1 Preparation And Multi-Timeframe Fan-Out
 
-Status: In Progress
+Status: Merged
 
 Updated: 2026-08-02
 
@@ -2491,6 +2491,8 @@ PR: https://github.com/SergejSchweizer/crypto-history-loader/pull/165
 Branch: `codex/pr59-gold-shared-timeframe-fanout`
 
 Depends on: PR-58
+
+Handoff status: `git status --short` produced no output after merge verification on 2026-08-02.
 
 Description:
 - R1: Prepare each symbol's Gold `m1` source frame and common joins once per build transaction.
@@ -2515,11 +2517,11 @@ Acceptance:
 
 ### PR-60: Gold Optional Artifact And Plot Decoupling
 
-Status: Planned
+Status: In Progress
 
 Updated: 2026-08-02
 
-PR: TBD
+PR: https://github.com/SergejSchweizer/crypto-history-loader/pull/167
 
 Branch: `codex/pr60-gold-optional-artifact-decoupling`
 

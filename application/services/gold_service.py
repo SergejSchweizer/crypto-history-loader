@@ -710,6 +710,7 @@ def _build_history_full_derived_for_symbol(
     auto_version: bool,
     version_base: str,
     keep_last_versions: int,
+    plot: bool = False,
     prepared_fanout: GoldTimeframeFanout | None = None,
     publication_requests: list[gold_publication.GoldArtifactPublishRequest] | None = None,
 ) -> GoldBuildReport:
@@ -865,13 +866,8 @@ def _build_history_full_derived_for_symbol(
     parquet_path = artifact_dir / f"{stem}.parquet"
     plot_path = artifact_dir / f"{stem}.png"
     artifact_dir.mkdir(parents=True, exist_ok=True)
-    written_plot = _write_feature_distribution_plot(merged, plot_path, normalize_y=False)
-    if written_plot is None:
-        raise ValueError(
-            "Gold build requires plot generation for every dataset, but plot generation failed "
-            "(missing matplotlib dependency or no plottable numeric columns)."
-        )
-    manifest_payload["plot_generated"] = True
+    written_plot = _write_feature_distribution_plot(merged, plot_path, normalize_y=False) if plot else None
+    manifest_payload["plot_generated"] = written_plot is not None
     manifest_path = artifact_dir / f"{stem}.json"
     publish_request = gold_publication.GoldArtifactPublishRequest(
         frame=merged,
@@ -937,6 +933,7 @@ def build_gold_timeframe_fanout_for_symbol(
     auto_version: bool = False,
     version_base: str = "v1.0.0",
     keep_last_versions: int = GOLD_RETENTION_KEEP_VERSIONS,
+    plot: bool = False,
 ) -> list[GoldBuildReport]:
     """Build and atomically publish sibling Gold timeframes from one validated M1 source.
 
@@ -949,6 +946,7 @@ def build_gold_timeframe_fanout_for_symbol(
         auto_version: Whether to derive each sibling version from its latest manifest.
         version_base: Semantic version for each sibling's initial automatic publication.
         keep_last_versions: Fixed Gold retention count.
+        plot: Whether to generate optional distribution plots after frame preparation.
 
     Returns:
         Reports for all published sibling artifacts in deterministic dataset-ID order.
@@ -977,6 +975,7 @@ def build_gold_timeframe_fanout_for_symbol(
             auto_version=auto_version,
             version_base=version_base,
             keep_last_versions=keep_last_versions,
+            plot=plot,
             prepared_fanout=fanout,
             publication_requests=publication_requests,
         )
@@ -1035,6 +1034,7 @@ def build_gold_for_symbol(
             auto_version=auto_version,
             version_base=version_base,
             keep_last_versions=keep_last_versions,
+            plot=plot,
         )
     pl = _require_polars()
     symbol = normalize_symbol(symbol)
@@ -1347,13 +1347,8 @@ def build_gold_for_symbol(
     if unchanged_report is not None:
         return unchanged_report
     artifact_dir.mkdir(parents=True, exist_ok=True)
-    written_plot = _write_feature_distribution_plot(merged, plot_path, normalize_y=False)
-    if written_plot is None:
-        raise ValueError(
-            "Gold build requires plot generation for every dataset, but plot generation failed "
-            "(missing matplotlib dependency or no plottable numeric columns)."
-        )
-    manifest_payload["plot_generated"] = True
+    written_plot = _write_feature_distribution_plot(merged, plot_path, normalize_y=False) if plot else None
+    manifest_payload["plot_generated"] = written_plot is not None
     gold_publication.publish_gold_artifact_atomically(
         frame=merged,
         parquet_path=parquet_path,
