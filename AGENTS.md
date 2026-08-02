@@ -318,7 +318,8 @@ Applies to day-to-day agent execution flow for implementation, debugging, and de
 
 - [MUST] Before changing code, inspect relevant files.
 - [MUST] Never commit directly to `main`.
-- [MUST] Always create a short-lived, task-specific feature branch from latest `main` using `codex/<scope>-<short-description>`.
+- [MUST] Always create a short-lived, task-specific feature branch from latest `main` using `codex/pr<backlog-number>-<scope>-<short-description>`.
+- [MUST] Every working branch name includes its Backlog PR number as lowercase `pr<backlog-number>`; for example, `codex/pr61-incremental-medallion-orchestrator`.
 - [MUST] Use lowercase letters, numbers, and hyphens only in branch names.
 - [MUST] Do not use vague branch names such as `codex/fixes`, `codex/update`, `codex/big-change`, `codex/refactor-all`, or `codex/work`.
 - [MUST] Keep one branch to one logical change.
@@ -465,7 +466,7 @@ Remove checks that do not exist in the repository.
 - `git fetch origin`
 - `git checkout main`
 - `git pull --ff-only origin main`
-- `git checkout -b codex/<task-name>`
+- `git checkout -b codex/pr<backlog-number>-<task-name>`
 - `git diff`
 - `gh pr create --base main --head codex/<task-name> --fill`
 - `gh pr checks`
