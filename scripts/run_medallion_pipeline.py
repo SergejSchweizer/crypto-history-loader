@@ -14,6 +14,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from application.services.medallion_freshness import audit_gold_history_freshness
 from application.services.runtime_service import LOG_ARCHIVE_RETENTION_DAYS, enforce_log_retention
 
 
@@ -139,6 +140,15 @@ def _dataset_values(cli_args: list[str]) -> list[str]:
         values.append(cli_args[cursor])
         cursor += 1
     return values
+
+
+def _option_values(cli_args: list[str], option_name: str) -> list[str]:
+    """Return the positional value block following one CLI option."""
+
+    if option_name not in cli_args:
+        return []
+    option_idx = cli_args.index(option_name)
+    return [token for token in cli_args[option_idx + 1 :] if not token.startswith("--")]
 
 
 def _replace_dataset_values(cli_args: list[str], dataset_values: list[str]) -> list[str]:
@@ -369,9 +379,18 @@ def main() -> int:
     config_data = _load_yaml(config_path)
     steps = _build_steps(main_path=main_path, config_path=config_path, config_data=config_data)
     if args.dry_run:
+        bronze_step = next((step for step in steps if step.name == "bronze"), None)
+        symbols = _option_values(bronze_step.args, "--symbols") if bronze_step is not None else []
+        gold_root = repo_root / "lake" / "gold"
+        freshness = audit_gold_history_freshness(gold_root=gold_root, exchange="deribit", symbols=symbols)
         print(
             json.dumps(
-                {"mode": "dry-run", "steps": [{"name": step.name, "args": step.args} for step in steps]}, indent=2
+                {
+                    "mode": "dry-run",
+                    "steps": [{"name": step.name, "args": step.args} for step in steps],
+                    "gold_freshness": freshness,
+                },
+                indent=2,
             )
         )
         return 0
