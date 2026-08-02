@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import Any, Literal, cast
 
 from application.dataset_contracts import supported_silver_build_ids
+from application.services.silver_dependency_graph import SilverWorkNode, bounded_work_batches
 from application.services.silver_incremental_planner import plan_incremental_months
 from application.services.silver_service import (
     SilverBuildReport,
@@ -837,28 +838,35 @@ def run_silver_build(args: argparse.Namespace, logger: logging.Logger) -> None:
             else:
                 jobs.append((market, symbol, _make_ohlcv_job(market, symbol)))
 
-    logger.info("Silver build parallelization maxprocesses=%s jobs=%s", maxprocesses, len(jobs))
-    with ThreadPoolExecutor(max_workers=maxprocesses) as executor:
-        futures: list[tuple[str, str, Future[list[dict[str, object]]]]] = []
-        for market, symbol, job in jobs:
-            futures.append((market, symbol, executor.submit(job)))
-        _collect_job_results(
-            futures=futures,
-            logger=logger,
-            reports=reports,
-            stage_name="base",
-        )
-    if derived_jobs:
-        logger.info("Silver derived build schedule jobs=%s", len(derived_jobs))
+    base_names = tuple(f"source:{market}:{symbol}" for market, symbol, _ in jobs)
+    nodes = tuple(
+        [SilverWorkNode(name=name, kind="source") for name in base_names]
+        + [
+            SilverWorkNode(
+                name=f"derived:{market}:{symbol}",
+                kind="derived",
+                depends_on=base_names,
+            )
+            for market, symbol, _ in derived_jobs
+        ]
+    )
+    scheduled_jobs = {f"source:{market}:{symbol}": (market, symbol, job, "source") for market, symbol, job in jobs} | {
+        f"derived:{market}:{symbol}": (market, symbol, job, "derived") for market, symbol, job in derived_jobs
+    }
+    batches = bounded_work_batches(nodes, max_workers=maxprocesses)
+    logger.info("Silver dependency schedule batches=%s workers=%s", len(batches), maxprocesses)
+    for batch in batches:
         with ThreadPoolExecutor(max_workers=maxprocesses) as executor:
-            futures = []
-            for market, symbol, job in derived_jobs:
+            futures: list[tuple[str, str, Future[list[dict[str, object]]]]] = []
+            stage_name = batch[0].kind
+            for node in batch:
+                market, symbol, job, _ = scheduled_jobs[node.name]
                 futures.append((market, symbol, executor.submit(job)))
             _collect_job_results(
                 futures=futures,
                 logger=logger,
                 reports=reports,
-                stage_name="derived",
+                stage_name=stage_name,
             )
 
     if not bool(args.no_json_output):
