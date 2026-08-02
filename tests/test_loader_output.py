@@ -7,7 +7,16 @@ from datetime import UTC, datetime
 from typing import Any
 
 from api.commands.loader_output import BronzeRunState, IncrementalPersistor
-from application.dto import BronzeFetchPlanDTO, TradeFetchTaskDTO, VolatilityFetchTaskDTO
+from application.dto import (
+    BronzeFetchPlanDTO,
+    FundingFetchTaskDTO,
+    OpenInterestFetchTaskDTO,
+    TradeFetchTaskDTO,
+    VolatilityFetchTaskDTO,
+)
+from ingestion.funding import FundingPoint
+from ingestion.open_interest import OpenInterestPoint
+from ingestion.spot_ohlcv import SpotCandle
 from ingestion.trades import TradeTick
 from ingestion.volatility import VolatilityPoint
 
@@ -149,3 +158,65 @@ def test_empty_volatility_chunk_skips_persistence() -> None:
 
     assert persist_calls == []
     assert checkpoint_marks == []
+
+
+def test_incremental_persistor_persists_each_market_family_and_logs_once() -> None:
+    """All incremental source families should use their dataset-specific storage DTO."""
+
+    calls: list[dict[str, Any]] = []
+    checkpoints: list[tuple[str, tuple[object, ...]]] = []
+
+    def _persist_fn(**kwargs: Any) -> _PersistResult:
+        calls.append(kwargs)
+        return _PersistResult()
+
+    persistor = IncrementalPersistor(
+        lake_root="lake/bronze",
+        mark_checkpoint_complete=lambda dataset, key: checkpoints.append((dataset, key)),
+        persist_fn=_persist_fn,
+    )
+    logger = logging.getLogger("persistor-family-test")
+    timestamp = datetime(2026, 4, 27, 10, 0, tzinfo=UTC)
+    candle = SpotCandle(
+        exchange="deribit",
+        symbol="BTC",
+        interval="1m",
+        open_time=timestamp,
+        close_time=timestamp,
+        open_price=100.0,
+        high_price=101.0,
+        low_price=99.0,
+        close_price=100.5,
+        volume=1.0,
+        quote_volume=100.0,
+        trade_count=1,
+    )
+    oi = OpenInterestPoint("deribit", "BTC", "1m", timestamp, timestamp, 10.0, 1000.0)
+    funding = FundingPoint("deribit", "BTC", "8h", timestamp, timestamp, 0.001, 100.0, 101.0)
+    candle_task = type(
+        "CandleTask", (), {"exchange": "deribit", "market": "spot_ohlcv", "symbol": "BTC", "timeframe": "1m"}
+    )()
+    persistor.on_candle_task_complete(candle_task, [candle], logger)
+    persistor.on_open_interest_task_complete(OpenInterestFetchTaskDTO("deribit", "BTC", "1m"), [oi], logger)
+    persistor.on_funding_task_complete(FundingFetchTaskDTO("deribit", "BTC", "8h"), [funding], logger)
+    persistor.on_trade_task_complete(
+        TradeFetchTaskDTO("deribit", "option", "BTC"),
+        [
+            TradeTick(
+                exchange="deribit",
+                symbol="BTC",
+                instrument_type="option",
+                trade_id="option-1",
+                trade_time=timestamp,
+                price=1.0,
+                quantity=1.0,
+                side="buy",
+                is_maker=False,
+                source_endpoint="public_get_last_trades_by_currency",
+            )
+        ],
+        logger,
+    )
+    assert len(calls) == 4
+    assert checkpoints == []
+    assert all(call["options"].save_parquet_lake is True for call in calls)

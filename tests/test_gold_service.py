@@ -11,14 +11,21 @@ from pathlib import Path
 import pytest
 
 from application.services.gold_service import (
+    GoldBuildReport,
+    _build_history_full_derived_for_symbol,
     _bump_semver,
     _contract_bump_level,
     _dataset_includes_l2,
     _dataset_requirements,
     _feature_hash,
     _feature_source_dataset,
+    _git_commit_hash,
+    _history_full_derived_interval,
+    _history_full_source_dataset_id,
+    _iso_utc,
     _json_payload_hash,
     _parse_semver,
+    _read_latest_gold_dataset_artifact,
     build_gold_for_symbol,
     discover_gold_symbols,
     discover_gold_symbols_for_dataset,
@@ -138,6 +145,137 @@ def test_dataset_specs_symbol_normalization_and_hash_helpers() -> None:
     assert _feature_source_dataset("funding_rate_last_known") == "funding_1m_feature"
     assert _feature_source_dataset("perps_trades_open_price") == "perps_trades_1m_feature"
     assert _feature_source_dataset("options_trades_open_price") == "options_trades_1m_feature"
+
+
+def test_gold_service_small_contract_helpers_and_artifact_errors(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Gold helper errors should identify missing or mismatched lineage artifacts."""
+
+    report = GoldBuildReport(
+        exchange="deribit",
+        symbol="BTC",
+        rows_out=1,
+        columns=["timestamp_m1"],
+        min_timestamp=None,
+        max_timestamp=None,
+        parquet_path="x.parquet",
+        manifest_path=None,
+        plot_path=None,
+        hash_string="h",
+        dataset_id="gold.history.full.m1",
+        dataset_version="v1.0.0",
+        feature_set_hash="f",
+        source_data_hash="s",
+        git_commit_hash="g",
+        version_bump_level="manual",
+        version_bump_reason="manual_version",
+        previous_version=None,
+    )
+    assert report.to_dict()["dataset_id"] == "gold.history.full.m1"
+    assert _iso_utc(None) is None
+    assert _history_full_derived_interval("gold.history.full.m5") == "5m"
+    assert _history_full_source_dataset_id("gold.history.full.m5") == "gold.history.full.m1"
+    with pytest.raises(ValueError, match="Missing gold dataset"):
+        _read_latest_gold_dataset_artifact(
+            gold_root=str(tmp_path), dataset_id="gold.history.full.m1", exchange="deribit", symbol="BTC"
+        )
+    artifact_dir = (
+        tmp_path
+        / "dataset_id=gold.history.full.m1"
+        / "dataset_type=gold_symbol_dataset"
+        / "feature_set_version=v1.0.0"
+        / "exchange=deribit"
+        / "symbol=BTC"
+    )
+    artifact_dir.mkdir(parents=True)
+    parquet = artifact_dir / "BTC.parquet"
+    pl.DataFrame({"value": [1]}).write_parquet(parquet)
+    with pytest.raises(ValueError, match="Missing gold manifest"):
+        _read_latest_gold_dataset_artifact(
+            gold_root=str(tmp_path), dataset_id="gold.history.full.m1", exchange="deribit", symbol="BTC"
+        )
+    parquet.with_suffix(".json").write_text('{"dataset_id":"other"}', encoding="utf-8")
+    with pytest.raises(ValueError, match="lineage mismatch"):
+        _read_latest_gold_dataset_artifact(
+            gold_root=str(tmp_path), dataset_id="gold.history.full.m1", exchange="deribit", symbol="BTC"
+        )
+    monkeypatch.setattr("application.services.gold_service.subprocess.check_output", lambda *_args, **_kwargs: "")
+    assert _git_commit_hash() == "nogit"
+    monkeypatch.setattr(
+        "application.services.gold_service.subprocess.check_output",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("git unavailable")),
+    )
+    assert _git_commit_hash() == "nogit"
+
+
+def test_gold_service_rejects_invalid_derived_dataset_ids() -> None:
+    """Derived builders should reject unsupported lineage identifiers before I/O."""
+
+    with pytest.raises(ValueError, match="Unsupported derived"):
+        _build_history_full_derived_for_symbol(
+            gold_root="/tmp/unused",
+            exchange="deribit",
+            symbol="BTC",
+            dataset_id="gold.unknown.m5",
+            dataset_version="v1.0.0",
+            auto_version=False,
+            version_base="v1.0.0",
+            keep_last_versions=3,
+        )
+
+
+def test_gold_service_delegation_boundaries(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Application Gold wrappers should preserve their explicit frame-service boundaries."""
+
+    import application.services.gold_service as service
+
+    sentinel = object()
+    delegates = {
+        "read_latest_l2_gold_frame": (
+            "_read_latest_l2_gold_frame",
+            {"l2_root": "x", "exchange": "deribit", "symbol": "BTC"},
+        ),
+        "prepare_l2": ("_prepare_l2", {"pl": sentinel, "frame": sentinel, "symbol": "BTC"}),
+        "l2_invalid_mask_expr": ("_l2_invalid_mask_expr", {"pl": sentinel, "columns": set()}),
+        "validate_or_filter_l2_quality": (
+            "_validate_or_filter_l2_quality",
+            {"pl": sentinel, "frame": sentinel, "mode": "strict"},
+        ),
+        "prepare_spot_ohlcv_or_perp": (
+            "_prepare_spot_ohlcv_or_perp",
+            {"pl": sentinel, "frame": sentinel, "prefix": "spot", "symbol": "BTC"},
+        ),
+        "prepare_open_interest": ("_prepare_open_interest", {"pl": sentinel, "frame": sentinel, "symbol": "BTC"}),
+        "prepare_funding": ("_prepare_funding", {"pl": sentinel, "frame": sentinel, "symbol": "BTC"}),
+        "prepare_trades": ("_prepare_trades", {"pl": sentinel, "frame": sentinel, "symbol": "BTC"}),
+        "prepare_options_trades": ("_prepare_options_trades", {"pl": sentinel, "frame": sentinel, "symbol": "BTC"}),
+        "prepare_volatility_index_data": (
+            "_prepare_volatility_index_data",
+            {"pl": sentinel, "frame": sentinel, "symbol": "BTC"},
+        ),
+        "prepare_dataset_frame": (
+            "_prepare_dataset_frame",
+            {"pl": sentinel, "dataset_type": "spot_ohlcv", "frame": sentinel, "symbol": "BTC"},
+        ),
+        "optional_feature_schema": ("_optional_feature_schema", {"pl": sentinel, "dataset_type": "spot_ohlcv"}),
+        "build_minute_grid": (
+            "_build_minute_grid",
+            {"pl": sentinel, "prepared": [], "exchange": "deribit", "symbol": "BTC"},
+        ),
+    }
+    for target_name, (wrapper_name, kwargs) in delegates.items():
+        monkeypatch.setattr(service.gold_frames, target_name, lambda *_args, **_kwargs: sentinel)
+        assert getattr(service, wrapper_name)(**kwargs) is sentinel
+    monkeypatch.setattr(service.gold_frames, "discover_symbols_for_dataset", lambda **_kwargs: {"BTC"})
+    assert service.discover_gold_symbols_for_dataset("silver", "deribit", "gold.history.full.m5") == ["BTC"]
+    assert service._strategy_feature_lookbacks("gold.market.full.m1") == {}
+    assert service._prediction_target_definitions("gold.market.full.m1") == {}
+    assert service._origin_repository("gold.live.full.m1") == "crypto-live-loader"
+    assert service._origin_repository("gold.history.full.m1") == "crypto-history-loader"
+    assert service._add_strategy_feature_families(sentinel, sentinel, "gold.market.full.m1") is sentinel
+    assert service._add_prediction_targets(sentinel, sentinel, "gold.market.full.m1") is sentinel
+    assert service._add_live_extended_feature_families(sentinel, sentinel, "gold.market.full.m1") is sentinel
     assert _feature_source_dataset("historical_prediction_perps_rv_1h") == "historical_prediction_1m_feature"
     assert _feature_source_dataset("volatility_index_data_value") == "volatility_index_data_observed"
     assert _feature_source_dataset("volatility_index_value") == "volatility_index_data_observed"
