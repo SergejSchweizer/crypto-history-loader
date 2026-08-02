@@ -180,6 +180,11 @@ def add_silver_build_parser(subparsers: Any) -> None:
         default=list(DEFAULT_SILVER_BUILD_DATASETS),
     )
     parser.add_argument("--symbols", nargs="+", help="Optional symbol list; auto-discovered when omitted")
+    parser.add_argument(
+        "--months",
+        nargs="+",
+        help="Optional exact YYYY-MM Silver target months; omitted processes all discoverable months",
+    )
     parser.add_argument("--timeframe", default="1m", help="Timeframe to process (default: 1m)")
     parser.add_argument("--manifest", action="store_true", help="Generate monthly silver manifest sidecars")
     parser.add_argument("--plot", action="store_true", help="Generate monthly silver plot PNG sidecars")
@@ -194,6 +199,7 @@ def run_silver_build(args: argparse.Namespace, logger: logging.Logger) -> None:
     silver_root = cast(str, args.silver_root)
     exchange = cast(str, args.exchange)
     timeframe = cast(str, args.timeframe)
+    requested_months = cast(list[str] | None, getattr(args, "months", None))
     maxprocesses = int(getattr(args, "maxprocesses", 4))
     if maxprocesses < 1:
         raise ValueError(f"Invalid --maxprocesses '{maxprocesses}'. Value must be an integer >= 1")
@@ -631,6 +637,7 @@ def run_silver_build(args: argparse.Namespace, logger: logging.Logger) -> None:
             exchange=exchange,
             symbol=symbol,
             timeframe=timeframe,
+            months=requested_months,
         )
         payload = _report_payload(market, symbol, report)
         logger.info(
