@@ -9,6 +9,13 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from application.dataset_contracts import SILVER_FUNDING_FEATURE_COLUMNS, SILVER_FUNDING_OBSERVED_COLUMNS
+from application.services.silver_partition_manifest import (
+    load_current_manifest,
+    publish_partition_atomically,
+    source_fingerprint,
+)
+
+_FUNDING_OBSERVED_CONTRACT_VERSION = "silver-funding-observed/v1"
 
 __all__ = [
     "FundingDependencies",
@@ -98,6 +105,32 @@ def build_funding_observed_for_symbol(
         )
         if not files:
             continue
+        target = dependencies.silver_month_path(
+            silver_root=silver_root,
+            market="funding_observed",
+            exchange=exchange,
+            symbol=symbol,
+            timeframe=timeframe,
+            month=month,
+        )
+        source_schema = dict(pl.scan_parquet(files).collect_schema())
+        fingerprint = source_fingerprint(
+            bronze_root=Path(bronze_root),
+            source_files=files,
+            source_schema=source_schema,
+            exchange=exchange,
+            symbol=symbol,
+            timeframe=timeframe,
+            builder_contract_version=_FUNDING_OBSERVED_CONTRACT_VERSION,
+        )
+        cached = load_current_manifest(
+            parquet_path=target,
+            expected_input_fingerprint=fingerprint,
+            expected_builder_contract_version=_FUNDING_OBSERVED_CONTRACT_VERSION,
+        )
+        if cached is not None:
+            agg_rows_out += cached.row_count
+            continue
         frame = pl.scan_parquet(files).collect()
         rows_in = frame.height
         if rows_in == 0:
@@ -164,16 +197,15 @@ def build_funding_observed_for_symbol(
         )
 
         duplicates_removed = cleaned.height - observed.height
-        target = dependencies.silver_month_path(
-            silver_root=silver_root,
-            market="funding_observed",
-            exchange=exchange,
-            symbol=symbol,
-            timeframe=timeframe,
-            month=month,
+        publish_partition_atomically(
+            frame=observed,
+            parquet_path=target,
+            input_fingerprint=fingerprint,
+            source_schema=source_schema,
+            sort_keys=("funding_time",),
+            deduplication_keys=("exchange", "symbol", "funding_time"),
+            builder_contract_version=_FUNDING_OBSERVED_CONTRACT_VERSION,
         )
-        target.parent.mkdir(parents=True, exist_ok=True)
-        observed.write_parquet(target)
 
         month_min = observed.select(pl.col("funding_time").min()).item()
         month_max = observed.select(pl.col("funding_time").max()).item()
