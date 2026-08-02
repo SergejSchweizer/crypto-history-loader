@@ -105,3 +105,20 @@ def test_ensure_bronze_sidecars_skips_complete_invalid_and_repairs_missing(
     ) == [str(valid.resolve())]
     assert repaired == [valid]
     assert any("backfill complete" in message for message in logs)
+
+
+def test_ensure_bronze_sidecars_skips_mismatched_partition_dataset(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A path parsed as another dataset must not be repaired under the selected label."""
+
+    parquet = tmp_path / "data.parquet"
+    parquet.write_bytes(b"parquet")
+    monkeypatch.setattr(sidecars, "dataset_data_files", lambda *_args: [parquet])
+    monkeypatch.setattr(
+        sidecars,
+        "partition_key_from_parquet_path",
+        lambda _path: ("funding", ("deribit", "perp", "BTC", "8h", "2026-08-02")),
+    )
+
+    assert ensure_bronze_sidecars(lake_root=str(tmp_path), dataset_types=["spot_ohlcv"]) == []
