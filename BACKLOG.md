@@ -2453,7 +2453,7 @@ Status: In Progress
 
 Updated: 2026-08-02
 
-PR: TBD
+PR: https://github.com/SergejSchweizer/crypto-history-loader/pull/163
 
 Branch: `codex/pr58-gold-incremental-m1-publication`
 
