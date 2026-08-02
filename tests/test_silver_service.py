@@ -235,6 +235,94 @@ def test_build_silver_for_symbol_writes_monthly_parquet_and_aggregated_report(tm
     assert "plot_generated" in monthly_payload
 
 
+def test_build_silver_for_symbol_limits_work_to_requested_months(tmp_path: Path) -> None:
+    """Read and publish only the exact incremental target month selection."""
+
+    bronze = tmp_path / "bronze"
+    silver = tmp_path / "silver"
+    base = {
+        "schema_version": "v1",
+        "dataset_type": "perps_ohlcv",
+        "exchange": "deribit",
+        "symbol": "BTC-PERPETUAL",
+        "instrument_type": "perp",
+        "timeframe": "1m",
+        "run_id": "r1",
+        "source_endpoint": "public_market_data",
+        "volume": 1.0,
+        "quote_volume": 1.0,
+        "trade_count": 1,
+    }
+    for month, timestamp in (
+        ("2026-05", datetime(2026, 5, 1, tzinfo=UTC)),
+        ("2026-06", datetime(2026, 6, 1, tzinfo=UTC)),
+    ):
+        _write_bronze_day_file(
+            bronze,
+            market="perps_ohlcv",
+            exchange="deribit",
+            symbol="BTC-PERPETUAL",
+            timeframe="1m",
+            month=month,
+            day=f"{month}-01",
+            rows=[
+                {
+                    **base,
+                    "event_time": timestamp,
+                    "open_time": timestamp,
+                    "close_time": timestamp.replace(second=59, microsecond=999000),
+                    "ingested_at": timestamp.replace(minute=1),
+                    "open_price": 100.0,
+                    "high_price": 101.0,
+                    "low_price": 99.0,
+                    "close_price": 100.5,
+                }
+            ],
+        )
+
+    report = build_silver_for_symbol(
+        bronze_root=str(bronze),
+        silver_root=str(silver),
+        market="perps_ohlcv",
+        exchange="deribit",
+        symbol="BTC-PERPETUAL",
+        months=["2026-06"],
+    )
+
+    assert report.months_processed == ["2026-06"]
+    assert report.rows_in == 1
+    assert (
+        silver
+        / "dataset_type=perps_ohlcv"
+        / "exchange=deribit"
+        / "symbol=BTC-PERPETUAL"
+        / "timeframe=1m"
+        / "year=2026"
+        / "month=2026-06"
+        / "BTC-PERPETUAL-2026-06.parquet"
+    ).exists()
+    assert not (
+        silver
+        / "dataset_type=perps_ohlcv"
+        / "exchange=deribit"
+        / "symbol=BTC-PERPETUAL"
+        / "timeframe=1m"
+        / "year=2026"
+        / "month=2026-05"
+        / "BTC-PERPETUAL-2026-05.parquet"
+    ).exists()
+
+    with pytest.raises(ValueError, match="2026-07"):
+        build_silver_for_symbol(
+            bronze_root=str(bronze),
+            silver_root=str(silver),
+            market="perps_ohlcv",
+            exchange="deribit",
+            symbol="BTC-PERPETUAL",
+            months=["2026-07"],
+        )
+
+
 def test_build_silver_for_symbol_skips_matching_performance_manifest(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:

@@ -37,7 +37,7 @@ Last updated: 2026-08-02
 ```markdown
 ### PR-XX: Short Ticket Title
 
-Status: Planned
+Status: In Progress
 
 Updated: YYYY-MM-DD
 
@@ -2344,7 +2344,7 @@ Acceptance:
 
 ### PR-55: Silver Source Fingerprint Manifests And No-Op Detection
 
-Status: Ready
+Status: Merged
 
 Updated: 2026-08-02
 
@@ -2383,11 +2383,11 @@ Publication evidence:
 
 ### PR-56: Silver Incremental Monthly Partitions And Lookback Windows
 
-Status: Planned
+Status: In Progress
 
 Updated: 2026-08-02
 
-PR: TBD
+PR: https://github.com/SergejSchweizer/crypto-history-loader/pull/161
 
 Branch: `codex/pr56-silver-incremental-monthly-builds`
 

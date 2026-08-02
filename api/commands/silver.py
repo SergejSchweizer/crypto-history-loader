@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import Any, Literal, cast
 
 from application.dataset_contracts import supported_silver_build_ids
+from application.services.silver_incremental_planner import plan_incremental_months
 from application.services.silver_service import (
     SilverBuildReport,
     build_funding_1m_feature_for_symbol,
@@ -47,6 +48,7 @@ from application.services.silver_service import (
     discover_instrument_metadata_symbols,
     discover_iv_rv_symbols,
     discover_l2_symbols,
+    discover_months,
     discover_options_instrument_ticker_symbols,
     discover_options_surface_symbols,
     discover_options_ticker_symbols,
@@ -179,7 +181,23 @@ def add_silver_build_parser(subparsers: Any) -> None:
         choices=list(SILVER_BUILD_DATASETS),
         default=list(DEFAULT_SILVER_BUILD_DATASETS),
     )
+    parser.add_argument(
+        "--changed-months",
+        nargs="+",
+        help="Changed Bronze YYYY-MM months; expands to safe dependent target months with --lookback-days",
+    )
+    parser.add_argument(
+        "--lookback-days",
+        type=int,
+        default=0,
+        help="Trailing dependency window for --changed-months (default: 0)",
+    )
     parser.add_argument("--symbols", nargs="+", help="Optional symbol list; auto-discovered when omitted")
+    parser.add_argument(
+        "--months",
+        nargs="+",
+        help="Optional exact YYYY-MM Silver target months; omitted processes all discoverable months",
+    )
     parser.add_argument("--timeframe", default="1m", help="Timeframe to process (default: 1m)")
     parser.add_argument("--manifest", action="store_true", help="Generate monthly silver manifest sidecars")
     parser.add_argument("--plot", action="store_true", help="Generate monthly silver plot PNG sidecars")
@@ -194,6 +212,11 @@ def run_silver_build(args: argparse.Namespace, logger: logging.Logger) -> None:
     silver_root = cast(str, args.silver_root)
     exchange = cast(str, args.exchange)
     timeframe = cast(str, args.timeframe)
+    requested_months = cast(list[str] | None, getattr(args, "months", None))
+    changed_months = cast(list[str] | None, getattr(args, "changed_months", None))
+    lookback_days = int(getattr(args, "lookback_days", 0))
+    if requested_months is not None and changed_months is not None:
+        raise ValueError("--months and --changed-months cannot be used together")
     maxprocesses = int(getattr(args, "maxprocesses", 4))
     if maxprocesses < 1:
         raise ValueError(f"Invalid --maxprocesses '{maxprocesses}'. Value must be an integer >= 1")
@@ -624,6 +647,22 @@ def run_silver_build(args: argparse.Namespace, logger: logging.Logger) -> None:
         return [_report_payload("historical_prediction_1m_feature", symbol, feature)]
 
     def _run_ohlcv(market: str, symbol: str) -> list[dict[str, object]]:
+        target_months = requested_months
+        if changed_months is not None:
+            available_months = discover_months(
+                bronze_root=bronze_root,
+                market=market,
+                exchange=exchange,
+                symbol=symbol,
+                timeframe=timeframe,
+            )
+            target_months = list(
+                plan_incremental_months(
+                    available_months=available_months,
+                    changed_months=changed_months,
+                    lookback_days=lookback_days,
+                ).rebuild_months
+            )
         report = build_silver_for_symbol(
             bronze_root=bronze_root,
             silver_root=silver_root,
@@ -631,6 +670,7 @@ def run_silver_build(args: argparse.Namespace, logger: logging.Logger) -> None:
             exchange=exchange,
             symbol=symbol,
             timeframe=timeframe,
+            months=target_months,
         )
         payload = _report_payload(market, symbol, report)
         logger.info(

@@ -505,27 +505,53 @@ def build_silver_for_symbol(
     exchange: str,
     symbol: str,
     timeframe: str = "1m",
+    months: list[str] | None = None,
 ) -> SilverBuildReport:
-    """Build monthly silver parquet outputs and aggregated report for one symbol."""
+    """Build selected monthly Silver OHLCV outputs for one symbol.
+
+    Args:
+        bronze_root: Root of the Bronze lake.
+        silver_root: Root of the Silver lake.
+        market: Bronze and Silver market dataset identifier.
+        exchange: Exchange partition value.
+        symbol: Instrument symbol partition value.
+        timeframe: Source and output timeframe.
+        months: Optional exact ``YYYY-MM`` target-month selection. ``None`` preserves
+            the historical behavior of processing every discoverable Bronze month.
+
+    Returns:
+        Aggregated deterministic build report for the selected partitions.
+
+    Raises:
+        ValueError: If a requested target month has no discoverable Bronze input.
+    """
 
     pl = _require_polars()
-    months = discover_months(
+    available_months = discover_months(
         bronze_root=bronze_root,
         market=market,
         exchange=exchange,
         symbol=symbol,
         timeframe=timeframe,
     )
+    if months is None:
+        selected_months = available_months
+    else:
+        requested_months = sorted(set(months))
+        unavailable = sorted(set(requested_months).difference(available_months))
+        if unavailable:
+            raise ValueError(f"Requested Silver months have no Bronze input: {', '.join(unavailable)}")
+        selected_months = requested_months
     accumulator = SilverMonthlyBuildAccumulator(
         dataset=f"{market}_1m",
         exchange=exchange,
         symbol=symbol,
         timeframe=timeframe,
-        months=months,
+        months=selected_months,
         columns=SILVER_OHLCV_COLUMNS,
     )
 
-    for month in months:
+    for month in selected_months:
         started = perf_counter()
         files = _bronze_month_files(
             bronze_root=bronze_root,
