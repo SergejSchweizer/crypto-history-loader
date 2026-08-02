@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import json
+import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from importlib import import_module
 from pathlib import Path
+from time import perf_counter
 from typing import Any
 
 from application.dataset_contracts import (
@@ -68,6 +71,14 @@ from application.services import (
     silver_trades,
     silver_volatility,
 )
+from application.services.silver_partition_manifest import (
+    load_current_manifest,
+    publish_partition_atomically,
+    source_fingerprint,
+)
+
+_LOGGER = logging.getLogger(__name__)
+_OHLCV_BUILDER_CONTRACT_VERSION = "silver-ohlcv/v1"
 
 SILVER_FUNDING_FEATURE_COLUMNS = silver_funding.SILVER_FUNDING_FEATURE_COLUMNS
 SILVER_FUNDING_OBSERVED_COLUMNS = silver_funding.SILVER_FUNDING_OBSERVED_COLUMNS
@@ -442,6 +453,37 @@ def _iso_utc(value: datetime | None) -> str | None:
     return value.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def _performance_event(
+    event: str,
+    *,
+    market: str,
+    exchange: str,
+    symbol: str,
+    month: str,
+    fingerprint: str,
+    row_count: int = 0,
+    elapsed_ms: int = 0,
+) -> None:
+    """Emit the stable operational event contract for a Silver partition."""
+
+    _LOGGER.info(
+        json.dumps(
+            {
+                "event": event,
+                "layer": "silver",
+                "dataset": market,
+                "exchange": exchange,
+                "symbol": symbol,
+                "partition": month,
+                "source_fingerprint": fingerprint,
+                "row_count": row_count,
+                "elapsed_ms": elapsed_ms,
+            },
+            sort_keys=True,
+        )
+    )
+
+
 def _normalize_symbol_expr(pl: Any, col_name: str = "symbol") -> Any:
     return (
         pl.col(col_name)
@@ -482,6 +524,7 @@ def build_silver_for_symbol(
     )
 
     for month in months:
+        started = perf_counter()
         files = _bronze_month_files(
             bronze_root=bronze_root,
             market=market,
@@ -491,6 +534,50 @@ def build_silver_for_symbol(
             month=month,
         )
         if not files:
+            continue
+        target = _silver_month_path(
+            silver_root=silver_root,
+            market=market,
+            exchange=exchange,
+            symbol=symbol,
+            timeframe=timeframe,
+            month=month,
+        )
+        source_schema = dict(pl.scan_parquet(files).collect_schema())
+        fingerprint = source_fingerprint(
+            bronze_root=Path(bronze_root),
+            source_files=files,
+            source_schema=source_schema,
+            exchange=exchange,
+            symbol=symbol,
+            timeframe=timeframe,
+            builder_contract_version=_OHLCV_BUILDER_CONTRACT_VERSION,
+        )
+        _performance_event(
+            "planned",
+            market=market,
+            exchange=exchange,
+            symbol=symbol,
+            month=month,
+            fingerprint=fingerprint,
+        )
+        cached = load_current_manifest(
+            parquet_path=target,
+            expected_input_fingerprint=fingerprint,
+            expected_builder_contract_version=_OHLCV_BUILDER_CONTRACT_VERSION,
+        )
+        if cached is not None:
+            _performance_event(
+                "skipped_unchanged",
+                market=market,
+                exchange=exchange,
+                symbol=symbol,
+                month=month,
+                fingerprint=fingerprint,
+                row_count=cached.row_count,
+                elapsed_ms=int((perf_counter() - started) * 1000),
+            )
+            accumulator.record_month(rows_in=0, rows_out=cached.row_count)
             continue
         frame = pl.scan_parquet(files).collect()
         rows_in = frame.height
@@ -523,16 +610,48 @@ def build_silver_for_symbol(
         )
         duplicates_removed = cleaned.height - deduped.height
 
-        target = _silver_month_path(
-            silver_root=silver_root,
+        _performance_event(
+            "built",
             market=market,
             exchange=exchange,
             symbol=symbol,
-            timeframe=timeframe,
             month=month,
+            fingerprint=fingerprint,
+            row_count=deduped.height,
+            elapsed_ms=int((perf_counter() - started) * 1000),
         )
-        target.parent.mkdir(parents=True, exist_ok=True)
-        deduped.write_parquet(target)
+        try:
+            publish_partition_atomically(
+                frame=deduped,
+                parquet_path=target,
+                input_fingerprint=fingerprint,
+                source_schema=source_schema,
+                sort_keys=("open_time",),
+                deduplication_keys=("exchange", "instrument_type", "symbol", "timeframe", "open_time"),
+                builder_contract_version=_OHLCV_BUILDER_CONTRACT_VERSION,
+            )
+        except Exception:
+            _performance_event(
+                "failed",
+                market=market,
+                exchange=exchange,
+                symbol=symbol,
+                month=month,
+                fingerprint=fingerprint,
+                row_count=deduped.height,
+                elapsed_ms=int((perf_counter() - started) * 1000),
+            )
+            raise
+        _performance_event(
+            "published",
+            market=market,
+            exchange=exchange,
+            symbol=symbol,
+            month=month,
+            fingerprint=fingerprint,
+            row_count=deduped.height,
+            elapsed_ms=int((perf_counter() - started) * 1000),
+        )
 
         month_min = deduped.select(pl.col("open_time").min()).item()
         month_max = deduped.select(pl.col("open_time").max()).item()

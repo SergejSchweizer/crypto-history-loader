@@ -2311,7 +2311,7 @@ idempotency, and atomic-publication evidence is not an acceptable result.
 
 ### PR-54: Medallion Performance Benchmark And Stage Telemetry
 
-Status: In Progress
+Status: Merged
 
 Updated: 2026-08-02
 
@@ -2344,7 +2344,7 @@ Acceptance:
 
 ### PR-55: Silver Source Fingerprint Manifests And No-Op Detection
 
-Status: Planned
+Status: In Progress
 
 Updated: 2026-08-02
 

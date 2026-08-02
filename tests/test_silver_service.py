@@ -235,6 +235,71 @@ def test_build_silver_for_symbol_writes_monthly_parquet_and_aggregated_report(tm
     assert "plot_generated" in monthly_payload
 
 
+def test_build_silver_for_symbol_skips_matching_performance_manifest(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Avoid reading unchanged Bronze rows when a matching published manifest exists."""
+
+    caplog.set_level("INFO", logger="application.services.silver_service")
+    bronze = tmp_path / "bronze"
+    silver = tmp_path / "silver"
+    base = {
+        "schema_version": "v1",
+        "dataset_type": "spot_ohlcv",
+        "exchange": "deribit",
+        "symbol": "BTC",
+        "instrument_type": "spot_ohlcv",
+        "timeframe": "1m",
+        "run_id": "r1",
+        "source_endpoint": "public_market_data",
+        "event_time": datetime(2026, 5, 1, 0, 0, tzinfo=UTC),
+        "ingested_at": datetime(2026, 5, 1, 0, 1, tzinfo=UTC),
+        "open_price": 100.0,
+        "high_price": 101.0,
+        "low_price": 99.0,
+        "close_price": 100.5,
+        "volume": 1.0,
+        "quote_volume": 1.0,
+        "trade_count": 1,
+    }
+    _write_bronze_day_file(
+        bronze,
+        market="spot_ohlcv",
+        exchange="deribit",
+        symbol="BTC",
+        timeframe="1m",
+        month="2026-05",
+        day="2026-05-01",
+        rows=[
+            {
+                **base,
+                "open_time": datetime(2026, 5, 1, 0, 0, tzinfo=UTC),
+                "close_time": datetime(2026, 5, 1, 0, 0, 59, tzinfo=UTC),
+            }
+        ],
+    )
+
+    build_silver_for_symbol(
+        bronze_root=str(bronze), silver_root=str(silver), market="spot_ohlcv", exchange="deribit", symbol="BTC"
+    )
+    parquet_path = (
+        silver
+        / "dataset_type=spot_ohlcv/exchange=deribit/symbol=BTC/timeframe=1m"
+        / "year=2026/month=2026-05/BTC-2026-05.parquet"
+    )
+    first_bytes = parquet_path.read_bytes()
+
+    caplog.clear()
+    repeated = build_silver_for_symbol(
+        bronze_root=str(bronze), silver_root=str(silver), market="spot_ohlcv", exchange="deribit", symbol="BTC"
+    )
+
+    assert repeated.rows_in == 0
+    assert repeated.rows_out == 1
+    assert parquet_path.read_bytes() == first_bytes
+    assert any('"event": "skipped_unchanged"' in record.message for record in caplog.records)
+
+
 def test_build_funding_observed_and_1m_feature(tmp_path: Path) -> None:
     bronze = tmp_path / "bronze"
     silver = tmp_path / "silver"
