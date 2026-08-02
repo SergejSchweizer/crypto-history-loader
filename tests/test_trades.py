@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pyarrow.parquet as pq
 
+from ingestion import trades
 from ingestion.lake import save_trades_parquet_lake
 from ingestion.trades import OptionTradeTick, TradeTick, fetch_trades_all_history, fetch_trades_range
 
@@ -225,3 +226,17 @@ def test_save_options_trades_parquet_lake_writes_option_dataset(tmp_path: Path) 
     row = table.to_pylist()[0]
     assert row["instrument_name"] == "BTC-31DEC26-100000-C"
     assert row["option_type"] == "call"
+
+
+def test_trade_parsers_normalize_symbol_side_maker_and_option_contract_edges() -> None:
+    """Source-row parsing handles all Deribit symbol aliases and malformed option contracts."""
+
+    assert trades._canonical_underlying_symbol("BTC-PERPETUAL") == "BTC"
+    assert trades._canonical_underlying_symbol("SOL_USDC") == "SOL"
+    assert trades._canonical_underlying_symbol("ETHUSDT") == "ETH"
+    assert trades._parse_side({"direction": "SELL"}) == "sell"
+    assert trades._parse_side({"direction": "other"}) == "unknown"
+    assert trades._parse_is_maker({"liquidation": "m"}) is True
+    assert trades._parse_is_maker({}) is False
+    assert trades._parse_option_contract_fields("") == ("", 0.0, "unknown")
+    assert trades._parse_option_contract_fields("BTC-31DEC26-invalid-X") == ("31DEC26", 0.0, "unknown")

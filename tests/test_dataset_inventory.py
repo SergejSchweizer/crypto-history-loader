@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import subprocess
 from datetime import datetime
 from pathlib import Path
 
 import polars as pl
+import pytest
 
-from api.commands.inventory import run_dataset_inventory
+from api.commands.inventory import _resolve_builder_commit, run_dataset_inventory
 from application.services.dataset_inventory import (
     build_dataset_inventory,
     inventory_to_json,
@@ -204,3 +206,24 @@ def test_inventory_command_writes_explicit_output_only(tmp_path: Path) -> None:
 class _NullLogger:
     def info(self, *_args: object, **_kwargs: object) -> None:
         """Accept command logging without writing a real logfile."""
+
+
+def test_resolve_builder_commit_uses_explicit_environment_git_and_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Inventory provenance has deterministic priority and never fails the command."""
+
+    monkeypatch.setenv("GITHUB_SHA", "env-sha")
+    assert _resolve_builder_commit(" explicit ") == "explicit"
+    assert _resolve_builder_commit(None) == "env-sha"
+    monkeypatch.delenv("GITHUB_SHA")
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda *_args, **_kwargs: type("Result", (), {"stdout": "git-sha\n"})(),
+    )
+    assert _resolve_builder_commit(None) == "git-sha"
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("missing git")),
+    )
+    assert _resolve_builder_commit(None) == "unknown"

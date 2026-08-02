@@ -170,6 +170,34 @@ jobs:
           --
           -o addopts= -q -n logical --maxprocesses=4 --dist=loadscope --no-cov
 
+  pr-coverage-95:
+    name: pr-coverage-95
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Install dependencies
+        run: uv sync --extra dev
+
+      - name: Full test suite with 90 percent coverage gate
+        run: uv run pytest --cov-fail-under=90 --cov-report=term-missing
+
   pr-quality:
     name: pr-quality
     if: always() && github.event_name == 'pull_request'
@@ -179,6 +207,7 @@ jobs:
       - pr-typing-quality
       - pr-unit-tests
       - pr-integration-tests
+      - pr-coverage-95
 
     steps:
       - name: Verify PR quality gates
@@ -199,7 +228,11 @@ jobs:
             echo "pr-integration-tests result: ${{ needs.pr-integration-tests.result }}" >&2
             exit 1
           fi
-          echo "pr-quality passed: lint, typing, unit, and integration gates succeeded"
+          if [[ "${{ needs.pr-coverage-95.result }}" != "success" ]]; then
+            echo "pr-coverage-95 result: ${{ needs.pr-coverage-95.result }}" >&2
+            exit 1
+          fi
+          echo "pr-quality passed: lint, typing, unit, integration, and 90 percent coverage gates succeeded"
 
   main-lint-quality:
     name: main-lint-quality

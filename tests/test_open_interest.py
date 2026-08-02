@@ -222,3 +222,51 @@ def test_parse_open_interest_row_preserves_raw_timestamp() -> None:
     )
     assert parsed["open_time"] == datetime(2026, 4, 28, 12, 8, 34, tzinfo=UTC)
     assert parsed["close_time"] == datetime(2026, 4, 28, 12, 8, 34, tzinfo=UTC)
+
+
+def test_fetch_open_interest_all_history_streams_pages_and_retries_legacy_collect_signature(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Chunked open-interest reads work with both current and legacy exchange adapters."""
+
+    timestamp = int(datetime(2026, 4, 28, 12, 0, tzinfo=UTC).timestamp() * 1000)
+
+    def _legacy_fetcher(**kwargs: object) -> list[dict[str, object]]:
+        if "collect" in kwargs:
+            raise TypeError("unexpected keyword argument 'collect'")
+        callback = kwargs["on_page"]
+        assert callable(callback)
+        callback([{"timestamp": timestamp, "open_interest": 10.0}])
+        return []
+
+    monkeypatch.setattr(deribit_open_interest, "fetch_open_interest_all", _legacy_fetcher)
+    chunks: list[object] = []
+    rows = open_interest.fetch_open_interest_all_history("deribit", "BTC", "1m", "perp", on_history_chunk=chunks.append)
+
+    assert rows == []
+    assert len(chunks) == 1
+    assert chunks[0][0].open_interest == 10.0  # type: ignore[index,union-attr]
+
+
+def test_open_interest_adapter_normalizes_tokens_and_uses_range_cache(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The range adapter retains one cached history per instrument and filters inclusively."""
+
+    assert deribit_open_interest._normalize_continuation_token(" token ") == "token"
+    assert deribit_open_interest._normalize_continuation_token("none") is None
+    assert deribit_open_interest._normalize_continuation_token(1) is None
+    assert deribit_open_interest._normalize_open_interest_instrument("SOL-PERPETUAL") == "SOL_USDC-PERPETUAL"
+
+    deribit_open_interest._OPEN_INTEREST_HISTORY_CACHE.clear()
+    calls: list[str] = []
+
+    def _history(*, symbol: str, period: str) -> list[dict[str, object]]:
+        calls.append(f"{symbol}:{period}")
+        return [{"timestamp": 1}, {"timestamp": 2}, {"timestamp": 3}]
+
+    monkeypatch.setattr(deribit_open_interest, "fetch_open_interest_all", _history)
+    assert deribit_open_interest.fetch_open_interest_range("BTC-PERPETUAL", "1m", 2, 3) == [
+        {"timestamp": 2},
+        {"timestamp": 3},
+    ]
+    assert deribit_open_interest.fetch_open_interest_range("BTC-PERPETUAL", "1m", 1, 1) == [{"timestamp": 1}]
+    assert calls == ["BTC-PERPETUAL:1m"]

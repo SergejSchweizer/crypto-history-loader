@@ -179,3 +179,28 @@ def test_fetch_funding_all_paginates_backward_until_empty(
     rows = deribit_funding.fetch_funding_all(symbol="BTC-PERPETUAL", period=period)
     assert [int(cast(Any, row["timestamp"])) for row in rows] == [period_ms * 8, period_ms * 9, period_ms * 10]
     assert len(calls) == 3
+
+
+def test_funding_helpers_validate_payloads_and_fast_path_deduplicates(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Funding pages ignore malformed rows, normalize fields, and deduplicate small delta windows."""
+
+    assert deribit_funding._to_float_or_default(None, 1.0) == 1.0
+    assert deribit_funding._to_float_or_default("bad", 1.0) == 1.0
+    assert deribit_funding._to_float_or_default("2.5", 1.0) == 2.5
+    assert deribit_funding._period_to_milliseconds("2m") == 120_000
+    assert deribit_funding._period_to_milliseconds("1d") == 86_400_000
+    with pytest.raises(ValueError):
+        deribit_funding._period_to_milliseconds("bad")
+
+    monkeypatch.setattr(
+        deribit_funding,
+        "_fetch_funding_page",
+        lambda **_kwargs: [{"timestamp": 2}, {"timestamp": 1}, {"timestamp": 1}, {"timestamp": 99}],
+    )
+    rows = deribit_funding.fetch_funding_range("BTC-PERPETUAL", "1m", 1, 2)
+    assert [row["timestamp"] for row in rows] == [1, 2]
+
+    monkeypatch.undo()
+    monkeypatch.setattr(deribit_funding, "get_json", lambda *_args, **_kwargs: [])
+    with pytest.raises(ValueError, match="Unexpected Deribit funding response format"):
+        deribit_funding._fetch_funding_page("BTC-PERPETUAL", 0, 1)

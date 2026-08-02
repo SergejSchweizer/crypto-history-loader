@@ -11,7 +11,8 @@ from types import SimpleNamespace
 import pytest
 
 from api.commands.benchmark import run_benchmark_build
-from application.services.benchmark_service import benchmark_stage, write_benchmark_report
+from application.services import benchmark_service
+from application.services.benchmark_service import BenchmarkTelemetryEvent, benchmark_stage, write_benchmark_report
 
 pl = pytest.importorskip("polars")
 
@@ -146,3 +147,61 @@ def test_benchmark_logs_every_required_work_event(tmp_path: Path, caplog: pytest
     assert {payload["event_type"] for payload in payloads} == {"planned", "skipped", "built", "published", "failed"}
     for payload in payloads:
         assert {"stage", "dataset", "rows_in", "rows_out", "worker_count", "polars_thread_count"} <= set(payload)
+
+
+def test_benchmark_event_to_dict_is_json_compatible() -> None:
+    event = BenchmarkTelemetryEvent(
+        event_type="skipped",
+        stage="gold",
+        dataset="none",
+        symbol=None,
+        partition=None,
+        rows_in=0,
+        rows_out=0,
+        bytes_read=0,
+        bytes_written=0,
+        elapsed_seconds=0.0,
+        worker_count=1,
+        polars_thread_count=4,
+        timestamp="2026-01-01T00:00:00+00:00",
+    )
+
+    payload = event.to_dict()
+    assert payload["event_type"] == "skipped"
+    assert json.loads(json.dumps(payload)) == payload
+
+
+@pytest.mark.parametrize("worker_count", [0, 5])
+def test_benchmark_stage_rejects_invalid_worker_count(tmp_path: Path, worker_count: int) -> None:
+    with pytest.raises(ValueError, match="worker_count"):
+        benchmark_stage(stage="bronze", root=tmp_path, worker_count=worker_count)
+
+
+@pytest.mark.parametrize("thread_count", [0, 5])
+def test_benchmark_stage_rejects_invalid_polars_thread_count(tmp_path: Path, thread_count: int) -> None:
+    with pytest.raises(ValueError, match="polars_thread_count"):
+        benchmark_stage(stage="bronze", root=tmp_path, polars_thread_count=thread_count)
+
+
+def test_benchmark_stage_uses_stem_when_path_has_no_partition_labels(tmp_path: Path) -> None:
+    artifact = tmp_path / "dataset" / "artifact.parquet"
+    artifact.parent.mkdir(parents=True)
+    pl.DataFrame({"value": [1]}).write_parquet(artifact)
+
+    events = benchmark_stage(stage="silver", root=tmp_path)
+
+    assert events[0].dataset == "dataset"
+    assert events[0].symbol is None
+    assert events[0].partition == "artifact"
+
+
+def test_benchmark_stage_marks_row_count_failure(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    artifact = tmp_path / "dataset" / "artifact.parquet"
+    artifact.parent.mkdir(parents=True)
+    pl.DataFrame({"value": [1]}).write_parquet(artifact)
+    monkeypatch.setattr(benchmark_service, "_parquet_rows", lambda _path: (_ for _ in ()).throw(OSError("broken")))
+
+    events = benchmark_stage(stage="gold", root=tmp_path)
+
+    assert events[0].event_type == "failed"
+    assert events[0].dataset == "dataset"

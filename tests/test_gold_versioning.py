@@ -11,6 +11,8 @@ import pytest
 from application.services.gold_versioning import (
     bump_semver,
     contract_bump_level,
+    extract_feature_set_version,
+    format_semver,
     latest_manifest_for_dataset,
     parse_semver,
     prune_gold_artifacts,
@@ -129,3 +131,47 @@ def test_prune_gold_versions_enforces_dataset_wide_latest_three(tmp_path: Path) 
 
     kept_versions = sorted(path.name.split("=", 1)[1] for path in dataset_base.glob("feature_set_version=*"))
     assert kept_versions == ["v1.0.1", "v1.0.2", "v1.0.3"]
+
+
+def test_versioning_handles_invalid_and_missing_artifacts(tmp_path: Path) -> None:
+    """Versioning helpers should reject invalid retention and ignore malformed manifests."""
+
+    assert format_semver(1, 2, 3) == "v1.2.3"
+    assert extract_feature_set_version(Path("feature_set_version=v2.0.0")) == "v2.0.0"
+    assert extract_feature_set_version(Path("version=v2.0.0")) is None
+    assert extract_feature_set_version(Path("feature_set_version=")) is None
+    assert latest_manifest_for_dataset(tmp_path, "deribit", "BTC", "gold.missing") is None
+    with pytest.raises(ValueError, match="keep_last_versions"):
+        prune_gold_versions(
+            gold_root=tmp_path,
+            dataset_id="gold.market.core.m1",
+            exchange="deribit",
+            symbol="BTC",
+            keep_last_versions=0,
+        )
+    with pytest.raises(ValueError, match="keep_last_versions"):
+        prune_gold_artifacts(
+            gold_root=tmp_path,
+            dataset_id="gold.market.core.m1",
+            exchange="deribit",
+            symbol="BTC",
+            keep_last_versions=0,
+        )
+
+
+def test_contract_bump_level_detects_added_and_invalid_source_keys() -> None:
+    """Source additions are minor while malformed source-key contracts are major."""
+
+    base = {"columns": ["a"], "join_policy": "join", "source_dataset_keys": ["spot"]}
+    assert contract_bump_level(
+        {"contract_signature": base},
+        {**base, "source_dataset_keys": ["spot", "funding"]},
+        previous_source_data_hash="x",
+        current_source_data_hash="x",
+    ) == ("minor", "source_dataset_added")
+    assert contract_bump_level(
+        {"contract_signature": {**base, "source_dataset_keys": "bad"}},
+        base,
+        previous_source_data_hash="x",
+        current_source_data_hash="x",
+    ) == ("major", "invalid_source_dataset_keys")

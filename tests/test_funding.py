@@ -197,3 +197,27 @@ def test_parse_funding_row_handles_null_prev_index_price() -> None:
     )
     assert parsed["index_price"] == 123.45
     assert parsed["mark_price"] == 123.45
+
+
+def test_fetch_funding_all_history_streams_callback_and_supports_legacy_collect_signature(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Streaming mode forwards parsed pages and retries legacy adapters without ``collect``."""
+
+    timestamp = int(datetime(2026, 4, 28, 12, 0, tzinfo=UTC).timestamp() * 1000)
+
+    def _legacy_fetcher(**kwargs: object) -> list[dict[str, object]]:
+        if "collect" in kwargs:
+            raise TypeError("unexpected keyword argument 'collect'")
+        callback = kwargs["on_page"]
+        assert callable(callback)
+        callback([{"timestamp": timestamp, "interest_8h": 0.001, "index_price": 100.0}])
+        return []
+
+    monkeypatch.setattr(deribit_funding, "fetch_funding_all", _legacy_fetcher)
+    chunks: list[object] = []
+    rows = fetch_funding_all_history("deribit", "BTC", "1m", "perp", on_history_chunk=chunks.append)
+
+    assert rows == []
+    assert len(chunks) == 1
+    assert chunks[0][0].funding_rate == 0.001  # type: ignore[index,union-attr]

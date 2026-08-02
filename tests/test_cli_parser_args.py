@@ -263,3 +263,55 @@ def test_apply_env_from_config_sets_non_null_entries(monkeypatch: pytest.MonkeyP
     cli._apply_env_from_config({"env": {"UNIT_TEST_ENV_A": "1", "UNIT_TEST_ENV_B": None}})  # type: ignore[attr-defined]
     assert cli.os.environ["UNIT_TEST_ENV_A"] == "1"
     assert "UNIT_TEST_ENV_B" not in cli.os.environ
+
+
+@pytest.mark.parametrize(
+    ("contents", "error"),
+    [
+        ("", "config.yaml is empty"),
+        ("- not-a-mapping", "top-level mapping"),
+        ("env: {}", "missing required section"),
+    ],
+)
+def test_load_yaml_config_rejects_invalid_config_contracts(tmp_path: Path, contents: str, error: str) -> None:
+    """CLI startup fails clearly when the required config contract is not present."""
+
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(contents, encoding="utf-8")
+    config_path.chmod(0o644)
+
+    with pytest.raises(ValueError, match=error):
+        cli._load_yaml_config(str(config_path))
+
+
+def test_load_yaml_config_rejects_missing_directory_and_insecure_file(tmp_path: Path) -> None:
+    """The runtime config must be a secure regular file before YAML parsing begins."""
+
+    with pytest.raises(FileNotFoundError, match="is missing"):
+        cli._load_yaml_config(str(tmp_path / "missing.yaml"))
+    with pytest.raises(ValueError, match="regular file"):
+        cli._load_yaml_config(str(tmp_path))
+
+    config_path = tmp_path / "insecure.yaml"
+    config_path.write_text("env: {}\nexport-descriptive-stats: {}\n", encoding="utf-8")
+    config_path.chmod(0o666)
+    with pytest.raises(PermissionError, match="Insecure permissions"):
+        cli._load_yaml_config(str(config_path))
+
+
+def test_cli_default_helpers_honor_explicit_options_and_command_aliases() -> None:
+    """YAML defaults never overwrite explicit flags and Bronze aliases resolve deterministically."""
+
+    parser = cli.build_parser()
+    command_parser = cli._subparser_for_command(parser, "bronze-build")
+    assert command_parser is not None
+    assert cli._collect_explicit_cli_dests(command_parser, ["--lake-root=lake/cli", "--", "--symbols"]) == {"lake_root"}
+    args = parser.parse_args(["bronze-build", "--lake-root", "lake/cli"])
+    cli._apply_yaml_defaults(
+        args=args,
+        command="bronze-build",
+        config={"global": {"lake_root": "lake/yaml"}, "bronze-build": {"symbols": ["BTC"]}},
+        explicit_dests={"lake_root"},
+    )
+    assert args.lake_root == "lake/cli"
+    assert args.symbols == ["BTC"]

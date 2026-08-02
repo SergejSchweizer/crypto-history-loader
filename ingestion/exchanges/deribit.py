@@ -34,7 +34,7 @@ def normalize_timeframe(value: str) -> str:
 
     lowered = raw.lower()
     if lowered.startswith("mn") and raw[2:].isdigit():
-        candidate = f"{raw[2:]}M"
+        candidate = f"{raw[2:]}m"
     elif raw[0].isalpha() and raw[1:].isdigit():
         candidate = f"{raw[1:]}{raw[0].lower()}"
     elif raw[:-1].isdigit() and raw[-1].isalpha():

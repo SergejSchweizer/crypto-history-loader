@@ -13,6 +13,7 @@ from ingestion.lake_queries import (
     empty_trade_minutes_in_lake_by_dataset,
     latest_open_time_in_lake,
     open_time_bounds_in_lake_by_dataset,
+    open_time_minutes_in_lake_by_dataset,
     open_times_in_lake,
     partition_dates_in_lake_by_dataset,
 )
@@ -223,4 +224,36 @@ def test_empty_trade_minutes_roundtrip_for_options_trades(tmp_path: Path) -> Non
     assert minutes == [
         datetime(2026, 4, 27, 10, 0, tzinfo=UTC),
         datetime(2026, 4, 27, 10, 1, tzinfo=UTC),
+    ]
+
+
+def test_open_time_minutes_in_lake_groups_trade_ticks_by_minute(tmp_path: Path) -> None:
+    """Gap-fill reads one sorted minute per observed trade minute, independent of tick count."""
+
+    save_trades_parquet_lake(
+        {
+            "deribit": {
+                "BTC-PERPETUAL": [
+                    _trade("first", datetime(2026, 4, 27, 10, 0, 5, tzinfo=UTC)),
+                    _trade("second", datetime(2026, 4, 27, 10, 0, 45, tzinfo=UTC)),
+                    _trade("third", datetime(2026, 4, 27, 10, 2, 1, tzinfo=UTC)),
+                ]
+            }
+        },
+        market="perp",
+        lake_root=str(tmp_path),
+    )
+
+    minutes = open_time_minutes_in_lake_by_dataset(
+        lake_root=str(tmp_path),
+        dataset_type="perps_trades",
+        market="perp",
+        exchange="deribit",
+        symbol="BTC-PERPETUAL",
+        timeframe="tick",
+    )
+
+    assert minutes == [
+        datetime(2026, 4, 27, 10, 0, tzinfo=UTC),
+        datetime(2026, 4, 27, 10, 2, tzinfo=UTC),
     ]

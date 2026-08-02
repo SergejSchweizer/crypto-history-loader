@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import json
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
@@ -9,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+import application.services.silver_service as silver_service
 from application.services.silver_service import (
     _build_trade_feature_frame,
     _build_trade_observed_frame,
@@ -632,6 +634,25 @@ def test_build_perps_trades_1m_feature_for_symbol(tmp_path: Path) -> None:
         / f"{symbol}-2026-05.parquet"
     )
     assert out_file.exists()
+
+
+def test_silver_discovery_helpers_cover_missing_and_legacy_layouts(tmp_path: Path) -> None:
+    """Silver discovery should handle absent roots and both month directory layouts."""
+
+    assert discover_symbols(str(tmp_path / "missing"), "perps_ohlcv", "deribit") == []
+    assert discover_months(str(tmp_path / "missing"), "perps_ohlcv", "deribit", "BTC") == []
+    root = (
+        tmp_path
+        / "dataset_type=perps_ohlcv"
+        / "exchange=deribit"
+        / "instrument_type=perp"
+        / "symbol=BTC"
+        / "timeframe=1m"
+    )
+    (root / "year=2026" / "month=2026-05").mkdir(parents=True)
+    (root / "month=2026-06").mkdir(parents=True)
+    assert discover_symbols(str(tmp_path), "perps_ohlcv", "deribit") == ["BTC"]
+    assert discover_months(str(tmp_path), "perps_ohlcv", "deribit", "BTC") == ["2026-05", "2026-06"]
 
 
 def test_build_trade_observed_frame_filters_invalid_and_deduplicates() -> None:
@@ -1325,3 +1346,60 @@ def test_build_volatility_observed_for_symbol(tmp_path: Path) -> None:
     assert observed["volatility_high"].to_list() == [57.0]
     assert observed["volatility_low"].to_list() == [54.5]
     assert observed["volatility_close"].to_list() == [56.0]
+
+
+def test_silver_delegating_builders_reject_invalid_reports(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Every public adapter must enforce the shared SilverBuildReport contract."""
+
+    builders = [
+        ("silver_funding", "build_funding_observed_for_symbol"),
+        ("silver_funding", "build_funding_1m_feature_for_symbol"),
+        ("silver_open_interest", "build_open_interest_observed_for_symbol"),
+        ("silver_open_interest", "build_open_interest_1m_feature_for_symbol"),
+        ("silver_volatility", "build_volatility_observed_for_symbol"),
+        ("silver_volatility", "build_volatility_snapshot_observed_for_symbol"),
+        ("silver_volatility", "build_volatility_index_1m_feature_for_symbol"),
+        ("silver_realized_volatility", "build_realized_volatility_1m_feature_for_symbol"),
+        ("silver_historical_prediction", "build_historical_prediction_1m_feature_for_symbol"),
+        ("silver_iv_rv", "build_iv_rv_1m_feature_for_symbol"),
+        ("silver_index_price", "build_index_price_observed_for_symbol"),
+        ("silver_index_price", "build_index_price_1m_feature_for_symbol"),
+        ("silver_futures_summary", "build_futures_summary_observed_for_symbol"),
+        ("silver_futures_summary", "build_futures_summary_1m_feature_for_symbol"),
+        ("silver_options_ticker", "build_options_ticker_observed_for_symbol"),
+        ("silver_options_ticker", "build_options_instrument_ticker_observed_for_symbol"),
+        ("silver_options_surface", "build_options_surface_1m_feature_for_symbol"),
+        ("silver_l2", "build_l2_observed_for_symbol"),
+        ("silver_l2", "build_l2_1m_feature_for_symbol"),
+        ("silver_recent_trades", "build_recent_trade_snapshot_observed_for_symbol"),
+        ("silver_instrument_metadata", "build_instrument_metadata_observed_for_symbol"),
+        ("silver_historical_volatility", "build_historical_volatility_observed_for_symbol"),
+    ]
+    values: dict[str, object] = {
+        "bronze_root": str(tmp_path / "bronze"),
+        "silver_root": str(tmp_path / "silver"),
+        "exchange": "deribit",
+        "symbol": "BTC",
+        "timeframe": "1m",
+        "observed_timeframe": "8h",
+        "cutoff_time": datetime(2026, 5, 1, tzinfo=UTC),
+        "bronze_dataset_type": "volatility_index_data",
+        "output_dataset_type": "volatility_index_data_observed",
+    }
+
+    for module_name, builder_name in builders:
+        module = getattr(silver_service, module_name)
+        monkeypatch.setattr(module, builder_name, lambda **_kwargs: None)
+        public_name = builder_name
+        if builder_name == "build_l2_observed_for_symbol":
+            public_name = "build_perps_l2_observed_for_symbol"
+        elif builder_name == "build_l2_1m_feature_for_symbol":
+            public_name = "build_perps_l2_1m_feature_for_symbol"
+        public_builder = getattr(silver_service, public_name)
+        kwargs = {
+            name: values[name]
+            for name, parameter in inspect.signature(public_builder).parameters.items()
+            if parameter.default is inspect.Parameter.empty and name in values
+        }
+        with pytest.raises(TypeError, match="unexpected report"):
+            public_builder(**kwargs)
