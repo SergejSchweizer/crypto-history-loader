@@ -299,6 +299,17 @@ def test_build_silver_for_symbol_skips_matching_performance_manifest(
     assert parquet_path.read_bytes() == first_bytes
     assert any('"event": "skipped_unchanged"' in record.message for record in caplog.records)
 
+    parquet_path.with_suffix(".performance.json").write_text("{malformed", encoding="utf-8")
+    rebuilt = build_silver_for_symbol(
+        bronze_root=str(bronze), silver_root=str(silver), market="spot_ohlcv", exchange="deribit", symbol="BTC"
+    )
+    assert rebuilt.rows_in == 1
+
+    final_repeat = build_silver_for_symbol(
+        bronze_root=str(bronze), silver_root=str(silver), market="spot_ohlcv", exchange="deribit", symbol="BTC"
+    )
+    assert final_repeat.rows_in == 0
+
 
 def test_build_funding_observed_and_1m_feature(tmp_path: Path) -> None:
     bronze = tmp_path / "bronze"
