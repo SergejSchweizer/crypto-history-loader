@@ -2416,7 +2416,7 @@ Acceptance:
 
 ### PR-57: Silver Shared Source Scan And Dependency Planner
 
-Status: Planned
+Status: In Progress
 
 Updated: 2026-08-02
 
