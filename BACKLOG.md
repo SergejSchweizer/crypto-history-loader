@@ -37,7 +37,7 @@ Last updated: 2026-08-02
 ```markdown
 ### PR-XX: Short Ticket Title
 
-Status: Planned
+Status: In Progress
 
 Updated: YYYY-MM-DD
 
@@ -2383,7 +2383,7 @@ Publication evidence:
 
 ### PR-56: Silver Incremental Monthly Partitions And Lookback Windows
 
-Status: Planned
+Status: In Progress
 
 Updated: 2026-08-02
 
