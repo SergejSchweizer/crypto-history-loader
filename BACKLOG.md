@@ -2519,7 +2519,7 @@ Status: In Progress
 
 Updated: 2026-08-02
 
-PR: https://github.com/SergejSchweizer/crypto-history-loader/pull/166
+PR: https://github.com/SergejSchweizer/crypto-history-loader/pull/167
 
 Branch: `codex/pr60-gold-optional-artifact-decoupling`
 
