@@ -11,10 +11,16 @@ from typing import Any, cast
 import pytest
 
 from application.services.runtime_service import (
+    SingleInstanceError,
+    SingleInstanceLock,
     apply_repository_runtime_limits,
     configure_logging,
     enforce_log_retention,
+    env_bool,
+    env_float,
+    env_int,
     env_list,
+    env_str,
     fetch_concurrency,
     load_env_file,
 )
@@ -167,3 +173,77 @@ def test_enforce_log_retention_keeps_five_plain_days_archives_older_and_deletes_
     assert (tmp_path / f"loader.log.{today.fromordinal(today.toordinal() - 6).isoformat()}.gz").exists()
     assert (tmp_path / f"loader.log.{today.fromordinal(today.toordinal() - 7).isoformat()}.gz").exists()
     assert not stale_archive.exists()
+
+
+def test_runtime_environment_helpers_cover_defaults_and_invalid_values(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Environment helpers should use defaults for missing or malformed values."""
+
+    monkeypatch.delenv("BOOL_VALUE", raising=False)
+    monkeypatch.delenv("FLOAT_VALUE", raising=False)
+    monkeypatch.delenv("INT_VALUE", raising=False)
+    monkeypatch.delenv("LIST_VALUE", raising=False)
+    assert env_bool("BOOL_VALUE", True) is True
+    assert env_float("FLOAT_VALUE", 1.5) == 1.5
+    assert env_int("INT_VALUE", 7) == 7
+    assert env_list("LIST_VALUE", ["BTC"]) == ["BTC"]
+    assert env_str("STRING_VALUE", "fallback") == "fallback"
+
+    monkeypatch.setenv("BOOL_VALUE", " yes ")
+    monkeypatch.setenv("FLOAT_VALUE", "bad")
+    monkeypatch.setenv("INT_VALUE", "bad")
+    monkeypatch.setenv("LIST_VALUE", ",  ")
+    assert env_bool("BOOL_VALUE", False) is True
+    assert env_float("FLOAT_VALUE", 1.5) == 1.5
+    assert env_int("INT_VALUE", 7) == 7
+    assert env_list("LIST_VALUE", ["BTC"]) == ["BTC"]
+
+
+def test_load_env_file_ignores_comments_invalid_lines_and_strips_quotes(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """The local env parser should ignore malformed input and preserve process values."""
+
+    env_file = tmp_path / ".env"
+    env_file.write_text("# comment\ninvalid\nQUOTED=\"value\"\nSINGLE='one'\n", encoding="utf-8")
+    monkeypatch.delenv("QUOTED", raising=False)
+    monkeypatch.delenv("SINGLE", raising=False)
+    load_env_file(str(env_file))
+    assert os.environ["QUOTED"] == "value"
+    assert os.environ["SINGLE"] == "one"
+    load_env_file(str(tmp_path / "missing.env"))
+
+
+def test_runtime_limits_normalize_invalid_and_low_values(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Invalid and below-ceiling Polars settings should be normalized deterministically."""
+
+    monkeypatch.setenv("POLARS_MAX_THREADS", "invalid")
+    apply_repository_runtime_limits()
+    assert os.environ["POLARS_MAX_THREADS"] == "4"
+    monkeypatch.setenv("POLARS_MAX_THREADS", "2")
+    apply_repository_runtime_limits()
+    assert os.environ["POLARS_MAX_THREADS"] == "2"
+
+
+def test_log_retention_validates_arguments_and_missing_directory(tmp_path: Path) -> None:
+    """Retention should reject unsafe settings and tolerate a missing log directory."""
+
+    with pytest.raises(ValueError, match="plain_daily_files"):
+        enforce_log_retention(tmp_path / "missing" / "loader.log", plain_daily_files=-1)
+    with pytest.raises(ValueError, match="archive_retention_days"):
+        enforce_log_retention(tmp_path / "missing" / "loader.log", archive_retention_days=0)
+    enforce_log_retention(tmp_path / "missing" / "loader.log")
+
+
+def test_single_instance_lock_rejects_when_lock_is_held(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """A simulated held lock must fail without leaking the file descriptor."""
+
+    import application.services.runtime_service as module
+
+    monkeypatch.setattr(module.fcntl, "flock", lambda *_args: (_ for _ in ()).throw(BlockingIOError()))
+    with pytest.raises(SingleInstanceError):
+        with SingleInstanceLock(str(tmp_path / "loader.lock")):
+            pass

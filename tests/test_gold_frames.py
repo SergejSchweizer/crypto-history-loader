@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -385,3 +386,108 @@ def test_gold_contract_requirements_have_preparation_specs() -> None:
     }
 
     assert contract_sources <= registered
+
+
+def test_gold_frame_validation_and_empty_input_paths(tmp_path: Path) -> None:
+    """Frame helpers should reject incomplete inputs and report absent artifacts clearly."""
+
+    assert gold_frames.normalize_symbol("") == ""
+    assert (
+        gold_frames.discover_symbols_for_dataset(
+            silver_root=str(tmp_path / "missing"),
+            exchange="deribit",
+            dataset_type="perps_ohlcv",
+            timeframe="1m",
+        )
+        == set()
+    )
+    with pytest.raises(ValueError, match="Missing silver dataset"):
+        gold_frames.read_dataset_frame(
+            silver_root=str(tmp_path), exchange="deribit", symbol="BTC", dataset_type="spot_ohlcv", timeframe="1m"
+        )
+    with pytest.raises(ValueError, match="Missing L2 parquet"):
+        gold_frames.read_latest_l2_gold_frame(l2_root=str(tmp_path), exchange="deribit", symbol="BTC")
+    with pytest.raises(ValueError, match="missing required"):
+        gold_frames.prepare_l2(pl, pl.DataFrame({"value": [1]}), "BTC")
+    with pytest.raises(ValueError, match="Unsupported l2_validation_mode"):
+        gold_frames.validate_or_filter_l2_quality(pl, pl.DataFrame({"l2_snapshot_count": [1]}), "bad")
+    with pytest.raises(ValueError, match="no supported"):
+        gold_frames.validate_or_filter_l2_quality(pl, pl.DataFrame({"value": [1]}), "strict")
+    with pytest.raises(ValueError, match="Unsupported optional"):
+        gold_frames.optional_feature_schema(pl, "unknown")
+    with pytest.raises(ValueError, match="Unsupported dataset_type"):
+        gold_frames.prepare_dataset_frame(pl, "unknown", pl.DataFrame(), "BTC")
+    with pytest.raises(ValueError, match="No timestamp coverage"):
+        gold_frames.build_minute_grid(pl, [pl.DataFrame()], "deribit", "BTC")
+
+
+def test_gold_frame_optional_columns_and_resample_edge_paths() -> None:
+    """Optional feature defaults and one-minute resampling preserve the explicit contract."""
+
+    timestamp = datetime(2026, 5, 1, 0, 0, tzinfo=UTC)
+    index = gold_frames.prepare_index_price(
+        pl,
+        pl.DataFrame({"timestamp": [timestamp], "exchange": ["deribit"], "index_price": [100.0]}),
+        "BTC",
+    )
+    assert index.columns == [
+        "timestamp_m1",
+        "exchange",
+        "symbol",
+        "index_price",
+        "index_price_is_observed",
+        "minutes_since_index_price_observation",
+    ]
+    with pytest.raises(ValueError, match="Unsupported history_full"):
+        gold_frames.resample_history_full_frame(pl, index, "2m")
+    with pytest.raises(ValueError, match="requires timestamp"):
+        gold_frames.resample_history_full_frame(pl, pl.DataFrame({"value": [1]}), "5m")
+    assert gold_frames.resample_history_full_frame(pl, index, "1m").height == 1
+
+
+def test_gold_target_helpers_cover_grouping_and_incomplete_future_windows() -> None:
+    """Prediction helpers keep groups separate and leave incomplete horizons null."""
+
+    rows = [
+        {
+            "exchange": "deribit",
+            "symbol": "BTC",
+            "perp_close_price": 100.0,
+            "iv_minus_rv_1h": 0.1,
+            "iv_rv_zscore_1d": 0.0,
+            "funding_rate_last_known": 0.01,
+            "rv_1h": 0.2,
+        },
+        {
+            "exchange": "deribit",
+            "symbol": "BTC",
+            "perp_close_price": 101.0,
+            "iv_minus_rv_1h": 0.2,
+            "iv_rv_zscore_1d": 2.0,
+            "funding_rate_last_known": 0.0,
+            "rv_1h": 0.3,
+        },
+        {
+            "exchange": "deribit",
+            "symbol": "ETH",
+            "perp_close_price": None,
+            "iv_minus_rv_1h": None,
+            "iv_rv_zscore_1d": None,
+            "funding_rate_last_known": None,
+            "rv_1h": None,
+        },
+    ]
+    groups = gold_frames._group_target_rows(rows)
+    assert [len(group) for group in groups] == [2, 1]
+    output = gold_frames._prediction_target_rows(rows[:2])
+    assert output[0]["target_forward_return_1h"] is None
+    assert output[0]["label_regime_shift_1h"] is None
+    assert gold_frames._float_or_none(True) is None
+    assert gold_frames._float_or_none("1") is None
+    assert gold_frames._float_or_none(2) == 2.0
+    assert gold_frames._min_float([None, "bad", 3, 1]) == 1.0
+    assert gold_frames._min_float([None, "bad"]) is None
+    assert gold_frames._forward_log_return(100.0, 110.0) == pytest.approx(math.log(1.1))
+    assert gold_frames._forward_log_return(0.0, 110.0) is None
+    assert gold_frames.prediction_target_definitions()
+    assert gold_frames.strategy_feature_lookbacks()
