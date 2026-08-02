@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from ingestion.exchanges import deribit_volatility
 
 
@@ -58,3 +60,31 @@ def test_fetch_volatility_index_data_range_continuation(monkeypatch) -> None:  #
     )
     assert [row["timestamp"] for row in rows] == [1000, 2000, 3000]
     assert calls == [1000, 2001]
+
+
+def test_fetch_volatility_index_data_range_validates_and_stops_on_empty_results(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """The adapter rejects invalid requests and treats empty or malformed result blocks as terminal."""
+
+    assert (
+        deribit_volatility.fetch_volatility_index_data_range(
+            currency="BTC", start_open_ms=2, end_open_ms=1, resolution="60"
+        )
+        == []
+    )
+    with pytest.raises(ValueError, match="currency cannot be empty"):
+        deribit_volatility.fetch_volatility_index_data_range(
+            currency=" ", start_open_ms=1, end_open_ms=2, resolution="60"
+        )
+
+    monkeypatch.setattr(deribit_volatility, "get_json", lambda *_args, **_kwargs: {"result": {"data": []}})
+    assert (
+        deribit_volatility.fetch_volatility_index_data_range(
+            currency="BTC", start_open_ms=1, end_open_ms=2, resolution="60"
+        )
+        == []
+    )
+    monkeypatch.setattr(deribit_volatility, "get_json", lambda *_args, **_kwargs: [])
+    with pytest.raises(ValueError, match="Unexpected Deribit volatility"):
+        deribit_volatility.fetch_volatility_index_data_range(
+            currency="BTC", start_open_ms=1, end_open_ms=2, resolution="60"
+        )
