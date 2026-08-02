@@ -2344,7 +2344,7 @@ Acceptance:
 
 ### PR-55: Silver Source Fingerprint Manifests And No-Op Detection
 
-Status: Ready
+Status: Merged
 
 Updated: 2026-08-02
 
