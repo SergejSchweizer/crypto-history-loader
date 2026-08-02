@@ -2449,7 +2449,7 @@ Acceptance:
 
 ### PR-58: Gold Input Fingerprints And Incremental M1 Publication
 
-Status: Planned
+Status: In Progress
 
 Updated: 2026-08-02
 
