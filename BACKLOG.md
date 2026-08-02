@@ -2587,7 +2587,7 @@ Status: In Progress
 
 Updated: 2026-08-02
 
-PR: TBD
+PR: https://github.com/SergejSchweizer/crypto-history-loader/pull/169
 
 Branch: `codex/pr62-enforce-pr-branch-names`
 
