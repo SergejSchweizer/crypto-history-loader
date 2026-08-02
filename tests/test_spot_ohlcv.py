@@ -13,6 +13,10 @@ from ingestion.spot_ohlcv import (
     fetch_candles,
     fetch_candles_all_history,
     fetch_candles_range,
+    interval_to_milliseconds,
+    list_supported_intervals,
+    max_candles_per_request,
+    normalize_storage_symbol,
     normalize_timeframe,
     parse_kline,
 )
@@ -253,3 +257,36 @@ def test_deribit_fetch_klines_all_and_range_edge_paths(monkeypatch: pytest.Monke
 
     monkeypatch.setattr(deribit, "_fetch_chart_page", lambda **kwargs: [])
     assert deribit.fetch_klines_range("BTC", "perp", "1m", 10, 5) == []
+
+
+def test_spot_adapter_delegates_capabilities_and_rejects_unsupported_exchange() -> None:
+    """Public spot helpers expose Deribit capabilities and fail explicitly for unknown exchanges."""
+
+    assert list_supported_intervals("deribit") == deribit.list_supported_intervals()
+    assert max_candles_per_request("deribit") == deribit.max_limit()
+    assert interval_to_milliseconds("deribit", "1m") == 60_000
+    assert normalize_storage_symbol("deribit", "BTC", "perp") == "BTC-PERPETUAL"
+    for helper, args in [
+        (list_supported_intervals, ("unsupported",)),
+        (max_candles_per_request, ("unsupported",)),
+        (interval_to_milliseconds, ("unsupported", "1m")),
+        (normalize_storage_symbol, ("unsupported", "BTC", "perp")),
+    ]:
+        with pytest.raises(ValueError, match="Unsupported exchange"):
+            helper(*args)  # type: ignore[arg-type]
+
+
+def test_fetch_candles_all_history_supports_legacy_fetcher_and_chunks(monkeypatch: pytest.MonkeyPatch) -> None:
+    """History reads retain compatibility with fetchers that predate the page callback."""
+
+    row = [1000, "1", "1", "1", "1", "1", 1999, None, 1]
+
+    def _legacy_fetcher(**kwargs: object) -> list[list[object]]:
+        if "on_page" in kwargs:
+            raise TypeError("unexpected keyword argument 'on_page'")
+        return [row]
+
+    monkeypatch.setattr(deribit, "fetch_klines_all", _legacy_fetcher)
+    rows = fetch_candles_all_history("deribit", "BTC", "1m", "perp", on_history_chunk=lambda _rows: None)
+    assert len(rows) == 1
+    assert rows[0].quote_volume is None
