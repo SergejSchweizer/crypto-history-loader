@@ -41,7 +41,7 @@ Status: In Progress
 
 Updated: YYYY-MM-DD
 
-PR: TBD
+PR: https://github.com/SergejSchweizer/crypto-history-loader/pull/170
 
 Branch: `codex/prxx-short-ticket-title`
 
@@ -2616,6 +2616,8 @@ Description:
 
 Acceptance:
 - A1 (verifies R1): `AGENTS.md` defines the `PR-<backlog-number>` Conventional Commit subject format with an example.
+
+Handoff status: `git status --short` produced no output before this ticket update.
 
 ## Completion Definition
 
