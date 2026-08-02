@@ -78,6 +78,14 @@ EXPECTED_MEDALLION_SILVER_DATASETS = set(supported_silver_build_ids())
         (["gold-build", "--retention-keep-versions", "3"], {"retention_keep_versions": 3}),
         (["gold-build", "--maxprocesses", "4"], {"maxprocesses": 4}),
         (["gold-build", "--no-json-output"], {"no_json_output": True}),
+        (
+            ["benchmark-build", "--fixture-only", "--output-report", "docs/benchmarks/report.json"],
+            {"fixture_only": True, "output_report": "docs/benchmarks/report.json"},
+        ),
+        (
+            ["benchmark-build", "--bronze-root", "lake/test-bronze", "--output-report", "report.json"],
+            {"bronze_root": "lake/test-bronze", "output_report": "report.json"},
+        ),
         (["dataset-inventory", "--bronze-root", "lake/test-bronze"], {"bronze_root": "lake/test-bronze"}),
         (["dataset-inventory", "--silver-root", "lake/test-silver"], {"silver_root": "lake/test-silver"}),
         (["dataset-inventory", "--gold-root", "lake/test-gold"], {"gold_root": "lake/test-gold"}),

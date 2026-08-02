@@ -20,6 +20,7 @@ apply_repository_runtime_limits()
 
 from api.commands import loader as loader_cmd
 from api.commands import stats as stats_cmd
+from api.commands.benchmark import add_benchmark_build_parser, run_benchmark_build
 from api.commands.gold import add_gold_build_parser, run_gold_build
 from api.commands.inventory import add_dataset_inventory_parser, run_dataset_inventory
 from api.commands.loader import add_bronze_build_parser
@@ -152,6 +153,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_bronze_build_parser(subparsers)
     add_silver_build_parser(subparsers)
     add_gold_build_parser(subparsers)
+    add_benchmark_build_parser(subparsers)
     add_dataset_inventory_parser(subparsers)
     add_list_spot_ohlcv_timeframes_parser(subparsers)
     add_export_descriptive_stats_parser(subparsers)
@@ -321,6 +323,8 @@ def main() -> None:
         run_silver_build(args=args, logger=logger)
     elif args.command == "gold-build":
         run_gold_build(args=args, logger=logger)
+    elif args.command == "benchmark-build":
+        run_benchmark_build(args=args, logger=logger)
     elif args.command == "dataset-inventory":
         run_dataset_inventory(args=args, logger=logger)
     elif args.command == "list-spot_ohlcv-timeframes":
