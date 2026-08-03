@@ -71,6 +71,12 @@ def add_gold_build_parser(subparsers: Any) -> None:
         choices=list(supported_gold_dataset_ids()),
         help="Gold dataset identifier (when omitted, build all supported datasets)",
     )
+    parser.add_argument(
+        "--exclude-dataset-id",
+        choices=list(supported_gold_dataset_ids()),
+        nargs="+",
+        help="Dataset identifiers to omit from the default all-datasets schedule",
+    )
     parser.add_argument("--dataset-version", default="v1.0.0", help="Semantic dataset version")
     parser.add_argument(
         "--auto-version", action="store_true", help="Auto-increment semantic version from prior manifests"
@@ -157,6 +163,7 @@ def run_gold_build(args: argparse.Namespace, logger: logging.Logger) -> None:
     l2_root = cast(str, args.l2_root)
     exchange = cast(str, args.exchange)
     dataset_id = cast(str | None, args.dataset_id)
+    excluded_dataset_ids = cast(list[str] | None, getattr(args, "exclude_dataset_id", None)) or []
     dataset_version = cast(str, args.dataset_version)
     auto_version = bool(getattr(args, "auto_version", False))
     version_base = cast(str, getattr(args, "version_base", "v1.0.0"))
@@ -170,7 +177,11 @@ def run_gold_build(args: argparse.Namespace, logger: logging.Logger) -> None:
         raise ValueError(f"Invalid --maxprocesses '{maxprocesses}'. Value must be an integer >= 1")
     reports: list[dict[str, object]] = []
 
-    dataset_ids = _resolve_dataset_ids(dataset_id)
+    if dataset_id is not None and dataset_id in excluded_dataset_ids:
+        raise ValueError("--dataset-id cannot also be passed to --exclude-dataset-id")
+    dataset_ids = [
+        candidate for candidate in _resolve_dataset_ids(dataset_id) if candidate not in set(excluded_dataset_ids)
+    ]
     schedule: dict[str, list[str]] = {}
     for selected_dataset_id in dataset_ids:
         schedule[selected_dataset_id] = _resolve_gold_symbols(

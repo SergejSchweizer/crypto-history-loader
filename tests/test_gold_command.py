@@ -67,6 +67,33 @@ def test_resolve_dataset_ids_returns_sorted_supported_when_missing() -> None:
     assert gold_cmd._resolve_dataset_ids(None) == expected
 
 
+def test_run_gold_build_excludes_configured_dataset_ids(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The default Gold schedule omits only explicitly excluded datasets."""
+
+    scheduled_dataset_ids: list[str] = []
+
+    def _resolve_symbols(**kwargs: object) -> list[str]:
+        scheduled_dataset_ids.append(str(kwargs["dataset_id"]))
+        return []
+
+    monkeypatch.setattr(gold_cmd, "_resolve_gold_symbols", _resolve_symbols)
+    monkeypatch.setattr(gold_cmd, "_validate_version_args", lambda **kwargs: None)
+    args = gold_args(dataset_id=None)
+    excluded_dataset_ids = [
+        "gold.history.extended.m1",
+        "gold.history.extended.m5",
+        "gold.history.extended.m30",
+        "gold.history.extended.h1",
+        "gold.history.extended_full.m1",
+    ]
+    args.exclude_dataset_id = excluded_dataset_ids
+
+    gold_cmd.run_gold_build(args=args, logger=logging.getLogger("test"))
+
+    assert not set(excluded_dataset_ids).intersection(scheduled_dataset_ids)
+    assert "gold.history.full.m1" in scheduled_dataset_ids
+
+
 def test_order_dataset_ids_with_dependencies_runs_sources_first() -> None:
     dataset_ids = [
         "gold.live.extended.h1",

@@ -2331,6 +2331,26 @@ Acceptance:
 
 Handoff status: merged through PR-171; feature branch may be deleted after merge verification.
 
+### PR-65: Disable Historical Prediction Production Builds
+
+Status: In Progress
+
+Updated: 2026-08-03
+
+PR: TBD
+
+Branch: `codex/pr65-disable-historical-prediction`
+
+Depends on: PR-64
+
+Description:
+- R1: Stop scheduled Silver historical prediction and Silver plot generation.
+- R2: Exclude Gold datasets that require historical prediction while retaining Gold plot generation.
+
+Acceptance:
+- A1 (verifies R1): The Medallion Silver schedule excludes `historical_prediction` and `--plot`.
+- A2 (verifies R2): Gold excludes only the five history-extended datasets and retains `--plot`.
+
 ## Completion Definition
 
 The stack is complete when:
