@@ -1972,316 +1972,6 @@ Acceptance:
 - The top-level workflow becomes a coordinator over named stage contracts rather than a monolithic implementation.
 - `git status --short` and the PR URL are recorded in this backlog entry before handoff.
 
-### PR-47: Bronze Compatibility Wrapper Retirement Plan
-
-Status: Planned
-
-Updated: 2026-07-25
-
-PR: TBD
-
-Branch: `codex/pr47-bronze-compat-retirement`
-
-Depends on: PR-46
-
-Planning `git status --short`:
-
-```text
-clean
-```
-
-Publication `git status --short`:
-
-```text
-TBD
-```
-
-Description:
-- R1: Inventory compatibility wrappers and isolate every required shim with its owner, reason, and removal condition.
-- R2: Migrate Bronze tests from module-global monkeypatching to public request, adapter, and stage contracts.
-- R3: Remove unused wrappers and enforce the API/application import boundary.
-- R4: Preserve deterministic repeated command execution in one process.
-- R5: Record publication evidence in this ticket before handoff.
-
-Out of scope:
-- Do not break documented public CLI commands.
-- Do not remove compatibility that is still needed for stable tests unless the tests are migrated in the same PR.
-- Do not alter Bronze dataset behavior.
-
-Acceptance:
-- A1 (verifies R1): Remaining compatibility code is isolated and documents its owner, reason, and removal condition.
-- A2 (verifies R2): New Bronze tests use public contracts instead of module-global monkeypatching where practical.
-- A3 (verifies R3): Unused wrappers are absent and import-boundary checks pass.
-- A4 (verifies R4): A regression test proves deterministic repeated in-process command execution.
-- A5 (verifies R5): `git status --short` and the PR URL are recorded before handoff.
-
-### PR-48: Silver Builder Spec Completeness Audit
-
-Status: Planned
-
-Updated: 2026-07-25
-
-PR: TBD
-
-Branch: `codex/pr48-silver-builder-spec-audit`
-
-Depends on: PR-47
-
-Planning `git status --short`:
-
-```text
-clean
-```
-
-Publication `git status --short`:
-
-```text
-TBD
-```
-
-Description:
-- R1: Expose every supported Silver builder spec in deterministic sorted order.
-- R2: Require every CLI-supported Silver dataset to have one complete builder spec or a documented non-buildable reason.
-- R3: Record deterministic output path, sorting, and deduplication semantics in every spec.
-- R4: Preserve existing Silver transformation and output behavior.
-- R5: Record publication evidence in this ticket before handoff.
-
-Out of scope:
-- Do not rewrite individual Silver builders yet.
-- Do not change report output, partition paths, column order, or schema.
-- Do not add new Silver datasets.
-
-Acceptance:
-- A1 (verifies R1): One test lists all supported Silver build specs in stable sorted order.
-- A2 (verifies R2): A completeness test fails when a CLI dataset lacks a complete spec or documented exception.
-- A3 (verifies R3): Every spec declares deterministic output path, sorting, and deduplication semantics.
-- A4 (verifies R4): Existing Silver behavior and output contracts remain unchanged in regression tests.
-- A5 (verifies R5): `git status --short` and the PR URL are recorded before handoff.
-
-### PR-49: Silver Service Coordinator Extraction
-
-Status: Planned
-
-Updated: 2026-07-25
-
-PR: TBD
-
-Branch: `codex/pr49-silver-service-coordinator`
-
-Depends on: PR-48
-
-Planning `git status --short`:
-
-```text
-clean
-```
-
-Publication `git status --short`:
-
-```text
-TBD
-```
-
-Description:
-- R1: Route every CLI-supported Silver dataset through one spec-driven coordinator.
-- R2: Limit dataset-specific coordinator branches to explicitly documented exceptions.
-- R3: Preserve public builder imports through coordinator delegation or documented legacy adapters.
-- R4: Preserve deterministic output files, columns, and report metadata on repeated builds.
-- R5: Record publication evidence in this ticket before handoff.
-
-Out of scope:
-- Do not optimize performance yet.
-- Do not change row ordering except to preserve documented stable sort keys.
-- Do not remove compatibility aliases that are still imported by tests or commands.
-
-Acceptance:
-- A1 (verifies R1): `silver-build --dataset ...` resolves every current dataset through the same coordinator path.
-- A2 (verifies R2): Tests or inspection show no undocumented dataset-specific coordinator branches.
-- A3 (verifies R3): Existing public builders delegate or are documented legacy adapters.
-- A4 (verifies R4): Repeated unchanged builds produce identical files, columns, and report metadata.
-- A5 (verifies R5): `git status --short` and the PR URL are recorded before handoff.
-
-### PR-50: Silver Dataset Builder Module Boundaries
-
-Status: Planned
-
-Updated: 2026-07-25
-
-PR: TBD
-
-Branch: `codex/pr50-silver-builder-boundaries`
-
-Depends on: PR-49
-
-Planning `git status --short`:
-
-```text
-clean
-```
-
-Publication `git status --short`:
-
-```text
-TBD
-```
-
-Description:
-- R1: Remove dataset-specific transformation ownership from `silver_service.py`.
-- R2: Provide typed public entrypoints and return reports for cohesive Silver builder modules.
-- R3: Enforce each builder's declared input and output contract with deterministic tests.
-- R4: Preserve application, API, and ingestion import boundaries.
-- R5: Record publication evidence in this ticket before handoff.
-
-Out of scope:
-- Do not introduce new feature definitions.
-- Do not change Silver contract names.
-- Do not change Gold requirements.
-
-Acceptance:
-- A1 (verifies R1): `silver_service.py` contains coordination but no dataset-specific transformation details.
-- A2 (verifies R2): Builder modules expose typed public entrypoints and return reports.
-- A3 (verifies R3): Tests fail when a builder emits columns outside its contract.
-- A4 (verifies R4): Import-linter passes for application, API, and ingestion boundaries.
-- A5 (verifies R5): `git status --short` and the PR URL are recorded before handoff.
-
-### PR-51: Gold Source Preparation Module Split
-
-Status: Planned
-
-Updated: 2026-07-25
-
-PR: TBD
-
-Branch: `codex/pr51-gold-source-preparation-split`
-
-Depends on: PR-50
-
-Planning `git status --short`:
-
-```text
-clean
-```
-
-Publication `git status --short`:
-
-```text
-TBD
-```
-
-Description:
-- R1: Register every Gold source requirement in a typed source preparation spec or document its exception.
-- R2: Preserve nullable optional-source columns without expanding the required time grid.
-- R3: Preserve existing Gold build behavior and source compatibility.
-- R4: Move source-specific preparation ownership out of `gold_frames.py`.
-- R5: Record publication evidence in this ticket before handoff.
-
-Out of scope:
-- Do not change Gold feature definitions, target definitions, version retention, or manifest behavior.
-- Do not change Silver input contract requirements.
-- Do not remove public Gold service entrypoints.
-
-Acceptance:
-- A1 (verifies R1): Every Gold source requirement has one typed preparation spec or documented exception.
-- A2 (verifies R2): Tests prove optional gaps create stable nullable columns without expanding the time grid.
-- A3 (verifies R3): Existing Gold build and compatibility tests pass unchanged.
-- A4 (verifies R4): `gold_frames.py` delegates source-specific preparation to focused modules.
-- A5 (verifies R5): `git status --short` and the PR URL are recorded before handoff.
-
-### PR-52: Gold Feature And Target Family Split
-
-Status: Planned
-
-Updated: 2026-07-25
-
-PR: TBD
-
-Branch: `codex/pr52-gold-feature-target-split`
-
-Depends on: PR-51
-
-Planning `git status --short`:
-
-```text
-clean
-```
-
-Publication `git status --short`:
-
-```text
-TBD
-```
-
-Description:
-- R1: Isolate feature-only Gold modules from prediction target and label modules.
-- R2: Declare target lookahead windows and output labels explicitly.
-- R3: Preserve existing Gold output schemas and dataset IDs.
-- R4: Enforce leakage prevention with executable tests.
-- R5: Record publication evidence in this ticket before handoff.
-
-Out of scope:
-- Do not change feature math unless an existing test proves a bug.
-- Do not add new model labels.
-- Do not change Gold dataset IDs.
-
-Acceptance:
-- A1 (verifies R1): Feature-only Gold datasets do not import target-building modules.
-- A2 (verifies R2): Target modules declare lookahead windows and output labels.
-- A3 (verifies R3): Contract tests prove existing Gold schemas and dataset IDs remain stable.
-- A4 (verifies R4): Tests fail when lookahead-dependent target logic enters feature construction.
-- A5 (verifies R5): `git status --short` and the PR URL are recorded before handoff.
-
-### PR-53: Gold Typing And Pyright Suppression Reduction
-
-Status: Planned
-
-Updated: 2026-07-25
-
-PR: TBD
-
-Branch: `codex/pr53-gold-typing-pyright-cleanup`
-
-Depends on: PR-52
-
-Planning `git status --short`:
-
-```text
-clean
-```
-
-Publication `git status --short`:
-
-```text
-TBD
-```
-
-Description:
-- R1: Remove or materially narrow broad Gold module type suppressions.
-- R2: Keep public Gold service parameters and return types explicit and compatible.
-- R3: Preserve or increase configured type-checking strictness.
-- R4: Pass Gold regression and import-boundary checks.
-- R5: Run and record the complete final quality suite.
-- R6: Record publication evidence in this ticket before handoff.
-
-Out of scope:
-- Do not attempt to type every internal Polars expression if it creates noisy casts without boundary value.
-- Do not relax pyright, mypy, ruff, coverage, or import-linter configuration.
-- Do not change Gold runtime behavior.
-
-Acceptance:
-- A1 (verifies R1): Broad Gold module suppressions are removed or materially narrowed.
-- A2 (verifies R2): Public Gold services have explicit compatible parameter and return types.
-- A3 (verifies R3): Type-check configuration remains at least as strict as before.
-- A4 (verifies R4): Gold tests and import-boundary checks pass.
-- A5 (verifies R5): The complete configured quality suite passes:
-  - `ruff check .`
-  - `ruff format --check .`
-  - `pyright`
-  - `pytest -q`
-  - `coverage run -m pytest`
-  - `coverage report`
-  - import-linter/schema validation commands if configured in this repository
-- A6 (verifies R6): `git status --short` and the PR URL are recorded before handoff.
-
 ## Performance Delivery Rules
 
 PR-54 through PR-61 are a separate performance stack. They must be implemented in order and must not be
@@ -2550,7 +2240,7 @@ Acceptance:
 
 ### PR-61: Incremental Medallion Orchestrator And Freshness Audit
 
-Status: In Progress
+Status: Merged
 
 Updated: 2026-08-02
 
@@ -2583,7 +2273,7 @@ Acceptance:
 
 ### PR-62: Backlog PR Branch Naming Policy
 
-Status: In Progress
+Status: Merged
 
 Updated: 2026-08-02
 
@@ -2601,7 +2291,7 @@ Acceptance:
 
 ### PR-63: Backlog PR Commit Identifier Policy
 
-Status: In Progress
+Status: Merged
 
 Updated: 2026-08-02
 
@@ -2618,6 +2308,28 @@ Acceptance:
 - A1 (verifies R1): `AGENTS.md` defines the `PR-<backlog-number>` Conventional Commit subject format with an example.
 
 Handoff status: `git status --short` produced no output before this ticket update.
+
+### PR-64: Backlog Cleanup For Superseded Refactoring Tickets
+
+Status: Merged
+
+Updated: 2026-08-03
+
+PR: https://github.com/SergejSchweizer/crypto-history-loader/pull/171
+
+Branch: `codex/pr64-backlog-cleanup`
+
+Depends on: PR-63
+
+Description:
+- R1: Remove the superseded planned PR-47 through PR-53 ticket entries.
+- R2: Synchronize PR-61 through PR-63 ticket statuses with their merged GitHub pull requests.
+
+Acceptance:
+- A1 (verifies R1): Backlog searches contain no PR-47 through PR-53 ticket headings.
+- A2 (verifies R2): PR-61 through PR-63 each have `Status: Merged`.
+
+Handoff status: merged through PR-171; feature branch may be deleted after merge verification.
 
 ## Completion Definition
 
