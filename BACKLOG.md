@@ -2333,7 +2333,7 @@ Handoff status: merged through PR-171; feature branch may be deleted after merge
 
 ### PR-65: Disable Historical Prediction Production Builds
 
-Status: In Progress
+Status: Merged
 
 Updated: 2026-08-03
 
@@ -2350,6 +2350,8 @@ Description:
 Acceptance:
 - A1 (verifies R1): The Medallion Silver schedule excludes `historical_prediction` and `--plot`.
 - A2 (verifies R2): Gold excludes only the five history-extended datasets and retains `--plot`.
+
+Handoff status: merged through PR-172; feature branch may be deleted after merge verification.
 
 ## Completion Definition
 
