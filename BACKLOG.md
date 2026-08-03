@@ -2315,7 +2315,7 @@ Status: In Progress
 
 Updated: 2026-08-03
 
-PR: TBD
+PR: https://github.com/SergejSchweizer/crypto-history-loader/pull/171
 
 Branch: `codex/pr64-backlog-cleanup`
 
