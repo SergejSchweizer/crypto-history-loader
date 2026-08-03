@@ -2337,7 +2337,7 @@ Status: In Progress
 
 Updated: 2026-08-03
 
-PR: TBD
+PR: https://github.com/SergejSchweizer/crypto-history-loader/pull/172
 
 Branch: `codex/pr65-disable-historical-prediction`
 
