@@ -205,8 +205,8 @@ def test_readme_python_commands_parse_without_lake_or_network_access(monkeypatch
     assert parsed_pipeline_commands == 1
 
 
-def test_medallion_pipeline_schedules_complete_silver_and_gold_runs() -> None:
-    """The cron medallion run should not silently omit supported Silver or Gold families."""
+def test_medallion_pipeline_schedules_configured_silver_and_gold_runs() -> None:
+    """The cron Medallion run follows explicit Silver and Gold production exclusions."""
 
     yaml = pytest.importorskip("yaml")
     config_path = Path(__file__).resolve().parents[1] / "config.yaml"
@@ -226,13 +226,22 @@ def test_medallion_pipeline_schedules_complete_silver_and_gold_runs() -> None:
         if token_value.startswith("--"):
             break
         silver_datasets.add(token_value)
-    assert silver_datasets == EXPECTED_MEDALLION_SILVER_DATASETS
+    assert silver_datasets == EXPECTED_MEDALLION_SILVER_DATASETS - {"historical_prediction"}
+    assert "--plot" not in silver_args
 
     gold_cfg = pipeline_cfg.get("gold")
     assert isinstance(gold_cfg, dict)
     gold_args = gold_cfg.get("cli_args")
     assert isinstance(gold_args, list)
     assert "--dataset-id" not in gold_args
+    assert "--exclude-dataset-id" in gold_args
+    assert set(gold_args[gold_args.index("--exclude-dataset-id") + 1 : gold_args.index("--manifest")]) == {
+        "gold.history.extended.m1",
+        "gold.history.extended.m5",
+        "gold.history.extended.m30",
+        "gold.history.extended.h1",
+        "gold.history.extended_full.m1",
+    }
 
 
 def test_apply_yaml_defaults_keeps_save_parquet_cli_only() -> None:

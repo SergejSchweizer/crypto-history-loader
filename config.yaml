@@ -62,7 +62,6 @@ medallion-pipeline:
       - open_interest
       - perps_trades
       - options_trades
-      - historical_prediction
       - volatility_index_data
       - volatility_index_snapshot_1m
       - realized_volatility
@@ -79,7 +78,6 @@ medallion-pipeline:
       - futures_instrument_metadata_snapshot_daily
       - historical_volatility
       - --manifest
-      - --plot
       - --maxprocesses
       - "4"
       - --no-json-output
@@ -87,6 +85,12 @@ medallion-pipeline:
     enabled: true
     command: gold-build
     cli_args:
+      - --exclude-dataset-id
+      - gold.history.extended.m1
+      - gold.history.extended.m5
+      - gold.history.extended.m30
+      - gold.history.extended.h1
+      - gold.history.extended_full.m1
       - --manifest
       - --plot
       - --maxprocesses
