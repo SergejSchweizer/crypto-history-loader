@@ -2311,7 +2311,7 @@ Handoff status: `git status --short` produced no output before this ticket updat
 
 ### PR-64: Backlog Cleanup For Superseded Refactoring Tickets
 
-Status: In Progress
+Status: Merged
 
 Updated: 2026-08-03
 
@@ -2328,6 +2328,8 @@ Description:
 Acceptance:
 - A1 (verifies R1): Backlog searches contain no PR-47 through PR-53 ticket headings.
 - A2 (verifies R2): PR-61 through PR-63 each have `Status: Merged`.
+
+Handoff status: merged through PR-171; feature branch may be deleted after merge verification.
 
 ## Completion Definition
 
