@@ -37,7 +37,7 @@ Last updated: 2026-08-02
 ```markdown
 ### PR-XX: Short Ticket Title
 
-Status: In Progress
+Status: Ready for Review
 
 Updated: YYYY-MM-DD
 
@@ -2352,6 +2352,26 @@ Acceptance:
 - A2 (verifies R2): Gold excludes only the five history-extended datasets and retains `--plot`.
 
 Handoff status: merged through PR-172; feature branch may be deleted after merge verification.
+
+### PR-66: Deduplicate Gold Live Full Artifacts
+
+Status: In Progress
+
+Updated: 2026-08-04
+
+PR: TBD
+
+Branch: `codex/pr66-deduplicate-gold-live-full`
+
+Depends on: PR-65
+
+Description:
+- R1: Retain one canonical artifact per symbol for every `gold.live.full.*` dataset.
+- R2: Preserve the existing three-version retention policy for non-live-full Gold datasets.
+
+Acceptance:
+- A1 (verifies R1): Repeated live-full builds leave one Parquet artifact per symbol and no duplicate timestamp keys.
+- A2 (verifies R2): The configured non-live-full Gold retention behavior remains unchanged.
 
 ## Completion Definition
 

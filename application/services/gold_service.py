@@ -41,6 +41,7 @@ GOLD_DATASET_SPECS: dict[str, dict[str, object]] = {
 }
 SUPPORTED_GOLD_DATASET_IDS = set(supported_gold_dataset_ids())
 GOLD_RETENTION_KEEP_VERSIONS = 3
+_LIVE_FULL_DATASET_PREFIX = "gold.live.full."
 HISTORY_FULL_HISTORY_SOURCE_COLUMNS = (
     "timestamp_m1",
     "exchange",
@@ -166,6 +167,14 @@ def validate_gold_retention_keep_versions(keep_last_versions: int) -> int:
             f"{GOLD_RETENTION_KEEP_VERSIONS} versions; received {keep_last_versions}"
         )
     return GOLD_RETENTION_KEEP_VERSIONS
+
+
+def _retention_keep_versions_for_dataset(dataset_id: str, keep_last_versions: int) -> int:
+    """Return the artifact retention count appropriate for a Gold dataset lineage."""
+
+    if dataset_id.startswith(_LIVE_FULL_DATASET_PREFIX):
+        return 1
+    return keep_last_versions
 
 
 def _select_history_full_canonical_columns(merged: Any) -> Any:
@@ -886,19 +895,20 @@ def _build_history_full_derived_for_symbol(
         publication_requests.append(publish_request)
     written_manifest: str | None = str(manifest_path.resolve())
     if publication_requests is None:
+        retention_keep_versions = _retention_keep_versions_for_dataset(dataset_id, keep_last_versions)
         _prune_gold_versions(
             gold_root=root,
             dataset_id=dataset_id,
             exchange=exchange,
             symbol=symbol,
-            keep_last_versions=keep_last_versions,
+            keep_last_versions=retention_keep_versions,
         )
         _prune_gold_artifacts(
             gold_root=root,
             dataset_id=dataset_id,
             exchange=exchange,
             symbol=symbol,
-            keep_last_versions=keep_last_versions,
+            keep_last_versions=retention_keep_versions,
         )
 
     return GoldBuildReport(
@@ -984,19 +994,20 @@ def build_gold_timeframe_fanout_for_symbol(
     gold_publication.publish_gold_artifacts_atomically(requests=publication_requests)
     root = Path(gold_root)
     for dataset_id in ordered_dataset_ids:
+        retention_keep_versions = _retention_keep_versions_for_dataset(dataset_id, keep_last_versions)
         _prune_gold_versions(
             gold_root=root,
             dataset_id=dataset_id,
             exchange=exchange,
             symbol=normalized_symbol,
-            keep_last_versions=keep_last_versions,
+            keep_last_versions=retention_keep_versions,
         )
         _prune_gold_artifacts(
             gold_root=root,
             dataset_id=dataset_id,
             exchange=exchange,
             symbol=normalized_symbol,
-            keep_last_versions=keep_last_versions,
+            keep_last_versions=retention_keep_versions,
         )
     return reports
 
@@ -1356,19 +1367,20 @@ def build_gold_for_symbol(
         manifest_payload=manifest_payload,
     )
     written_manifest: str | None = str(manifest_path.resolve())
+    retention_keep_versions = _retention_keep_versions_for_dataset(dataset_id, keep_last_versions)
     _prune_gold_versions(
         gold_root=root,
         dataset_id=dataset_id,
         exchange=exchange,
         symbol=symbol,
-        keep_last_versions=keep_last_versions,
+        keep_last_versions=retention_keep_versions,
     )
     _prune_gold_artifacts(
         gold_root=root,
         dataset_id=dataset_id,
         exchange=exchange,
         symbol=symbol,
-        keep_last_versions=keep_last_versions,
+        keep_last_versions=retention_keep_versions,
     )
 
     return GoldBuildReport(
