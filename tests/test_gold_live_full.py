@@ -244,6 +244,48 @@ def test_live_full_gold_combines_live_origin_features_without_historical_fill(tm
     assert manifest["missing_value_count_by_column"]["volatility_index_close"] > 0
 
 
+def test_live_full_gold_retains_one_canonical_artifact_per_symbol(tmp_path: Path) -> None:
+    """Repeated live builds must not leave duplicate full-history parquet snapshots."""
+
+    t0 = datetime(2026, 5, 24, 12, 0, tzinfo=UTC)
+    t1 = t0 + timedelta(minutes=1)
+    silver = tmp_path / "silver"
+    gold = tmp_path / "gold"
+    _write_volatility_snapshot(silver, [t0, t1])
+    _write_index_price_snapshot(silver, [t0, t1])
+    _write_futures_summary_snapshot(silver, [t0, t1])
+    _write_options_surface_snapshots(silver, [t0, t1])
+    _write_live_trade_metadata_sources(silver, [t0, t1])
+    for dataset_type, symbol, rows in (
+        (
+            "perps_l2_snapshot_1m_observed",
+            "BTC-PERPETUAL",
+            [_l2_row(t0, instrument_name="BTC-PERPETUAL"), _l2_row(t1, instrument_name="BTC-PERPETUAL")],
+        ),
+        (
+            "options_l2_snapshot_1m_observed",
+            "BTC",
+            [_l2_row(t0, instrument_name="BTC-29MAY26-100-C"), _l2_row(t1, instrument_name="BTC-29MAY26-100-C")],
+        ),
+    ):
+        _write_silver(silver, dataset_type=dataset_type, symbol=symbol, timeframe="1m", rows=rows)
+
+    for offset in range(3):
+        _write_volatility_snapshot(silver, [t0, t1 + timedelta(minutes=offset)])
+        build_gold_for_symbol(
+            silver_root=str(silver),
+            gold_root=str(gold),
+            exchange="deribit",
+            symbol="BTC",
+            dataset_id="gold.live.full.m1",
+        )
+
+    artifacts = list(gold.glob("dataset_id=gold.live.full.m1/**/*.parquet"))
+    assert len(artifacts) == 1
+    frame = pl.read_parquet(artifacts[0])
+    assert frame.height == frame.unique(subset=["timestamp_m1", "exchange", "symbol"]).height
+
+
 def test_live_full_gold_contract_declares_live_sources() -> None:
     """The typed live full contract should be isolated to live-loader-derived sources."""
 
