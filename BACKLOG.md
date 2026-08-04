@@ -37,7 +37,7 @@ Last updated: 2026-08-02
 ```markdown
 ### PR-XX: Short Ticket Title
 
-Status: Ready for Review
+Status: Merged
 
 Updated: YYYY-MM-DD
 
