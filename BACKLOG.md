@@ -41,7 +41,7 @@ Status: Ready for Review
 
 Updated: YYYY-MM-DD
 
-PR: TBD
+PR: https://github.com/SergejSchweizer/crypto-history-loader/pull/173
 
 Branch: `codex/prxx-short-ticket-title`
 
