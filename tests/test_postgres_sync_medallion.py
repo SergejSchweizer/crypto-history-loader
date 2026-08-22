@@ -85,7 +85,11 @@ def test_gold_failure_gates_postgres_sync(monkeypatch: pytest.MonkeyPatch, tmp_p
     executed: list[str] = []
 
     def fake_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
-        command_name = command[3]
+        command_name = next(
+            argument
+            for argument in command
+            if argument in {"bronze-build", "silver-build", "gold-build", "gold-sync-postgres"}
+        )
         executed.append(command_name)
         if command_name == "gold-build":
             raise subprocess.CalledProcessError(7, command)
@@ -115,7 +119,11 @@ def test_postgres_failure_propagates_after_gold_without_rebuild(
     executed: list[str] = []
 
     def fake_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
-        command_name = command[3]
+        command_name = next(
+            argument
+            for argument in command
+            if argument in {"bronze-build", "silver-build", "gold-build", "gold-sync-postgres"}
+        )
         executed.append(command_name)
         if command_name == "gold-sync-postgres":
             raise subprocess.CalledProcessError(9, command)
