@@ -46,6 +46,33 @@ Each consumer table mirrors the current Parquet Gold row schema and uses the com
 
 Every publishable current Gold contract must expose those three fields. Unsupported or ambiguous source types fail before any write. Existing table/source schema-signature mismatch is a migration-required error. Normal sync must never `DROP`, `TRUNCATE`, replace a table, delete-all, or silently mutate a live schema.
 
+### Timestamp compatibility contract
+
+The timestamp contract must be type-compatible with the implemented `market-regime-loader` Gold/PostgreSQL serving path.
+
+Canonical source timestamp type:
+
+```text
+timestamp_m1: Polars Datetime(time_unit="us", time_zone="UTC")
+```
+
+PostgreSQL timestamp type:
+
+```text
+TIMESTAMPTZ(6)
+```
+
+Mandatory invariants:
+
+- `timestamp_m1` must be normalized and validated as UTC-aware microsecond precision before hashing or PostgreSQL mutation.
+- Every Gold source column whose logical type is timestamp/datetime must use UTC-aware microsecond semantics at the PostgreSQL sync boundary; true calendar-date fields remain `DATE` and are not converted to timestamps.
+- Every PostgreSQL consumer timestamp/datetime column is exactly `TIMESTAMPTZ(6)`.
+- Internal sync timestamps are also exactly `TIMESTAMPTZ(6)`: `gold_sync_state.min_timestamp`, `gold_sync_state.max_timestamp`, `gold_sync_state.synced_at_utc`, and `gold_row_hashes.timestamp_m1`.
+- Every PostgreSQL sync session explicitly uses timezone `UTC`.
+- `TIMESTAMP WITHOUT TIME ZONE`, naive datetimes, non-UTC timestamp semantics, millisecond/nanosecond timestamp storage, and PostgreSQL timestamp precision other than `(6)` are forbidden at this boundary.
+- Timestamp round-trip tests must prove that an aware UTC microsecond source value is read back from PostgreSQL with identical instant and microsecond precision.
+- This mirrors the `market-regime-loader` convention: source Gold `Datetime(us, UTC)` and PostgreSQL `TIMESTAMPTZ(6)` with a UTC session. The observation semantics of the crypto datasets remain their own; only the timestamp type/precision/timezone contract is shared.
+
 Synchronization is state reconciliation, not a timestamp-watermark feed:
 
 - First successful sync of a `(dataset_id, exchange, symbol)` lineage inserts the complete current Gold history.
@@ -130,6 +157,7 @@ Description:
 - R6: Define atomic lineage transactions, advisory locks, schema-mismatch failure behavior, and forbidden destructive SQL during normal sync.
 - R7: Define Medallion ordering `Bronze -> Silver -> Gold -> PostgreSQL`, Gold-success gating, non-rollback of already-published Gold, and sync-only retry semantics.
 - R8: Move completed backlog history out of the active section and summarize completed work only at the end of this file; explicitly distinguish superseded PR-47 through PR-53 from completed work.
+- R9: Make the timestamp boundary exactly type-compatible with `market-regime-loader`: canonical source `timestamp_m1` is `Datetime(us, UTC)`, all PostgreSQL timestamp/datetime columns are `TIMESTAMPTZ(6)`, and every sync session is UTC.
 
 Acceptance:
 - A1 (verifies R1): repository root contains `BACKLOG.md` and no `BACKLOG_POSTGRES.md`; repository contains no second backlog source of truth.
@@ -140,6 +168,7 @@ Acceptance:
 - A6 (verifies R6): atomic lineage transaction, advisory lock, migration-required schema mismatch, and forbidden destructive SQL are explicit.
 - A7 (verifies R7): post-Gold ordering, failure propagation, local-Gold non-rollback, and retry-only-sync semantics are explicit.
 - A8 (verifies R8): completed PRs are represented in the final summary section and PR-47 through PR-53 are marked superseded/not completed.
+- A9 (verifies R9): backlog explicitly requires `Datetime(time_unit="us", time_zone="UTC")` -> `TIMESTAMPTZ(6)`, UTC PostgreSQL sessions, exact microsecond round-trip, and forbids timezone-naive or alternate-precision timestamp storage.
 
 ---
 
@@ -160,19 +189,21 @@ Description:
 - R1: Add immutable typed contracts `GoldLineage`, `GoldSourceSnapshot`, `GoldSyncState`, `GoldRowDigest`, `GoldDeltaPlan`, and `GoldSyncResult`; counts include inserted/updated/deleted/unchanged.
 - R2: Define exact constants for host `10.10.1.3`, port `54321`, role `crypto-history-loader`, consumer schema `crypto_history_gold`, sync schema `crypto_history_sync`, state table `gold_sync_state`, and digest table `gold_row_hashes`.
 - R3: Define deterministic dataset-ID -> consumer-table mapping by replacing `.` with `_`; reject invalid characters, collisions, names longer than 63 bytes, or mapping outside `crypto_history_gold`.
-- R4: Define publishable Gold row key exactly as `(exchange, symbol, timestamp_m1)` and add a contract check over every current `supported_gold_build_ids()` dataset; no current Gold contract may be silently excluded.
+- R4: Define publishable Gold row key exactly as `(exchange, symbol, timestamp_m1)` and require `timestamp_m1` canonical source type exactly `Polars Datetime(time_unit="us", time_zone="UTC")`; no current Gold contract may be silently excluded.
 - R5: Define application-layer `GoldSyncRepository` Protocol for reading sync state/digests/target summary, validating/creating consumer storage, and applying one lineage delta atomically; `application/` must not import psycopg or `infra`.
 - R6: Define source compatibility fields: dataset ID, exchange, symbol, source artifact path, source fingerprint, schema signature, row count, timestamp min/max, and stable source version/build identity when present.
 - R7: Keep application/domain contracts credential-free; password, administrator credentials, raw DSN, connection object, and cursor must not appear in dataclasses/results/errors.
+- R8: Define one timestamp compatibility constant/policy shared by later PRs: source timestamp unit `us`, source timezone `UTC`, PostgreSQL timestamp type `TIMESTAMPTZ(6)`, PostgreSQL session timezone `UTC`; no naive timestamp or alternate PostgreSQL timestamp type is valid.
 
 Acceptance:
 - A1 (verifies R1): tests instantiate all six immutable contracts and verify exact fields/count semantics.
 - A2 (verifies R2): tests assert every endpoint/role/schema/internal-table constant exactly.
 - A3 (verifies R3): all current Gold dataset IDs map uniquely/deterministically; invalid/colliding/overlong fixtures fail before SQL generation.
-- A4 (verifies R4): registry test iterates every current Gold build ID and fails if any cannot provide `exchange`, `symbol`, and `timestamp_m1`.
+- A4 (verifies R4): registry test iterates every current Gold build ID and fails if any cannot provide `exchange`, `symbol`, and `timestamp_m1` with exact `Datetime(us, UTC)` key type.
 - A5 (verifies R5): fake repository satisfies the Protocol and import-boundary tests find no psycopg/infra import in `application/postgres_sync`.
 - A6 (verifies R6): source snapshot fixtures serialize all compatibility fields deterministically.
 - A7 (verifies R7): contract introspection proves no credential/DSN/connection/cursor field exists.
+- A8 (verifies R8): contract tests assert exact `us`/`UTC`/`TIMESTAMPTZ(6)`/UTC-session values and reject naive/alternate-precision fixtures.
 
 ---
 
@@ -190,7 +221,7 @@ Commit: `feat(PR-69): compute deterministic PostgreSQL Gold deltas`
 Allowed files: `application/postgres_sync/delta.py`, `tests/test_postgres_sync_delta.py`
 
 Description:
-- R1: Implement deterministic SHA-256 row hashing over exact source column order with type tags/null markers, UTC epoch-microsecond datetime encoding, canonical finite floating-point encoding, and `-0.0 -> 0.0`; reject NaN/infinity where deterministic representation is not allowed.
+- R1: Implement deterministic SHA-256 row hashing over exact source column order with type tags/null markers, UTC epoch-microsecond datetime encoding, canonical finite floating-point encoding, and `-0.0 -> 0.0`; `timestamp_m1` is already canonical `Datetime(us, UTC)` and the planner must reject rather than silently reinterpret naive/non-UTC timestamp values.
 - R2: Implement pure complete-state comparison keyed by `(exchange, symbol, timestamp_m1)` producing disjoint, deterministically sorted insert/update/delete/unchanged key sets.
 - R3: Bootstrap rule: empty sync state plus empty digest state classifies every current source row as insert and no row as update/delete.
 - R4: Reject ambiguous bootstrap when authoritative sync state is absent but lineage digest state is non-empty.
@@ -199,7 +230,7 @@ Description:
 - R7: Keep this module side-effect free: no filesystem, Polars scan, PostgreSQL, logging, wall-clock, or environment access.
 
 Acceptance:
-- A1 (verifies R1): equal canonical rows hash identically; one value change changes digest; null/value differs; `-0.0` equals `0.0`; invalid non-finite fixtures fail deterministically.
+- A1 (verifies R1): equal canonical rows hash identically; one value change changes digest; null/value differs; `-0.0` equals `0.0`; invalid non-finite and naive/non-UTC timestamp fixtures fail deterministically.
 - A2 (verifies R2): mixed fixtures yield exact mutually exclusive ordered key sets with no key in two sets.
 - A3 (verifies R3): N source rows and empty target state yield exactly N inserts.
 - A4 (verifies R4): digest rows without sync state fail before a plan is returned.
@@ -226,16 +257,16 @@ Description:
 - R1: Build a read-only inventory over `lake/gold` using existing Gold contracts/manifests/discovery semantics and return exactly one current source snapshot per `(dataset_id, exchange, symbol)` lineage.
 - R2: Include every current materialized registered Gold dataset regardless of timeframe/family; Bronze/Silver and unregistered files are never publishable.
 - R3: Select current artifacts by repository version/manifest semantics, not mtime/ctime or arbitrary lexical recency; retained older Gold versions must not appear.
-- R4: Require valid source fingerprint, schema signature, row count, and timestamp min/max from validated manifest or deterministic existing metadata; missing/inconsistent metadata fails the lineage rather than guessing.
+- R4: Require valid source fingerprint, schema signature, row count, timestamp min/max, and canonical `timestamp_m1` source dtype `Datetime(us, UTC)` from validated artifact metadata/schema; missing/inconsistent metadata or timestamp type fails the lineage rather than guessing/coercing.
 - R5: Return lineages in stable `(dataset_id, exchange, symbol)` order and reject duplicate current candidates.
 - R6: Keep selector read-only: no Gold build, NAS mirror, retention/pruning, manifest mutation, or PostgreSQL connection.
-- R7: Add fixtures for one current plus retained old versions, multiple datasets/symbols/timeframes, unregistered artifacts, duplicate-current ambiguity, and missing/corrupt metadata.
+- R7: Add fixtures for one current plus retained old versions, multiple datasets/symbols/timeframes, unregistered artifacts, duplicate-current ambiguity, missing/corrupt metadata, and wrong timestamp unit/timezone.
 
 Acceptance:
 - A1 (verifies R1): fixtures produce exactly one snapshot for every expected current lineage.
 - A2 (verifies R2): every materialized registered Gold fixture is selected and Bronze/Silver/unregistered fixtures are absent.
 - A3 (verifies R3): changing file mtimes does not alter selection and retained old versions are never selected.
-- A4 (verifies R4): missing/corrupt fingerprint/schema/count/bounds fails deterministically with no guessed values.
+- A4 (verifies R4): missing/corrupt fingerprint/schema/count/bounds or non-`Datetime(us, UTC)` `timestamp_m1` fails deterministically with no guessed values.
 - A5 (verifies R5): output ordering is stable and duplicate current candidates fail.
 - A6 (verifies R6): spies prove no build/mirror/prune/write/DB call occurs.
 - A7 (verifies R7): all listed inventory scenarios pass offline under `tmp_path`.
@@ -257,21 +288,21 @@ Allowed files: `application/postgres_sync/schema.py`, `tests/test_postgres_sync_
 
 Description:
 - R1: Generate deterministic quoted PostgreSQL DDL for one table in `crypto_history_gold` using source column order; primary key exactly `(exchange, symbol, timestamp_m1)`.
-- R2: Map datetime -> `TIMESTAMPTZ(6)` UTC, date -> `DATE`, string/categorical/enum -> `TEXT`, bool -> `BOOLEAN`, signed integer -> `BIGINT`, UInt64 -> `NUMERIC(20,0)`, float -> `DOUBLE PRECISION`, decimal -> exact `NUMERIC`, binary -> `BYTEA`, list/struct-like -> `JSONB`; reject unknown/ambiguous dtypes.
+- R2: Match `market-regime-loader` timestamp storage exactly: canonical `timestamp_m1` source type is `Polars Datetime(time_unit="us", time_zone="UTC")`; every source timestamp/datetime column maps to PostgreSQL `TIMESTAMPTZ(6)` and every true date maps to `DATE`. Map string/categorical/enum -> `TEXT`, bool -> `BOOLEAN`, signed integer -> `BIGINT`, UInt64 -> `NUMERIC(20,0)`, float -> `DOUBLE PRECISION`, decimal -> exact `NUMERIC`, binary -> `BYTEA`, list/struct-like -> `JSONB`; reject unknown/ambiguous dtypes and reject naive/non-UTC timestamp source types rather than silently changing semantics.
 - R3: Quote every schema/table/column identifier safely; dataset IDs and source column names are never interpolated unquoted.
 - R4: Generate deterministic schema signature from ordered `(column_name, normalized_source_type, postgres_type, nullable)` entries plus primary-key contract.
 - R5: Require `exchange`, `symbol`, `timestamp_m1` to exist and be non-nullable at the logical-key boundary; do not invent surrogate IDs or row-position keys.
 - R6: Normal-sync DDL may create missing schemas/tables/indexes idempotently but must not emit `DROP`, `TRUNCATE`, table replacement, or destructive automatic `ALTER`.
-- R7: Test mapper against every current Gold schema fixture constructible from repository tests, including nested fields mapped to JSONB.
+- R7: Test mapper against every current Gold schema fixture constructible from repository tests, including nested fields mapped to JSONB and every timestamp/datetime field.
 
 Acceptance:
 - A1 (verifies R1): generated DDL has exact qualified table name, source column order, and composite primary key.
-- A2 (verifies R2): one fixture per listed dtype produces exact PostgreSQL type and unknown dtype fails.
+- A2 (verifies R2): canonical `Datetime(us, UTC)` fixtures map exactly to `TIMESTAMPTZ(6)`; all timestamp/datetime consumer columns use that exact PostgreSQL type; date uses `DATE`; naive/non-UTC timestamp and unknown dtype fixtures fail.
 - A3 (verifies R3): adversarial identifiers stay quoted and cannot inject SQL statements.
 - A4 (verifies R4): equal ordered schemas yield equal signatures and any column/type/nullability/key change changes signature.
 - A5 (verifies R5): missing or nullable logical-key fields fail before DDL is returned.
 - A6 (verifies R6): generated SQL contains no destructive operation and has no automatic destructive migration path.
-- A7 (verifies R7): mapper coverage passes for all current Gold contract schema fixtures.
+- A7 (verifies R7): mapper coverage passes for all current Gold contract schema fixtures and asserts no PostgreSQL timestamp type other than `TIMESTAMPTZ(6)` is emitted for datetime fields.
 
 ---
 
@@ -291,26 +322,26 @@ Allowed files: `infra/postgres/__init__.py`, `infra/postgres/gold_repository.py`
 Description:
 - R1: Add `psycopg` as the only new PostgreSQL runtime client; no SQLAlchemy, ORM, or second PostgreSQL driver.
 - R2: Create connections only from injected `PGHOST/PGPORT/PGUSER/PGDATABASE/PGPASSWORD`; require exact host `10.10.1.3`, port `54321`, user `crypto-history-loader`, and force session timezone UTC before data operations.
-- R3: Idempotently create/validate consumer tables from PR-71 DDL plus internal `crypto_history_sync.gold_sync_state` and `crypto_history_sync.gold_row_hashes`; internal tables are not consumer Gold tables.
+- R3: Idempotently create/validate consumer tables from PR-71 DDL plus internal `crypto_history_sync.gold_sync_state` and `crypto_history_sync.gold_row_hashes`; internal timestamp fields are exactly `TIMESTAMPTZ(6)`: state `min_timestamp`, `max_timestamp`, `synced_at_utc`, and digest `timestamp_m1`; internal tables are not consumer Gold tables.
 - R4: Read per-lineage sync state, target summary `(count,min_timestamp,max_timestamp)`, and complete `(exchange,symbol,timestamp_m1,row_sha256)` digest state without fetching unchanged feature payloads.
 - R5: Implement one-lineage `apply_delta` under deterministic lineage-scoped `pg_advisory_xact_lock`: consumer mutations -> digest mutations -> sync-state write -> summary verification -> commit.
 - R6: Roll back consumer rows, digest rows, and sync state together on SQL/verification error; retry against same source converges without duplicates.
 - R7: Bootstrap may insert complete validated lineage; non-bootstrap writes exactly supplied delta and never `TRUNCATE`, `DROP`, delete-all, table swap, or full-table replacement.
 - R8: Detect source/existing consumer schema-signature mismatch before row mutation and raise sanitized migration-required error; never auto-alter a live table destructively.
 - R9: Redact runtime/admin secrets and credential-bearing DSNs from repr/errors/logs; persist no credentials in internal tables.
-- R10: Add deterministic adapter tests with connection/cursor fakes for endpoint, timezone, DDL validation, lock/order, mixed delta counts, rollback, retry, schema mismatch, forbidden SQL, and redaction.
+- R10: Add deterministic adapter tests with connection/cursor fakes for endpoint, timezone, DDL validation, lock/order, mixed delta counts, rollback, retry, schema mismatch, forbidden SQL, redaction, and microsecond timestamp round-trip.
 
 Acceptance:
 - A1 (verifies R1): dependency inspection finds psycopg and no newly added ORM/second driver.
 - A2 (verifies R2): connection spy observes exact host/port/user, injected database/password, and UTC session timezone; wrong endpoint/user fails before data SQL.
-- A3 (verifies R3): DDL tests create/validate exact consumer/internal identities and keep sync metadata out of consumer tables.
+- A3 (verifies R3): DDL tests create/validate exact consumer/internal identities; every internal datetime field is exactly `TIMESTAMPTZ(6)` and sync metadata stays out of consumer tables.
 - A4 (verifies R4): query trace reads only state, summary, and key/hash digests for comparison.
 - A5 (verifies R5): trace order is advisory lock -> consumer mutations -> digest mutations -> state write -> summary verification -> commit.
 - A6 (verifies R6): injected failure leaves prior committed consumer/digest/state unchanged and retry succeeds once.
 - A7 (verifies R7): bootstrap N rows produces N inserts; later `2 insert + 1 update + 1 delete` executes exactly those mutations and no full reload.
 - A8 (verifies R8): schema mismatch causes zero consumer-row mutations and returns migration-required category.
 - A9 (verifies R9): fake secrets/full DSN never appear in diagnostics or persisted parameters.
-- A10 (verifies R10): all listed adapter cases pass offline without a live PostgreSQL server.
+- A10 (verifies R10): all listed adapter cases pass offline without a live PostgreSQL server, including an aware UTC timestamp with non-zero microseconds that round-trips with identical instant and microsecond value.
 
 ---
 
@@ -398,26 +429,26 @@ Allowed files: `application/postgres_sync/service.py`, `tests/test_postgres_sync
 Description:
 - R1: Implement deterministic application service receiving PR-70 current-lineage inventory and `GoldSyncRepository`; it must not invoke Bronze/Silver/Gold build, mirror, retention, provider, or provisioning operations.
 - R2: Process lineages sequentially in stable `(dataset_id, exchange, symbol)` order so restart behavior/logging are deterministic and DB load is bounded.
-- R3: On absent sync state plus empty digest state, load complete current source lineage, compute digests, and submit every row as bootstrap insert.
+- R3: On absent sync state plus empty digest state, load complete current source lineage, validate canonical `timestamp_m1` as UTC-aware microsecond precision, normalize every timestamp/datetime payload to aware UTC microsecond semantics, compute digests, and submit every row as bootstrap insert; true date fields remain dates.
 - R4: If synchronized source fingerprint/schema/count/bounds equal current snapshot, perform zero consumer/digest row mutations and verify target summary.
-- R5: If source fingerprint changed, read complete current lineage, compute complete current digests, compare through PR-69, and submit only planned insert/update/delete payloads.
+- R5: If source fingerprint changed, read complete current lineage, enforce the same UTC/microsecond timestamp boundary before hashing, compute complete current digests, compare through PR-69, and submit only planned insert/update/delete payloads.
 - R6: Preserve accumulated-delta semantics across any number of missed runs and historical corrections; timestamp-watermark optimization is forbidden.
 - R7: After repository commit, require final target row count/min/max to equal source snapshot before reporting synchronized; verification failure must not advance authoritative sync checkpoint.
 - R8: Stop on first lineage failure, return non-success with failing lineage/category, keep already committed earlier lineages valid, leave later lineages untouched, and make retry resume idempotently.
 - R9: Return aggregate/per-lineage inserted/updated/deleted/unchanged counts plus source identities with no credential fields.
-- R10: Add offline fake-inventory/repository/source-reader tests for bootstrap, unchanged fast path, mixed delta, historical update, delete, three missed runs, schema mismatch, verification failure, partial-progress retry, and empty inventory.
+- R10: Add offline fake-inventory/repository/source-reader tests for bootstrap, unchanged fast path, mixed delta, historical update, delete, three missed runs, schema mismatch, verification failure, partial-progress retry, empty inventory, naive timestamp rejection, and microsecond preservation.
 
 Acceptance:
 - A1 (verifies R1): spies prove only inventory/source-read/repository interfaces are called.
 - A2 (verifies R2): shuffled input produces stable sorted processing order and no concurrent DB writes.
-- A3 (verifies R3): empty target plus N rows yields exactly N bootstrap inserts.
+- A3 (verifies R3): empty target plus N rows yields exactly N bootstrap inserts; timestamp payloads reach the repository as aware UTC microsecond values and date fields remain dates.
 - A4 (verifies R4): unchanged fingerprint/state yields zero consumer/digest mutations while target summary is checked.
-- A5 (verifies R5): fixture `2 new + 1 changed + 1 stale + 100 unchanged` submits exactly 2 inserts, 1 update, 1 delete and no unchanged payloads.
+- A5 (verifies R5): fixture `2 new + 1 changed + 1 stale + 100 unchanged` submits exactly 2 inserts, 1 update, 1 delete and no unchanged payloads; timestamp normalization does not change instants or truncate microseconds.
 - A6 (verifies R6): old correction and three missed-week additions reconcile fully in one later run.
 - A7 (verifies R7): summary mismatch fails and cannot advance sync state to new source fingerprint.
 - A8 (verifies R8): failure on lineage 2 preserves committed lineage 1, leaves lineage 3 untouched, and retry converges without duplicates.
 - A9 (verifies R9): aggregate/per-lineage result fields/counts are exact and credential-free.
-- A10 (verifies R10): every listed use-case scenario passes offline.
+- A10 (verifies R10): every listed use-case scenario passes offline, including rejection of naive/non-UTC timestamps and preservation of non-zero microseconds.
 
 ---
 
@@ -475,8 +506,8 @@ Description:
 - R3: PostgreSQL failure makes Medallion non-zero and logs failed active step, but already published local Gold and existing NAS mirror remain untouched/authoritative.
 - R4: Preserve existing Sunday cron schedule; no second PostgreSQL cron job. Every manual Medallion invocation receives same post-Gold behavior.
 - R5: Use PR-74 protected runtime configuration only; no PostgreSQL/admin password in pipeline script, README, ARCHITECTURE, tests, command line, or logged plan.
-- R6: Document PostgreSQL as rebuildable Gold-only serving replica, exact endpoint/user/schema names, first-full/later-delta behavior, current-version-only selection, manual retry, and schema-migration failure semantics.
-- R7: Add deterministic Medallion tests for exact order `bronze -> silver -> gold -> postgres-gold-sync`, Gold-failure gating, PostgreSQL-failure propagation, no-op, retry without rebuilding Gold, and dry-run inclusion.
+- R6: Document PostgreSQL as rebuildable Gold-only serving replica, exact endpoint/user/schema names, first-full/later-delta behavior, current-version-only selection, manual retry, schema-migration failure semantics, and exact timestamp compatibility with `market-regime-loader`: source `Datetime(us, UTC)`, PostgreSQL `TIMESTAMPTZ(6)`, UTC session.
+- R7: Add deterministic Medallion tests for exact order `bronze -> silver -> gold -> postgres-gold-sync`, Gold-failure gating, PostgreSQL-failure propagation, no-op, retry without rebuilding Gold, dry-run inclusion, and timestamp-contract preservation.
 - R8: Run complete configured quality suite (Ruff lint/format, Mypy, Pyright, ty, import-linter, config validation, docs inventory validation, Pytest, coverage) and record any environment-only check that cannot run.
 
 Acceptance:
@@ -485,8 +516,8 @@ Acceptance:
 - A3 (verifies R3): injected PostgreSQL failure returns non-zero while local Gold and NAS mirror are not reverted/deleted.
 - A4 (verifies R4): no second scheduled PostgreSQL cron is introduced and docs state existing Sunday Medallion run owns scheduling.
 - A5 (verifies R5): touched-file scans contain no operational/admin credential literal and dry-run output has no password/DSN.
-- A6 (verifies R6): README/ARCHITECTURE contain all listed serving-plane, delta, current-version, retry, and migration rules without claiming PostgreSQL is canonical.
-- A7 (verifies R7): all ordering/failure/no-op/retry/dry-run tests pass offline.
+- A6 (verifies R6): README/ARCHITECTURE contain all listed serving-plane, delta, current-version, retry, migration, and exact `Datetime(us, UTC)` -> `TIMESTAMPTZ(6)` rules without claiming PostgreSQL is canonical.
+- A7 (verifies R7): all ordering/failure/no-op/retry/dry-run tests pass offline and a regression fixture confirms no timestamp type/precision/timezone drift from the market-regime-loader convention.
 - A8 (verifies R8): final PR records full quality-gate result and preserves or improves repository coverage.
 
 ## PostgreSQL stack completion definition
@@ -496,6 +527,9 @@ The stack is complete only when:
 - Gold Parquet remains canonical and PostgreSQL contains no Bronze/Silver serving tables from this stack.
 - Exact dedicated runtime role `crypto-history-loader` exists with least privilege on only `crypto_history_gold` and `crypto_history_sync` in the configured database.
 - Every current materialized registered Gold lineage has exactly one current PostgreSQL representation; retained old Gold versions are not duplicated.
+- Canonical key timestamp `timestamp_m1` is `Polars Datetime(time_unit="us", time_zone="UTC")` at the sync boundary.
+- Every PostgreSQL timestamp/datetime consumer column and internal sync timestamp is exactly `TIMESTAMPTZ(6)` and each session is UTC; no `TIMESTAMP WITHOUT TIME ZONE` or alternate timestamp precision is emitted.
+- A UTC timestamp containing non-zero microseconds round-trips without instant, timezone, or precision loss.
 - First sync performs complete lineage bootstrap; later runs write only accumulated INSERT/UPDATE/DELETE deltas.
 - Historical corrections and deletes are detected without a timestamp watermark.
 - Consumer rows, row digests, and sync checkpoint are atomic per lineage and retry-safe.
