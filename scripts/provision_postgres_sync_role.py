@@ -100,7 +100,10 @@ def _ensure_role(cursor: psycopg.Cursor[tuple[object, ...]], app_password: str) 
             (app_password,),
         )
     else:
-        cursor.execute(sql.SQL("ALTER ROLE {} WITH PASSWORD %s").format(role_identifier), (app_password,))
+        cursor.execute(
+            sql.SQL("ALTER ROLE {} WITH PASSWORD %s").format(role_identifier),
+            (app_password,),
+        )
 
 
 def _schema_owner(cursor: psycopg.Cursor[tuple[object, ...]], schema_name: str) -> str | None:
@@ -123,7 +126,9 @@ def _ensure_schema(cursor: psycopg.Cursor[tuple[object, ...]], schema_name: str)
     owner = _schema_owner(cursor, schema_name)
     if owner is None:
         cursor.execute(
-            sql.SQL("CREATE SCHEMA {} AUTHORIZATION {}").format(sql.Identifier(schema_name), sql.Identifier(APP_ROLE))
+            sql.SQL("CREATE SCHEMA {} AUTHORIZATION {}").format(
+                sql.Identifier(schema_name), sql.Identifier(APP_ROLE)
+            )
         )
     elif owner != APP_ROLE:
         raise RuntimeError(f"existing PostgreSQL schema {schema_name!r} has incompatible ownership")
