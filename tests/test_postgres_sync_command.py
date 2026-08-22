@@ -34,7 +34,11 @@ def test_invalid_config_creates_no_repository(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.delenv("PGDATABASE", raising=False)
     monkeypatch.delenv("PGPASSWORD", raising=False)
     calls: list[object] = []
-    monkeypatch.setattr(postgres_cmd, "PostgresGoldSyncRepository", lambda *args, **kwargs: calls.append((args, kwargs)))
+    monkeypatch.setattr(
+        postgres_cmd,
+        "PostgresGoldSyncRepository",
+        lambda *args, **kwargs: calls.append((args, kwargs)),
+    )
     args = argparse.Namespace(gold_root="lake/gold")
     with pytest.raises(postgres_cmd.PostgresSyncCommandError, match="configuration"):
         postgres_cmd.run_gold_sync_postgres(args, logging.getLogger("test"))
