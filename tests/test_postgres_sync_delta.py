@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime, timezone, timedelta
+from datetime import UTC, datetime, timedelta, timezone
 
 import pytest
 
@@ -74,7 +74,12 @@ def test_mixed_complete_state_delta_is_exact() -> None:
     assert plan.updated_count == 1
     assert plan.deleted_count == 1
     assert plan.unchanged_count == 1
-    all_keys = [payload.key for payload in plan.inserts] + [payload.key for payload in plan.updates] + list(plan.deletes) + list(plan.unchanged)
+    all_keys = (
+        [payload.key for payload in plan.inserts]
+        + [payload.key for payload in plan.updates]
+        + list(plan.deletes)
+        + list(plan.unchanged)
+    )
     assert len(all_keys) == len(set(all_keys))
 
 

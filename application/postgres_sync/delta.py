@@ -61,9 +61,9 @@ def _canonical_value(value: object) -> bytes:
         return b"list:[" + _SEPARATOR.join(encoded) + b"]"
     if isinstance(value, Mapping):
         items: list[bytes] = []
-        for raw_key in sorted(value, key=lambda item: str(item)):
+        for raw_key, raw_value in sorted(value.items(), key=lambda item: str(item[0])):
             key = str(raw_key)
-            items.append(b"key:" + key.encode("utf-8") + b"=" + _canonical_value(value[raw_key]))
+            items.append(b"key:" + key.encode("utf-8") + b"=" + _canonical_value(raw_value))
         return b"map:{" + _SEPARATOR.join(items) + b"}"
     raise TypeError(f"unsupported deterministic hash value type: {type(value).__name__}")
 
