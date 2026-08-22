@@ -1,0 +1,156 @@
+"""Read-only selection of current registered Gold artifacts for PostgreSQL sync."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+from collections.abc import Iterable
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
+from typing import Any, cast
+
+import polars as pl
+
+from application.dataset_contracts import supported_gold_dataset_ids
+from application.postgres_sync.contracts import GoldLineage, GoldSourceSnapshot, validate_unique_table_names
+from application.services.gold_versioning import parse_semver
+
+
+def _parse_utc_timestamp(value: object, field_name: str) -> datetime | None:
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"Gold manifest {field_name} must be an ISO UTC timestamp or null")
+    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if parsed.tzinfo is None or parsed.utcoffset() != timedelta(0):
+        raise ValueError(f"Gold manifest {field_name} must use UTC")
+    return parsed.astimezone(UTC)
+
+
+def _schema_signature(schema: dict[str, pl.DataType]) -> str:
+    payload = [(name, str(dtype)) for name, dtype in schema.items()]
+    canonical = json.dumps(payload, separators=(",", ":"), ensure_ascii=True)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _validate_timestamp_schema(schema: dict[str, pl.DataType]) -> None:
+    timestamp_dtype = schema.get("timestamp_m1")
+    if timestamp_dtype != pl.Datetime("us", "UTC"):
+        raise TypeError("Gold source timestamp_m1 must be Polars Datetime(us, UTC)")
+    if "exchange" not in schema or "symbol" not in schema:
+        raise ValueError("Gold source schema must contain exchange and symbol")
+
+
+def _manifest_payload(path: Path) -> dict[str, object]:
+    try:
+        raw: Any = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"invalid Gold manifest: {path}") from exc
+    if not isinstance(raw, dict):
+        raise ValueError(f"Gold manifest must contain an object: {path}")
+    return cast(dict[str, object], raw)
+
+
+def _lineage_from_manifest(payload: dict[str, object]) -> GoldLineage:
+    dataset_id = payload.get("dataset_id")
+    exchange = payload.get("exchange")
+    symbol = payload.get("symbol")
+    if not isinstance(dataset_id, str) or not isinstance(exchange, str) or not isinstance(symbol, str):
+        raise ValueError("Gold manifest must contain string dataset_id/exchange/symbol")
+    return GoldLineage(dataset_id, exchange, symbol)
+
+
+def _manifest_version(payload: dict[str, object]) -> str:
+    value = payload.get("dataset_version")
+    if not isinstance(value, str):
+        # Legacy sidecars store the same semantic value in feature_set_version.
+        value = payload.get("feature_set_version")
+    if not isinstance(value, str) or not value:
+        raise ValueError("Gold manifest missing dataset_version")
+    parse_semver(value)
+    return value
+
+
+def _manifest_fingerprint(payload: dict[str, object]) -> str:
+    for key in ("input_fingerprint", "source_data_hash"):
+        value = payload.get(key)
+        if isinstance(value, str) and value:
+            return value
+    raise ValueError("Gold manifest missing source fingerprint")
+
+
+def _manifest_row_count(payload: dict[str, object]) -> int:
+    value = payload.get("rows_out")
+    if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+        raise ValueError("Gold manifest rows_out must be a non-negative integer")
+    return value
+
+
+def _snapshot_from_candidate(manifest_path: Path, payload: dict[str, object]) -> GoldSourceSnapshot:
+    lineage = _lineage_from_manifest(payload)
+    parquet_path = manifest_path.with_suffix(".parquet")
+    if not parquet_path.is_file():
+        raise ValueError(f"Gold manifest has no matching parquet artifact: {manifest_path}")
+    schema_obj = pl.read_parquet_schema(parquet_path)
+    schema = dict(schema_obj)
+    _validate_timestamp_schema(schema)
+    row_count = _manifest_row_count(payload)
+    min_timestamp = _parse_utc_timestamp(payload.get("min_timestamp"), "min_timestamp")
+    max_timestamp = _parse_utc_timestamp(payload.get("max_timestamp"), "max_timestamp")
+    if row_count == 0:
+        min_timestamp = None
+        max_timestamp = None
+    version = _manifest_version(payload)
+    build_id_raw = payload.get("build_id")
+    build_id = build_id_raw if isinstance(build_id_raw, str) and build_id_raw else None
+    return GoldSourceSnapshot(
+        lineage=lineage,
+        artifact_path=parquet_path.resolve(),
+        source_fingerprint=_manifest_fingerprint(payload),
+        schema_signature=_schema_signature(schema),
+        row_count=row_count,
+        min_timestamp=min_timestamp,
+        max_timestamp=max_timestamp,
+        source_version=version,
+        build_id=build_id,
+    )
+
+
+def _candidate_manifests(gold_root: Path, dataset_id: str) -> Iterable[Path]:
+    dataset_root = gold_root / f"dataset_id={dataset_id}"
+    if not dataset_root.is_dir():
+        return ()
+    modern = dataset_root.glob("dataset_type=gold_symbol_dataset/feature_set_version=*/exchange=*/symbol=*/*.json")
+    legacy = dataset_root.glob("exchange=*/symbol=*/version=*/build_id=*/manifest.json")
+    return (*modern, *legacy)
+
+
+def discover_current_gold_lineages(gold_root: str | Path) -> tuple[GoldSourceSnapshot, ...]:
+    """Return exactly one highest-semver current artifact per registered Gold lineage."""
+
+    root = Path(gold_root)
+    if not root.exists():
+        return ()
+    supported = supported_gold_dataset_ids()
+    validate_unique_table_names(supported)
+    by_lineage: dict[GoldLineage, list[tuple[tuple[int, int, int], Path, dict[str, object]]]] = {}
+
+    for dataset_id in supported:
+        for manifest_path in _candidate_manifests(root, dataset_id):
+            payload = _manifest_payload(manifest_path)
+            lineage = _lineage_from_manifest(payload)
+            if lineage.dataset_id != dataset_id:
+                raise ValueError(f"Gold manifest dataset/path mismatch: {manifest_path}")
+            version = _manifest_version(payload)
+            by_lineage.setdefault(lineage, []).append((parse_semver(version), manifest_path, payload))
+
+    snapshots: list[GoldSourceSnapshot] = []
+    for lineage in sorted(by_lineage):
+        candidates = by_lineage[lineage]
+        highest_version = max(version for version, _, _ in candidates)
+        current = [(path, payload) for version, path, payload in candidates if version == highest_version]
+        if len(current) != 1:
+            raise ValueError(f"duplicate current Gold candidates for lineage {lineage}")
+        manifest_path, payload = current[0]
+        snapshots.append(_snapshot_from_candidate(manifest_path, payload))
+    return tuple(snapshots)
