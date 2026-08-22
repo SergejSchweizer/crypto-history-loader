@@ -1,46 +1,29 @@
 # Backlog
 
-This backlog records work that brings every Bronze dataset into a contracted Silver representation suitable for
-IV/RV and regime-change research.
+This file is the single implementation backlog for `crypto-history-loader`.
 
-Last updated: 2026-08-02
+Last updated: 2026-08-22
 
-## Policy
+## Backlog policy
 
-- Every ticket must contain numbered `Description` requirements (`R1`, `R2`, ...) and numbered `Acceptance`
-  checks (`A1`, `A2`, ...) with exactly the same IDs. `A1` verifies only `R1`, `A2` verifies only `R2`, and so on.
-  No description requirement or acceptance check may exist without its matching counterpart.
-- Keep each work item atomic: one dataset family, one contract boundary, or one shared adapter change.
-- Keep outputs deterministic: stable partition layout, stable sort keys, explicit dedup keys, fixed column order,
-  and no wall-clock-dependent feature values except build metadata fields.
-- Keep Silver dataset contracts explicit in `application/dataset_contracts.py`.
-- Keep Bronze raw fields audit-friendly; Silver may clean, normalize, deduplicate, aggregate, and align, but should
-  not create model labels or strategy-specific targets.
-- Keep IV/RV and regime-change features as reusable market-state features. Prediction labels belong in Gold or a
-  later modelling layer.
-Update this file when dataset naming, contracts, scope, order, or completion status changes. Keep historical work-item
-entries as an audit trail with their description and acceptance evidence.
+- `BACKLOG.md` is the only backlog file in the repository. Do not create `BACKLOG_*.md`, `docs/backlog/*.md`, or another parallel backlog.
+- Planned and in-progress work stays detailed in this file. Completed work is removed from the active section and summarized only in **Completed PR summary** at the end.
+- Every active ticket must contain numbered `Description` requirements (`R1`, `R2`, ...) and matching numbered `Acceptance` checks (`A1`, `A2`, ...). `A1` verifies only `R1`, `A2` verifies only `R2`, and so on.
+- Every active ticket must contain `Git branch` and `Git status` fields.
+- Keep each ticket atomic: one contract boundary, one pure planner, one adapter, one operational concern, or one integration concern.
+- Agents must not broaden scope into another ticket. Missing dependency contracts are a hard stop, not permission to reimplement them locally.
+- Every implementation commit and squash-merge title must include the backlog identifier, for example `feat(PR-68): ...`.
+- Use a separate checkout/worktree per parallel agent. Parallel agents must never share one working tree.
+- Before editing any ticket: `git fetch origin`, switch to current `main`, fast-forward only, then run `git status --short`. Any output is a hard stop.
+- Before handoff, run `git status --short` again and record the exact output in the PR/handoff evidence.
 
-## Operational Notes
+## Current operational baseline
 
-The cron-friendly medallion script must remain a complete layer scheduler:
+The repository implements a deterministic Medallion pipeline:
 
-- Bronze step: runs every historical Bronze dataset that this repository can fetch directly.
-- Silver step: runs every Bronze-backed and live-origin Silver dataset family supported by `silver-build`.
-- Gold step: omits `--dataset-id` intentionally so `gold-build` builds every supported Gold contract.
-
-Current complete-run commands:
-
-```bash
-uv run python scripts/run_medallion_pipeline.py --config config.yaml
-uv run python main.py silver-build --dataset spot_ohlcv perps_ohlcv open_interest funding perps_trades options_trades volatility_index_data volatility_index_snapshot_1m realized_volatility iv_rv index_price_snapshot_1m futures_summary_snapshot_1m options_ticker_snapshot_1m options_instrument_ticker_snapshot_1m options_surface_1m_feature perps_l2_snapshot_1m options_l2_snapshot_1m recent_trade_snapshot_1m instrument_metadata_snapshot_daily futures_instrument_metadata_snapshot_daily historical_volatility --manifest --plot --maxprocesses 4 --no-json-output
-uv run python main.py gold-build --manifest --plot --maxprocesses 4 --no-json-output
+```text
+Bronze -> Silver -> Gold
 ```
-
-Changes that add a new supported Silver or Gold dataset must update `config.yaml`, this command list, and the
-parser/config compatibility tests in the same change set.
-
-## Current Coverage Snapshot
 
 Bronze dataset types present locally:
 
@@ -65,2271 +48,540 @@ volatility_index_data
 volatility_index_snapshot_1m
 ```
 
-Bronze datasets already represented in Silver:
+Parquet Gold remains the canonical source of truth. The active PostgreSQL stack below adds a rebuildable serving-plane replica after Gold; it does not move canonical ownership away from Parquet.
 
-| Bronze Dataset | Current Silver Dataset(s) | Status |
-|---|---|---|
-| `spot_ohlcv` | `spot_ohlcv` | Exists |
-| `perps_ohlcv` | `perp` | Exists, needs naming cleanup to `perps_ohlcv` |
-| `funding` | `funding_observed`, `funding_1m_feature` | Exists |
-| `open_interest` | `open_interest_observed`, `open_interest_1m_feature` | Exists |
-| `perps_trades` | `perps_trades_observed`, `perps_trades_1m_feature` | Exists |
-| `options_trades` | `options_trades_observed`, `options_trades_1m_feature` | Exists |
-| `volatility_index_data` | `volatility_index_data_observed`, `volatility_index_1m_feature` | Exists |
-| `volatility_index_snapshot_1m` | `volatility_index_snapshot_1m_observed`, `volatility_index_1m_feature` | Exists |
+The PostgreSQL endpoint is exactly `10.10.1.3:54321`. The dedicated runtime LOGIN role is exactly `crypto-history-loader`. The operational password is supplied only from protected runtime configuration/environment and must never be committed, printed, logged, embedded in examples, placed in command-line arguments, or persisted in sync metadata. Administrator credentials are separate from application runtime credentials.
 
-Bronze datasets not yet represented in Silver:
+PostgreSQL consumer data lives in schema `crypto_history_gold`. Synchronization state lives separately in schema `crypto_history_sync`. Every registered current Gold dataset maps one-to-one to a consumer table whose name is derived deterministically from the dataset ID by replacing `.` with `_`, for example:
 
 ```text
-futures_instrument_metadata_snapshot_daily
-futures_summary_snapshot_1m
-historical_volatility
-index_price_snapshot_1m
-instrument_metadata_snapshot_daily
-options_instrument_ticker_snapshot_1m
-options_l2_snapshot_1m
-options_ticker_snapshot_1m
-perps_l2_snapshot_1m
-recent_trade_snapshot_1m
+gold.market.regime_features.m1
+-> crypto_history_gold.gold_market_regime_features_m1
 ```
 
-## PR Stack
+All mapped names must be unique and fit PostgreSQL's 63-byte identifier limit. Collisions or overlong names are hard errors.
 
-### PR-01: Silver Contract Registry Baseline
-
-Status: Merged
-
-Updated: 2026-07-25
-
-PR: PR #58: https://github.com/SergejSchweizer/crypto-history-loader/pull/58
-
-Branch: `codex/pr01-silver-contract-registry-baseline`
-
-Depends on: none
-
-Goal:
-Create a complete Silver contract inventory for every Bronze dataset, including the datasets that are not yet
-implemented. This makes the stack deterministic before transformation code is added.
-
-Scope:
-- Add contract placeholders for every missing Silver dataset.
-- Define canonical naming:
-  - `perps_ohlcv` replaces legacy Silver `perp`.
-  - `volatility_index_1m_observed` and `volatility_index_1m_feature` become the canonical IV index outputs.
-  - Live snapshot datasets keep their source family in the name, for example `options_l2_snapshot_1m_observed`.
-- Add tests that fail if a Bronze dataset has no declared Silver destination.
-- Document missing-data policy, timestamp column, timestamp semantics, and output columns for each planned output.
-
-Acceptance:
-- `application/dataset_contracts.py` lists every planned Silver dataset.
-- A contract test proves every local Bronze `dataset_type` has at least one Silver destination.
-- No transformation behavior changes yet.
-
-### PR-02: Silver Naming Compatibility For OHLCV
-
-Status: Merged
-
-Updated: 2026-07-25
-
-PR: PR #59: https://github.com/SergejSchweizer/crypto-history-loader/pull/59
-
-Branch: `codex/pr02-silver-ohlcv-naming-compat`
-
-Depends on: PR-01
-
-Goal:
-Remove ambiguity around `perp` vs `perps_ohlcv` before adding more Silver outputs.
-
-Scope:
-- Emit `perps_ohlcv` as the canonical Silver dataset for Bronze `perps_ohlcv`.
-- Keep backward-compatible discovery/read support for existing `dataset_type=perp` artifacts.
-- Update Gold requirements to prefer `perps_ohlcv` and fall back to `perp` only when needed.
-- Update README and tests.
-
-Acceptance:
-- New Silver builds write `dataset_type=perps_ohlcv`.
-- Existing local `dataset_type=perp` Silver files remain readable.
-- Gold tests cover canonical and fallback paths.
-
-### PR-03: Volatility Index OHLC Bronze To Silver
-
-Status: Merged
-
-Updated: 2026-07-25
-
-PR: PR #60: https://github.com/SergejSchweizer/crypto-history-loader/pull/60
-
-Branch: `codex/pr03-volatility-index-ohlc-silver`
-
-Depends on: PR-02
-
-Goal:
-Make Deribit volatility index usable as the primary IV index source for IV/RV regime work.
-
-Scope:
-- Parse all Deribit `get_volatility_index_data` fields: `timestamp`, `open`, `high`, `low`, `close`.
-- Store OHLC fields in Bronze `volatility_index_data`.
-- Convert normalized `1m` to Deribit API resolution `60`.
-- Build `volatility_index_data_observed` or canonical `volatility_index_1m_observed` with:
-  - `timestamp`
-  - `exchange`
-  - `symbol`
-  - `volatility_open`
-  - `volatility_high`
-  - `volatility_low`
-  - `volatility_close`
-  - `volatility_value` as `volatility_close`
-  - `volatility_source_timestamp`
-  - lineage columns
-- Keep old Bronze files with only `value` readable by falling back to `value`.
-
-Acceptance:
-- Unit tests prove all OHLC endpoint fields are parsed and written.
-- Silver tests prove `volatility_value == close`.
-- Live smoke test proves historical Deribit rows are returned for a bounded past range.
-
-### PR-04: Live Volatility Snapshot To Canonical IV Silver
-
-Status: Merged
-
-Updated: 2026-07-25
-
-PR: PR #61: https://github.com/SergejSchweizer/crypto-history-loader/pull/61
-
-Branch: `codex/pr04-volatility-snapshot-silver`
-
-Depends on: PR-03
-
-Goal:
-Integrate `volatility_index_snapshot_1m` from `crypto-live-loader` as the fresher IV index source.
-
-Scope:
-- Add Bronze reader for path layout using `currency` and `source`.
-- Build `volatility_index_snapshot_1m_observed`.
-- Normalize columns to the same IV semantic names as PR-03.
-- Add canonical feature builder `volatility_index_1m_feature` that can source from:
-  - `volatility_index_snapshot_1m_observed` first
-  - `volatility_index_data_observed` as historical fallback
-- Deduplicate by `exchange/symbol/timestamp`, newest `ingested_at` wins.
-
-Acceptance:
-- BTC/ETH snapshot rows build into Silver.
-- Canonical feature output contains one row per observed minute.
-- Source precedence and fallback are covered by tests.
-
-### PR-05: IV Feature Layer For Regime Research
-
-Status: Merged
-
-Updated: 2026-07-25
-
-PR: PR #62: https://github.com/SergejSchweizer/crypto-history-loader/pull/62
-
-Branch: `codex/pr05-iv-index-feature-layer`
-
-Depends on: PR-04
-
-Goal:
-Create reusable IV features without modelling labels.
-
-Scope:
-- Build `volatility_index_1m_feature`.
-- Add deterministic features:
-  - `iv_open`, `iv_high`, `iv_low`, `iv_close`
-  - `iv_range`
-  - `iv_return_1m`
-  - `iv_change_5m`, `iv_change_15m`, `iv_change_1h`
-  - `iv_zscore_1d`, `iv_zscore_7d`
-  - `iv_percentile_30d`
-  - source freshness fields
-- Use trailing windows only; no future leakage.
-
-Acceptance:
-- Tests prove rolling features use only current and past timestamps.
-- Output has stable columns and sort order.
-- Gold can consume `volatility_index_1m_feature`.
-
-### PR-06: RV Feature Layer From Spot And Perps OHLCV
-
-Status: Merged
-
-Updated: 2026-07-25
-
-PR: PR #63: https://github.com/SergejSchweizer/crypto-history-loader/pull/63
-
-Branch: `codex/pr06-rv-feature-layer`
-
-Depends on: PR-05
-
-Goal:
-Build realized-volatility features needed for IV/RV spread and regime state.
-
-Scope:
-- Build `realized_volatility_1m_feature` from `spot_ohlcv` and `perps_ohlcv`.
-- Add features:
-  - log returns
-  - rolling RV windows: `5m`, `15m`, `1h`, `4h`, `1d`
-  - Parkinson/range volatility from OHLC
-  - jump proxy from absolute return z-scores
-  - source flags for spot/perps availability
-- Keep symbol normalization deterministic.
-
-Acceptance:
-- Tests prove RV windows do not leak future data.
-- Feature output is available for BTC/ETH/SOL where OHLCV exists.
-- Gold can join RV with IV.
-
-### PR-07: IV/RV Spread Feature Dataset
-
-Status: Merged
-
-Updated: 2026-07-25
-
-PR: PR #64: https://github.com/SergejSchweizer/crypto-history-loader/pull/64
-
-Branch: `codex/pr07-iv-rv-spread-feature`
-
-Depends on: PR-06
-
-Goal:
-Create the direct IV/RV state inputs for regime-change prediction.
-
-Scope:
-- Build `iv_rv_1m_feature` from `volatility_index_1m_feature` and `realized_volatility_1m_feature`.
-- Add features:
-  - `iv_minus_rv_1h`
-  - `iv_minus_rv_1d`
-  - `iv_rv_ratio_1h`
-  - `iv_rv_ratio_1d`
-  - z-scores and percentile ranks
-  - availability/freshness columns
-- Do not create target labels.
-
-Acceptance:
-- Missing IV for SOL is represented explicitly, not silently filled from BTC/ETH.
-- Tests cover partial data availability.
-- Gold includes this dataset only when requirements are satisfied or explicitly optional.
-
-### PR-08: Index Price Snapshot Silver
-
-Status: Merged
-
-Updated: 2026-07-25
-
-PR: PR #65: https://github.com/SergejSchweizer/crypto-history-loader/pull/65
-
-Branch: `codex/pr08-index-price-snapshot-silver`
-
-Depends on: PR-07
-
-Goal:
-Bring `index_price_snapshot_1m` into Silver for mark/index dislocation and fair-value context.
-
-Scope:
-- Build `index_price_snapshot_1m_observed`.
-- Build optional `index_price_1m_feature`.
-- Normalize `currency/symbol`, timestamp, index price, source, freshness.
-- Deduplicate by `exchange/symbol/timestamp`.
-
-Acceptance:
-- Silver output covers all available index-price currencies.
-- Tests cover schema drift and duplicate snapshots.
-- Gold can join index price into regime features.
-
-### PR-09: Futures Summary Snapshot Silver
-
-Status: Merged
-
-Updated: 2026-07-25
-
-PR: PR #66: https://github.com/SergejSchweizer/crypto-history-loader/pull/66
-
-Branch: `codex/pr09-futures-summary-silver`
-
-Depends on: PR-08
-
-Goal:
-Bring `futures_summary_snapshot_1m` into Silver as derivatives market-state context.
-
-Scope:
-- Build `futures_summary_snapshot_1m_observed`.
-- Normalize per-instrument summary fields.
-- Build selected 1m features for:
-  - mark/index relationship
-  - open interest if present
-  - volume/turnover if present
-  - funding-related summary fields if present
-- Keep feature set conservative and schema-driven.
-
-Acceptance:
-- Tests cover missing optional fields.
-- Output is deterministic by `exchange/instrument/timestamp`.
-- No duplicated semantics with existing funding/open-interest features unless explicitly named.
-
-### PR-10: Options Ticker Snapshot Silver
-
-Status: Merged
-
-Updated: 2026-07-25
-
-PR: PR #67: https://github.com/SergejSchweizer/crypto-history-loader/pull/67
-
-Branch: `codex/pr10-options-ticker-silver`
-
-Depends on: PR-09
-
-Goal:
-Bring option tickers into Silver for options-implied-volatility and skew context.
-
-Scope:
-- Build `options_ticker_snapshot_1m_observed`.
-- Normalize contract metadata:
-  - underlying
-  - expiry
-  - strike
-  - option type
-  - timestamp
-- Preserve implied volatility, mark price, bid/ask, greeks, open interest, volume fields when present.
-- Add deterministic dedup and validation.
-
-Acceptance:
-- Tests cover call/put parsing, invalid strike/expiry, and missing greeks.
-- Output can support surface aggregation in later PRs.
-
-### PR-11: Options Instrument Ticker Snapshot Silver
-
-Status: Merged
-
-Updated: 2026-07-25
-
-PR: PR #68: https://github.com/SergejSchweizer/crypto-history-loader/pull/68
-
-Branch: `codex/pr11-options-instrument-ticker-silver`
-
-Depends on: PR-10
-
-Goal:
-Bring `options_instrument_ticker_snapshot_1m` into Silver and reconcile it with option ticker snapshots.
-
-Scope:
-- Build `options_instrument_ticker_snapshot_1m_observed`.
-- Use same contract metadata normalization as PR-10.
-- Define precedence when both ticker snapshot families overlap.
-- Add a reconciliation report for overlapping fields.
-
-Acceptance:
-- Tests prove overlapping records resolve deterministically.
-- Silver output preserves source lineage.
-
-### PR-12: Option Surface 1m Feature
-
-Status: Merged
-
-Updated: 2026-07-25
-
-PR: PR #69: https://github.com/SergejSchweizer/crypto-history-loader/pull/69
-
-Branch: `codex/pr12-option-surface-feature`
-
-Depends on: PR-11
-
-Goal:
-Create an option-surface feature dataset for IV regime and skew research.
-
-Scope:
-- Build `options_surface_1m_feature`.
-- Aggregate observed option tickers by underlying/time/expiry/moneyness buckets.
-- Add features:
-  - ATM IV proxy
-  - short-dated IV proxy
-  - skew proxy
-  - term-structure proxy
-  - put/call IV spread
-  - quote freshness and contract coverage counts
-- Use deterministic bucket rules.
-
-Acceptance:
-- Tests cover bucket assignment and no future leakage.
-- Output supports BTC/ETH where option tickers exist.
-
-### PR-13: Perps L2 Snapshot Silver
-
-Status: Merged
-
-Updated: 2026-07-25
-
-PR: PR #70: https://github.com/SergejSchweizer/crypto-history-loader/pull/70
-
-Branch: `codex/pr13-perps-l2-silver`
-
-Depends on: PR-12
-
-Goal:
-Bring `perps_l2_snapshot_1m` into Silver for liquidity and microstructure regime context.
-
-Scope:
-- Build `perps_l2_snapshot_1m_observed`.
-- Build `perps_l2_1m_feature`.
-- Add features:
-  - best bid/ask
-  - mid price
-  - spread
-  - top-of-book depth
-  - imbalance
-  - depth within configured bps bands if available
-- Validate non-negative prices/sizes and sorted books.
-
-Acceptance:
-- Tests cover malformed book snapshots.
-- Feature output is one row per symbol/minute where observed.
-
-### PR-14: Options L2 Snapshot Silver
-
-Status: Merged
-
-Updated: 2026-07-25
-
-PR: PR #71: https://github.com/SergejSchweizer/crypto-history-loader/pull/71
-
-Branch: `codex/pr14-options-l2-silver`
-
-Depends on: PR-13
-
-Goal:
-Bring `options_l2_snapshot_1m` into Silver for option liquidity and surface-quality filters.
-
-Scope:
-- Build `options_l2_snapshot_1m_observed`.
-- Build optional `options_l2_1m_feature`.
-- Normalize option contract metadata.
-- Add liquidity features:
-  - spread
-  - mid
-  - top depth
-  - quote availability
-  - stale quote flags
-
-Acceptance:
-- Tests cover contract parsing and empty-book snapshots.
-- Surface features can filter contracts by liquidity quality.
-
-### PR-15: Recent Trade Snapshot Silver
-
-Status: Merged
-
-Updated: 2026-07-25
-
-PR: PR #72: https://github.com/SergejSchweizer/crypto-history-loader/pull/72
-
-Branch: `codex/pr15-recent-trade-snapshot-silver`
-
-Depends on: PR-14
-
-Goal:
-Bring `recent_trade_snapshot_1m` into Silver and reconcile with `perps_trades`/`options_trades`.
-
-Scope:
-- Build `recent_trade_snapshot_1m_observed`.
-- Normalize trade fields and instrument metadata.
-- Add deterministic dedup by source trade ID or fallback composite key.
-- Add reconciliation checks against historical trade datasets where overlap exists.
-
-Acceptance:
-- Tests cover missing trade IDs and overlapping historical trades.
-- Output is clearly marked as snapshot-derived, not full historical tick coverage.
-
-### PR-16: Instrument Metadata Silver
-
-Status: Merged
-
-Updated: 2026-07-25
-
-PR: PR #73: https://github.com/SergejSchweizer/crypto-history-loader/pull/73
-
-Branch: `codex/pr16-instrument-metadata-silver`
-
-Depends on: PR-15
-
-Goal:
-Bring instrument metadata snapshots into Silver for joins, contract parsing, and universe filters.
-
-Scope:
-- Build `instrument_metadata_snapshot_daily_observed`.
-- Build `futures_instrument_metadata_snapshot_daily_observed`.
-- Normalize:
-  - instrument name
-  - base/quote/settlement currencies
-  - instrument kind
-  - expiry
-  - strike
-  - option type
-  - tick size
-  - contract size
-  - active/listed state
-- Produce latest-valid metadata views per day.
-
-Acceptance:
-- Tests cover futures and options metadata.
-- Other Silver builders can join metadata without ad hoc parsing.
-
-### PR-17: Historical Volatility Silver
-
-Status: Merged
-
-Updated: 2026-07-25
-
-PR: PR #74: https://github.com/SergejSchweizer/crypto-history-loader/pull/74
-
-Branch: `codex/pr17-historical-volatility-silver`
-
-Depends on: PR-16
-
-Goal:
-Bring `historical_volatility` into Silver as an auxiliary RV/volatility reference source.
-
-Scope:
-- Build `historical_volatility_observed`.
-- Preserve source value and timestamp.
-- Validate non-negative finite volatility values.
-- Clearly distinguish this source from internally computed RV in PR-06.
-
-Acceptance:
-- Tests prove naming does not collide with `realized_volatility_1m_feature`.
-- Gold can include it as an optional reference feature.
-
-### PR-18: Gold Contract Update For Regime Feature Set
-
-Status: Merged
-
-Updated: 2026-07-25
-
-PR: PR #77: https://github.com/SergejSchweizer/crypto-history-loader/pull/77
-
-Branch: `codex/pr18-gold-regime-feature-contract`
-
-Depends on: PR-17
-
-Goal:
-Expose the new Silver datasets through a coherent Gold dataset contract for IV/RV and regime-change research.
-
-Scope:
-- Add `gold.market.regime_features.m1`.
-- Required sources:
-  - `spot_ohlcv`
-  - `perps_ohlcv`
-  - `funding_1m_feature`
-  - `open_interest_1m_feature`
-  - `realized_volatility_1m_feature`
-  - `iv_rv_1m_feature`
-- Optional sources:
-  - L2 features
-  - option surface features
-  - index price features
-  - historical volatility reference
-- Add manifest fields for optional source availability.
-
-Acceptance:
-- Gold build is deterministic with and without optional sources.
-- Manifest exposes source coverage and freshness.
-- No predictive labels are added.
-
-## Physical Materialization And Gold Stack
-
-The following stack closes the gap between the merged code contracts and the physical Lake snapshot.
-Each PR is atomic and must not regenerate unrelated historical artifacts. Builds must be deterministic:
-fixed input manifest, stable sort, explicit deduplication, fixed columns, explicit timestamp semantics,
-and a manifest containing source paths, source hashes, row counts, date spans, missing days, and builder
-commit. The live-origin datasets are the snapshot families from `crypto-live-loader`; historical-origin
-datasets are fetched and transformed by this repository.
-
-### PR-19: Silver Materialization Audit And Build Manifest
-
-Status: Merged
-
-Updated: 2026-07-25
-
-PR: PR #79: https://github.com/SergejSchweizer/crypto-history-loader/pull/79
-
-Branch: `codex/pr19-silver-materialization-audit`
-
-Depends on: PR-18
-
-Goal:
-Create one deterministic audit command that compares Bronze inventory, Silver contracts, physical Silver
-files, and per-series missing-day statistics.
-
-Scope:
-- Add a read-only inventory report; do not write Lake data during audit.
-- Add `dataset-inventory` as the deterministic read-only CLI entrypoint for the report.
-- Validate that `config.yaml` schedules every `silver-build` dataset family and that the Gold medallion
-  step still builds every supported Gold dataset by omitting `--dataset-id`.
-- Report `dataset_type`, origin repository, schema columns, file count, row count, start/end, observed days,
-  missing days, and contract status.
-- Fail when a Bronze dataset has neither a physical Silver output nor an explicitly documented exception.
-- Add fixture tests for partition dates, mixed series lifetimes, and legacy `perp` compatibility.
-
-Acceptance:
-- The report reproduces the README inventory without manual edits.
-- `dataset-inventory` runs without writing Lake files and supports Markdown and JSON rendering.
-- A config compatibility test fails if any Silver or Gold dataset is omitted from the complete medallion run.
-- `git status --short` remains clean after the audit.
-- Targeted tests cover only inventory, contract, and report formatting behavior.
-
-### PR-20: Volatility Index Silver Materialization
-
-Status: Merged
-
-Updated: 2026-07-25
-
-PR: PR #80: https://github.com/SergejSchweizer/crypto-history-loader/pull/80
-
-Branch: `codex/pr20-volatility-silver-materialization`
-
-Depends on: PR-19
-
-Goal:
-Materialize historical and live IV observations into one canonical, freshness-aware Silver feature.
-
-Scope:
-- Build `volatility_index_data_observed` from historical `value` Bronze rows.
-- Build `volatility_index_snapshot_1m_observed` from live `open/high/low/close` snapshots.
-- Build `volatility_index_1m_feature` with live snapshot precedence and historical fallback.
-- Preserve source lineage and represent missing SOL live data explicitly.
-
-Acceptance:
-- Exact output variables are the contract columns in `application/dataset_contracts.py`.
-- Dedup key is `exchange/symbol/timestamp`; newest `ingested_at` wins deterministically.
-- Targeted tests cover historical fallback, live precedence, duplicate rows, and missing IV.
-
-### PR-21: Realized Volatility And IV/RV Silver Materialization
-
-Status: Merged
-
-Updated: 2026-07-25
-
-PR: PR #81: https://github.com/SergejSchweizer/crypto-history-loader/pull/81
-
-Branch: `codex/pr21-rv-iv-rv-silver-materialization`
-
-Depends on: PR-20
-
-Goal:
-Materialize leakage-safe RV and IV/RV state features for BTC, ETH, and SOL.
-
-Scope:
-- Build `realized_volatility_1m_feature` from spot/perpetual OHLCV.
-- Build `iv_rv_1m_feature` from the canonical IV feature and realized-volatility feature.
-- Keep trailing windows only: 5m, 15m, 1h, 4h, and 1d.
-- Preserve availability, freshness, and source timestamps; never cross-fill symbols.
-
-Acceptance:
-- Contract variables include RV windows, Parkinson RV, jump proxy, IV-RV spreads/ratios, z-score,
-  percentile, and availability flags.
-- Tests prove no future timestamps enter a rolling value and partial source availability remains explicit.
-- Targeted tests cover RV windows, IV/RV joins, and timestamp alignment.
-
-### PR-22: Index Price And Futures Summary Silver Materialization
-
-Status: Merged
-
-Updated: 2026-07-25
-
-PR: PR #83: https://github.com/SergejSchweizer/crypto-history-loader/pull/83; PR #92: https://github.com/SergejSchweizer/crypto-history-loader/pull/92
-
-Branch: `codex/pr22-index-futures-silver-materialization`
-
-Depends on: PR-21
-
-Goal:
-Materialize index/mark dislocation, derivatives summary, and freshness context.
-
-Scope:
-- Build `index_price_snapshot_1m_observed` and `index_price_1m_feature`.
-- Build `futures_summary_snapshot_1m_observed` and `futures_summary_1m_feature`.
-- Normalize currency/index names to canonical symbols and preserve optional-field availability.
-
-Acceptance:
-- Dedup keys and one-minute ordering are deterministic.
-- Tests cover missing optional summary fields and symbol normalization.
-- No duplicate funding or open-interest semantics are silently introduced.
-
-### PR-23: Options Ticker Silver Materialization
-
-Status: Merged
-
-Updated: 2026-07-25
-
-PR: PR #84: https://github.com/SergejSchweizer/crypto-history-loader/pull/84; PR #93: https://github.com/SergejSchweizer/crypto-history-loader/pull/93
-
-Branch: `codex/pr23-options-ticker-silver-materialization`
-
-Depends on: PR-22
-
-Goal:
-Materialize option ticker and instrument-ticker observations needed for surface reconstruction.
-
-Scope:
-- Build `options_ticker_snapshot_1m_observed`.
-- Build `options_instrument_ticker_snapshot_1m_observed`.
-- Normalize instrument name, underlying, expiry, strike, option type, IV, greeks, quotes, OI, and volume.
-- Keep source-family lineage so overlapping ticker records can be reconciled later.
-
-Acceptance:
-- Tests cover calls/puts, invalid expiry/strike, missing greeks, and duplicate snapshots.
-- Output columns match the Silver contract exactly.
-- Only the related options ticker tests run on this intermediate PR.
-
-### PR-24: Options Surface Silver Materialization
-
-Status: Merged
-
-Updated: 2026-07-25
-
-PR: PR #85: https://github.com/SergejSchweizer/crypto-history-loader/pull/85; PR #94: https://github.com/SergejSchweizer/crypto-history-loader/pull/94
-
-Branch: `codex/pr24-options-surface-silver-materialization`
-
-Depends on: PR-23
-
-Goal:
-Build deterministic option-surface features for IV level, skew, smile, and term structure.
-
-Scope:
-- Build `options_surface_1m_feature` using fixed expiry and moneyness bucket rules.
-- Calculate ATM IV, short-dated IV, skew, term structure, put/call IV spread, coverage, and quote age.
-- Exclude stale or invalid quotes using explicit quality rules.
-
-Acceptance:
-- Bucket boundaries and tie-breaking are tested and documented.
-- No future contract observation enters a minute feature.
-- Surface coverage and missing days are present in the build manifest.
-
-### PR-25: Perpetual L2 Silver Materialization
-
-Status: Merged
-
-Updated: 2026-07-25
-
-PR: PR #86: https://github.com/SergejSchweizer/crypto-history-loader/pull/86; PR #95: https://github.com/SergejSchweizer/crypto-history-loader/pull/95
-
-Branch: `codex/pr25-perps-l2-silver-materialization`
-
-Depends on: PR-24
-
-Goal:
-Materialize perpetual order-book features for liquidity and microstructure regime context.
-
-Scope:
-- Build `perps_l2_snapshot_1m_observed` and `perps_l2_1m_feature`.
-- Produce mid, spread, top depth, imbalance, depth-at-10/50bps, quote age, and stale flags.
-- Validate non-negative prices/sizes and ordered bid/ask levels.
-
-Acceptance:
-- One deterministic row per symbol/minute where observations exist.
-- Malformed/empty books are classified, not silently coerced into valid liquidity.
-- Targeted L2 tests cover strict and lenient quality modes.
-
-### PR-26: Options L2 Silver Materialization
-
-Status: Merged
-
-Updated: 2026-07-25
-
-PR: PR #87: https://github.com/SergejSchweizer/crypto-history-loader/pull/87; PR #96: https://github.com/SergejSchweizer/crypto-history-loader/pull/96
-
-Branch: `codex/pr26-options-l2-silver-materialization`
-
-Depends on: PR-25
-
-Goal:
-Materialize option order-book features and liquidity filters for surface quality.
-
-Scope:
-- Build `options_l2_snapshot_1m_observed` and `options_l2_1m_feature`.
-- Normalize contract metadata and quote fields.
-- Add empty-book, stale-quote, spread, mid, and depth indicators.
-
-Acceptance:
-- Tests cover missing contract metadata, empty books, and invalid quote ordering.
-- Surface consumers can filter by explicit liquidity-quality variables.
-
-### PR-27: Recent Trade Snapshot Silver Materialization
-
-Status: Merged
-
-Updated: 2026-07-25
-
-PR: PR #88: https://github.com/SergejSchweizer/crypto-history-loader/pull/88; PR #97: https://github.com/SergejSchweizer/crypto-history-loader/pull/97
-
-Branch: `codex/pr27-recent-trades-silver-materialization`
-
-Depends on: PR-26
-
-Goal:
-Materialize live recent trades without treating snapshots as a replacement for historical tick data.
-
-Scope:
-- Build `recent_trade_snapshot_1m_observed`.
-- Deduplicate by source trade ID or a documented composite fallback key.
-- Preserve snapshot timestamp, exchange timestamp, direction, liquidation, block-trade, and notional fields.
-
-Acceptance:
-- Output is explicitly marked `snapshot_derived`.
-- Overlap with historical trades produces a deterministic reconciliation report.
-- Tests cover missing IDs, duplicate snapshots, and timestamp ordering.
-
-### PR-28: Instrument Metadata Silver Materialization
-
-Status: Merged
-
-Updated: 2026-07-25
-
-PR: PR #98: https://github.com/SergejSchweizer/crypto-history-loader/pull/98
-
-Branch: `codex/pr28-instrument-metadata-silver-materialization`
-
-Depends on: PR-27
-
-Goal:
-Materialize the daily instrument universe required for contract parsing and valid option-surface joins.
-
-Scope:
-- Build `instrument_metadata_snapshot_daily_observed`.
-- Build `futures_instrument_metadata_snapshot_daily_observed`.
-- Normalize currency, kind, expiry, strike, option type, tick/contract size, listing, and active state.
-- Select the latest valid metadata snapshot per instrument/day deterministically.
-
-Acceptance:
-- Tests cover option and future metadata, expiry transitions, and inactive instruments.
-- Metadata joins never infer contract identity from an unvalidated string.
-
-### PR-29: Historical Silver Backfill And Reconciliation
-
-Status: Merged
-
-Updated: 2026-07-25
-
-PR: PR #99: https://github.com/SergejSchweizer/crypto-history-loader/pull/99
-
-Branch: `codex/pr29-silver-backfill-reconciliation`
-
-Depends on: PR-28
-
-Goal:
-Run the complete Silver build over all available Bronze history and live snapshot windows.
-
-Scope:
-- Materialize all missing outputs from PR-20 through PR-28.
-- Rebuild stale `perp` outputs as canonical `perps_ohlcv` while preserving read compatibility.
-- Emit one inventory manifest per dataset/series with rows, columns, start/end, observed/missing days,
-  source hash, builder commit, and quality counters.
-- Keep Parquet data outside tracked project content; only reproducible reports or generated metadata may be tracked when explicitly allowed by policy.
-
-Acceptance:
-- Every Bronze dataset has a physical Silver destination or a documented exception.
-- All outputs are sorted, deduplicated, schema-valid, and restart-safe.
-- Full Silver build report is reproducible from the same input manifest.
-
-### PR-30: Historical Gold IV/RV Feature Dataset
-
-Status: Merged
-
-Updated: 2026-07-25
-
-PR: PR #100: https://github.com/SergejSchweizer/crypto-history-loader/pull/100
-
-Branch: `codex/pr30-historical-gold-iv-rv`
-
-Depends on: PR-29
-
-Goal:
-Create the historical Gold dataset used for IV/RV prediction without forward-looking values.
-
-Scope:
-- Materialize `gold.market.iv_rv.m1` from `iv_rv_1m_feature`.
-- Extend the canonical historical state join with spot/perps returns, RV horizons, IV level/change,
-  IV-RV spread/ratio, funding, OI, and data-quality fields.
-- Keep `historical_volatility_observed` as a named external reference, never as a substitute for computed RV.
-
-Acceptance:
-- Manifest reports source coverage/freshness and feature-set hash.
-- Point-in-time tests prove all features are known at `timestamp_m1`.
-- Intermediate PR runs only Gold IV/RV tests.
-
-### PR-31: Historical Gold Regime Features
-
-Status: Merged
-
-Updated: 2026-07-25
-
-PR: PR #101: https://github.com/SergejSchweizer/crypto-history-loader/pull/101; PR #103: https://github.com/SergejSchweizer/crypto-history-loader/pull/103
-
-Branch: `codex/pr31-historical-gold-regime-features`
-
-Depends on: PR-30
-
-Goal:
-Materialize `gold.market.regime_features.m1` as the reusable state representation for regime-change models.
-
-Scope:
-- Require spot/perps OHLCV, funding, OI, RV, and IV/RV features.
-- Include optional index, futures summary, option surface, L2, and external historical-volatility features
-  as typed nullable columns with availability flags.
-- Keep all transformations trailing and deterministic.
-
-Acceptance:
-- Required-source gaps fail loudly; optional-source gaps do not change schema or minute grid.
-- No regime labels or future returns are present in this feature dataset.
-
-### PR-32: Historical Strategy Feature Families
-
-Status: Merged
-
-Updated: 2026-07-25
-
-PR: PR #104: https://github.com/SergejSchweizer/crypto-history-loader/pull/104; PR #105: https://github.com/SergejSchweizer/crypto-history-loader/pull/105
-
-Branch: `codex/pr32-historical-strategy-features`
-
-Depends on: PR-31
-
-Goal:
-Add reusable feature families for momentum, trend following, and mean reversion.
-
-Scope:
-- Momentum/trend: multi-horizon returns, EMA slopes, breakout distance, trend persistence, and volatility-scaled direction.
-- Mean reversion: rolling z-scores, VWAP/EMA distance, Bollinger distance, spread reversion, and estimated half-life.
-- Add turnover, spread, and volatility normalization needed for realistic optimization.
-
-Acceptance:
-- Each feature has a declared lookback and no future dependency.
-- Features are state variables only; strategy targets remain separate.
-- Tests cover warm-up periods, constant-price series, zero-volume, and numerical stability.
-
-### PR-33: Historical Prediction Targets And Regime Labels
-
-Status: Merged
-
-Updated: 2026-07-25
-
-PR: PR #106: https://github.com/SergejSchweizer/crypto-history-loader/pull/106
-
-Branch: `codex/pr33-historical-targets-labels`
-
-Depends on: PR-32
-
-Goal:
-Create explicitly forward-looking training targets without contaminating inference features.
-
-Scope:
-- Future RV and IV-change targets at 1h, 4h, and 1d.
-- Forward return, drawdown, and cost-adjusted return targets for momentum/trend/mean-reversion evaluation.
-- Regime-change labels with fixed transition and horizon definitions.
-
-Acceptance:
-- Targets live in a separate dataset and are never joined into live feature outputs.
-- Label definitions, horizons, transaction-cost assumptions, and null rules are versioned.
-- Leakage tests fail if a target column appears in a feature contract.
-
-### PR-34: Live-Origin Gold Feature Contract
-
-Status: Merged
-
-Updated: 2026-07-25
-
-PR: PR #107: https://github.com/SergejSchweizer/crypto-history-loader/pull/107; PR #108: https://github.com/SergejSchweizer/crypto-history-loader/pull/108
-
-Branch: `codex/pr34-live-gold-feature-contract`
-
-Depends on: PR-31
-
-Goal:
-Expose live-loader index, surface, L2, trade, and metadata data through feature schemas compatible with
-historical inference inputs.
-
-Scope:
-- Add `gold.live.volatility_features.m1` and `gold.live.microstructure_features.m1` as explicit live-origin
-  feature contracts.
-- Keep future live regime and instrument-universe additions as extensions of the canonical
-  `gold.live.full.m1` endpoint rather than separate primary Gold endpoints.
-- Preserve live source lineage, `as_of`, freshness, coverage, and availability flags.
-- Do not backfill live data with historical values inside a live dataset.
-
-Acceptance:
-- Historical/live overlapping features have identical names, units, timestamp semantics, and null rules.
-- Live artifacts remain clearly marked as snapshot-derived and source-repository-specific.
-
-### PR-35: Historical Full Gold Dataset
-
-Status: Merged
-
-Updated: 2026-07-25
-
-PR: PR #110: https://github.com/SergejSchweizer/crypto-history-loader/pull/110
-
-Branch: `codex/pr35-historical-full-gold-dataset`
-
-Depends on: PR-33
-
-Goal:
-Create one historical Gold dataset that joins every raw historical dataset family fetched by
-`crypto-history-loader` into Bronze. Research-derived IV/RV, volatility, L2, index, futures-summary,
-option-surface, strategy, target, and label features stay in narrower Gold contracts.
-
-Scope:
-- Add `gold.market.history_full.m1` as the complete raw-history join.
-- Required historical sources:
-  - `spot_ohlcv`
-  - `perps_ohlcv`
-  - `funding_1m_feature`
-  - `open_interest_1m_feature`
-  - `perps_trades_1m_feature`
-  - `options_trades_1m_feature`
-- Build the Gold minute grid from the union of those historical source timestamps.
-- Keep missing source values nullable; do not shrink the dataset to a date intersection.
-- Keep realized-volatility, IV/RV, volatility-index, L2, index, futures-summary, option-surface,
-  strategy, target, and label columns out of this dataset.
-- Update complete-run commands, parser compatibility tests, and README inventory docs.
-
-Acceptance:
-- One deterministic row per `exchange/symbol/timestamp_m1` on the historical minute grid.
-- Every joined source column has explicit prefixing, timestamp semantics, null policy, and availability flag.
-- Leakage tests prove forward-looking targets are absent from the inference-safe output.
-- Manifest reports row count, source coverage, start/end, observed days, missing days, source hashes, and
-  builder commit.
-- Intermediate PR runs only the focused historical full-Gold tests.
-
-### PR-36: Live Full Gold Dataset
-
-Status: Merged
-
-Updated: 2026-07-25
-
-PR: PR #112: https://github.com/SergejSchweizer/crypto-history-loader/pull/112
-
-Branch: `codex/pr36-live-full-gold-dataset`
-
-Depends on: PR-34, PR-35
-
-Goal:
-Create one live-origin Gold dataset that joins every live-loader-derived Silver/Gold feature family into a
-single inference table compatible with the historical full dataset where semantics overlap.
-
-Scope:
-- Add `gold.live.full.m1` as the complete live feature join.
-- Required live sources:
-  - `volatility_index_1m_feature`
-  - `iv_rv_1m_feature`
-  - `perps_l2_1m_feature`
-  - `options_l2_1m_feature`
-- Optional live Silver sources remain nullable with explicit availability/freshness fields:
-  - `index_price_1m_feature`
-  - `futures_summary_1m_feature`
-  - `options_surface_1m_feature`
-- Keep future live regime and instrument-universe additions as extensions of `gold.live.full.m1`, not as
-  separate primary Gold endpoints.
-- Do not backfill live gaps from historical datasets; live missing minutes stay null and are represented by
-  coverage, freshness, and source-availability fields.
-- Align overlapping column names, units, and null semantics with `gold.market.history_full.m1`.
-- Update complete-run commands, parser compatibility tests, and README inventory docs.
-
-Acceptance:
-- One deterministic row per live `exchange/symbol/timestamp_m1` where the live minute grid exists.
-- Existing live-loader-derived feature families are represented directly or through documented availability flags.
-- Historical/live schema compatibility tests pass for overlapping feature families.
-- Manifest reports origin repository, source coverage, freshness, start/end, observed days, missing days,
-  source hashes, and builder commit.
-- Intermediate PR runs only focused live full-Gold tests.
-
-### PR-37: Gold Inventory Documentation And Release Gate
-
-Status: Merged
-
-Updated: 2026-07-25
-
-PR: PR #114: https://github.com/SergejSchweizer/crypto-history-loader/pull/114
-
-Branch: `codex/pr37-gold-inventory-contract-gate`
-
-Depends on: PR-29, PR-33, PR-34, PR-35, PR-36
-
-Goal:
-Make README and backlog status reproducible and release-blocking.
-
-Scope:
-- Generate the Bronze/Silver/Gold inventory report from the audit command.
-- Document every dataset's variables, origin, series, start/end, observed days, missing days, and physical/contract status.
-- Add CI validation that README inventory date and schema lists match the generated report.
-
-Acceptance:
-- No dataset is described as present when only its contract exists.
-- Final stack run executes the full quality suite, `coverage run -m pytest`, and `coverage report`.
-
-### PR-38: Fixed Gold Dataset Retention
-
-Status: Merged
-
-Updated: 2026-07-25
-
-PR: PR #113: https://github.com/SergejSchweizer/crypto-history-loader/pull/113
-
-Branch: `codex/gold-retention-three-versions`
-
-Depends on: PR-36
-
-Goal:
-Keep Gold storage bounded and deterministic by retaining exactly the latest three artifact versions for each
-`dataset_id/exchange/symbol` lineage.
-
-Scope:
-- Enforce a fixed Gold retention window of three versions in the Gold build service.
-- Keep the legacy `--retention-keep-versions` CLI argument parseable, but reject any value other than `3`.
-- Update README retention policy and focused regression tests.
-
-Acceptance:
-- Gold pruning always runs with a retention window of `3`.
-- CLI/config/direct service callers fail clearly when they request any other retention window.
-- Backlog and README describe fixed Gold retention.
-
-## Refactor Hardening Stack
-
-The 2026-07-12 repository rescan found five refactor issues that create the largest future maintenance risk:
-handwritten Silver command routing, duplicated Silver monthly IO/report plumbing, a broad Gold frame-preparation
-module, repeated dataset/config/CLI lists, and oversized monkeypatch-heavy tests. The following stack is atomic,
-idempotent, and behavior-preserving; each PR must keep existing public commands and dataset contracts compatible.
-
-### PR-39: Silver Build Registry Extraction
-
-Status: Merged
-
-Updated: 2026-07-25
-
-PR: PR #120: https://github.com/SergejSchweizer/crypto-history-loader/pull/120
-
-Branch: `codex/pr39-silver-build-registry`
-
-Depends on: PR-38
-
-Planning `git status --short`:
+Each consumer table mirrors the current Parquet Gold row schema and uses the composite logical key:
 
 ```text
-clean
+(exchange, symbol, timestamp_m1)
 ```
 
-Publication `git status --short`:
+Every publishable current Gold contract must expose those three fields. Unsupported or ambiguous source types fail before any write. Existing table/source schema-signature mismatch is a migration-required error. Normal sync must never `DROP`, `TRUNCATE`, replace a table, delete-all, or silently mutate a live schema.
+
+### Timestamp compatibility contract
+
+The timestamp contract must be type-compatible with the implemented `market-regime-loader` Gold/PostgreSQL serving path.
+
+Canonical source timestamp type:
 
 ```text
-clean
+timestamp_m1: Polars Datetime(time_unit="us", time_zone="UTC")
 ```
 
-Goal:
-Replace the handwritten `silver-build` handler/discovery cascade in `api/commands/silver.py` with a typed dataset
-build registry that keeps dataset choices, discovery, builder functions, output dataset names, and sidecar reporting
-in one inspectable contract.
-
-Scope:
-- Add a typed `SilverBuildSpec` registry in the application layer or a command-adjacent module with no new storage side effects.
-- Move per-dataset discovery selection and handler wiring out of the long `run_silver_build` branch cascade.
-- Keep current CLI arguments, JSON output shape, logging fields, and sidecar behavior unchanged.
-- Add focused route tests that compare every existing dataset choice against exactly one registry entry.
-
-Acceptance:
-- `silver-build --dataset ...` schedules the same jobs and reports as before for every current dataset.
-- Adding a Silver dataset requires one registry entry plus tests, not edits to multiple `elif` chains.
-- Re-running the same command with unchanged inputs is idempotent and produces the same target paths and report metadata.
-- `git status --short` and the PR URL are recorded in this backlog entry before handoff.
-
-### PR-40: Shared Silver Monthly IO And Report Kernel
-
-Status: Merged
-
-Updated: 2026-07-25
-
-PR: PR #121: https://github.com/SergejSchweizer/crypto-history-loader/pull/121
-
-Branch: `codex/pr40-silver-monthly-io-kernel`
-
-Depends on: PR-39
-
-Planning `git status --short`:
+PostgreSQL timestamp type:
 
 ```text
-clean
+TIMESTAMPTZ(6)
 ```
 
-Publication `git status --short`:
+Mandatory invariants:
+
+- `timestamp_m1` must be normalized and validated as UTC-aware microsecond precision before hashing or PostgreSQL mutation.
+- Every Gold source column whose logical type is timestamp/datetime must use UTC-aware microsecond semantics at the PostgreSQL sync boundary; true calendar-date fields remain `DATE` and are not converted to timestamps.
+- Every PostgreSQL consumer timestamp/datetime column is exactly `TIMESTAMPTZ(6)`.
+- Internal sync timestamps are also exactly `TIMESTAMPTZ(6)`: `gold_sync_state.min_timestamp`, `gold_sync_state.max_timestamp`, `gold_sync_state.synced_at_utc`, and `gold_row_hashes.timestamp_m1`.
+- Every PostgreSQL sync session explicitly uses timezone `UTC`.
+- `TIMESTAMP WITHOUT TIME ZONE`, naive datetimes, non-UTC timestamp semantics, millisecond/nanosecond timestamp storage, and PostgreSQL timestamp precision other than `(6)` are forbidden at this boundary.
+- Timestamp round-trip tests must prove that an aware UTC microsecond source value is read back from PostgreSQL with identical instant and microsecond precision.
+- This mirrors the `market-regime-loader` convention: source Gold `Datetime(us, UTC)` and PostgreSQL `TIMESTAMPTZ(6)` with a UTC session. The observation semantics of the crypto datasets remain their own; only the timestamp type/precision/timezone contract is shared.
+
+Synchronization is state reconciliation, not a timestamp-watermark feed:
+
+- First successful sync of a `(dataset_id, exchange, symbol)` lineage inserts the complete current Gold history.
+- Later sync checks the current Gold source fingerprint against the last successful sync state.
+- If the fingerprint is unchanged, zero consumer-row mutations are allowed; target count/min/max are still verified.
+- If the fingerprint changed, current Gold is hashed row-by-row and compared with the complete PostgreSQL digest state for that lineage.
+- Only accumulated `INSERT`, `UPDATE`, and `DELETE` deltas are written. Unchanged rows are never rewritten.
+- Historical corrections, deleted rows, and any number of missed runs must be discovered on the next successful sync.
+- A last-timestamp watermark is forbidden because it cannot detect historical revisions or deletions.
+- Consumer rows, digest rows, and sync-state checkpoint commit atomically per lineage under a lineage-scoped advisory transaction lock.
+- Exactly one current artifact per `(dataset_id, exchange, symbol)` is synchronized. Retained older Gold versions are not replicated.
+
+The target execution order is:
 
 ```text
-clean
+Bronze -> Silver -> Gold -> PostgreSQL Gold sync
 ```
 
-Goal:
-Extract the repeated Silver monthly read, deterministic write, timestamp-span, duplicate-count, and
-`SilverBuildReport` aggregation patterns from `application/services/silver_service.py` and the `silver_*` builders
-into one reusable monthly build kernel.
+PostgreSQL runs only after Gold succeeds. PostgreSQL failure makes the Medallion invocation non-zero but never rolls back already-published local Gold or its existing NAS mirror. Recovery runs only `gold-sync-postgres` and converges from the last successful per-lineage checkpoint.
 
-Scope:
-- Define a typed monthly build result object that owns rows in/out, duplicate counts, invalid counts, timestamp span,
-  months processed, output columns, and target path.
-- Move shared parquet path creation, month iteration, report aggregation, and UTC formatting behind explicit helpers.
-- Migrate OHLCV and one existing observed/feature pair first; leave adapters for the remaining builders to preserve behavior.
-- Keep all existing dataset paths, partition names, row ordering, and deduplication keys stable.
-
-Acceptance:
-- Focused Silver service tests prove migrated datasets write byte-equivalent schemas and identical report fields.
-- Existing public builder functions remain import-compatible for CLI and tests.
-- The new kernel has no wall-clock dependency except caller-supplied cutoffs already present in existing builders.
-- Re-running the same monthly build is idempotent and rewrites only the same deterministic target files.
-- `git status --short` and the PR URL are recorded in this backlog entry before handoff.
-
-### PR-41: Gold Frame Preparation Registry
-
-Status: Merged
-
-Updated: 2026-07-25
-
-PR: PR #122: https://github.com/SergejSchweizer/crypto-history-loader/pull/122
-
-Branch: `codex/pr41-gold-frame-preparation-registry`
-
-Depends on: PR-40
-
-Planning `git status --short`:
+## Parallel delivery waves
 
 ```text
-clean
+PR-67 consolidate/plan PostgreSQL sync
+   |
+   +------------------------+------------------------+
+   v                        v                        v
+PR-68 contracts         PR-73 role provisioning  PR-74 runtime config
+   |
+   +----------------+----------------+
+   v                v                v
+PR-69 delta        PR-70 inventory  PR-71 schema mapper
+                                      |
+                         PR-68 + PR-71
+                                      |
+                                      v
+                                  PR-72 adapter
+                    PR-69 + PR-70 + PR-72
+                                      |
+                                      v
+                                  PR-75 use case
+                              PR-74 + PR-75
+                                      |
+                                      v
+                                  PR-76 CLI
+                              PR-73 + PR-76
+                                      |
+                                      v
+                                  PR-77 Medallion integration
 ```
 
-Publication `git status --short`:
+Maximum safe parallelism:
 
-```text
-clean
-```
+- Wave 1: PR-68, PR-73, PR-74 in parallel after PR-67 merges.
+- Wave 2: PR-69, PR-70, PR-71 in parallel after PR-68 merges.
+- Wave 3: PR-72 after PR-68 and PR-71.
+- Wave 4: PR-75 after PR-69, PR-70, PR-72.
+- Wave 5: PR-76 after PR-74 and PR-75.
+- Wave 6: PR-77 after PR-73 and PR-76.
 
-Goal:
-Split `application/services/gold_frames.py` into a registry-driven frame-preparation layer so dataset-specific
-select/cast/prefix rules, optional schemas, live lineage fields, strategy feature lookbacks, and prediction target
-definitions are explicit and independently testable.
+---
 
-Scope:
-- Introduce typed preparation specs mapping Silver dataset types to prepare functions, required columns, output columns,
-  optional nullable schema, and source lineage semantics.
-- Move optional feature schema definitions next to their corresponding prepare specs.
-- Keep `prepare_dataset_frame`, strategy feature, and prediction-target public entrypoints compatible during migration.
-- Add tests that every Gold contract requirement has a registered preparation path or documented explicit exception.
+## PR-67: Consolidate Backlog And Define PostgreSQL Gold Sync Stack
 
-Acceptance:
-- Gold builds emit the same column order for `gold.market.history_full.m1`, `gold.market.regime_features.m1`,
-  `gold.live.volatility_features.m1`, `gold.live.microstructure_features.m1`, and `gold.live.full.m1`.
-- Optional source gaps still produce stable nullable columns and do not expand required grids.
-- The registry makes unsupported dataset types fail with one deterministic error message.
-- Re-running a Gold build with the same Silver inputs remains idempotent, including manifest hashes and version pruning.
-- `git status --short` and the PR URL are recorded in this backlog entry before handoff.
-
-### PR-42: Contract-Driven Dataset Lists And Command Choices
-
-Status: Merged
-
-Updated: 2026-07-25
-
-PR: PR #123: https://github.com/SergejSchweizer/crypto-history-loader/pull/123
-
-Branch: `codex/pr42-contract-driven-dataset-lists`
-
-Depends on: PR-41
-
-Planning `git status --short`:
-
-```text
-clean
-```
-
-Publication `git status --short`:
-
-```text
-clean
-```
-
-Goal:
-Remove dataset-list drift by deriving CLI choices, complete-run command validation, inventory expectations, and docs
-checks from the typed dataset contracts and build registries instead of maintaining repeated literal lists.
-
-Scope:
-- Add contract helpers for supported Bronze-backed Silver build IDs, live-origin Silver build IDs, and supported Gold IDs.
-- Make `silver-build` and `gold-build` parser choices consume these helpers without changing accepted command values.
-- Update parser/config compatibility tests to assert config lists are subsets of contract-derived supported IDs.
-- Update README/backlog inventory validators to rely on the same canonical helper where practical.
-
-Acceptance:
-- A new dataset cannot be added to contracts without either appearing in command choices or being explicitly marked as
-  non-buildable with a test-covered reason.
-- Complete medallion command validation fails on missing or stale dataset IDs without duplicating the full list in tests.
-- Existing `config.yaml` and documented complete-run commands remain valid.
-- The refactor is idempotent: canonical helpers return sorted stable sequences and do not read local lake state.
-- `git status --short` and the PR URL are recorded in this backlog entry before handoff.
-
-### PR-43: Typed Test Fixture And Command Harness Consolidation
-
-Status: Merged
-
-Updated: 2026-07-25
-
-PR: PR #124: https://github.com/SergejSchweizer/crypto-history-loader/pull/124
-
-Branch: `codex/pr43-typed-test-command-harness`
-
-Depends on: PR-42
-
-Planning `git status --short`:
-
-```text
-clean
-```
-
-Publication `git status --short`:
-
-```text
-clean
-```
-
-Goal:
-Reduce regression risk in the largest monkeypatch-heavy test modules by introducing typed fixtures and command harnesses
-for Silver routing, Gold frame builds, fetch services, and parquet fixture construction.
-
-Scope:
-- Add reusable typed fixture builders for Silver reports, Gold parquet inputs, Bronze parquet partitions, and command args.
-- Replace repeated `# type: ignore[no-untyped-def]` monkeypatch patterns in `tests/test_silver_command.py`,
-  `tests/test_gold_service.py`, and the largest fetch-service tests with typed local helpers.
-- Keep test behavior and assertions equivalent while reducing dependency on private compatibility wrappers.
-- Document fixture ownership in test module docstrings or a small test helper README if needed.
-
-Acceptance:
-- Targeted Silver command, Gold service, and fetch-service tests pass with fewer untyped test ignores.
-- Fixture helpers are deterministic, do not touch network resources, and write only under pytest `tmp_path` roots.
-- Command tests assert behavior through public CLI/service surfaces wherever practical.
-- The final stacked PR runs the complete configured quality suite plus coverage before merge readiness.
-- `git status --short` and the PR URL are recorded in this backlog entry before handoff.
-
-## Quantitative Correctness Priority Stack
-
-This stack was merged from `docs/backlog/quant-correctness-priority-stack.md` (recorded during the 2026-07-17
-repository review). Data correctness takes precedence over structural cleanup.
-
-Priority order:
-
-1. QC-01: Normalize implied- and realized-volatility semantics.
-2. QC-02: Preserve rolling state across monthly partitions.
-3. QC-03: Prevent row-wise spot/perpetual source switching in realized volatility.
-4. QC-04: Add quantitative semantics to dataset contracts.
-5. QC-05: Validate documented CLI commands as executable contracts.
-6. QC-06: Align documented and enforced quality gates.
-
-### QC-01: Normalize IV/RV Units, Horizons, And Annualization
-
-Priority: P0 - data correctness blocker
-
-Status: Merged
-
-Updated: 2026-07-25
-
-PR: PR #140: https://github.com/SergejSchweizer/crypto-history-loader/pull/140
-
-Branch: `codex/qc01-normalize-iv-rv-semantics`
-
-Depends on: none
-
-Planning `git status --short`:
-
-```text
-clean
-```
-
-Publication `git status --short`:
-
-```text
- M ARCHITECTURE.md
- M BACKLOG.md
- M README.md
- M application/dataset_contracts.py
- M application/services/gold_frames.py
- M application/services/silver_iv_rv.py
- M application/services/silver_realized_volatility.py
- M application/services/silver_volatility.py
- M ingestion/feature_metadata.py
- M tests/test_gold_live_full.py
- M tests/test_gold_live_volatility.py
- M tests/test_gold_regime_features.py
- M tests/test_gold_service.py
- M tests/test_silver_iv_rv.py
- M tests/test_silver_realized_volatility.py
-```
-
-Problem:
-`volatility_index_1m_feature.iv_close` represents an annualized implied-volatility index in percentage points,
-while `realized_volatility_1m_feature.rv_1h` and `rv_1d` currently represent non-annualized square-root sums of
-squared decimal log returns. Direct subtraction and division therefore mix incompatible units and horizons in
-expressions such as `iv_minus_rv_1h = iv_close - rv_1h` and `iv_rv_ratio_1h = iv_close / rv_1h`.
-
-Goal:
-Make every IV/RV comparison financially interpretable and encode the convention in contracts, manifests, tests,
-and column names.
-
-Scope:
-- Define the canonical IV unit as annualized volatility percentage points.
-- Define the canonical annualization basis explicitly, with crypto calendar-time defaulting to 365 days unless a
-  contract states otherwise.
-- Add annualized realized-volatility fields with explicit names, for example `rv_1h_annualized_pct`,
-  `rv_1d_annualized_pct`, `rv_30d_annualized_pct`.
-- Prefer a horizon-compatible 30-day realized-volatility comparison for the volatility index:
-  `rv_30d_annualized_pct = sqrt(sum(last_30d_log_returns^2)) * sqrt(365 / 30) * 100`,
-  `iv_rv_spread_30d_pct = iv_30d_annualized_pct - rv_30d_annualized_pct`,
-  `iv_rv_ratio_30d = iv_30d_annualized_pct / rv_30d_annualized_pct`.
-- Either remove ambiguous `iv_minus_rv_1h`, `iv_minus_rv_1d`, `iv_rv_ratio_1h`, and `iv_rv_ratio_1d` fields or
-  version them with precisely documented semantics.
-- Update Silver and Gold contracts, manifests, README tables, architecture documentation, and rebuild notes.
-- Add a migration or compatibility policy for existing materialized artifacts.
-
-Out of scope:
-- Do not tune trading thresholds or model hyperparameters.
-- Do not create forward-looking labels.
-- Do not silently reinterpret existing persisted columns without a schema/version change.
-
-Acceptance:
-- Every IV and RV output declares unit, horizon, annualization status, annualization basis, and estimator.
-- Unit tests use realistic decimal-return and volatility-index values rather than treating values such as `10.0`
-  as a one-hour decimal RV.
-- A deterministic reference test verifies annualization formulas against hand-calculated results.
-- Division-by-zero and insufficient-history policies are explicit and tested.
-- Gold feature-only datasets expose no mixed-unit IV/RV subtraction or ratio.
-- A rebuild note identifies every affected Silver and Gold dataset.
-- `git status --short` and the PR URL are recorded in this backlog entry before handoff.
-
-### QC-02: Preserve Rolling State Across Monthly Partitions
-
-Priority: P0 - data correctness blocker
-
-Status: Merged
-
-Updated: 2026-07-25
-
-PR: PR #141: https://github.com/SergejSchweizer/crypto-history-loader/pull/141
-
-Branch: `codex/qc02-cross-month-rolling-state`
-
-Depends on: QC-01
-
-Problem:
-Rolling returns, realized volatility, z-scores, changes, and percentiles are calculated independently inside
-monthly processing loops. At the beginning of each month, the calculation loses the previous close and all
-required trailing observations. Storage partition boundaries therefore alter feature values. Affected feature
-families include at least `realized_volatility_1m_feature`, `volatility_index_1m_feature`, and
-`iv_rv_1m_feature`; potentially affected calculations include the first return of each month, `5m`/`15m`/`1h`/
-`4h`/`1d` RV windows, `1d`/`7d` z-scores, `30d` percentiles, IV change windows, jump proxies, and any downstream
-Gold rolling features.
-
-Goal:
-Make feature values invariant to monthly storage partitioning.
-
-Scope:
-- Declare the maximum required lookback for each builder or feature family.
-- Load sufficient prior-partition context before calculating a target month.
-- Calculate on the buffered frame, then trim output back to the requested target month.
-- Preserve the previous valid close across month and year boundaries.
-- Centralize buffered monthly reads in a reusable helper rather than implementing one-off overlap logic in each
-  builder.
-- Keep writes monthly and deterministic.
-- Add manifest metadata recording the calculation lookback used.
-
-Recommended processing pattern:
-`calculation_start = target_month_start - required_lookback`; calculate on
-`[calculation_start, output_end]`; write only `[output_start, output_end]`.
-
-Out of scope:
-- Do not change partition layout.
-- Do not add future observations or centered windows.
-- Do not use forward fills that cross source-availability rules.
-
-Acceptance:
-- Regression tests cover January 31 to February 1 and December 31 to January 1.
-- Building one long unpartitioned fixture and building the same fixture month-by-month produce equal values for
-  all target-month rows.
-- The first valid minute of a month uses the final valid prior-month close when the contract permits it.
-- A `30d` percentile on the first day of a month includes eligible prior-month observations.
-- Re-running a month with unchanged inputs produces byte-stable or value-stable deterministic output according
-  to the existing storage contract.
-- Affected historical artifacts are explicitly marked for rebuild.
-- `git status --short` and the PR URL are recorded in this backlog entry before handoff.
-
-### QC-03: Separate Spot And Perpetual RV Sources
-
-Priority: P0 - data correctness blocker
-
-Status: Merged
-
-Updated: 2026-07-25
-
-PR: PR #141: https://github.com/SergejSchweizer/crypto-history-loader/pull/141
-
-Branch: `codex/qc03-separate-spot-perp-rv`
-
-Depends on: QC-02
-
-Problem:
-The current realized-volatility builder creates one synthetic price stream by coalescing perpetual OHLCV over
-spot OHLCV row by row. If a perpetual minute is absent, the stream can switch to spot and then switch back. The
-spot-perpetual basis is then misclassified as a price return, contaminating RV and jump features.
-
-Goal:
-Prevent source switching from producing artificial returns while retaining explicit source availability.
-
-Scope:
-- Calculate spot and perpetual returns and RV features as separate source families, for example `spot_rv_1h`,
-  `spot_rv_1d`, `spot_rv_30d_annualized_pct`, `perps_rv_1h`, `perps_rv_1d`, `perps_rv_30d_annualized_pct`.
-- Define one canonical IV/RV comparison source, preferably through an explicit contract or configuration rather
-  than row-wise fallback.
-- If a stitched canonical series remains necessary, require an explicit basis-adjusted stitching method and emit
-  source-transition flags.
-- Preserve `spot_available` and `perps_available`, and add source identity fields where a canonical RV is
-  published.
-- Add data-quality counters for source gaps and attempted source transitions.
-
-Out of scope:
-- Do not hide missing perpetual data by silently substituting spot.
-- Do not treat the spot-perpetual basis as ordinary underlying return.
-- Do not remove either source family from research outputs.
-
-Acceptance:
-- A regression fixture with alternating spot/perpetual availability produces no artificial basis jump in either
-  source-specific return series.
-- Source-specific RV values match independent hand calculations.
-- Canonical IV/RV features declare which RV source is used.
-- Missing canonical-source observations remain explicitly unavailable unless a documented stitching policy
-  applies.
-- Gold manifests report source availability and the canonical RV source policy.
-- `git status --short` and the PR URL are recorded in this backlog entry before handoff.
-
-### QC-04: Extend Dataset Contracts With Quantitative Semantics
-
-Priority: P1 - contract integrity
-
-Status: Merged
-
-Updated: 2026-07-25
-
-PR: PR #141: https://github.com/SergejSchweizer/crypto-history-loader/pull/141
-
-Branch: `codex/qc04-quant-semantic-contracts`
-
-Depends on: QC-01 through QC-03
-
-Goal:
-Extend typed dataset contracts beyond column shape so economically meaningful fields cannot be combined without
-explicit semantic metadata.
-
-Scope:
-- For quantitative feature fields or feature families, add typed metadata for unit (decimal, percentage points,
-  price, quantity, notional, count, or dimensionless), horizon or tenor, annualized flag, annualization basis,
-  estimator or construction method, required lookback, source-selection policy, and null/insufficient-history
-  policy.
-- Add contract tests proving IV/RV comparisons use compatible semantics.
-- Emit relevant metadata into Silver and Gold manifests.
-
-Acceptance:
-- A contract test fails when an IV/RV spread attempts to combine incompatible units or horizons.
-- All volatility feature families declare their estimator, horizon, unit, and annualization convention.
-- Required lookbacks are machine-readable and used by buffered partition reads.
-- Documentation is generated from or validated against the canonical contracts where practical.
-- `git status --short` and the PR URL are recorded in this backlog entry before handoff.
-
-### QC-05: Validate Documentation Commands As Executable Contracts
-
-Priority: P1 - operational correctness
-
-Status: Merged
-
-Updated: 2026-07-25
-
-PR: PR #141: https://github.com/SergejSchweizer/crypto-history-loader/pull/141
-
-Branch: `codex/qc05-executable-doc-commands`
-
-Depends on: none
-
-Problem:
-README examples can drift from the actual parser surface. A documented Bronze command may use a stale argument
-name while the parser exposes a different canonical flag.
-
-Scope:
-- Correct stale README command examples.
-- Extract or represent canonical example argument vectors in a testable form.
-- Add parser-level tests proving documented commands are accepted.
-- Keep examples synchronized with dataset registry choices and configuration aliases.
-
-Acceptance:
-- Every canonical README command parses successfully without network or lake access.
-- CI fails when a documented flag or dataset choice is removed without updating documentation.
-- README, `config.yaml`, and parser choices use the same canonical vocabulary.
-- `git status --short` and the PR URL are recorded in this backlog entry before handoff.
-
-### QC-06: Align Documented And Enforced Quality Gates
-
-Priority: P2 - governance consistency
-
-Status: Merged
-
-Updated: 2026-07-25
-
-PR: PR #141: https://github.com/SergejSchweizer/crypto-history-loader/pull/141
-
-Branch: `codex/qc06-align-quality-gates`
-
-Depends on: none
-
-Problem:
-`AGENTS.md`, architecture documentation, pre-commit configuration, and GitHub Actions do not currently describe
-exactly the same quality-gate suite. In particular, documented docstring tools must either be enforced or
-removed from the mandatory policy.
-
-Scope:
-- Inventory mandatory checks declared by `AGENTS.md`, `ARCHITECTURE.md`, `.pre-commit-config.yaml`, `Makefile`,
-  and `.github/workflows/ci.yml`.
-- Choose one canonical enforced suite.
-- Add missing tools such as `interrogate` and `pydoclint` only if they are intentionally mandatory.
-- Otherwise revise policy text so it matches the enforced suite.
-- Add a lightweight consistency test for named mandatory checks where practical.
-
-Acceptance:
-- Local `make check`, pre-commit, and CI perform the same logical mandatory checks.
-- No tool is described as mandatory without being enforced.
-- CI remains the final merge-readiness authority.
-- `git status --short` and the PR URL are recorded in this backlog entry before handoff.
-
-### Required Rebuild And Release Gate (QC-01 Through QC-03)
-
-QC-01 through QC-03 change historical feature values and require a controlled rebuild. Before downstream
-research or model training treats the outputs as corrected: rebuild affected Silver volatility datasets;
-rebuild dependent Gold datasets; publish schema or feature-set version changes; compare old and corrected
-distributions; document expected discontinuities; verify no reusable feature dataset contains forward-looking
-labels; record the effective corrected-data start/version in manifests.
-
-QC-01 rebuild note: QC-01 adds new columns (`iv_30d_annualized_pct`; `rv_5m_annualized_pct`,
-`rv_15m_annualized_pct`, `rv_1h_annualized_pct`, `rv_4h_annualized_pct`, `rv_1d_annualized_pct`, `rv_30d`,
-`rv_30d_annualized_pct`; `iv_rv_spread_30d_pct`, `iv_rv_ratio_30d`) without deleting or recomputing any
-existing column, so previously materialized `volatility_index_1m_feature`, `realized_volatility_1m_feature`,
-and `iv_rv_1m_feature` Silver artifacts must be rebuilt to backfill the new columns before Gold contracts that
-select those columns (`gold.market.regime_features.m1`, `gold.live.volatility_features.m1`) can expose them;
-existing legacy columns (`iv_minus_rv_1h`, `iv_minus_rv_1d`, `iv_rv_ratio_1h`, `iv_rv_ratio_1d`) are unchanged
-and require no rebuild for consumers that only read those fields.
-
-## Refactor Architecture Stack
-
-This stack captures the next three highest-value refactor topics after rereading the repository on 2026-07-16:
-
-1. Bronze loader boundary cleanup.
-2. Silver builder registry and monthly IO consolidation.
-3. Gold frame preparation split with stronger contracts and typing.
-
-The stack is intentionally ordered from operational boundary risk to downstream feature correctness. Each PR must
-preserve existing CLI behavior, public dataset names, partition layouts, report fields, manifest hashes, and
-backward-compatible reads unless a later PR explicitly documents a migration.
-
-### PR-44: Bronze Build Request And Result Contracts
-
-Status: Merged
-
-Updated: 2026-07-25
-
-PR: PR #134: https://github.com/SergejSchweizer/crypto-history-loader/pull/134
-
-Branch: `codex/pr44-bronze-build-contracts`
-
-Depends on: PR-43
-
-Planning `git status --short`:
-
-```text
-clean
-```
-
-Publication `git status --short`:
-
-```text
-?? application/bronze_contracts.py
-?? tests/test_bronze_contracts.py
-```
-
-Goal:
-Introduce typed Bronze build input and output contracts so the CLI, compatibility wrappers, runtime services,
-checkpoint handling, and fetch execution no longer exchange implicit mutable module state.
-
-Scope:
-- Add `BronzeBuildRequest`, `BronzeRuntimeContext`, `BronzeDatasetSelection`, and `BronzeBuildResult` types in the
-  application layer.
-- Keep existing command-line flags, default values, debug behavior, JSON output shape, lock paths, checkpoint keys,
-  and Bronze write locations unchanged.
-- Add conversion helpers from parsed CLI args to `BronzeBuildRequest` without moving execution logic yet.
-- Add focused tests proving current CLI argument combinations produce deterministic request objects.
-- Document every field that is wall-clock-sensitive, config-derived, environment-derived, or dataset-derived.
-
-Out of scope:
-- Do not remove compatibility wrappers yet.
-- Do not change fetch execution order, retry behavior, checkpoint writes, or lake writes.
-- Do not change public command names or aliases.
-
-Acceptance:
-- The same current Bronze CLI invocations build equivalent requests across repeated runs when config and args match.
-- Tests cover at least default loader execution, explicit dataset selection, explicit time bounds, symbol filters,
-  debug behavior, dry-run/report-only behavior where supported, and config/env override precedence.
-- New contracts are fully typed and do not import `api`.
-- `api` depends on the contracts; application contracts do not depend on CLI parser internals.
-- Existing Bronze tests continue to pass without updating lake fixtures.
-- `git status --short` and the PR URL are recorded in this backlog entry before handoff.
-
-### PR-45: Bronze Runtime Adapter Without Module-Global Mutation
-
-Status: Merged
-
-Updated: 2026-07-25
-
-PR: PR #135: https://github.com/SergejSchweizer/crypto-history-loader/pull/135
-
-Branch: `codex/pr45-bronze-runtime-adapter`
-
-Depends on: PR-44
-
-Planning `git status --short`:
-
-```text
-clean
-```
-
-Publication `git status --short`:
-
-```text
- M api/cli.py
- M api/commands/loader.py
- M application/services/bronze_runtime_service.py
- M tests/test_bronze_runtime_service.py
- M tests/test_loader_command.py
-```
-
-Goal:
-Replace CLI-to-loader module-global synchronization with an explicit runtime adapter while preserving the old
-test-facing compatibility surface during the transition.
-
-Scope:
-- Introduce a `BronzeRuntimeAdapter` or equivalent typed dependency object that carries runtime bounds, fetch hooks,
-  clock hooks, config aliases, lock policy, and checkpoint policy.
-- Route `api/cli.py` and `api/commands/loader.py` through the adapter instead of mutating imported module globals.
-- Keep existing private compatibility functions importable for tests, but make them delegate to the adapter.
-- Remove or shrink direct synchronization helpers that copy values between CLI and loader modules.
-- Add regression tests that monkeypatch the old compatibility surface and prove behavior is still preserved.
-
-Out of scope:
-- Do not split the main build workflow yet.
-- Do not change task planning, checkpoint semantics, or persistence behavior.
-- Do not change logs except for adding deterministic adapter-identification fields where useful.
-
-Acceptance:
-- There is one explicit runtime object per command invocation.
-- Parallel or repeated command invocations in the same Python process do not share mutable runtime overrides except
-  through explicitly passed dependencies.
-- Existing CLI and loader compatibility tests pass.
-- New tests prove old monkeypatch entrypoints still route to the new adapter.
-- No application-layer module imports `api`.
-- `git status --short` and the PR URL are recorded in this backlog entry before handoff.
-
-### PR-46: Bronze Workflow Stage Split
-
-Status: Merged
-
-Updated: 2026-07-25
-
-PR: PR #137: https://github.com/SergejSchweizer/crypto-history-loader/pull/137
-
-Branch: `codex/pr46-bronze-workflow-stages`
-
-Depends on: PR-45
-
-Planning `git status --short`:
-
-```text
-clean
-```
-
-Publication `git status --short`:
-
-```text
-M  api/commands/loader.py
-M  api/commands/loader_execution.py
-M  api/commands/loader_workflow.py
-M  tests/test_loader_command.py
-M  tests/test_loader_execution.py
-```
-
-Scope note: the Bronze build workflow was already substantially stage-split before this PR
-(`loader_planning.py`, `loader_checkpoint.py`, `loader_bounds.py`, `loader_execution.py`,
-`loader_output.py`, each with dedicated no-network stage-level tests, coordinated by
-`loader_workflow.py::run_bronze_build` via `BronzeWorkflowDependencies`). The remaining concrete
-gap this PR closes: `loader_execution.py::fetch_all_task_groups` returned a
-`FetchAllResult8 | FetchAllResult10` tuple union, disambiguated by the coordinator via a fragile
-`len(fetch_results) == 8` arity check (the 8-tuple branch was dead in production; only exercised by
-test doubles). Replaced with a single explicit, stably-ordered `FetchAllTaskGroupsResult` dataclass
-(10 named fields) always returned from the execution stage, removing the arity-sniffing branch from
-`run_bronze_build` entirely.
-
-Goal:
-Split the Bronze build workflow into deterministic stages with explicit inputs and outputs so checkpointing,
-locking, planning, execution, persistence, and reporting can be tested independently.
-
-Scope:
-- Extract stage functions or small services for:
-  - request validation and normalization
-  - lock acquisition plan
-  - checkpoint hydration
-  - fetch task planning
-  - task execution
-  - incremental persistence
-  - final checkpoint/report construction
-- Define stage result types with stable ordering and explicit side-effect ownership.
-- Keep the existing top-level command workflow as a thin coordinator.
-- Add tests for each stage using deterministic in-memory or `tmp_path` fixtures.
-- Preserve all existing Bronze report fields and JSON output.
-
-Out of scope:
-- Do not introduce a new scheduler.
-- Do not change concurrency defaults.
-- Do not change lake partition layout, dedup keys, checkpoint keys, or raw record schema.
-
-Acceptance:
-- A no-network stage-level test can validate task planning from a fixed request/config pair.
-- A no-network stage-level test can validate checkpoint decisions from fixed checkpoint inputs.
-- The full Bronze command still writes the same deterministic target paths for the same inputs.
-- Failure handling remains observable and does not silently swallow fetch, checkpoint, or persistence errors.
-- The top-level workflow becomes a coordinator over named stage contracts rather than a monolithic implementation.
-- `git status --short` and the PR URL are recorded in this backlog entry before handoff.
-
-## Performance Delivery Rules
-
-PR-54 through PR-61 are a separate performance stack. They must be implemented in order and must not be
-combined into one broad optimization PR. Every ticket in this stack has the following mandatory properties:
-
-- **Idempotent:** rerunning with identical source fingerprints produces no changed data files, no duplicate rows,
-  and no version churn. A changed input produces exactly one replacement for the affected output partition.
-- **Atomic:** write to a uniquely named temporary path in the same filesystem, flush and close it, validate the
-  artifact, then publish with an atomic rename. A failed build must leave the last valid artifact and its manifest
-  untouched. Temporary paths must be cleaned only after the failure is logged.
-- **Deterministic:** use explicit source fingerprints, stable partition keys, stable sort keys, explicit deduplication
-  keys, fixed schemas, and UTC timestamps. Wall-clock time may appear only in operational metadata.
-- **Bounded:** preserve the repository-wide maximum of four Polars threads and four application workers. No ticket
-  may add nested unbounded executors or silently increase `maxprocesses`.
-- **Observable:** log one structured event for `planned`, `skipped_unchanged`, `built`, `published`, and `failed`
-  with layer, dataset, exchange, symbol, partition, source fingerprint, row count, and elapsed milliseconds.
-- **Backward compatible:** old artifacts without a performance manifest remain readable and are treated as needing
-  one rebuild; no existing canonical dataset ID or column contract is removed.
-- **Rollback-safe:** publication must be recoverable by retaining the previous valid manifest until the new manifest
-  is validated. No ticket may delete lake data as part of a normal optimization run.
-
-Each PR must include a focused benchmark fixture and report before/after wall time, rows processed, bytes read,
-bytes written, peak memory where available, and the number of skipped partitions. A speedup without correctness,
-idempotency, and atomic-publication evidence is not an acceptable result.
-
-## Performance PR Stack
-
-### PR-54: Medallion Performance Benchmark And Stage Telemetry
-
-Status: Merged
-
-Updated: 2026-08-02
-
-PR: https://github.com/SergejSchweizer/crypto-history-loader/pull/159
-
-Branch: `codex/pr54-medallion-performance-benchmark`
-
-Depends on: none
-
-Description:
-- R1: Add a deterministic, read-only benchmark command or test fixture covering representative Bronze, Silver, and Gold symbol/month inputs without touching the production lake.
-- R2: Measure stage, dataset, symbol, and partition timings together with rows in/out, bytes read/written, worker count, and Polars thread count.
-- R3: Add structured performance log events for planned, skipped, built, published, and failed work without changing dataset contents.
-- R4: Record baseline measurements for the current full and representative incremental workloads in a versioned benchmark report.
-- R5: Preserve the existing CLI contracts, log root, and four-core limit.
-- R6: Record the exact planning and publication `git status --short` output and PR URL in this ticket.
-
-Out of scope:
-- No incremental processing or cache behavior.
-- No schema, partition-layout, or dataset-ID changes.
-- No production-lake writes from the benchmark.
-
-Acceptance:
-- A1 (verifies R1): The benchmark runs twice against the same fixture and leaves the production lake unchanged.
-- A2 (verifies R2): The report contains all R2 fields and distinguishes Bronze, Silver, and Gold timings.
-- A3 (verifies R3): Log tests assert all five event types and required context fields.
-- A4 (verifies R4): A checked-in baseline report contains reproducible commands, fixture size, and measured values.
-- A5 (verifies R5): CLI compatibility tests pass and telemetry reports no more than four Polars threads and workers.
-- A6 (verifies R6): The ticket contains the exact clean status output and final PR URL before merge.
-
-### PR-55: Silver Source Fingerprint Manifests And No-Op Detection
-
-Status: Merged
-
-Updated: 2026-08-02
-
-PR: https://github.com/SergejSchweizer/crypto-history-loader/pull/160
-
-Branch: `codex/pr55-silver-source-fingerprint-manifests`
-
-Depends on: PR-54
-
-Description:
-- R1: Define a versioned Silver input fingerprint over the exact Bronze files, file metadata/content identity, source schema, exchange, symbol, timeframe, and builder contract version.
-- R2: Write one manifest per Silver output partition containing the input fingerprint, output fingerprint, schema signature, row count, sort/dedup contract, and build status.
-- R3: Skip an unchanged Silver partition before loading its data and emit `skipped_unchanged` telemetry.
-- R4: Treat missing, malformed, incompatible, or legacy manifests as cache misses and rebuild the affected partition.
-- R5: Publish data and manifest atomically so a crash cannot expose a new manifest with an old or missing parquet artifact.
-- R6: Record publication evidence in this ticket before handoff.
-
-Out of scope:
-- No change to Silver feature math or canonical dataset names.
-- No cross-partition incremental windowing yet; that is PR-56.
-- No deletion of legacy Silver artifacts.
-
-Acceptance:
-- A1 (verifies R1): Identical Bronze inputs produce identical fingerprints across two independent processes.
-- A2 (verifies R2): Manifest contract tests validate every required field and reject unknown status values.
-- A3 (verifies R3): A second unchanged build reads zero source rows for the skipped partition and preserves file hashes.
-- A4 (verifies R4): Tests prove legacy and corrupt manifests trigger exactly one rebuild rather than silent skipping.
-- A5 (verifies R5): Failure-injection tests prove the previous valid artifact remains readable after data or manifest publication failure.
-- A6 (verifies R6): The ticket contains the exact clean status output and final PR URL before merge.
-
-Publication evidence:
-- Pull request: https://github.com/SergejSchweizer/crypto-history-loader/pull/160
-- `git status --short`: *(empty)*
-- GitHub required checks: `pr-lint-quality`, `pr-typing-quality`, all four unit shards, all four integration shards,
-  `pr-coverage-95`, and `pr-quality` passed on 2026-08-02.
-
-### PR-56: Silver Incremental Monthly Partitions And Lookback Windows
-
-Status: Merged
-
-Updated: 2026-08-02
-
-PR: https://github.com/SergejSchweizer/crypto-history-loader/pull/161
-
-Branch: `codex/pr56-silver-incremental-monthly-builds`
-
-Depends on: PR-55
-
-Description:
-- R1: Plan Silver work at the smallest safe partition boundary, using changed Bronze months and a configurable feature lookback window rather than rescanning the complete history.
-- R2: Recompute the changed partition plus the minimum preceding lookback required by each rolling, resampling, forward-fill, or gap-tracking operation.
-- R3: Replace affected Silver partitions atomically and preserve unaffected partition hashes and manifests.
-- R4: Keep minute-gap and zero-minute tracking semantics correct across partition boundaries, including the first and last minute of each rebuilt partition.
-- R5: Make retries and interrupted runs restart-safe: a retry must converge to the same output as one successful run.
-- R6: Record publication evidence in this ticket before handoff.
-
-Out of scope:
-- No Gold changes.
-- No reduction of the configured lookback below the documented feature dependency.
-- No automatic deletion or compaction of historical partitions.
-
-Acceptance:
-- A1 (verifies R1): A fixture with one changed Bronze month plans only that month and documented dependency months.
-- A2 (verifies R2): Boundary tests prove rolling windows, resampling, forward-fill, and zero-minute tracking match a full rebuild.
-- A3 (verifies R3): Unaffected Silver partition hashes and manifests remain byte-identical after an incremental build.
-- A4 (verifies R4): Tests cover month transitions, empty Deribit minutes, and perps/options trade zero-minute rows.
-- A5 (verifies R5): Injected interruption followed by retry produces the same partition set, rows, schemas, and manifests as a clean run.
-- A6 (verifies R6): The ticket contains the exact clean status output and final PR URL before merge.
-
-### PR-57: Silver Shared Source Scan And Dependency Planner
-
-Status: Merged
-
-Updated: 2026-08-02
-
-PR: https://github.com/SergejSchweizer/crypto-history-loader/pull/162
-
-Branch: `codex/pr57-silver-shared-source-planner`
-
-Depends on: PR-56
-
-Description:
-- R1: Build a typed Silver dependency graph separating source-backed, derived, and sidecar work.
-- R2: Reuse one bounded lazy Bronze scan or normalized intermediate frame when multiple Silver outputs consume the same symbol/month source.
-- R3: Schedule independent work with at most four application workers and execute derived datasets only after their declared inputs are published.
-- R4: Preserve memory bounds by evicting intermediates at partition boundaries and never retaining the complete historical lake in a global cache.
-- R5: Keep output bytes, schemas, sort keys, dedup keys, manifests, and lineage identical to the pre-planner implementation.
-- R6: Record publication evidence in this ticket before handoff.
-
-Out of scope:
-- No new Silver dataset families.
-- No Gold source-cache implementation.
-- No global process pool or unbounded in-memory cache.
-
-Acceptance:
-- A1 (verifies R1): A graph test rejects missing dependencies and cycles and lists a deterministic execution order.
-- A2 (verifies R2): Instrumented tests show duplicate source scans are eliminated for the selected shared-input families.
-- A3 (verifies R3): Scheduler tests prove dependency ordering and a maximum of four workers.
-- A4 (verifies R4): Stress fixtures demonstrate bounded intermediate lifetime and no complete-history cache.
-- A5 (verifies R5): Golden-file tests prove unchanged outputs and lineage against the pre-planner fixture.
-- A6 (verifies R6): The ticket contains the exact clean status output and final PR URL before merge.
-
-### PR-58: Gold Input Fingerprints And Incremental M1 Publication
-
-Status: Merged
-
-Updated: 2026-08-02
-
-PR: https://github.com/SergejSchweizer/crypto-history-loader/pull/163
-
-Branch: `codex/pr58-gold-incremental-m1-publication`
-
-Depends on: PR-57
-
-Description:
-- R1: Define Gold source fingerprints over all required and optional Silver inputs, source manifests, Gold contract version, and feature configuration.
-- R2: Plan Gold `m1` work by changed Silver partitions and the minimum feature lookback needed by each Gold feature family.
-- R3: Rebuild only affected symbol/partition outputs and atomically publish the new canonical and extended `m1` artifacts.
-- R4: Preserve canonical-versus-extended dataset separation and all existing Gold column selection, target, and leakage contracts.
-- R5: Make missing optional sources explicit in the fingerprint and keep their nullable output columns stable.
-- R6: Record publication evidence in this ticket before handoff.
-
-Out of scope:
-- No Gold `m5`, `m30`, or `h1` fan-out yet; that is PR-59.
-- No removal of existing Gold versions or manifests.
-- No change to target lookahead semantics.
-
-Acceptance:
-- A1 (verifies R1): Identical Silver inputs and configuration yield identical Gold source fingerprints.
-- A2 (verifies R2): A fixture with one changed Silver month plans only that month plus declared feature lookback partitions.
-- A3 (verifies R3): Unchanged Gold partitions retain hashes; changed partitions are published exactly once after validation.
-- A4 (verifies R4): Canonical/extended schema, dataset-ID, and leakage regression tests pass unchanged.
-- A5 (verifies R5): Optional-source availability changes are detected and produce deterministic nullable columns without grid expansion.
-- A6 (verifies R6): The ticket contains the exact clean status output and final PR URL before merge.
-
-### PR-59: Gold Shared M1 Preparation And Multi-Timeframe Fan-Out
-
-Status: Merged
-
-Updated: 2026-08-02
-
-PR: https://github.com/SergejSchweizer/crypto-history-loader/pull/165
-
-Branch: `codex/pr59-gold-shared-timeframe-fanout`
-
-Depends on: PR-58
-
-Handoff status: `git status --short` produced no output after merge verification on 2026-08-02.
-
-Description:
-- R1: Prepare each symbol's Gold `m1` source frame and common joins once per build transaction.
-- R2: Derive `m5`, `m30`, and `h1` from the validated `m1` frame in one deterministic fan-out while preserving each dataset contract.
-- R3: Publish all sibling timeframe artifacts only after their source `m1` artifact and all derived frames validate successfully.
-- R4: Ensure a partial fan-out failure leaves every previously valid timeframe readable and marks the failed transaction for retry.
-- R5: Preserve dependency ordering so no derived timeframe is attempted before its source dataset is available.
-- R6: Record publication evidence in this ticket before handoff.
-
-Out of scope:
-- No change to timeframe aggregation rules or bucket labels.
-- No cross-symbol shared cache.
-- No dataset-ID renaming.
-
-Acceptance:
-- A1 (verifies R1): Instrumentation proves one common `m1` preparation per symbol for a multi-timeframe build.
-- A2 (verifies R2): Golden fixtures prove identical rows, columns, timestamps, and aggregates for all three timeframes.
-- A3 (verifies R3): Transaction tests prove no child artifact is published before validated `m1` input.
-- A4 (verifies R4): Failure injection proves old artifacts remain available and retry publishes a complete sibling set.
-- A5 (verifies R5): Scheduler tests prove `m1 -> m5/m30/h1` ordering for history and live families.
-- A6 (verifies R6): The ticket contains the exact clean status output and final PR URL before merge.
-
-### PR-60: Gold Optional Artifact And Plot Decoupling
-
-Status: Merged
-
-Updated: 2026-08-02
-
-PR: https://github.com/SergejSchweizer/crypto-history-loader/pull/167
-
-Branch: `codex/pr60-gold-optional-artifact-decoupling`
-
-Depends on: PR-59
-
-Handoff status: merged into `main` as `d136ce7` on 2026-08-02; feature branch deleted by GitHub.
-
-Description:
-- R1: Make Gold parquet and manifest publication the required production path and move plots to an explicit audit operation.
-- R2: Preserve backward-compatible CLI flags while making plot generation opt-in or separately runnable.
-- R3: Ensure plot failures cannot invalidate an otherwise valid parquet and manifest transaction.
-- R4: Emit plot status and paths as separate operational metadata without changing Gold data schemas.
-- R5: Record publication evidence in this ticket before handoff.
-
-Out of scope:
-- No feature, target, schema, or dataset-ID changes.
-- No deletion of existing plot artifacts.
-- No reduction of manifest validation.
-
-Acceptance:
-- A1 (verifies R1): A production Gold build writes valid parquet and manifest artifacts without invoking plotting.
-- A2 (verifies R2): CLI compatibility tests cover existing flags and the explicit audit invocation.
-- A3 (verifies R3): Plot failure injection leaves the validated data transaction published and retryable plot status recorded.
-- A4 (verifies R4): Logs and audit reports distinguish data publication from plot publication.
-- A5 (verifies R5): The ticket contains the exact clean status output and final PR URL before merge.
-
-### PR-61: Incremental Medallion Orchestrator And Freshness Audit
-
-Status: Merged
-
-Updated: 2026-08-02
-
-PR: https://github.com/SergejSchweizer/crypto-history-loader/pull/168
-
-Branch: `codex/pr61-incremental-medallion-orchestrator`
-
-Depends on: PR-60
-
-Description:
-- R1: Add a dependency-aware medallion plan that runs only stale Bronze, Silver, and Gold partitions while preserving the complete-run mode.
-- R2: Propagate source fingerprints and publication states across layers so downstream work starts only after upstream artifacts are valid.
-- R3: Make the daily run resumable from the last successful atomic publication without duplicating rows or skipping changed inputs.
-- R4: Add a dry-run plan showing stale, unchanged, blocked, and scheduled partitions before any write occurs.
-- R5: Add a freshness audit that identifies stale or missing canonical and extended Gold timeframes.
-- R6: Record publication evidence in this ticket before handoff.
-
-Out of scope:
-- No change to cron timing or external loader ownership.
-- No silent repair of corrupt artifacts; the audit must report them for an explicit rebuild.
-- No increase above the repository-wide four-core limit.
-
-Acceptance:
-- A1 (verifies R1): A fixture with unchanged and changed inputs schedules only the expected stale partitions and leaves complete-run behavior available.
-- A2 (verifies R2): Integration tests block downstream publication when an upstream manifest is missing, invalid, or failed.
-- A3 (verifies R3): Kill-and-retry tests converge to the same lake state as a clean run with no duplicate keys.
-- A4 (verifies R4): Dry-run output is deterministic and contains every planned status without writing lake files.
-- A5 (verifies R5): Freshness audit tests detect missing `m1`, `m5`, `m30`, or `h1` artifacts and report their source lineage.
-- A6 (verifies R6): The ticket contains the exact clean status output and final PR URL before merge.
-
-### PR-62: Backlog PR Branch Naming Policy
-
-Status: Merged
-
-Updated: 2026-08-02
-
-PR: https://github.com/SergejSchweizer/crypto-history-loader/pull/169
-
-Branch: `codex/pr62-enforce-pr-branch-names`
-
-Depends on: None
-
-Description:
-- R1: Require every new working branch to include its Backlog PR number in a deterministic lowercase form.
-
-Acceptance:
-- A1 (verifies R1): `AGENTS.md` defines the `codex/pr<backlog-number>-...` convention and examples follow it.
-
-### PR-63: Backlog PR Commit Identifier Policy
-
-Status: Merged
-
-Updated: 2026-08-02
-
-PR: https://github.com/SergejSchweizer/crypto-history-loader/pull/170
-
-Branch: `codex/pr63-require-pr-identifiers`
-
-Depends on: PR-62
-
-Description:
-- R1: Require each working-branch commit and squash-merge title to include its Backlog PR identifier.
-
-Acceptance:
-- A1 (verifies R1): `AGENTS.md` defines the `PR-<backlog-number>` Conventional Commit subject format with an example.
-
-Handoff status: `git status --short` produced no output before this ticket update.
-
-### PR-64: Backlog Cleanup For Superseded Refactoring Tickets
-
-Status: Merged
-
-Updated: 2026-08-03
-
-PR: https://github.com/SergejSchweizer/crypto-history-loader/pull/171
-
-Branch: `codex/pr64-backlog-cleanup`
-
-Depends on: PR-63
-
-Description:
-- R1: Remove the superseded planned PR-47 through PR-53 ticket entries.
-- R2: Synchronize PR-61 through PR-63 ticket statuses with their merged GitHub pull requests.
-
-Acceptance:
-- A1 (verifies R1): Backlog searches contain no PR-47 through PR-53 ticket headings.
-- A2 (verifies R2): PR-61 through PR-63 each have `Status: Merged`.
-
-Handoff status: merged through PR-171; feature branch may be deleted after merge verification.
-
-### PR-65: Disable Historical Prediction Production Builds
-
-Status: Merged
-
-Updated: 2026-08-03
-
-PR: https://github.com/SergejSchweizer/crypto-history-loader/pull/172
-
-Branch: `codex/pr65-disable-historical-prediction`
-
-Depends on: PR-64
-
-Description:
-- R1: Stop scheduled Silver historical prediction and Silver plot generation.
-- R2: Exclude Gold datasets that require historical prediction while retaining Gold plot generation.
-
-Acceptance:
-- A1 (verifies R1): The Medallion Silver schedule excludes `historical_prediction` and `--plot`.
-- A2 (verifies R2): Gold excludes only the five history-extended datasets and retains `--plot`.
-
-Handoff status: merged through PR-172; feature branch may be deleted after merge verification.
-
-### PR-66: Deduplicate Gold Live Full Artifacts
-
+PR name: `postgres-gold-sync-backlog`
 Status: In Progress
-
-Updated: 2026-08-04
-
-PR: TBD
-
-Branch: `codex/pr66-deduplicate-gold-live-full`
-
-Depends on: PR-65
+Updated: 2026-08-22
+PR: #174
+Git branch: `codex/pr67-postgres-gold-sync-backlog`
+Git status: `planning branch; handoff requires empty git status --short`
+Agent lane: Planning/governance; one agent only
+Depends on: none
+Commit: `docs(PR-67): consolidate backlog and PostgreSQL Gold sync plan`
+Allowed files: `BACKLOG.md`; delete obsolete `BACKLOG_POSTGRES.md`
 
 Description:
-- R1: Retain one canonical artifact per symbol for every `gold.live.full.*` dataset.
-- R2: Preserve the existing three-version retention policy for non-live-full Gold datasets.
+- R1: Make `BACKLOG.md` the only backlog file and remove `BACKLOG_POSTGRES.md`; no active planning information may be lost.
+- R2: Keep PR-68 through PR-77 as small, exact, dependency-aware tickets with explicit branch, Git-status, file-ownership, requirement, and acceptance metadata for weak agents.
+- R3: Define the serving-plane contract: only registered current Gold is replicated to `10.10.1.3:54321`; Parquet Gold remains authoritative and Bronze/Silver replication is forbidden.
+- R4: Define exact runtime role `crypto-history-loader`, consumer schema `crypto_history_gold`, internal schema `crypto_history_sync`, deterministic table naming, and logical row key `(exchange, symbol, timestamp_m1)`.
+- R5: Define first-full/later-delta reconciliation using source fingerprints plus complete row digests for changed lineages, including insert/update/delete, missed-run catch-up, and historical corrections; timestamp watermarks are forbidden.
+- R6: Define atomic lineage transactions, advisory locks, schema-mismatch failure behavior, and forbidden destructive SQL during normal sync.
+- R7: Define Medallion ordering `Bronze -> Silver -> Gold -> PostgreSQL`, Gold-success gating, non-rollback of already-published Gold, and sync-only retry semantics.
+- R8: Move completed backlog history out of the active section and summarize completed work only at the end of this file; explicitly distinguish superseded PR-47 through PR-53 from completed work.
+- R9: Make the timestamp boundary exactly type-compatible with `market-regime-loader`: canonical source `timestamp_m1` is `Datetime(us, UTC)`, all PostgreSQL timestamp/datetime columns are `TIMESTAMPTZ(6)`, and every sync session is UTC.
 
 Acceptance:
-- A1 (verifies R1): Repeated live-full builds leave one Parquet artifact per symbol and no duplicate timestamp keys.
-- A2 (verifies R2): The configured non-live-full Gold retention behavior remains unchanged.
+- A1 (verifies R1): repository root contains `BACKLOG.md` and no `BACKLOG_POSTGRES.md`; repository contains no second backlog source of truth.
+- A2 (verifies R2): PR-68 through PR-77 each appear exactly once in the active section and each contains `Git branch`, `Git status`, `Allowed files`, matching R/A IDs, and exact dependencies.
+- A3 (verifies R3): endpoint and Gold-only serving-plane rules are explicit and PostgreSQL is never described as canonical storage.
+- A4 (verifies R4): exact role/schema names, deterministic table mapping, and the exact three-column logical key are explicit; no operational password literal is present.
+- A5 (verifies R5): bootstrap, no-op, accumulated delta, missed-run, update, delete, and historical-revision semantics are explicit and no last-timestamp watermark is permitted.
+- A6 (verifies R6): atomic lineage transaction, advisory lock, migration-required schema mismatch, and forbidden destructive SQL are explicit.
+- A7 (verifies R7): post-Gold ordering, failure propagation, local-Gold non-rollback, and retry-only-sync semantics are explicit.
+- A8 (verifies R8): completed PRs are represented in the final summary section and PR-47 through PR-53 are marked superseded/not completed.
+- A9 (verifies R9): backlog explicitly requires `Datetime(time_unit="us", time_zone="UTC")` -> `TIMESTAMPTZ(6)`, UTC PostgreSQL sessions, exact microsecond round-trip, and forbids timezone-naive or alternate-precision timestamp storage.
 
-## Completion Definition
+---
 
-The stack is complete when:
+## PR-68: PostgreSQL Gold Sync Contracts
 
-- Every local Bronze `dataset_type` has at least one explicit Silver destination or an explicit archived/deprecated
-  decision in this file.
-- Every Bronze dataset with available local files has a materialized Silver output, with per-series start/end,
-  observed days, missing days, row count, schema, origin, and source lineage in the inventory report.
-- Every Silver output has a tested contract.
-- Every Silver builder has deterministic sorting, deduplication, and missing-data semantics.
-- IV/RV and regime-change research can consume:
-  - IV index features
-  - RV features
-  - IV/RV spread features
-  - funding/open-interest context
-  - trade-flow context
-  - optional L2 and option-surface context
-- Gold has a dedicated `gold.market.regime_features.m1` contract.
-- Historical and live-origin Gold features use compatible point-in-time schemas and are explicitly separated.
-- Forward-looking prediction targets and regime labels are stored separately from feature datasets.
-- README and the generated inventory report agree on every dataset variable and coverage statistic.
-- The final squash PR passes the complete quality and coverage suite; no stacked intermediate PR is required to
-  run the full suite.
+PR name: `postgres-gold-sync-contracts`
+Status: Planned
+Updated: 2026-08-22
+PR: TBD
+Git branch: `codex/pr68-postgres-gold-sync-contracts`
+Git status: `planned; start only when git status --short is empty`
+Agent lane: Foundation; one weak agent
+Depends on: PR-67
+Commit: `feat(PR-68): define PostgreSQL Gold sync contracts`
+Allowed files: `application/postgres_sync/__init__.py`, `application/postgres_sync/contracts.py`, `tests/test_postgres_sync_contracts.py`
+
+Description:
+- R1: Add immutable typed contracts `GoldLineage`, `GoldSourceSnapshot`, `GoldSyncState`, `GoldRowDigest`, `GoldDeltaPlan`, and `GoldSyncResult`; counts include inserted/updated/deleted/unchanged.
+- R2: Define exact constants for host `10.10.1.3`, port `54321`, role `crypto-history-loader`, consumer schema `crypto_history_gold`, sync schema `crypto_history_sync`, state table `gold_sync_state`, and digest table `gold_row_hashes`.
+- R3: Define deterministic dataset-ID -> consumer-table mapping by replacing `.` with `_`; reject invalid characters, collisions, names longer than 63 bytes, or mapping outside `crypto_history_gold`.
+- R4: Define publishable Gold row key exactly as `(exchange, symbol, timestamp_m1)` and require `timestamp_m1` canonical source type exactly `Polars Datetime(time_unit="us", time_zone="UTC")`; no current Gold contract may be silently excluded.
+- R5: Define application-layer `GoldSyncRepository` Protocol for reading sync state/digests/target summary, validating/creating consumer storage, and applying one lineage delta atomically; `application/` must not import psycopg or `infra`.
+- R6: Define source compatibility fields: dataset ID, exchange, symbol, source artifact path, source fingerprint, schema signature, row count, timestamp min/max, and stable source version/build identity when present.
+- R7: Keep application/domain contracts credential-free; password, administrator credentials, raw DSN, connection object, and cursor must not appear in dataclasses/results/errors.
+- R8: Define one timestamp compatibility constant/policy shared by later PRs: source timestamp unit `us`, source timezone `UTC`, PostgreSQL timestamp type `TIMESTAMPTZ(6)`, PostgreSQL session timezone `UTC`; no naive timestamp or alternate PostgreSQL timestamp type is valid.
+
+Acceptance:
+- A1 (verifies R1): tests instantiate all six immutable contracts and verify exact fields/count semantics.
+- A2 (verifies R2): tests assert every endpoint/role/schema/internal-table constant exactly.
+- A3 (verifies R3): all current Gold dataset IDs map uniquely/deterministically; invalid/colliding/overlong fixtures fail before SQL generation.
+- A4 (verifies R4): registry test iterates every current Gold build ID and fails if any cannot provide `exchange`, `symbol`, and `timestamp_m1` with exact `Datetime(us, UTC)` key type.
+- A5 (verifies R5): fake repository satisfies the Protocol and import-boundary tests find no psycopg/infra import in `application/postgres_sync`.
+- A6 (verifies R6): source snapshot fixtures serialize all compatibility fields deterministically.
+- A7 (verifies R7): contract introspection proves no credential/DSN/connection/cursor field exists.
+- A8 (verifies R8): contract tests assert exact `us`/`UTC`/`TIMESTAMPTZ(6)`/UTC-session values and reject naive/alternate-precision fixtures.
+
+---
+
+## PR-69: Deterministic Gold Row Delta Planner
+
+PR name: `postgres-gold-delta-planner`
+Status: Planned
+Updated: 2026-08-22
+PR: TBD
+Git branch: `codex/pr69-postgres-gold-delta-planner`
+Git status: `planned; start only when git status --short is empty`
+Agent lane: Pure logic; one weak agent
+Depends on: PR-68
+Commit: `feat(PR-69): compute deterministic PostgreSQL Gold deltas`
+Allowed files: `application/postgres_sync/delta.py`, `tests/test_postgres_sync_delta.py`
+
+Description:
+- R1: Implement deterministic SHA-256 row hashing over exact source column order with type tags/null markers, UTC epoch-microsecond datetime encoding, canonical finite floating-point encoding, and `-0.0 -> 0.0`; `timestamp_m1` is already canonical `Datetime(us, UTC)` and the planner must reject rather than silently reinterpret naive/non-UTC timestamp values.
+- R2: Implement pure complete-state comparison keyed by `(exchange, symbol, timestamp_m1)` producing disjoint, deterministically sorted insert/update/delete/unchanged key sets.
+- R3: Bootstrap rule: empty sync state plus empty digest state classifies every current source row as insert and no row as update/delete.
+- R4: Reject ambiguous bootstrap when authoritative sync state is absent but lineage digest state is non-empty.
+- R5: Classify identical key/hash as unchanged, changed hash as update, source-only key as insert, and target-only key as delete.
+- R6: Do not use a timestamp watermark or previous-Gold-build dependency; arbitrarily old corrections and additions accumulated over multiple missed weeks must be discoverable whenever the source fingerprint changes.
+- R7: Keep this module side-effect free: no filesystem, Polars scan, PostgreSQL, logging, wall-clock, or environment access.
+
+Acceptance:
+- A1 (verifies R1): equal canonical rows hash identically; one value change changes digest; null/value differs; `-0.0` equals `0.0`; invalid non-finite and naive/non-UTC timestamp fixtures fail deterministically.
+- A2 (verifies R2): mixed fixtures yield exact mutually exclusive ordered key sets with no key in two sets.
+- A3 (verifies R3): N source rows and empty target state yield exactly N inserts.
+- A4 (verifies R4): digest rows without sync state fail before a plan is returned.
+- A5 (verifies R5): dedicated fixtures independently prove insert/update/delete/unchanged classification.
+- A6 (verifies R6): tests detect a historical correction and three missed-run additions without a last-sync timestamp.
+- A7 (verifies R7): import/monkeypatch tests prove no external side effect and repeated calls serialize identically.
+
+---
+
+## PR-70: Current Gold Lineage Inventory Selector
+
+PR name: `postgres-current-gold-inventory`
+Status: Planned
+Updated: 2026-08-22
+PR: TBD
+Git branch: `codex/pr70-postgres-current-gold-inventory`
+Git status: `planned; start only when git status --short is empty`
+Agent lane: Gold discovery; one weak agent
+Depends on: PR-68
+Commit: `feat(PR-70): select current Gold lineages for PostgreSQL sync`
+Allowed files: `application/postgres_sync/inventory.py`, `tests/test_postgres_sync_inventory.py`
+
+Description:
+- R1: Build a read-only inventory over `lake/gold` using existing Gold contracts/manifests/discovery semantics and return exactly one current source snapshot per `(dataset_id, exchange, symbol)` lineage.
+- R2: Include every current materialized registered Gold dataset regardless of timeframe/family; Bronze/Silver and unregistered files are never publishable.
+- R3: Select current artifacts by repository version/manifest semantics, not mtime/ctime or arbitrary lexical recency; retained older Gold versions must not appear.
+- R4: Require valid source fingerprint, schema signature, row count, timestamp min/max, and canonical `timestamp_m1` source dtype `Datetime(us, UTC)` from validated artifact metadata/schema; missing/inconsistent metadata or timestamp type fails the lineage rather than guessing/coercing.
+- R5: Return lineages in stable `(dataset_id, exchange, symbol)` order and reject duplicate current candidates.
+- R6: Keep selector read-only: no Gold build, NAS mirror, retention/pruning, manifest mutation, or PostgreSQL connection.
+- R7: Add fixtures for one current plus retained old versions, multiple datasets/symbols/timeframes, unregistered artifacts, duplicate-current ambiguity, missing/corrupt metadata, and wrong timestamp unit/timezone.
+
+Acceptance:
+- A1 (verifies R1): fixtures produce exactly one snapshot for every expected current lineage.
+- A2 (verifies R2): every materialized registered Gold fixture is selected and Bronze/Silver/unregistered fixtures are absent.
+- A3 (verifies R3): changing file mtimes does not alter selection and retained old versions are never selected.
+- A4 (verifies R4): missing/corrupt fingerprint/schema/count/bounds or non-`Datetime(us, UTC)` `timestamp_m1` fails deterministically with no guessed values.
+- A5 (verifies R5): output ordering is stable and duplicate current candidates fail.
+- A6 (verifies R6): spies prove no build/mirror/prune/write/DB call occurs.
+- A7 (verifies R7): all listed inventory scenarios pass offline under `tmp_path`.
+
+---
+
+## PR-71: Gold Schema To PostgreSQL DDL Mapper
+
+PR name: `postgres-gold-schema-mapper`
+Status: Planned
+Updated: 2026-08-22
+PR: TBD
+Git branch: `codex/pr71-postgres-gold-schema-mapper`
+Git status: `planned; start only when git status --short is empty`
+Agent lane: Pure schema logic; one weak agent
+Depends on: PR-68
+Commit: `feat(PR-71): map Gold schemas to PostgreSQL DDL`
+Allowed files: `application/postgres_sync/schema.py`, `tests/test_postgres_sync_schema.py`
+
+Description:
+- R1: Generate deterministic quoted PostgreSQL DDL for one table in `crypto_history_gold` using source column order; primary key exactly `(exchange, symbol, timestamp_m1)`.
+- R2: Match `market-regime-loader` timestamp storage exactly: canonical `timestamp_m1` source type is `Polars Datetime(time_unit="us", time_zone="UTC")`; every source timestamp/datetime column maps to PostgreSQL `TIMESTAMPTZ(6)` and every true date maps to `DATE`. Map string/categorical/enum -> `TEXT`, bool -> `BOOLEAN`, signed integer -> `BIGINT`, UInt64 -> `NUMERIC(20,0)`, float -> `DOUBLE PRECISION`, decimal -> exact `NUMERIC`, binary -> `BYTEA`, list/struct-like -> `JSONB`; reject unknown/ambiguous dtypes and reject naive/non-UTC timestamp source types rather than silently changing semantics.
+- R3: Quote every schema/table/column identifier safely; dataset IDs and source column names are never interpolated unquoted.
+- R4: Generate deterministic schema signature from ordered `(column_name, normalized_source_type, postgres_type, nullable)` entries plus primary-key contract.
+- R5: Require `exchange`, `symbol`, `timestamp_m1` to exist and be non-nullable at the logical-key boundary; do not invent surrogate IDs or row-position keys.
+- R6: Normal-sync DDL may create missing schemas/tables/indexes idempotently but must not emit `DROP`, `TRUNCATE`, table replacement, or destructive automatic `ALTER`.
+- R7: Test mapper against every current Gold schema fixture constructible from repository tests, including nested fields mapped to JSONB and every timestamp/datetime field.
+
+Acceptance:
+- A1 (verifies R1): generated DDL has exact qualified table name, source column order, and composite primary key.
+- A2 (verifies R2): canonical `Datetime(us, UTC)` fixtures map exactly to `TIMESTAMPTZ(6)`; all timestamp/datetime consumer columns use that exact PostgreSQL type; date uses `DATE`; naive/non-UTC timestamp and unknown dtype fixtures fail.
+- A3 (verifies R3): adversarial identifiers stay quoted and cannot inject SQL statements.
+- A4 (verifies R4): equal ordered schemas yield equal signatures and any column/type/nullability/key change changes signature.
+- A5 (verifies R5): missing or nullable logical-key fields fail before DDL is returned.
+- A6 (verifies R6): generated SQL contains no destructive operation and has no automatic destructive migration path.
+- A7 (verifies R7): mapper coverage passes for all current Gold contract schema fixtures and asserts no PostgreSQL timestamp type other than `TIMESTAMPTZ(6)` is emitted for datetime fields.
+
+---
+
+## PR-72: PostgreSQL Gold Repository Adapter
+
+PR name: `postgres-gold-repository-adapter`
+Status: Planned
+Updated: 2026-08-22
+PR: TBD
+Git branch: `codex/pr72-postgres-gold-repository-adapter`
+Git status: `planned; start only when git status --short is empty`
+Agent lane: PostgreSQL persistence; one weak agent
+Depends on: PR-68, PR-71
+Commit: `feat(PR-72): implement PostgreSQL Gold repository adapter`
+Allowed files: `infra/postgres/__init__.py`, `infra/postgres/gold_repository.py`, `pyproject.toml`, `uv.lock`, `tests/test_postgres_gold_repository.py`
+
+Description:
+- R1: Add `psycopg` as the only new PostgreSQL runtime client; no SQLAlchemy, ORM, or second PostgreSQL driver.
+- R2: Create connections only from injected `PGHOST/PGPORT/PGUSER/PGDATABASE/PGPASSWORD`; require exact host `10.10.1.3`, port `54321`, user `crypto-history-loader`, and force session timezone UTC before data operations.
+- R3: Idempotently create/validate consumer tables from PR-71 DDL plus internal `crypto_history_sync.gold_sync_state` and `crypto_history_sync.gold_row_hashes`; internal timestamp fields are exactly `TIMESTAMPTZ(6)`: state `min_timestamp`, `max_timestamp`, `synced_at_utc`, and digest `timestamp_m1`; internal tables are not consumer Gold tables.
+- R4: Read per-lineage sync state, target summary `(count,min_timestamp,max_timestamp)`, and complete `(exchange,symbol,timestamp_m1,row_sha256)` digest state without fetching unchanged feature payloads.
+- R5: Implement one-lineage `apply_delta` under deterministic lineage-scoped `pg_advisory_xact_lock`: consumer mutations -> digest mutations -> sync-state write -> summary verification -> commit.
+- R6: Roll back consumer rows, digest rows, and sync state together on SQL/verification error; retry against same source converges without duplicates.
+- R7: Bootstrap may insert complete validated lineage; non-bootstrap writes exactly supplied delta and never `TRUNCATE`, `DROP`, delete-all, table swap, or full-table replacement.
+- R8: Detect source/existing consumer schema-signature mismatch before row mutation and raise sanitized migration-required error; never auto-alter a live table destructively.
+- R9: Redact runtime/admin secrets and credential-bearing DSNs from repr/errors/logs; persist no credentials in internal tables.
+- R10: Add deterministic adapter tests with connection/cursor fakes for endpoint, timezone, DDL validation, lock/order, mixed delta counts, rollback, retry, schema mismatch, forbidden SQL, redaction, and microsecond timestamp round-trip.
+
+Acceptance:
+- A1 (verifies R1): dependency inspection finds psycopg and no newly added ORM/second driver.
+- A2 (verifies R2): connection spy observes exact host/port/user, injected database/password, and UTC session timezone; wrong endpoint/user fails before data SQL.
+- A3 (verifies R3): DDL tests create/validate exact consumer/internal identities; every internal datetime field is exactly `TIMESTAMPTZ(6)` and sync metadata stays out of consumer tables.
+- A4 (verifies R4): query trace reads only state, summary, and key/hash digests for comparison.
+- A5 (verifies R5): trace order is advisory lock -> consumer mutations -> digest mutations -> state write -> summary verification -> commit.
+- A6 (verifies R6): injected failure leaves prior committed consumer/digest/state unchanged and retry succeeds once.
+- A7 (verifies R7): bootstrap N rows produces N inserts; later `2 insert + 1 update + 1 delete` executes exactly those mutations and no full reload.
+- A8 (verifies R8): schema mismatch causes zero consumer-row mutations and returns migration-required category.
+- A9 (verifies R9): fake secrets/full DSN never appear in diagnostics or persisted parameters.
+- A10 (verifies R10): all listed adapter cases pass offline without a live PostgreSQL server, including an aware UTC timestamp with non-zero microseconds that round-trips with identical instant and microsecond value.
+
+---
+
+## PR-73: Provision Dedicated PostgreSQL Service Role
+
+PR name: `postgres-service-role-provisioning`
+Status: Planned
+Updated: 2026-08-22
+PR: TBD
+Git branch: `codex/pr73-postgres-service-role-provisioning`
+Git status: `planned; start only when git status --short is empty`
+Agent lane: PostgreSQL operations; one weak agent
+Depends on: PR-67
+Commit: `feat(PR-73): add PostgreSQL service-role provisioning`
+Allowed files: `scripts/provision_postgres_sync_role.py`, `infra/postgres/provisioning.sql`, `tests/test_postgres_role_provisioning.py`
+
+Description:
+- R1: Add idempotent operator provisioning targeting exactly `10.10.1.3:54321` that creates/validates LOGIN role exactly `crypto-history-loader`; static SQL must quote the hyphenated role name.
+- R2: Receive administrator username/password and application-role password only from protected environment/runtime input; no secret in tracked files, process-list-visible arguments, examples, logs, or exception text.
+- R3: Enforce role attributes exactly `LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS`.
+- R4: Create/validate schemas `crypto_history_gold` and `crypto_history_sync` owned by or granting only sufficient `USAGE/CREATE` rights to `crypto-history-loader`; no rights on other repository schemas.
+- R5: Keep administrator credentials separate from application runtime credentials and never export admin credentials into Medallion/CLI runtime configuration.
+- R6: Make repeated provisioning idempotent; incompatible pre-existing role attributes/schema ownership fail safely instead of broadening privileges silently.
+- R7: Require `PGDATABASE` as protected operator input; do not guess or hard-code a database name.
+- R8: Add offline command/SQL contract tests for endpoint/role/attributes/schemas, secret placeholders, idempotency, quoted role identity, and absence of literal credentials.
+
+Acceptance:
+- A1 (verifies R1): command/SQL fixtures resolve exact endpoint and exact role `crypto-history-loader`.
+- A2 (verifies R2): tracked content contains only environment references/test placeholders and process commands never embed a password argument.
+- A3 (verifies R3): SQL contract asserts all six exact least-privilege attributes.
+- A4 (verifies R4): only `crypto_history_gold` and `crypto_history_sync` rights are provisioned for the application role.
+- A5 (verifies R5): admin inputs are distinct and absent from application-runtime output/config objects.
+- A6 (verifies R6): second-run fixture is no-op/validation while incompatible state fails without privilege escalation.
+- A7 (verifies R7): missing/blank database input fails before connection.
+- A8 (verifies R8): all listed provisioning tests pass offline and repository scans find no real password literal.
+
+---
+
+## PR-74: PostgreSQL Sync Runtime Configuration
+
+PR name: `postgres-sync-runtime-config`
+Status: Planned
+Updated: 2026-08-22
+PR: TBD
+Git branch: `codex/pr74-postgres-sync-runtime-config`
+Git status: `planned; start only when git status --short is empty`
+Agent lane: Runtime configuration; one weak agent
+Depends on: PR-67
+Commit: `feat(PR-74): add PostgreSQL sync runtime configuration`
+Allowed files: `application/postgres_sync/config.py`, `scripts/runtime_config.py`, `tests/test_postgres_sync_config.py`, `tests/test_runtime_config.py`
+
+Description:
+- R1: Define typed runtime configuration resolving exact `PGHOST=10.10.1.3`, `PGPORT=54321`, `PGUSER=crypto-history-loader`, required non-empty `PGDATABASE`, and protected `PGPASSWORD` from environment or already-ignored runtime config; tracked source/docs contain no password value.
+- R2: Preserve existing logging/runtime behavior in `scripts/runtime_config.py`; PostgreSQL support is additive and must not change log-path resolution.
+- R3: Explicit environment values override ignored runtime-config PostgreSQL values; partial mixed sources are allowed only when final five-variable set is complete and exact.
+- R4: Validate endpoint/user/database/password before adapter construction; wrong host/port/user or blank database/password fails without opening a connection.
+- R5: Redact password and credential-bearing DSN from validation errors, dataclass repr, debug logs, and JSON result/error payloads.
+- R6: Provide method returning the five standard `PG*` values for subprocess/CLI composition without admin provisioning credentials.
+- R7: Add deterministic tests for environment-only, ignored-config-only, override precedence, invalid identity, missing values, shell-special fake passwords, and redaction.
+
+Acceptance:
+- A1 (verifies R1): valid fixture resolves exact host/port/user plus injected database/password and no tracked fixture contains operational secret.
+- A2 (verifies R2): pre-existing runtime/log configuration tests remain passing without behavior change.
+- A3 (verifies R3): precedence fixtures produce exact final five-variable mapping.
+- A4 (verifies R4): each invalid/missing required field fails before mocked connection factory is called.
+- A5 (verifies R5): fake password/full DSN is absent from repr, errors, logs, and serialized payloads.
+- A6 (verifies R6): exported runtime mapping contains only `PGHOST`, `PGPORT`, `PGUSER`, `PGDATABASE`, `PGPASSWORD` and no admin variables.
+- A7 (verifies R7): all listed config cases pass offline.
+
+---
+
+## PR-75: Gold To PostgreSQL Reconciliation Use Case
+
+PR name: `postgres-gold-sync-use-case`
+Status: Planned
+Updated: 2026-08-22
+PR: TBD
+Git branch: `codex/pr75-postgres-gold-sync-use-case`
+Git status: `planned; start only when git status --short is empty`
+Agent lane: Application orchestration; one weak agent
+Depends on: PR-69, PR-70, PR-72
+Commit: `feat(PR-75): reconcile current Gold into PostgreSQL`
+Allowed files: `application/postgres_sync/service.py`, `tests/test_postgres_sync_service.py`
+
+Description:
+- R1: Implement deterministic application service receiving PR-70 current-lineage inventory and `GoldSyncRepository`; it must not invoke Bronze/Silver/Gold build, mirror, retention, provider, or provisioning operations.
+- R2: Process lineages sequentially in stable `(dataset_id, exchange, symbol)` order so restart behavior/logging are deterministic and DB load is bounded.
+- R3: On absent sync state plus empty digest state, load complete current source lineage, validate canonical `timestamp_m1` as UTC-aware microsecond precision, normalize every timestamp/datetime payload to aware UTC microsecond semantics, compute digests, and submit every row as bootstrap insert; true date fields remain dates.
+- R4: If synchronized source fingerprint/schema/count/bounds equal current snapshot, perform zero consumer/digest row mutations and verify target summary.
+- R5: If source fingerprint changed, read complete current lineage, enforce the same UTC/microsecond timestamp boundary before hashing, compute complete current digests, compare through PR-69, and submit only planned insert/update/delete payloads.
+- R6: Preserve accumulated-delta semantics across any number of missed runs and historical corrections; timestamp-watermark optimization is forbidden.
+- R7: After repository commit, require final target row count/min/max to equal source snapshot before reporting synchronized; verification failure must not advance authoritative sync checkpoint.
+- R8: Stop on first lineage failure, return non-success with failing lineage/category, keep already committed earlier lineages valid, leave later lineages untouched, and make retry resume idempotently.
+- R9: Return aggregate/per-lineage inserted/updated/deleted/unchanged counts plus source identities with no credential fields.
+- R10: Add offline fake-inventory/repository/source-reader tests for bootstrap, unchanged fast path, mixed delta, historical update, delete, three missed runs, schema mismatch, verification failure, partial-progress retry, empty inventory, naive timestamp rejection, and microsecond preservation.
+
+Acceptance:
+- A1 (verifies R1): spies prove only inventory/source-read/repository interfaces are called.
+- A2 (verifies R2): shuffled input produces stable sorted processing order and no concurrent DB writes.
+- A3 (verifies R3): empty target plus N rows yields exactly N bootstrap inserts; timestamp payloads reach the repository as aware UTC microsecond values and date fields remain dates.
+- A4 (verifies R4): unchanged fingerprint/state yields zero consumer/digest mutations while target summary is checked.
+- A5 (verifies R5): fixture `2 new + 1 changed + 1 stale + 100 unchanged` submits exactly 2 inserts, 1 update, 1 delete and no unchanged payloads; timestamp normalization does not change instants or truncate microseconds.
+- A6 (verifies R6): old correction and three missed-week additions reconcile fully in one later run.
+- A7 (verifies R7): summary mismatch fails and cannot advance sync state to new source fingerprint.
+- A8 (verifies R8): failure on lineage 2 preserves committed lineage 1, leaves lineage 3 untouched, and retry converges without duplicates.
+- A9 (verifies R9): aggregate/per-lineage result fields/counts are exact and credential-free.
+- A10 (verifies R10): every listed use-case scenario passes offline, including rejection of naive/non-UTC timestamps and preservation of non-zero microseconds.
+
+---
+
+## PR-76: PostgreSQL Gold Sync CLI
+
+PR name: `postgres-gold-sync-cli`
+Status: Planned
+Updated: 2026-08-22
+PR: TBD
+Git branch: `codex/pr76-postgres-gold-sync-cli`
+Git status: `planned; start only when git status --short is empty`
+Agent lane: CLI/composition; one weak agent
+Depends on: PR-74, PR-75
+Commit: `feat(PR-76): expose Gold PostgreSQL sync CLI`
+Allowed files: `api/commands/postgres.py`, `api/cli.py`, `tests/test_postgres_sync_command.py`, `tests/test_cli.py`
+
+Description:
+- R1: Add exactly one operational command `gold-sync-postgres` with `--gold-root`, `--debug`, and existing global `--config`; default Gold root `lake/gold`.
+- R2: Compose PR-70 inventory, source reader, PR-75 service, and PR-72 repository only after PR-74 validation succeeds; missing/invalid config creates no DB connection.
+- R3: Command is read-only toward Bronze/Silver/local Gold and must not build, mirror, prune, reconcile source providers, or provision roles/schemas with admin credentials.
+- R4: Use existing logging utilities/shared configured `.logs` root with module logger `postgres-gold-sync`; never print password/DSN and do not create a separate logging subsystem.
+- R5: Emit deterministic success JSON/log fields: command, status, lineages processed, inserted, updated, deleted, unchanged, and existing elapsed metadata convention.
+- R6: Return stable non-zero exit categories for configuration, current-Gold inventory, compatibility/schema, PostgreSQL, and verification errors; success/no-op returns zero.
+- R7: Provide manual retry path running only `gold-sync-postgres`; PostgreSQL outage after Gold publication must not require rebuilding Bronze/Silver/Gold.
+- R8: Add parser/composition/no-side-effect/result/redaction/error tests with deterministic fakes and no network.
+
+Acceptance:
+- A1 (verifies R1): parser exposes exactly `gold-sync-postgres`, expected arguments, and `--debug`.
+- A2 (verifies R2): composition spy sees no DB factory call for invalid config and exact validated dependencies for valid fixture.
+- A3 (verifies R3): spies prove no build/mirror/prune/provider/provisioning call is reachable.
+- A4 (verifies R4): command logs through existing utilities and fake secrets/full DSN are absent from output.
+- A5 (verifies R5): success/no-op fixtures emit exact aggregate fields/counts.
+- A6 (verifies R6): each failure class returns deterministic non-zero status and cannot claim success.
+- A7 (verifies R7): retry test invokes only sync composition and converges against prior checkpoints.
+- A8 (verifies R8): all listed command tests pass offline.
+
+---
+
+## PR-77: Medallion PostgreSQL Gold Sync Integration
+
+PR name: `medallion-postgres-gold-sync`
+Status: Planned
+Updated: 2026-08-22
+PR: TBD
+Git branch: `codex/pr77-medallion-postgres-gold-sync`
+Git status: `planned; start only when git status --short is empty`
+Agent lane: Final integration/operations; one weak agent
+Depends on: PR-73, PR-76
+Commit: `feat(PR-77): sync Gold to PostgreSQL after Medallion Gold`
+Allowed files: `scripts/run_medallion_pipeline.py`, `README.md`, `ARCHITECTURE.md`, `tests/test_run_medallion_pipeline.py`, `tests/test_postgres_sync_medallion.py`
+
+Description:
+- R1: Append one `postgres-gold-sync` pipeline step immediately after configured successful Gold step; invoke existing Python entrypoint plus `gold-sync-postgres` using same config and `lake/gold`.
+- R2: Gate PostgreSQL on Gold success: Bronze/Silver/Gold failure prevents sync; successful Gold always attempts sync in the same Medallion invocation.
+- R3: PostgreSQL failure makes Medallion non-zero and logs failed active step, but already published local Gold and existing NAS mirror remain untouched/authoritative.
+- R4: Preserve existing Sunday cron schedule; no second PostgreSQL cron job. Every manual Medallion invocation receives same post-Gold behavior.
+- R5: Use PR-74 protected runtime configuration only; no PostgreSQL/admin password in pipeline script, README, ARCHITECTURE, tests, command line, or logged plan.
+- R6: Document PostgreSQL as rebuildable Gold-only serving replica, exact endpoint/user/schema names, first-full/later-delta behavior, current-version-only selection, manual retry, schema-migration failure semantics, and exact timestamp compatibility with `market-regime-loader`: source `Datetime(us, UTC)`, PostgreSQL `TIMESTAMPTZ(6)`, UTC session.
+- R7: Add deterministic Medallion tests for exact order `bronze -> silver -> gold -> postgres-gold-sync`, Gold-failure gating, PostgreSQL-failure propagation, no-op, retry without rebuilding Gold, dry-run inclusion, and timestamp-contract preservation.
+- R8: Run complete configured quality suite (Ruff lint/format, Mypy, Pyright, ty, import-linter, config validation, docs inventory validation, Pytest, coverage) and record any environment-only check that cannot run.
+
+Acceptance:
+- A1 (verifies R1): generated pipeline contains one and only one PostgreSQL sync directly after Gold.
+- A2 (verifies R2): injected Bronze/Silver/Gold failures produce zero PostgreSQL calls; Gold success produces exactly one sync call.
+- A3 (verifies R3): injected PostgreSQL failure returns non-zero while local Gold and NAS mirror are not reverted/deleted.
+- A4 (verifies R4): no second scheduled PostgreSQL cron is introduced and docs state existing Sunday Medallion run owns scheduling.
+- A5 (verifies R5): touched-file scans contain no operational/admin credential literal and dry-run output has no password/DSN.
+- A6 (verifies R6): README/ARCHITECTURE contain all listed serving-plane, delta, current-version, retry, migration, and exact `Datetime(us, UTC)` -> `TIMESTAMPTZ(6)` rules without claiming PostgreSQL is canonical.
+- A7 (verifies R7): all ordering/failure/no-op/retry/dry-run tests pass offline and a regression fixture confirms no timestamp type/precision/timezone drift from the market-regime-loader convention.
+- A8 (verifies R8): final PR records full quality-gate result and preserves or improves repository coverage.
+
+## PostgreSQL stack completion definition
+
+The stack is complete only when:
+
+- Gold Parquet remains canonical and PostgreSQL contains no Bronze/Silver serving tables from this stack.
+- Exact dedicated runtime role `crypto-history-loader` exists with least privilege on only `crypto_history_gold` and `crypto_history_sync` in the configured database.
+- Every current materialized registered Gold lineage has exactly one current PostgreSQL representation; retained old Gold versions are not duplicated.
+- Canonical key timestamp `timestamp_m1` is `Polars Datetime(time_unit="us", time_zone="UTC")` at the sync boundary.
+- Every PostgreSQL timestamp/datetime consumer column and internal sync timestamp is exactly `TIMESTAMPTZ(6)` and each session is UTC; no `TIMESTAMP WITHOUT TIME ZONE` or alternate timestamp precision is emitted.
+- A UTC timestamp containing non-zero microseconds round-trips without instant, timezone, or precision loss.
+- First sync performs complete lineage bootstrap; later runs write only accumulated INSERT/UPDATE/DELETE deltas.
+- Historical corrections and deletes are detected without a timestamp watermark.
+- Consumer rows, row digests, and sync checkpoint are atomic per lineage and retry-safe.
+- Unchanged source fingerprint performs no consumer-row rewrite.
+- Every successful Medallion Gold step is followed by PostgreSQL sync, including the existing Sunday run.
+- PostgreSQL outage never invalidates or rolls back already-published local Gold; manual `gold-sync-postgres` retry is sufficient after connectivity returns.
+- No operational password, administrator credential, or credential-bearing DSN exists in Git history, tracked files, logs, persisted sync metadata, or test snapshots.
+
+---
+
+# Completed PR summary
+
+Completed work is intentionally summarized here instead of keeping large finished ticket bodies in the active backlog. Git history and merged pull requests remain the detailed audit trail.
+
+| Completed backlog IDs | Summary |
+|---|---|
+| PR-01–PR-12 | Established Silver contracts and canonical naming; added volatility-index, realized-volatility, IV/RV, index-price, futures-summary, option-ticker, and option-surface foundations feeding Gold. |
+| PR-13–PR-20 | Completed the next Silver/Gold dataset coverage wave, including additional live-origin market-state inputs, explicit deterministic normalization, lineage, and model-ready Gold integration. |
+| PR-21–PR-38 | Hardened medallion data handling, live/history boundaries, deterministic inventory/reporting, Gold construction, operational scripts, and test coverage. |
+| PR-39–PR-43 | Extracted Silver build registry, shared monthly IO/report kernel, Gold frame-preparation registry, contract-driven command choices, and typed test/command harnesses. |
+| PR-44–PR-46 | Added typed Bronze build contracts, explicit runtime adapter, and explicit Bronze workflow-stage result contracts. |
+| QC-01–QC-06 | Corrected IV/RV units/horizons, cross-month rolling state, spot/perpetual RV source semantics, quantitative contract metadata, executable documented CLI contracts, and quality-gate alignment. |
+| PR-54–PR-61 | Added medallion performance telemetry, Silver/Gold fingerprints, incremental partition planning, shared-source dependency planning, Gold multi-timeframe fan-out, plot decoupling, and incremental freshness orchestration. |
+| PR-62–PR-66 | Enforced backlog-number branch/commit conventions, cleaned superseded backlog entries, disabled scheduled historical prediction builds, and deduplicated `gold.live.full.*` artifacts while preserving normal Gold retention. |
+
+Completed ticket index: `PR-01` through `PR-46`, `QC-01` through `QC-06`, and `PR-54` through `PR-66`.
+
+Latest completed backlog ticket: PR-66, merged as GitHub pull request #173 on 2026-08-04.
+
+## Superseded, not completed
+
+PR-47 through PR-53 were intentionally removed/superseded by later correctness and performance work. They are not counted as completed PRs and must not be resurrected unless a new backlog ticket explicitly redefines the missing work.
