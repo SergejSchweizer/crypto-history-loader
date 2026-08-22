@@ -94,8 +94,7 @@ def _ensure_role(cursor: psycopg.Cursor[tuple[object, ...]], app_password: str) 
     if not exists:
         cursor.execute(
             sql.SQL(
-                "CREATE ROLE {} WITH LOGIN PASSWORD %s NOSUPERUSER NOCREATEDB NOCREATEROLE "
-                "NOREPLICATION NOBYPASSRLS"
+                "CREATE ROLE {} WITH LOGIN PASSWORD %s NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS"
             ).format(role_identifier),
             (app_password,),
         )
@@ -126,9 +125,7 @@ def _ensure_schema(cursor: psycopg.Cursor[tuple[object, ...]], schema_name: str)
     owner = _schema_owner(cursor, schema_name)
     if owner is None:
         cursor.execute(
-            sql.SQL("CREATE SCHEMA {} AUTHORIZATION {}").format(
-                sql.Identifier(schema_name), sql.Identifier(APP_ROLE)
-            )
+            sql.SQL("CREATE SCHEMA {} AUTHORIZATION {}").format(sql.Identifier(schema_name), sql.Identifier(APP_ROLE))
         )
     elif owner != APP_ROLE:
         raise RuntimeError(f"existing PostgreSQL schema {schema_name!r} has incompatible ownership")
