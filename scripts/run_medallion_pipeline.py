@@ -1,4 +1,4 @@
-"""Run Bronze, Silver, and Gold builders sequentially for cron automation."""
+"""Run Bronze, Silver, Gold, and PostgreSQL Gold sync sequentially for cron automation."""
 
 from __future__ import annotations
 
@@ -70,7 +70,7 @@ def _load_yaml(path: Path) -> dict[str, Any]:
 
 
 def _build_steps(*, main_path: Path, config_path: Path, config_data: dict[str, Any]) -> list[PipelineStep]:
-    """Build pipeline command sequence from config."""
+    """Build pipeline command sequence and append sync directly after enabled Gold."""
 
     pipeline_cfg = config_data.get("medallion-pipeline")
     if not isinstance(pipeline_cfg, dict):
@@ -86,6 +86,8 @@ def _build_steps(*, main_path: Path, config_path: Path, config_data: dict[str, A
         raise ValueError(
             f"Unsupported pipeline layer(s) in execution_order: {invalid}. Allowed: {sorted(valid_layers)}"
         )
+    if execution_order.count("gold") > 1:
+        raise ValueError("medallion-pipeline.execution_order may contain Gold at most once")
 
     steps: list[PipelineStep] = []
     for layer_name in execution_order:
@@ -119,6 +121,16 @@ def _build_steps(*, main_path: Path, config_path: Path, config_data: dict[str, A
         if not skip_layer_step:
             cmd = [str(main_path), "--config", str(config_path), command, *cli_args]
             steps.append(PipelineStep(name=layer_name, args=cmd))
+            if layer_name == "gold":
+                sync_cmd = [
+                    str(main_path),
+                    "--config",
+                    str(config_path),
+                    "gold-sync-postgres",
+                    "--gold-root",
+                    "lake/gold",
+                ]
+                steps.append(PipelineStep(name="postgres-gold-sync", args=sync_cmd))
     return steps
 
 
