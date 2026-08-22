@@ -25,7 +25,9 @@ from infra.postgres.gold_repository import (
 
 
 class FakeCursor:
-    def __init__(self, trace: list[tuple[str, object]], fetchone_queue: list[object], fail_token: str | None = None) -> None:
+    def __init__(
+        self, trace: list[tuple[str, object]], fetchone_queue: list[object], fail_token: str | None = None
+    ) -> None:
         self.trace = trace
         self.fetchone_queue = fetchone_queue
         self.fail_token = fail_token
@@ -146,7 +148,7 @@ def test_existing_schema_signature_mismatch_fails_before_rows() -> None:
     with pytest.raises(PostgresSchemaMismatchError):
         repository.ensure_lineage(_snapshot(schema.signature), schema.ddl, schema.signature)
     assert ("ROLLBACK", None) in connection.trace
-    assert not any(query.startswith("INSERT INTO \"crypto_history_gold\"") for query, _ in connection.trace)
+    assert not any(query.startswith('INSERT INTO "crypto_history_gold"') for query, _ in connection.trace)
 
 
 def test_apply_delta_order_and_microsecond_preservation() -> None:
@@ -180,9 +182,15 @@ def test_apply_delta_order_and_microsecond_preservation() -> None:
 
     queries = [query for query, _ in connection.trace]
     lock_idx = next(index for index, query in enumerate(queries) if "pg_advisory_xact_lock" in query)
-    insert_idx = next(index for index, query in enumerate(queries) if query.startswith("INSERT INTO \"crypto_history_gold\""))
-    digest_idx = next(index for index, query in enumerate(queries) if "gold_row_hashes" in query and query.startswith("INSERT"))
-    state_idx = next(index for index, query in enumerate(queries) if "gold_sync_state" in query and query.startswith("INSERT"))
+    insert_idx = next(
+        index for index, query in enumerate(queries) if query.startswith('INSERT INTO "crypto_history_gold"')
+    )
+    digest_idx = next(
+        index for index, query in enumerate(queries) if "gold_row_hashes" in query and query.startswith("INSERT")
+    )
+    state_idx = next(
+        index for index, query in enumerate(queries) if "gold_sync_state" in query and query.startswith("INSERT")
+    )
     summary_idx = next(index for index, query in enumerate(queries) if query.startswith("SELECT COUNT"))
     commit_idx = queries.index("COMMIT")
     assert lock_idx < insert_idx < digest_idx < state_idx < summary_idx < commit_idx
