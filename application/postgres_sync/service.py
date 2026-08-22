@@ -30,7 +30,8 @@ class GoldSyncServiceError(RuntimeError):
     """Typed application failure identifying the first lineage that could not converge."""
 
     def __init__(self, snapshot: GoldSourceSnapshot, category: str, message: str) -> None:
-        super().__init__(f"{category}: {snapshot.lineage.dataset_id}/{snapshot.lineage.exchange}/{snapshot.lineage.symbol}: {message}")
+        lineage = snapshot.lineage
+        super().__init__(f"{category}: {lineage.dataset_id}/{lineage.exchange}/{lineage.symbol}: {message}")
         self.lineage = snapshot.lineage
         self.category = category
 
