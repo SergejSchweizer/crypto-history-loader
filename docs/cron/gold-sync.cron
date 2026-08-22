@@ -1,2 +1,0 @@
-# Mirror the current Gold lake into the NAS staging path every night.
-30 23 * * * cd /home/dev_crypto/crypto-history-loader && .venv/bin/python scripts/sync_gold_to_temp.py --config .run/cron-config.yaml --source-root lake/gold --destination-root /volume1/Temp/gold --lock-file .run/sync-gold-to-temp.lock

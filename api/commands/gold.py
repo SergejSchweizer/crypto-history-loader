@@ -6,6 +6,7 @@ import argparse
 import json
 import logging
 import re
+import subprocess
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, cast
@@ -51,6 +52,7 @@ _HISTORY_FULL_DERIVED_BASE_DATASET_IDS = {
     "gold.live.full.m30": "gold.live.full.m1",
     "gold.live.full.h1": "gold.live.full.m1",
 }
+_DEFAULT_GOLD_MIRROR_ROOT = "/volume1/Temp/gold"
 
 
 def add_gold_build_parser(subparsers: Any) -> None:
@@ -99,6 +101,13 @@ def add_gold_build_parser(subparsers: Any) -> None:
         help="Fixed Gold retention window; only the value 3 is accepted",
     )
     parser.add_argument("--maxprocesses", type=int, default=4, help="Maximum parallel gold build workers")
+    parser.add_argument(
+        "--no-mirror-gold-to-temp",
+        action="store_false",
+        dest="mirror_gold_to_temp",
+        help="Skip mirroring successful Gold output to /volume1/Temp/gold",
+    )
+    parser.set_defaults(mirror_gold_to_temp=True)
     parser.add_argument("--no-json-output", action="store_true", help="Suppress JSON output")
 
 
@@ -153,6 +162,19 @@ def _validate_version_args(*, auto_version: bool, dataset_version: str, version_
         raise ValueError(f"Invalid --dataset-version '{dataset_version}'. Expected semantic version like v1.0.0")
     if auto_version and not _SEMVER_RE.fullmatch(version_base):
         raise ValueError(f"Invalid --version-base '{version_base}'. Expected semantic version like v1.0.0")
+
+
+def _mirror_gold_to_temp(*, gold_root: str, logger: logging.Logger) -> None:
+    """Mirror the completed Gold lake to the NAS staging directory with rsync."""
+
+    source_root = f"{gold_root.rstrip('/')}/"
+    destination_root = f"{_DEFAULT_GOLD_MIRROR_ROOT}/"
+    logger.info("Gold mirror start source_root=%s destination_root=%s", source_root, destination_root)
+    subprocess.run(
+        ["rsync", "-a", "--delete", source_root, destination_root],
+        check=True,
+    )
+    logger.info("Gold mirror complete source_root=%s destination_root=%s", source_root, destination_root)
 
 
 def run_gold_build(args: argparse.Namespace, logger: logging.Logger) -> None:
@@ -327,3 +349,5 @@ def run_gold_build(args: argparse.Namespace, logger: logging.Logger) -> None:
     if not bool(args.no_json_output):
         print(json.dumps({"reports": reports}, indent=2))
     logger.info("Command complete: gold-build reports=%s", len(reports))
+    if bool(getattr(args, "mirror_gold_to_temp", False)):
+        _mirror_gold_to_temp(gold_root=gold_root, logger=logger)

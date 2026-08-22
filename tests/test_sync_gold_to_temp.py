@@ -73,18 +73,6 @@ def test_parse_args_defaults_to_nightly_gold_sync_contract(monkeypatch: pytest.M
     assert args.lock_file.endswith(".run/sync-gold-to-temp.lock")
 
 
-def test_cron_recipe_declares_2330_sync_schedule() -> None:
-    cron_file = Path(__file__).resolve().parents[1] / "docs" / "cron" / "gold-sync.cron"
-    content = cron_file.read_text(encoding="utf-8").splitlines()
-
-    assert content[0].startswith("# Mirror the current Gold lake")
-    assert content[1].startswith("30 23 * * * ")
-    assert "/volume1/Temp/gold" in content[1]
-    assert "scripts/sync_gold_to_temp.py" in content[1]
-    assert "--source-root lake/gold" in content[1]
-    assert "--lock-file .run/sync-gold-to-temp.lock" in content[1]
-
-
 def test_script_runs_from_repo_path_with_help() -> None:
     script = Path(__file__).resolve().parents[1] / "scripts" / "sync_gold_to_temp.py"
     result = subprocess.run([sys.executable, str(script), "--help"], check=True, capture_output=True, text=True)

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import subprocess
 from typing import cast
 
 import pytest
@@ -189,6 +190,41 @@ def test_run_gold_build_uses_helpers_and_emits_reports(
     assert "gold.market.full.m1" in payload
     assert captured_kwargs["keep_last_versions"] == 3
     assert captured_kwargs["plot"] is False
+
+
+def test_run_gold_build_mirrors_completed_gold_output(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A successful CLI Gold build mirrors the full output tree once."""
+
+    mirrored_roots: list[str] = []
+    monkeypatch.setattr(gold_cmd, "_resolve_gold_symbols", lambda **_kwargs: [])
+    monkeypatch.setattr(gold_cmd, "_validate_version_args", lambda **_kwargs: None)
+    monkeypatch.setattr(
+        gold_cmd,
+        "_mirror_gold_to_temp",
+        lambda *, gold_root, logger: mirrored_roots.append(gold_root),
+    )
+    args = gold_args()
+    args.mirror_gold_to_temp = True
+
+    gold_cmd.run_gold_build(args=args, logger=logging.getLogger("test"))
+
+    assert mirrored_roots == ["lake/gold"]
+
+
+def test_mirror_gold_to_temp_uses_incremental_delete_rsync(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Gold mirroring must preserve the destination as an exact current-state copy."""
+
+    commands: list[list[str]] = []
+
+    def _run(command: list[str], **_kwargs: object) -> subprocess.CompletedProcess[bytes]:
+        commands.append(command)
+        return subprocess.CompletedProcess(command, 0)
+
+    monkeypatch.setattr(gold_cmd.subprocess, "run", _run)
+
+    gold_cmd._mirror_gold_to_temp(gold_root="lake/gold", logger=logging.getLogger("test"))
+
+    assert commands == [["rsync", "-a", "--delete", "lake/gold/", "/volume1/Temp/gold/"]]
 
 
 def test_run_gold_build_skips_symbol_on_value_error(

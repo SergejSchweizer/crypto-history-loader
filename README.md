@@ -267,9 +267,9 @@ Gold behavior:
 
 Gold mirror:
 
-- nightly cron recipe lives in `docs/cron/gold-sync.cron`
-- syncs `lake/gold` to `/volume1/Temp/gold` every day at `23:30`
-- mirror runs through `scripts/sync_gold_to_temp.py` and uses the shared `.logs` root
+- every successful `gold-build` mirrors `lake/gold` to `/volume1/Temp/gold`
+- the mirror uses `rsync -a --delete`, copying only changed files and removing stale destination artifacts
+- use `--no-mirror-gold-to-temp` only when a successful build must not update the NAS staging copy
 
 ## Quality gates
 
