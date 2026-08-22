@@ -7,6 +7,7 @@ from typing import Any
 
 import pytest
 
+from api.commands import loader_fetchers
 from api.commands.loader_fetchers import (
     BronzeSymbolFetchDependencies,
     build_symbol_fetch_dependencies,
@@ -62,6 +63,52 @@ def test_fetch_symbol_candles_uses_runtime_start_bound() -> None:
 
     assert rows == [_sample_candle()]
     assert calls == [(start_ms, end_ms)]
+
+
+def test_fetch_symbol_candles_uses_full_gap_planning_in_tail_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Spot and perpetual OHLCV must close persisted gaps even when tail mode is enabled."""
+
+    observed_tail_modes: list[bool] = []
+    observed_start_bounds: list[object] = []
+
+    def _fetch_symbol_candles(**kwargs: object) -> list[SpotCandle]:
+        observed_tail_modes.append(bool(kwargs["tail_delta_only"]))
+        observed_start_bounds.append(kwargs["start_open_ms_bound"])
+        return []
+
+    monkeypatch.setattr(loader_fetchers.fetch_service, "fetch_symbol_candles", _fetch_symbol_candles)
+    dependencies = _dependencies(
+        fetch_candles_range=lambda **_kwargs: [],
+        last_closed_open_ms=lambda **_kwargs: 1,
+    )
+    runtime_context = BronzeRuntimeBoundsContext(
+        tail_delta_only=True,
+        global_start_open_ms=None,
+        symbol_start_open_ms={},
+        exchange_symbol_start_open_ms={},
+    )
+
+    fetch_symbol_candles(
+        dependencies=dependencies,
+        runtime_context=runtime_context,
+        exchange="deribit",
+        market="spot_ohlcv",
+        symbol="BTCUSDT",
+        timeframe="1m",
+        lake_root="lake/bronze",
+    )
+    fetch_symbol_candles(
+        dependencies=dependencies,
+        runtime_context=runtime_context,
+        exchange="deribit",
+        market="perp",
+        symbol="BTC-PERPETUAL",
+        timeframe="1m",
+        lake_root="lake/bronze",
+    )
+
+    assert observed_tail_modes == [False, False]
+    assert observed_start_bounds == [None, None]
 
 
 def test_build_symbol_fetch_dependencies_preserves_adapter_functions() -> None:

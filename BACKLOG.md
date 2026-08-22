@@ -1,26 +1,16 @@
 # Backlog
 
-This backlog is the source of truth for stacked, atomic PRs that bring every Bronze dataset into a
-contracted Silver representation suitable for IV/RV and regime-change research.
+This backlog records work that brings every Bronze dataset into a contracted Silver representation suitable for
+IV/RV and regime-change research.
 
 Last updated: 2026-08-02
 
 ## Policy
 
-- Use this backlog as a simple ticket system: one `PR-XX` entry is one ticket and one logical pull request.
-- Every ticket must contain separate `Status`, `Updated`, `PR`, `Branch`, and `Depends on` fields. `Updated` uses
-  `YYYY-MM-DD`; `Branch` remains in the merged ticket as historical traceability after branch deletion.
-- The only valid statuses are `Planned`, `In Progress`, `Blocked`, `Ready`, and `Merged`. `Merged` is the only
-  completed status. Terms such as `Done`, `Implemented`, `Complete`, and `Finished` are not valid statuses.
 - Every ticket must contain numbered `Description` requirements (`R1`, `R2`, ...) and numbered `Acceptance`
   checks (`A1`, `A2`, ...) with exactly the same IDs. `A1` verifies only `R1`, `A2` verifies only `R2`, and so on.
   No description requirement or acceptance check may exist without its matching counterpart.
-- A ticket may move to `Ready` only when every acceptance check passes. A ticket may move to `Merged` only after
-  the PR is merged into `main` and the merge commit is reachable from `origin/main`.
-- After reachability from `origin/main` is verified, delete both the local and remote feature branches. Record
-  `Status: Merged`, the final `Updated` date, and the final PR URL before deleting them.
-- Keep PRs stacked in the order listed here; each PR must be mergeable after its predecessor.
-- Keep each PR atomic: one dataset family, one contract boundary, or one shared adapter change.
+- Keep each work item atomic: one dataset family, one contract boundary, or one shared adapter change.
 - Keep outputs deterministic: stable partition layout, stable sort keys, explicit dedup keys, fixed column order,
   and no wall-clock-dependent feature values except build metadata fields.
 - Keep Silver dataset contracts explicit in `application/dataset_contracts.py`.
@@ -28,61 +18,10 @@ Last updated: 2026-08-02
   not create model labels or strategy-specific targets.
 - Keep IV/RV and regime-change features as reusable market-state features. Prediction labels belong in Gold or a
   later modelling layer.
-- Update this file in every PR that changes dataset naming, contracts, scope, order, or completion status.
-- Keep merged and superseded ticket entries in this backlog as an audit trail; never delete their recorded branch,
-  date, PR URL, description, or acceptance evidence.
+Update this file when dataset naming, contracts, scope, order, or completion status changes. Keep historical work-item
+entries as an audit trail with their description and acceptance evidence.
 
-## Ticket Template
-
-```markdown
-### PR-XX: Short Ticket Title
-
-Status: Merged
-
-Updated: YYYY-MM-DD
-
-PR: https://github.com/SergejSchweizer/crypto-history-loader/pull/173
-
-Branch: `codex/prxx-short-ticket-title`
-
-Depends on: none
-
-Description:
-- R1: State one required behavior or deliverable.
-- R2: State one required behavior or deliverable.
-
-Acceptance:
-- A1 (verifies R1): State the observable condition proving R1.
-- A2 (verifies R2): State the observable condition proving R2.
-```
-
-The number and IDs of `Description` and `Acceptance` items must match exactly. Broad `Goal`, `Scope`, or prose
-sections may provide context, but they never replace the paired requirements and checks.
-
-## Status Semantics And Working-Tree Policy
-
-`Merged` on PR-01 through PR-18 means that the contract, transformation code, and focused tests are in `main`.
-It does not mean that a complete local Lake artifact exists. The 2026-07-10 inventory found ten physical
-Silver dataset types and nine physical Gold families; all other outputs require materialization or rebuild.
-
-Every stacked PR must begin with:
-
-```bash
-git status --short
-git branch --show-current
-git fetch origin --prune
-git checkout main
-git pull --ff-only origin main
-git checkout -b codex/<pr-name>
-```
-
-Before commit and after validation, `git status --short` must contain only the intended tracked source,
-test, documentation, or configuration files. Ignored Lake outputs must never be committed. An unexpected
-untracked or modified file is a stop condition; do not use `git add -A`, `git stash`, reset, or cleanup
-commands to hide it. Each PR must include its exact status output in the handoff or PR notes.
-
-Intermediate stacked PRs run only their smallest reliable related tests. The final PR before the squash
-merge into `main` runs the complete configured quality suite and a coverage report.
+## Operational Notes
 
 The cron-friendly medallion script must remain a complete layer scheduler:
 
@@ -98,8 +37,8 @@ uv run python main.py silver-build --dataset spot_ohlcv perps_ohlcv open_interes
 uv run python main.py gold-build --manifest --plot --maxprocesses 4 --no-json-output
 ```
 
-PRs that add a new supported Silver or Gold dataset must update `config.yaml`, this command list, and
-the parser/config compatibility tests in the same change set.
+Changes that add a new supported Silver or Gold dataset must update `config.yaml`, this command list, and the
+parser/config compatibility tests in the same change set.
 
 ## Current Coverage Snapshot
 
@@ -984,7 +923,7 @@ Scope:
 - Rebuild stale `perp` outputs as canonical `perps_ohlcv` while preserving read compatibility.
 - Emit one inventory manifest per dataset/series with rows, columns, start/end, observed/missing days,
   source hash, builder commit, and quality counters.
-- Do not commit Parquet data; commit only reproducible reports or generated metadata explicitly allowed by policy.
+- Keep Parquet data outside tracked project content; only reproducible reports or generated metadata may be tracked when explicitly allowed by policy.
 
 Acceptance:
 - Every Bronze dataset has a physical Silver destination or a documented exception.
@@ -1221,12 +1160,10 @@ Scope:
 - Generate the Bronze/Silver/Gold inventory report from the audit command.
 - Document every dataset's variables, origin, series, start/end, observed days, missing days, and physical/contract status.
 - Add CI validation that README inventory date and schema lists match the generated report.
-- Record the exact `git status --short` and validation commands in the PR handoff.
 
 Acceptance:
 - No dataset is described as present when only its contract exists.
 - Final stack run executes the full quality suite, `coverage run -m pytest`, and `coverage report`.
-- `main` is clean after merge and all stacked branches are deleted only after their commits are reachable from `main`.
 
 ### PR-38: Fixed Gold Dataset Retention
 

@@ -139,27 +139,22 @@ Applies to system design, module boundaries, refactors, scalability, reliability
 
 ## Scope
 
-Applies to review readiness, PR preparation, and pre-merge quality-gate validation.
+Applies to review readiness and quality-gate validation.
 
 ## Rules
 
-- [MUST] All repositories using this baseline enforce quality gates through pre-commit and CI.
-- [MUST] Pre-commit and CI enforce the same logical checks.
 - [SHOULD] A change that passes locally also passes in CI without additional manual steps.
-- [MUST] CI is the final authority for merge readiness.
 - [MUST] Prioritize correctness and regression risk over style.
 - [MUST] Validate contract and schema integrity and boundary discipline.
 - [MUST] Flag operational risk (idempotency, restartability, observability).
 - [MUST] Require tests for risk-heavy behavior changes.
 - [MUST] Use explicit typing and return types on public interfaces.
 - [SHOULD] Require docstrings for non-trivial modules and functions.
-- [MUST] Run lint, format, typing, tests, and coverage checks before merge when practical.
-- [MUST] Required quality-gate checks include Ruff linting, Ruff formatting check, Mypy, Pyright strict type checking, ty, Pytest, coverage threshold, config schema validation, README inventory validation, Conventional Commit validation, import boundary checks, and architecture tests.
-- [SHOULD] Use docstring quality tools such as `interrogate` and `pydoclint` when they are configured, but do not describe them as mandatory repository gates unless pre-commit and CI enforce them.
+- [MUST] Run lint, format, typing, tests, and coverage checks before delivery when practical.
+- [MUST] Required quality-gate checks include Ruff linting, Ruff formatting check, Mypy, Pyright strict type checking, ty, Pytest, coverage threshold, config schema validation, README inventory validation, import boundary checks, and architecture tests.
+- [SHOULD] Use docstring quality tools such as `interrogate` and `pydoclint` when they are configured, but do not describe them as mandatory repository gates unless automated validation enforces them.
 - [MUST] Run quality tools in strict mode where available, and fail the build on any reported error.
 - [MUST] Do not use permissive flags or downgraded severity levels that hide lint, type, formatting, or test failures.
-- [MUST] Agents must not bypass checks with `--no-verify` unless explicitly instructed by the human maintainer.
-- [MUST] `.pre-commit-config.yaml` includes and maintains hooks for the same logical mandatory checks enforced by CI.
 
 ## Review Findings Format
 
@@ -205,7 +200,7 @@ Applies when adding or changing tests, fixing bugs, refactoring behavior, adding
 ## Rules
 
 - [MUST] Run targeted tests for changed areas.
-- [SHOULD] Run the full test suite before finalization only when the PR is the final squash-merge candidate or the change has broad cross-cutting risk.
+- [SHOULD] Run the full test suite before finalization when the change has broad cross-cutting risk.
 - [MUST] Disclose checks that could not run and why.
 - [MUST] Add regression tests for every bug fix.
 - [MUST] Test happy path, edge cases, and failure paths.
@@ -308,7 +303,7 @@ Applies to Python quality tooling, typing, formatting, and local validation comm
 - `mypy .` or `pyright`
 - `pytest -q`
 
-## Agent Workflow
+## Delivery Workflow
 
 ## Scope
 
@@ -317,59 +312,13 @@ Applies to day-to-day agent execution flow for implementation, debugging, and de
 ## Rules
 
 - [MUST] Before changing code, inspect relevant files.
-- [MUST] Never commit directly to `main`.
-- [MUST] Always create a short-lived, task-specific feature branch from latest `main` using `codex/pr<backlog-number>-<scope>-<short-description>`.
-- [MUST] Every working branch name includes its Backlog PR number as lowercase `pr<backlog-number>`; for example, `codex/pr61-incremental-medallion-orchestrator`.
-- [MUST] Every commit on a working branch includes the same Backlog PR number in its Conventional Commit subject;
-  use `<type>[optional-scope]: PR-<backlog-number> <description>`, for example,
-  `feat(medallion): PR-61 add freshness audit`.
-- [MUST] Use lowercase letters, numbers, and hyphens only in branch names.
-- [MUST] Do not use vague branch names such as `codex/fixes`, `codex/update`, `codex/big-change`, `codex/refactor-all`, or `codex/work`.
-- [MUST] Keep one branch to one logical change.
-- [MUST] Treat `BACKLOG.md` as a simple ticket system. Each backlog PR is one ticket and one logical change.
-- [MUST] Every backlog ticket records these separate fields: `Status`, `Updated` in `YYYY-MM-DD` format,
-  `PR`, `Branch`, and `Depends on`. `Branch` remains recorded after deletion as historical traceability.
-- [MUST] Allowed ticket statuses are `Planned`, `In Progress`, `Blocked`, `Ready`, and `Merged`.
-  `Merged` is the only completed status; do not use ambiguous completion terms such as `Done`, `Implemented`,
-  `Complete`, or `Finished`.
-- [MUST] Every ticket defines numbered `Description` requirements and numbered `Acceptance` checks with an exact
-  one-to-one ID mapping. Each description ID has exactly one acceptance ID, and each acceptance ID verifies only
-  its matching description requirement. A ticket may not enter `Ready` while either side is missing or mismatched.
-- [MUST] Update the ticket's `Status` and `Updated` date whenever its state changes. Set `PR` to the pull request URL
-  when the PR is created; use `TBD` only before a PR exists.
-- [MUST] Pursue backlog PRs as stacked PRs: preserve their declared order, base each follow-up
-  backlog branch on the preceding backlog branch until it merges, and restack downstream branches
-  after upstream merges.
-- [MUST] Every backlog PR entry must record the linked GitHub pull request URL and the exact `git status --short`
-  output captured for that PR's handoff or publication state.
-- [MUST] Before starting a task, run `git status`, `git branch --show-current`, `git fetch origin`, `git checkout main`, and `git pull --ff-only origin main`.
-- [MUST] If the working tree is not clean before starting, stop and report changed files.
-- [MUST] Do not overwrite, delete, stash, reset, or otherwise discard user changes unless explicitly instructed.
-- [MUST] Before committing the final squash-merge candidate, run `ruff check .`, `pyright`, `pytest`, and `coverage run -m pytest`.
-- [MUST] If configured, also run `pre-commit run --all-files` for the final squash-merge candidate and include repository-specific typing or import boundary checks.
-- [MUST] If a required check fails, fix it before commit or clearly report why it is unrelated and safe to defer.
-- [MUST] Before committing, inspect `git diff` and `git status` and ensure only task-relevant changes are included.
-- [MUST] Use Conventional Commit messages: `<type>[optional-scope][!]: <description>`.
-- [MUST] Allowed Conventional Commit types are `build`, `chore`, `ci`, `docs`, `feat`, `fix`, `perf`,
-  `refactor`, `revert`, `style`, and `test`.
-- [MUST] Pull request titles must use the same `PR-<backlog-number>` Conventional Commit format because squash
-  merges use the PR title as the final commit subject.
-- [MUST] Push the feature branch and open a pull request into `main`.
-- [MUST] Never self-merge a pull request unless explicitly instructed.
-- [MUST] A finished PR must be merged into `main`; leaving a finished PR unmerged is not an allowed terminal state.
-- [MUST] After a PR is merged, verify that its commit is reachable from `origin/main`, then delete both the local
-  feature branch and the remote feature branch. Do not delete either copy before that reachability check passes.
-- [MUST] Record the final PR URL, `Status: Merged`, and merge date in the backlog ticket before deleting the branches.
-- [SHOULD] Prefer squash merge.
-- [MUST] If rebasing requires history rewrite, only use `git push --force-with-lease`, never plain `git push --force`.
-- [MUST] After merge, sync with `git checkout main` and `git pull --ff-only origin main`.
+- [MUST] Do not overwrite, delete, reset, stash, or otherwise discard user changes unless explicitly instructed.
 - [MUST] Do not weaken tests to make them pass.
 - [MUST] Do not remove type hints.
 - [MUST] Do not introduce hidden network calls.
-- [MUST] Never commit secrets, credentials, tokens, `.env` files, or private paths.
-- [MUST] Do not commit generated local artifacts unless explicitly required by the task.
+- [MUST] Never store secrets, credentials, tokens, `.env` files, or private paths in tracked project content.
+- [MUST] Do not add generated local artifacts to tracked project content unless explicitly required by the task.
 - [MUST] Keep architecture boundaries explicit.
-- [SHOULD] Prefer small, reviewable commits.
 - [MUST] Preserve existing public contracts unless explicitly asked to change them.
 - [MUST] Add or update tests for behavioral changes.
 - [MUST] Run relevant quality gates.
@@ -379,83 +328,20 @@ Applies to day-to-day agent execution flow for implementation, debugging, and de
 - [MUST] Update tests and documentation in the same change set for behavior changes.
 - [MUST] During debugging, run CLI commands with `--debug` where available and analyze logfile output while scripts run.
 - [SHOULD] Add targeted diagnostic logs when they improve failure isolation.
-- [MUST] Do not run destructive commands without explicit instruction, including `git reset --hard`, `git clean -fd`, `git clean -fdx`, `git checkout -- .`, `git restore .`, `git stash`, `git push --force`, and `rm -rf`.
-
-## Pull Request Body Template
-
-Remove checks that do not exist in the repository.
-
-```markdown
-## Ticket
-
-- Backlog: PR-XX
-- Status: In Progress
-- Updated: YYYY-MM-DD
-- Branch: codex/<scope>-<short-description>
-
-## Summary
-
-- Describe what changed.
-- Describe why it changed.
-
-## Description
-
-- R1: State the first required behavior.
-- R2: State the second required behavior.
-
-## Acceptance
-
-- A1 (verifies R1): State the observable pass condition for R1.
-- A2 (verifies R2): State the observable pass condition for R2.
-
-## Dataset / Pipeline Impact
-
-- State affected datasets, layers, or commands.
-- State whether Bronze, Silver, or Gold behavior changed.
-
-## Validation
-
-- [ ] ruff check .
-- [ ] ruff format .
-- [ ] mypy .
-- [ ] pyright
-- [ ] ty check
-- [ ] lint-imports --config .importlinter
-- [ ] pytest
-- [ ] pytest --cov
-- [ ] pre-commit run --all-files
-
-## Risk
-
-- Low / Medium / High
-- Explain possible breakage or migration concerns.
-
-## Notes
-
-- Mention follow-up work.
-- Mention known limitations.
-```
+- [MUST] Do not run destructive commands without explicit instruction, including recursive deletion commands.
 
 ## Agent Action Checklist
 
 - Reproduce issue with deterministic inputs.
-- Verify clean working tree before branch creation.
-- Create focused branch from latest `main`.
 - Identify impacted contracts, side effects, and test scope.
 - Implement minimal fix or focused improvement.
 - Inspect diff to keep only task-related files.
-- Push branch and open PR targeting `main`.
 - Validate with quality gates and tests.
-- Do not merge without explicit instruction.
-- When explicitly instructed to finish, merge into `main`, verify the merge on `origin/main`, update the ticket,
-  and delete the local and remote feature branches.
 - Summarize risks, residual gaps, and follow-up work.
 
 ## Definition of Done
 
 - Requested change is implemented and validated.
-- Work enters `main` only through a pull request from a focused feature branch.
-- The backlog ticket is `Merged`, has its final date and PR URL, and its local and remote branches are deleted.
 - Debug and failure paths are observable.
 - Docs and tests match the updated behavior.
 
@@ -464,15 +350,6 @@ Remove checks that do not exist in the repository.
 - `pytest -q`
 - `ruff check .`
 - `ruff format --check .`
-- `git status`
-- `git branch --show-current`
-- `git fetch origin`
-- `git checkout main`
-- `git pull --ff-only origin main`
-- `git checkout -b codex/pr<backlog-number>-<task-name>`
-- `git diff`
-- `gh pr create --base main --head codex/<task-name> --fill`
-- `gh pr checks`
 
 ## Security
 
@@ -482,7 +359,7 @@ Applies to configuration, credentials, secrets handling, runtime environment, ex
 
 ## Rules
 
-- [MUST] Never commit secrets or credentials.
+- [MUST] Never store secrets or credentials in tracked project content.
 - [MUST] Keep sensitive values out of code, docs, and artifacts.
 - [MUST] Document required runtime variables in canonical configuration.
 - [MUST] Use one canonical runtime configuration source per repository.
@@ -530,7 +407,6 @@ Applies to release readiness and repository-wide instruction consistency.
 ## Agent Action Checklist
 
 - Update `AGENTS.md` directly when repository instructions change.
-- Verify pre-commit and other hooks do not modify `AGENTS.md`.
 - Validate release notes include testing status and known gaps.
 
 ## Definition of Done
@@ -541,5 +417,4 @@ Applies to release readiness and repository-wide instruction consistency.
 
 ## Verification Commands
 
-- `git diff -- AGENTS.md .pre-commit-config.yaml`
 - `pytest -q`

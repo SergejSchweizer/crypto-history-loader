@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime
 
 from application.services import fetch_service
@@ -126,6 +126,8 @@ def fetch_symbol_candles(
 ) -> list[SpotCandle]:
     """Fetch one OHLCV symbol using loader-provided adapter dependencies."""
 
+    # Candle datasets must scan all persisted coverage on every run, including older interrupted windows.
+    gapfill_context = replace(runtime_context, tail_delta_only=False)
     return fetch_service.fetch_symbol_candles(
         exchange=exchange,
         market=market,
@@ -140,12 +142,12 @@ def fetch_symbol_candles(
         history_fetcher=dependencies.fetch_candles_all_history,
         range_fetcher=dependencies.fetch_candles_range,
         latest_open_time_reader=dependencies.latest_open_time_in_lake,
-        tail_delta_only=runtime_context.tail_delta_only,
+        tail_delta_only=gapfill_context.tail_delta_only,
         on_history_chunk=on_history_chunk,
         start_open_ms_bound=_symbol_start_open_ms_bound(
             exchange=exchange,
             symbol=symbol,
-            runtime_context=runtime_context,
+            runtime_context=gapfill_context,
         ),
     )
 

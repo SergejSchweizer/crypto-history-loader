@@ -252,7 +252,6 @@ ty check
 lint-imports --config .importlinter
 python scripts/validate_config_with_pydantic.py --config config.yaml
 python scripts/validate_readme_inventory.py
-python scripts/validate_conventional_commit.py
 pytest
 ```
 
@@ -263,20 +262,9 @@ aggregator jobs. Unit and integration suites each use four deterministic test-fi
 enforcement is configured in `pyproject.toml`; main and merge-queue runs combine coverage data from
 all unit and integration shards before reporting.
 
-GitHub repository gates are managed through `scripts/github/apply_quality_gates.sh`, which uses
-`gh api` to configure server-side repository settings. The script is the durable configuration
-entrypoint for merge policy, `main` branch protection, and the default-branch merge-queue ruleset;
-the GitHub web UI should be treated as an inspection surface. Pull requests require the
-`pr-quality` CI job before merge. Pushes to `main` and merge-queue candidates run the full
-`main-quality` job, including coverage. If GitHub rejects API-based merge-queue setup for the
-repository plan or account, the script leaves branch protection active and reports the required
-manual UI step. The protected `main` branch also requires up-to-date branches before merge, linear
-history, resolved PR conversations, no force pushes, and no branch deletions. Repository merge
-settings are squash-only with automatic branch deletion after merge.
-
 ## Update Protocol
 
-Update `ARCHITECTURE.md` in the same PR when a change does any of the following:
+Update `ARCHITECTURE.md` when a change does any of the following:
 
 - changes package dependency direction or import-linter contracts
 - changes a dataset name, path, schema, timestamp semantics, or missing-data policy

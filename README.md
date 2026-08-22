@@ -11,7 +11,7 @@ Author: Sergej Schweizer
 | [`DATASETS.md`](DATASETS.md) | Authoritative Gold dataset catalog: every dataset ID, source contract, feature, feature meaning, null policy, lineage rule, physical status, and build example |
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | Package boundaries, medallion data flow, side effects, storage ownership, and architectural update rules |
 | [`AGENTS.md`](AGENTS.md) | Repository operating and engineering policy |
-| [`BACKLOG.md`](BACKLOG.md) | Authoritative ticket backlog, PR status, branch, date, scope, and acceptance criteria |
+| [`BACKLOG.md`](BACKLOG.md) | Authoritative work-item backlog, scope, and acceptance criteria |
 | [`docs/dataset_inventory.md`](docs/dataset_inventory.md) | Generated physical and contracted dataset inventory when present |
 
 Gold dataset definitions must not be duplicated in this README. Update `DATASETS.md` together with `application/dataset_contracts.py` whenever a Gold contract changes.
@@ -282,18 +282,10 @@ uv run ty check
 uv run lint-imports --config .importlinter
 uv run python scripts/validate_config_with_pydantic.py --config config.yaml
 uv run python scripts/validate_readme_inventory.py
-uv run python scripts/validate_conventional_commit.py --latest
 uv run --extra dev pytest
 ```
 
 `validate_readme_inventory.py` retains its legacy name for compatibility but validates the authoritative Gold catalog in `DATASETS.md`.
-
-Commit subjects and PR titles follow Conventional Commits, for example:
-
-```text
-docs: centralize gold dataset catalog
-feat(gold): add live full dataset contract
-```
 
 ## Roadmap
 
