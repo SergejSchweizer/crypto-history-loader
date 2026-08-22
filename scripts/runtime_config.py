@@ -6,6 +6,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, cast
 
+_POSTGRES_KEYS = ("PGHOST", "PGPORT", "PGUSER", "PGDATABASE", "PGPASSWORD")
+
 
 def _load_yaml_mapping(path: Path) -> dict[str, Any]:
     """Load config YAML as a mapping while preserving explicit error messages."""
@@ -52,3 +54,41 @@ def read_logfile_from_config(config_path: Path | None = None) -> Path:
     raise ValueError(
         "config.yaml must define 'env.DEPTH_SYNC_LOG_FILE', 'env.DEPTH_SYNC_LOG_DIR', or top-level 'logfile'"
     )
+
+
+def read_postgres_env_from_config(config_path: Path | None = None) -> dict[str, str]:
+    """Read only application PostgreSQL variables from protected runtime YAML.
+
+    Values may live under the existing ``env`` mapping or under a dedicated
+    ``postgres-sync`` mapping. Administrator provisioning variables are never
+    returned by this function.
+    """
+
+    path = config_path or Path("config.yaml")
+    if not path.exists():
+        raise FileNotFoundError(f"Config file not found: {path}")
+    config = _load_yaml_mapping(path)
+    resolved: dict[str, str] = {}
+
+    env_config = config.get("env")
+    if isinstance(env_config, dict):
+        for key in _POSTGRES_KEYS:
+            value = env_config.get(key)
+            if value is not None and str(value).strip():
+                resolved[key] = str(value)
+
+    postgres_config = config.get("postgres-sync")
+    if isinstance(postgres_config, dict):
+        aliases = {
+            "host": "PGHOST",
+            "port": "PGPORT",
+            "user": "PGUSER",
+            "database": "PGDATABASE",
+            "password": "PGPASSWORD",
+        }
+        for raw_key, pg_key in aliases.items():
+            value = postgres_config.get(raw_key)
+            if pg_key not in resolved and value is not None and str(value).strip():
+                resolved[pg_key] = str(value)
+
+    return resolved
