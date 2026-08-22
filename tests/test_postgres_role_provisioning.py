@@ -14,6 +14,18 @@ from scripts.provision_postgres_sync_role import (
 )
 
 
+class _Cursor:
+    def __init__(self, role_exists: bool) -> None:
+        self.role_exists = role_exists
+        self.queries: list[str] = []
+
+    def execute(self, query: object, params: object = None) -> None:
+        self.queries.append(query.as_string(None) if hasattr(query, "as_string") else str(query))
+
+    def fetchone(self) -> tuple[object, ...] | None:
+        return (False, False, False, False, False, True) if self.role_exists else None
+
+
 def _valid_env() -> dict[str, str]:
     return {
         "PGHOST": POSTGRES_HOST,
@@ -62,3 +74,15 @@ def test_static_sql_contains_only_least_privilege_contract() -> None:
         assert token in sql_text
     assert "fake-admin-secret" not in sql_text
     assert "fake-app-secret" not in sql_text
+
+
+def test_role_password_is_escaped_into_ddl_without_driver_parameter_placeholder() -> None:
+    cursor = _Cursor(role_exists=False)
+
+    from scripts.provision_postgres_sync_role import _ensure_role
+
+    _ensure_role(cursor, "secret'with-quote")
+
+    assert len(cursor.queries) == 2
+    assert "$1" not in cursor.queries[-1]
+    assert "secret''with-quote" in cursor.queries[-1]

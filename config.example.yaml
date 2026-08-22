@@ -10,7 +10,7 @@ env:
   PGHOST: 10.10.1.3
   PGPORT: 54321
   PGUSER: crypto-history-loader
-  PGDATABASE: market_data
+  PGDATABASE: postgres
   PGPASSWORD: "<set-in-local-config.yaml>"
 export-descriptive-stats:
   lake_root: lake/bronze

@@ -91,18 +91,15 @@ def _ensure_role(cursor: psycopg.Cursor[tuple[object, ...]], app_password: str) 
 
     exists = _validate_role(cursor)
     role_identifier = sql.Identifier(APP_ROLE)
+    password_literal = sql.Literal(app_password)
     if not exists:
         cursor.execute(
             sql.SQL(
-                "CREATE ROLE {} WITH LOGIN PASSWORD %s NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS"
-            ).format(role_identifier),
-            (app_password,),
+                "CREATE ROLE {} WITH LOGIN PASSWORD {} NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS"
+            ).format(role_identifier, password_literal)
         )
     else:
-        cursor.execute(
-            sql.SQL("ALTER ROLE {} WITH PASSWORD %s").format(role_identifier),
-            (app_password,),
-        )
+        cursor.execute(sql.SQL("ALTER ROLE {} WITH PASSWORD {}").format(role_identifier, password_literal))
 
 
 def _schema_owner(cursor: psycopg.Cursor[tuple[object, ...]], schema_name: str) -> str | None:

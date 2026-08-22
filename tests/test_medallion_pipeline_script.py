@@ -349,7 +349,7 @@ def test_apply_env_from_config_exports_postgres_runtime_values(monkeypatch: pyte
                 "PGHOST": "10.10.1.3",
                 "PGPORT": 54321,
                 "PGUSER": "crypto-history-loader",
-                "PGDATABASE": "market_data",
+                "PGDATABASE": "postgres",
                 "PGPASSWORD": "local-only",
             }
         }
@@ -358,7 +358,7 @@ def test_apply_env_from_config_exports_postgres_runtime_values(monkeypatch: pyte
     assert module.os.environ["PGHOST"] == "10.10.1.3"
     assert module.os.environ["PGPORT"] == "54321"
     assert module.os.environ["PGUSER"] == "crypto-history-loader"
-    assert module.os.environ["PGDATABASE"] == "market_data"
+    assert module.os.environ["PGDATABASE"] == "postgres"
     assert module.os.environ["PGPASSWORD"] == "local-only"
 
 
