@@ -25,6 +25,29 @@ The repository implements a deterministic Medallion pipeline:
 Bronze -> Silver -> Gold
 ```
 
+Bronze dataset types present locally:
+
+```text
+funding
+futures_instrument_metadata_snapshot_daily
+futures_summary_snapshot_1m
+historical_volatility
+index_price_snapshot_1m
+instrument_metadata_snapshot_daily
+open_interest
+options_instrument_ticker_snapshot_1m
+options_l2_snapshot_1m
+options_ticker_snapshot_1m
+options_trades
+perps_l2_snapshot_1m
+perps_ohlcv
+perps_trades
+recent_trade_snapshot_1m
+spot_ohlcv
+volatility_index_data
+volatility_index_snapshot_1m
+```
+
 Parquet Gold remains the canonical source of truth. The active PostgreSQL stack below adds a rebuildable serving-plane replica after Gold; it does not move canonical ownership away from Parquet.
 
 The PostgreSQL endpoint is exactly `10.10.1.3:54321`. The dedicated runtime LOGIN role is exactly `crypto-history-loader`. The operational password is supplied only from protected runtime configuration/environment and must never be committed, printed, logged, embedded in examples, placed in command-line arguments, or persisted in sync metadata. Administrator credentials are separate from application runtime credentials.
