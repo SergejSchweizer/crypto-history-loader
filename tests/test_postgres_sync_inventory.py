@@ -19,6 +19,7 @@ def _write_candidate(
     version: str = "v1.0.0",
     value: float = 1.0,
     timestamp_dtype: pl.DataType = UTC_MICROSECOND_TIMESTAMP,
+    build_date_utc: str = "2026-01-01T00:00:00Z",
 ) -> Path:
     artifact_dir = (
         root
@@ -50,6 +51,7 @@ def _write_candidate(
         "max_timestamp": "2026-01-01T00:00:00.123456Z",
         "input_fingerprint": f"fingerprint-{version}-{value}",
         "build_id": f"build-{version}",
+        "build_date_utc": build_date_utc,
     }
     parquet.with_suffix(".json").write_text(json.dumps(manifest), encoding="utf-8")
     return parquet
@@ -66,6 +68,22 @@ def test_selects_highest_semver_without_using_mtime(tmp_path: Path) -> None:
     assert snapshots[0].artifact_path == new.resolve()
     assert snapshots[0].min_timestamp is not None
     assert snapshots[0].min_timestamp.microsecond == 123456
+
+
+def test_selects_newest_build_when_semver_is_unchanged(tmp_path: Path) -> None:
+    old = _write_candidate(tmp_path, value=1.0, build_date_utc="2026-01-01T00:00:00Z")
+    new = old.with_name("BTC_GOLD_newer.parquet")
+    pl.read_parquet(old).with_columns(pl.lit(2.0).alias("value")).write_parquet(new)
+    payload = json.loads(old.with_suffix(".json").read_text(encoding="utf-8"))
+    payload["build_date_utc"] = "2026-01-02T00:00:00Z"
+    payload["input_fingerprint"] = "fingerprint-newer"
+    payload["build_id"] = "build-newer"
+    new.with_suffix(".json").write_text(json.dumps(payload), encoding="utf-8")
+
+    snapshots = discover_current_gold_lineages(tmp_path)
+
+    assert len(snapshots) == 1
+    assert snapshots[0].artifact_path == new.resolve()
 
 
 def test_unregistered_gold_artifacts_are_not_publishable(tmp_path: Path) -> None:

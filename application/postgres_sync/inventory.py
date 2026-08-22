@@ -79,6 +79,13 @@ def _manifest_fingerprint(payload: dict[str, object]) -> str:
     raise ValueError("Gold manifest missing source fingerprint")
 
 
+def _manifest_build_date(payload: dict[str, object]) -> datetime:
+    """Return the UTC build time used to select the newest artifact revision."""
+
+    parsed = _parse_utc_timestamp(payload.get("build_date_utc"), "build_date_utc")
+    return parsed if parsed is not None else datetime.min.replace(tzinfo=UTC)
+
+
 def _manifest_row_count(payload: dict[str, object]) -> int:
     value = payload.get("rows_out")
     if not isinstance(value, int) or isinstance(value, bool) or value < 0:
@@ -133,7 +140,10 @@ def discover_current_gold_lineages(gold_root: str | Path) -> tuple[GoldSourceSna
         return ()
     supported = supported_gold_dataset_ids()
     validate_unique_table_names(supported)
-    by_lineage: dict[GoldLineage, list[tuple[tuple[int, int, int], Path, dict[str, object]]]] = {}
+    by_lineage: dict[
+        GoldLineage,
+        list[tuple[tuple[int, int, int], datetime, Path, dict[str, object]]],
+    ] = {}
 
     for dataset_id in supported:
         for manifest_path in _candidate_manifests(root, dataset_id):
@@ -142,13 +152,20 @@ def discover_current_gold_lineages(gold_root: str | Path) -> tuple[GoldSourceSna
             if lineage.dataset_id != dataset_id:
                 raise ValueError(f"Gold manifest dataset/path mismatch: {manifest_path}")
             version = _manifest_version(payload)
-            by_lineage.setdefault(lineage, []).append((parse_semver(version), manifest_path, payload))
+            by_lineage.setdefault(lineage, []).append(
+                (parse_semver(version), _manifest_build_date(payload), manifest_path, payload)
+            )
 
     snapshots: list[GoldSourceSnapshot] = []
     for lineage in sorted(by_lineage):
         candidates = by_lineage[lineage]
-        highest_version = max(version for version, _, _ in candidates)
-        current = [(path, payload) for version, path, payload in candidates if version == highest_version]
+        highest_version = max(version for version, _, _, _ in candidates)
+        highest_build_date = max(build_date for version, build_date, _, _ in candidates if version == highest_version)
+        current = [
+            (path, payload)
+            for version, build_date, path, payload in candidates
+            if version == highest_version and build_date == highest_build_date
+        ]
         if len(current) != 1:
             raise ValueError(f"duplicate current Gold candidates for lineage {lineage}")
         manifest_path, payload = current[0]
