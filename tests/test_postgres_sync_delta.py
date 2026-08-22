@@ -86,9 +86,7 @@ def test_mixed_complete_state_delta_is_exact() -> None:
 def test_historical_correction_is_detected_without_watermark() -> None:
     old = datetime(2020, 1, 1, tzinfo=UTC)
     recent = datetime(2026, 1, 1, tzinfo=UTC)
-    target = (
-        GoldRowDigest(GoldRowKey("deribit", "BTC", old), canonical_row_hash(_row(old, 1.0))),
-    )
+    target = (GoldRowDigest(GoldRowKey("deribit", "BTC", old), canonical_row_hash(_row(old, 1.0))),)
     source = [_row(old, 9.0), _row(recent, 2.0)]
     plan = plan_gold_delta(source, target, state_exists=True)
     assert plan.updated_count == 1
