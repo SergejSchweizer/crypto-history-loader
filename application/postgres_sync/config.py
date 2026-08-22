@@ -6,8 +6,9 @@ import os
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 
-from application.postgres_sync.contracts import POSTGRES_HOST, POSTGRES_PORT, POSTGRES_ROLE
-
+POSTGRES_HOST = "10.10.1.3"
+POSTGRES_PORT = 54321
+POSTGRES_ROLE = "crypto-history-loader"
 _REQUIRED_KEYS = ("PGHOST", "PGPORT", "PGUSER", "PGDATABASE", "PGPASSWORD")
 
 
