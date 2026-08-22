@@ -85,9 +85,7 @@ class PostgresTableSchema:
 
 def _schema_signature(columns: tuple[PostgresColumn, ...], primary_key: tuple[str, ...]) -> str:
     payload = {
-        "columns": [
-            [column.name, column.source_type, column.postgres_type, column.nullable] for column in columns
-        ],
+        "columns": [[column.name, column.source_type, column.postgres_type, column.nullable] for column in columns],
         "primary_key": list(primary_key),
     }
     canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
@@ -127,9 +125,7 @@ def build_postgres_table_schema(
     qualified = f"{quote_identifier(POSTGRES_CONSUMER_SCHEMA)}.{quote_identifier(table_name)}"
     ddl = (
         f"CREATE SCHEMA IF NOT EXISTS {quote_identifier(POSTGRES_CONSUMER_SCHEMA)};\n"
-        f"CREATE TABLE IF NOT EXISTS {qualified} (\n    "
-        + ",\n    ".join(definitions)
-        + "\n);"
+        f"CREATE TABLE IF NOT EXISTS {qualified} (\n    " + ",\n    ".join(definitions) + "\n);"
     )
     normalized = tuple(columns)
     return PostgresTableSchema(
