@@ -9,6 +9,8 @@ import pytest
 
 from application.postgres_sync.inventory import discover_current_gold_lineages
 
+UTC_MICROSECOND_TIMESTAMP = pl.Datetime("us", "UTC")
+
 
 def _write_candidate(
     root: Path,
@@ -16,7 +18,7 @@ def _write_candidate(
     dataset_id: str = "gold.history.full.m1",
     version: str = "v1.0.0",
     value: float = 1.0,
-    timestamp_dtype: pl.DataType = pl.Datetime("us", "UTC"),
+    timestamp_dtype: pl.DataType = UTC_MICROSECOND_TIMESTAMP,
 ) -> Path:
     artifact_dir = (
         root
@@ -82,7 +84,7 @@ def test_duplicate_current_version_fails(tmp_path: Path) -> None:
 
 def test_wrong_timestamp_unit_or_timezone_fails(tmp_path: Path) -> None:
     _write_candidate(tmp_path, timestamp_dtype=pl.Datetime("ms", "UTC"))
-    with pytest.raises(TypeError, match="Datetime\(us, UTC\)"):
+    with pytest.raises(TypeError, match=r"Datetime\(us, UTC\)"):
         discover_current_gold_lineages(tmp_path)
 
 
