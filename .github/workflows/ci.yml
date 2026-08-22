@@ -50,7 +50,7 @@ jobs:
         run: uv run lint-imports --config .importlinter
 
       - name: Validate config schema
-        run: uv run python scripts/validate_config_with_pydantic.py --config config.yaml
+        run: uv run python scripts/validate_config_with_pydantic.py --config config.example.yaml
 
       - name: Validate README inventory
         run: uv run python scripts/validate_readme_inventory.py
@@ -269,7 +269,7 @@ jobs:
         run: uv run lint-imports --config .importlinter
 
       - name: Validate config schema
-        run: uv run python scripts/validate_config_with_pydantic.py --config config.yaml
+        run: uv run python scripts/validate_config_with_pydantic.py --config config.example.yaml
 
       - name: Validate README inventory
         run: uv run python scripts/validate_readme_inventory.py

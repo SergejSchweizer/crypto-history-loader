@@ -29,7 +29,7 @@ imports:
 	uv run lint-imports --config .importlinter
 
 config-check:
-	uv run python scripts/validate_config_with_pydantic.py --config config.yaml
+	uv run python scripts/validate_config_with_pydantic.py --config config.example.yaml
 
 readme-inventory-check:
 	uv run python scripts/validate_readme_inventory.py

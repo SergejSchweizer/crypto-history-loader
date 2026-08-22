@@ -7,6 +7,11 @@ env:
   DEPTH_DERIBIT_PERP_TRADES_INTER_REQUEST_SLEEP_S: 0.02
   DEPTH_DERIBIT_OPTIONS_TRADES_INTER_REQUEST_SLEEP_S: 0.02
   DEPTH_PERP_TRADES_WINDOW_MINUTES: 60
+  PGHOST: 10.10.1.3
+  PGPORT: 54321
+  PGUSER: crypto-history-loader
+  PGDATABASE: market_data
+  PGPASSWORD: "<set-in-local-config.yaml>"
 export-descriptive-stats:
   lake_root: lake/bronze
   output_csv: docs/tables/descriptive_stats.csv

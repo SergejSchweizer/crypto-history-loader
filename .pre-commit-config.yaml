@@ -33,7 +33,7 @@ repos:
         pass_filenames: false
       - id: pydantic-config
         name: pydantic-config
-        entry: uv run python scripts/validate_config_with_pydantic.py --config config.yaml
+        entry: uv run python scripts/validate_config_with_pydantic.py --config config.example.yaml
         language: system
         pass_filenames: false
       - id: readme-inventory

@@ -338,6 +338,30 @@ def test_default_config_path_falls_back_to_repo_config(tmp_path: Path) -> None:
     assert module._default_config_path(tmp_path) == tmp_path / "config.yaml"
 
 
+def test_apply_env_from_config_exports_postgres_runtime_values(monkeypatch: pytest.MonkeyPatch) -> None:
+    module = _load_pipeline_module()
+    for key in ("PGHOST", "PGPORT", "PGUSER", "PGDATABASE", "PGPASSWORD"):
+        monkeypatch.delenv(key, raising=False)
+
+    module._apply_env_from_config(
+        {
+            "env": {
+                "PGHOST": "10.10.1.3",
+                "PGPORT": 54321,
+                "PGUSER": "crypto-history-loader",
+                "PGDATABASE": "market_data",
+                "PGPASSWORD": "local-only",
+            }
+        }
+    )
+
+    assert module.os.environ["PGHOST"] == "10.10.1.3"
+    assert module.os.environ["PGPORT"] == "54321"
+    assert module.os.environ["PGUSER"] == "crypto-history-loader"
+    assert module.os.environ["PGDATABASE"] == "market_data"
+    assert module.os.environ["PGPASSWORD"] == "local-only"
+
+
 def test_lock_acquire_and_release(tmp_path: Path) -> None:
     module = _load_pipeline_module()
     lock_file = tmp_path / "lock" / "x.lock"

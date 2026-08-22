@@ -69,6 +69,17 @@ def _load_yaml(path: Path) -> dict[str, Any]:
     return loaded
 
 
+def _apply_env_from_config(config_data: dict[str, Any]) -> None:
+    """Export configured runtime values to every child CLI process."""
+
+    env_config = config_data.get("env")
+    if not isinstance(env_config, dict):
+        return
+    for raw_key, value in env_config.items():
+        if value is not None:
+            os.environ[str(raw_key)] = str(value)
+
+
 def _build_steps(*, main_path: Path, config_path: Path, config_data: dict[str, Any]) -> list[PipelineStep]:
     """Build pipeline command sequence and append sync directly after enabled Gold."""
 
@@ -389,6 +400,7 @@ def main() -> int:
         return 2
 
     config_data = _load_yaml(config_path)
+    _apply_env_from_config(config_data)
     steps = _build_steps(main_path=main_path, config_path=config_path, config_data=config_data)
     if getattr(args, "dry_run", False):
         bronze_step = next((step for step in steps if step.name == "bronze"), None)

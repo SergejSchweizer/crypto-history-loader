@@ -17,7 +17,7 @@ REQUIRED_GATE_COMMANDS = (
     "pyright --level error",
     "ty check",
     "lint-imports --config .importlinter",
-    "python scripts/validate_config_with_pydantic.py --config config.yaml",
+    "python scripts/validate_config_with_pydantic.py --config config.example.yaml",
     "python scripts/validate_readme_inventory.py",
     "python scripts/validate_conventional_commit.py",
     "pytest",

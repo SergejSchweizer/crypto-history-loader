@@ -14,6 +14,7 @@
 !REPORT.md
 !RISKS.md
 !TIMELINE.md
+!config.example.yaml
 !Makefile
 !main.py
 !sitecustomize.py
@@ -59,4 +60,6 @@ exports/
 lake_test/
 .env
 .env.*
+config.yaml
+config.local.yaml
 docker/.env

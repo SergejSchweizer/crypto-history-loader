@@ -79,7 +79,8 @@ scripts/             pipeline runners, validation, and maintenance tools
 lake/                local Bronze, Silver, and Gold storage roots
 docs/                generated inventories and documentation assets
 tests/               unit, integration, and regression tests
-config.yaml          canonical runtime configuration
+config.example.yaml  versioned runtime configuration template
+config.yaml          local runtime configuration (ignored; create from the template)
 main.py               Python CLI entrypoint
 DATASETS.md           authoritative Gold dataset catalog
 ARCHITECTURE.md       architecture contract
@@ -104,9 +105,12 @@ Install the Python environment and development quality gates:
 uv sync --extra dev
 ```
 
-Runtime configuration uses `config.yaml`. Protect secrets and credentials:
+Runtime configuration uses the ignored local `config.yaml`. Create it from the safe template and set the
+PostgreSQL password only in the local file:
 
 ```bash
+cp config.example.yaml config.yaml
+# edit config.yaml and set env.PGPASSWORD
 chmod 600 config.yaml
 ```
 
@@ -280,7 +284,7 @@ uv run mypy .
 uv run pyright --level error
 uv run ty check
 uv run lint-imports --config .importlinter
-uv run python scripts/validate_config_with_pydantic.py --config config.yaml
+uv run python scripts/validate_config_with_pydantic.py --config config.example.yaml
 uv run python scripts/validate_readme_inventory.py
 uv run --extra dev pytest
 ```

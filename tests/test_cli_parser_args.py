@@ -128,7 +128,7 @@ def test_medallion_pipeline_cli_args_in_config_are_parser_compatible() -> None:
     """`config.yaml` medallion pipeline cli_args must remain valid for each command parser."""
 
     yaml = pytest.importorskip("yaml")
-    config_path = Path(__file__).resolve().parents[1] / "config.yaml"
+    config_path = Path(__file__).resolve().parents[1] / "config.example.yaml"
     config_data = yaml.safe_load(config_path.read_text(encoding="utf-8"))
     assert isinstance(config_data, dict)
     pipeline_cfg = config_data.get("medallion-pipeline")
@@ -209,7 +209,7 @@ def test_medallion_pipeline_schedules_configured_silver_and_gold_runs() -> None:
     """The cron Medallion run follows explicit Silver and Gold production exclusions."""
 
     yaml = pytest.importorskip("yaml")
-    config_path = Path(__file__).resolve().parents[1] / "config.yaml"
+    config_path = Path(__file__).resolve().parents[1] / "config.example.yaml"
     config_data = yaml.safe_load(config_path.read_text(encoding="utf-8"))
     assert isinstance(config_data, dict)
     pipeline_cfg = config_data.get("medallion-pipeline")

@@ -19,9 +19,13 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
+def _repo_config_path() -> Path:
+    return _repo_root() / "config.example.yaml"
+
+
 def _load_repo_config() -> dict[str, Any]:
     yaml = pytest.importorskip("yaml")
-    config_path = _repo_root() / "config.yaml"
+    config_path = _repo_config_path()
     loaded = yaml.safe_load(config_path.read_text(encoding="utf-8"))
     assert isinstance(loaded, dict), "config.yaml must contain a top-level mapping"
     return loaded
@@ -92,7 +96,7 @@ def test_repo_config_builds_pipeline_steps() -> None:
     module = _load_pipeline_module()
     config = _load_repo_config()
     main_path = _repo_root() / "main.py"
-    config_path = _repo_root() / "config.yaml"
+    config_path = _repo_config_path()
     steps = module._build_steps(main_path=main_path, config_path=config_path, config_data=config)
     assert steps, "Expected at least one enabled medallion pipeline step"
     for step in steps:
@@ -103,7 +107,7 @@ def test_repo_config_medallion_bronze_inherits_symbol_start_bounds() -> None:
     module = _load_pipeline_module()
     config = _load_repo_config()
     main_path = _repo_root() / "main.py"
-    config_path = _repo_root() / "config.yaml"
+    config_path = _repo_config_path()
     steps = module._build_steps(main_path=main_path, config_path=config_path, config_data=config)
     bronze_step = next(step for step in steps if step.name == "bronze")
 
@@ -119,7 +123,7 @@ def test_repo_config_medallion_bronze_uses_tail_delta_mode() -> None:
     module = _load_pipeline_module()
     config = _load_repo_config()
     main_path = _repo_root() / "main.py"
-    config_path = _repo_root() / "config.yaml"
+    config_path = _repo_config_path()
     steps = module._build_steps(main_path=main_path, config_path=config_path, config_data=config)
     bronze_step = next(step for step in steps if step.name == "bronze")
 
