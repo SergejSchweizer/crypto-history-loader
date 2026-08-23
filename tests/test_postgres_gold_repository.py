@@ -74,7 +74,7 @@ class FakeConnection:
 
 
 def _settings() -> PostgresConnectionSettings:
-    return PostgresConnectionSettings("10.10.1.3", 54321, "crypto-history-loader", "market_data", "fake-secret")
+    return PostgresConnectionSettings("10.10.1.3", 54321, "crypto-loader", "market_data", "fake-secret")
 
 
 def _schema() -> Any:
@@ -107,10 +107,10 @@ def test_settings_exact_endpoint_and_secret_redaction() -> None:
     settings = _settings()
     assert settings.host == "10.10.1.3"
     assert settings.port == 54321
-    assert settings.user == "crypto-history-loader"
+    assert settings.user == "crypto-loader"
     assert "fake-secret" not in repr(settings)
     with pytest.raises(ValueError):
-        PostgresConnectionSettings("localhost", 54321, "crypto-history-loader", "db", "secret")
+        PostgresConnectionSettings("localhost", 54321, "crypto-loader", "db", "secret")
 
 
 def test_ensure_lineage_uses_utc_and_non_destructive_ddl() -> None:
@@ -121,7 +121,7 @@ def test_ensure_lineage_uses_utc_and_non_destructive_ddl() -> None:
     sql_trace = "\n".join(query for query, _ in connection.trace)
     assert "SET TIME ZONE 'UTC'" in sql_trace
     assert "TIMESTAMPTZ(6)" in sql_trace
-    assert 'CREATE TABLE IF NOT EXISTS "crypto_history_gold"."gold_history_full_m1"' in sql_trace
+    assert 'CREATE TABLE IF NOT EXISTS "crypto_loader_gold"."gold_history_full_m1"' in sql_trace
     assert "DROP " not in sql_trace.upper()
     assert "TRUNCATE " not in sql_trace.upper()
     assert ("COMMIT", None) in connection.trace
@@ -148,7 +148,7 @@ def test_existing_schema_signature_mismatch_fails_before_rows() -> None:
     with pytest.raises(PostgresSchemaMismatchError):
         repository.ensure_lineage(_snapshot(schema.signature), schema.ddl, schema.signature)
     assert ("ROLLBACK", None) in connection.trace
-    assert not any(query.startswith('INSERT INTO "crypto_history_gold"') for query, _ in connection.trace)
+    assert not any(query.startswith('INSERT INTO "crypto_loader_gold"') for query, _ in connection.trace)
 
 
 def test_apply_delta_order_and_microsecond_preservation() -> None:
@@ -183,7 +183,7 @@ def test_apply_delta_order_and_microsecond_preservation() -> None:
     queries = [query for query, _ in connection.trace]
     lock_idx = next(index for index, query in enumerate(queries) if "pg_advisory_xact_lock" in query)
     insert_idx = next(
-        index for index, query in enumerate(queries) if query.startswith('INSERT INTO "crypto_history_gold"')
+        index for index, query in enumerate(queries) if query.startswith('INSERT INTO "crypto_loader_gold"')
     )
     digest_idx = next(
         index for index, query in enumerate(queries) if "gold_row_hashes" in query and query.startswith("INSERT")
@@ -208,7 +208,7 @@ def test_apply_delta_rolls_back_on_sql_failure() -> None:
     )
     plan = GoldDeltaPlan((payload,), (), (), (), (GoldRowDigest(key, "a" * 64),))
     state = GoldSyncState(lineage, "fingerprint", "c" * 64, 1, timestamp, timestamp, timestamp)
-    connection = FakeConnection(fail_token='INSERT INTO "crypto_history_gold"')
+    connection = FakeConnection(fail_token='INSERT INTO "crypto_loader_gold"')
     repository = PostgresGoldSyncRepository(_settings(), connection_factory=lambda _: connection)
     with pytest.raises(RuntimeError):
         repository.apply_delta(lineage, plan, state)

@@ -644,7 +644,7 @@ def _prediction_target_definitions(dataset_id: str) -> dict[str, object]:
 def _origin_repository(dataset_id: str) -> str:
     if dataset_id.startswith("gold.live."):
         return "crypto-live-loader"
-    return "crypto-history-loader"
+    return "crypto-loader"
 
 
 def _add_strategy_feature_families(pl: Any, frame: Any, dataset_id: str) -> Any:

@@ -309,9 +309,9 @@ def test_log_path_from_config_dir_and_default(tmp_path: Path) -> None:
     module = _load_pipeline_module()
     cfg = {"env": {"DEPTH_SYNC_LOG_DIR": str(tmp_path / "xlogs")}}
     out = module._log_path_from_config(config_data=cfg, repo_root=tmp_path)
-    assert out == (tmp_path / "xlogs" / "crypto-history-loader.log").resolve()
+    assert out == (tmp_path / "xlogs" / "crypto-loader.log").resolve()
     out_default = module._log_path_from_config(config_data={}, repo_root=tmp_path)
-    assert out_default == (tmp_path / ".run" / "logs" / "crypto-history-loader.log").resolve()
+    assert out_default == (tmp_path / ".run" / "logs" / "crypto-loader.log").resolve()
 
 
 def test_log_path_from_config_anchors_relative_dir_to_repo_root(tmp_path: Path) -> None:
@@ -320,7 +320,7 @@ def test_log_path_from_config_anchors_relative_dir_to_repo_root(tmp_path: Path) 
 
     out = module._log_path_from_config(config_data=cfg, repo_root=tmp_path)
 
-    assert out == (tmp_path / ".logs" / "crypto-history-loader.log").resolve()
+    assert out == (tmp_path / ".logs" / "crypto-loader.log").resolve()
 
 
 def test_default_config_path_prefers_runtime_cron_config(tmp_path: Path) -> None:
@@ -348,7 +348,7 @@ def test_apply_env_from_config_exports_postgres_runtime_values(monkeypatch: pyte
             "env": {
                 "PGHOST": "10.10.1.3",
                 "PGPORT": 54321,
-                "PGUSER": "crypto-history-loader",
+                "PGUSER": "crypto-loader",
                 "PGDATABASE": "postgres",
                 "PGPASSWORD": "local-only",
             }
@@ -357,7 +357,7 @@ def test_apply_env_from_config_exports_postgres_runtime_values(monkeypatch: pyte
 
     assert module.os.environ["PGHOST"] == "10.10.1.3"
     assert module.os.environ["PGPORT"] == "54321"
-    assert module.os.environ["PGUSER"] == "crypto-history-loader"
+    assert module.os.environ["PGUSER"] == "crypto-loader"
     assert module.os.environ["PGDATABASE"] == "postgres"
     assert module.os.environ["PGPASSWORD"] == "local-only"
 

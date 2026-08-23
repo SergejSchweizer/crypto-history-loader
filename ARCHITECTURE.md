@@ -1,12 +1,12 @@
 # Architecture
 
-This document is the durable architecture contract for `crypto-history-loader`. Keep it aligned
+This document is the durable architecture contract for `crypto-loader`. Keep it aligned
 with code changes that alter package boundaries, dataset contracts, medallion paths, runtime
 configuration, side effects, or quality gates.
 
 ## System Shape
 
-`crypto-history-loader` is a medallion data platform for deterministic crypto market-history
+`crypto-loader` is a medallion data platform for deterministic crypto market-history
 loading and feature generation.
 
 ```text

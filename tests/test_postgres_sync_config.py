@@ -9,7 +9,7 @@ def _runtime() -> dict[str, object]:
     return {
         "PGHOST": "10.10.1.3",
         "PGPORT": "54321",
-        "PGUSER": "crypto-history-loader",
+        "PGUSER": "crypto-loader",
         "PGDATABASE": "market_data",
         "PGPASSWORD": "fake-runtime-secret",
     }
@@ -19,7 +19,7 @@ def test_runtime_only_configuration() -> None:
     config = PostgresSyncConfig.from_sources(environment={}, runtime_values=_runtime())
     assert config.host == "10.10.1.3"
     assert config.port == 54321
-    assert config.user == "crypto-history-loader"
+    assert config.user == "crypto-loader"
     assert config.database == "market_data"
     assert config.as_env() == {key: str(value) for key, value in _runtime().items()}
     assert "fake-runtime-secret" not in repr(config)

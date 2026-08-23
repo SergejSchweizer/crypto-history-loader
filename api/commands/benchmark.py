@@ -87,7 +87,7 @@ def run_benchmark_build(args: argparse.Namespace, logger: logging.Logger) -> Non
     output = Path(cast(str, args.output_report))
 
     if bool(args.fixture_only):
-        with TemporaryDirectory(prefix="crypto-history-loader-benchmark-") as temporary_directory:
+        with TemporaryDirectory(prefix="crypto-loader-benchmark-") as temporary_directory:
             roots = _write_fixture(Path(temporary_directory))
             _validate_output_path(output=output, roots=roots)
             events = _benchmark_roots(roots=roots, worker_count=worker_count)

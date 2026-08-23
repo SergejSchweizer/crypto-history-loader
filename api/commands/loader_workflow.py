@@ -73,7 +73,7 @@ def run_bronze_build(
         )
 
     try:
-        with dependencies.single_instance_lock(".run/crypto-history-loader.lock"):
+        with dependencies.single_instance_lock(".run/crypto-loader.lock"):
             plan = dependencies.build_bronze_fetch_plan(args=args, logger=logger)
             ohlcv_markets = plan.ohlcv_markets
             data_types = plan.data_types

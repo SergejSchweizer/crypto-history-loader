@@ -443,7 +443,7 @@ def _origin_for_dataset(dataset: str) -> str:
         return "crypto-live-loader"
     if "snapshot" in dataset or dataset in {"recent_trade_snapshot_1m"}:
         return "crypto-live-loader"
-    return "crypto-history-loader"
+    return "crypto-loader"
 
 
 def _require_polars() -> Any:

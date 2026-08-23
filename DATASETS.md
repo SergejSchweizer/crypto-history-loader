@@ -1,7 +1,7 @@
 # Gold Datasets
 
 This file is the canonical human-readable catalog for every Gold dataset supported by
-`crypto-history-loader`. It owns Gold dataset purpose, source contracts, alignment and null
+`crypto-loader`. It owns Gold dataset purpose, source contracts, alignment and null
 semantics, exact feature membership, and feature meaning.
 
 The executable sources of truth are:
@@ -29,7 +29,7 @@ current Lake until it is built.
   manufacture executions.
 - Optional source families have stable typed nullable columns when the optional artifact is absent.
 - `gold.history.full.m1` is the canonical historical market table built only from
-  crypto-history-loader-owned Silver sources.
+  crypto-loader-owned Silver sources.
 - `gold.history.extended.m1` and `gold.history.extended_full.m1` are the same canonical table plus historical-prediction
   features from this repository.
 - `gold.history.full.m5`, `gold.history.full.m30`, and `gold.history.full.h1`
@@ -45,7 +45,7 @@ current Lake until it is built.
 - Gold manifests record the dataset version, feature-set hash, source-data hash, Git commit, source
   lineage, coverage, and build metadata.
 - The latest three versions are retained per dataset/exchange/symbol lineage.
-- History Gold IDs use `crypto-history-loader` as origin. Live Gold IDs use `crypto-live-loader`
+- History Gold IDs use `crypto-loader` as origin. Live Gold IDs use `crypto-live-loader`
   as origin because their required Silver inputs are produced by the live-loader pipeline.
 
 ## Contract inventory
@@ -80,7 +80,7 @@ dataset. Definitions for every feature are in [Feature dictionary](#feature-dict
 
 ### gold.history.full.m1
 
-- Origin: `crypto-history-loader`.
+- Origin: `crypto-loader`.
 - Alignment: union of historical source minute timestamps; source gaps remain null and event-driven
   trade fields are never forward-filled.
 - Feature groups: **Keys**, **Spot OHLCV**, **Perpetual OHLCV**, **Funding state**,
@@ -90,7 +90,7 @@ dataset. Definitions for every feature are in [Feature dictionary](#feature-dict
 
 ### gold.history.extended_full.m1
 
-- Origin: `crypto-history-loader`.
+- Origin: `crypto-loader`.
 - Alignment: same union-minute grid as `gold.history.full.m1`; historical-prediction
   features remain nullable when the source family is unavailable.
 - Feature groups: **Keys**, **Spot OHLCV**, **Perpetual OHLCV**, **Funding state**,
@@ -99,7 +99,7 @@ dataset. Definitions for every feature are in [Feature dictionary](#feature-dict
 
 ### gold.history.extended.m1
 
-- Origin: `crypto-history-loader`.
+- Origin: `crypto-loader`.
 - Alignment: same union-minute grid as `gold.history.full.m1`; historical-prediction
   features remain nullable when the source family is unavailable.
 - Feature groups: **Keys**, **Spot OHLCV**, **Perpetual OHLCV**, **Funding state**,
@@ -108,7 +108,7 @@ dataset. Definitions for every feature are in [Feature dictionary](#feature-dict
 
 ### gold.history.full.m5 / gold.history.full.m30 / gold.history.full.h1
 
-- Origin: `crypto-history-loader`.
+- Origin: `crypto-loader`.
 - Alignment: deterministic bucket-start resample of `gold.history.full.m1` using 5m, 30m, or
   1h buckets.
 - Feature groups: same closed schema as `gold.history.full.m1`.
@@ -118,7 +118,7 @@ dataset. Definitions for every feature are in [Feature dictionary](#feature-dict
 
 ### gold.history.extended.m5 / gold.history.extended.m30 / gold.history.extended.h1
 
-- Origin: `crypto-history-loader`.
+- Origin: `crypto-loader`.
 - Alignment: deterministic bucket-start resample of `gold.history.extended.m1` using 5m, 30m, or
   1h buckets.
 - Feature groups: same closed schema as `gold.history.extended.m1`.

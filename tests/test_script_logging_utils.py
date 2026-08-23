@@ -28,13 +28,13 @@ def test_configure_logger_uses_module_file_under_configured_log_root(tmp_path: P
             if getattr(handler, "formatter", None) is not None
         ]
 
-        assert logger.name == "crypto_history_loader.agents-sync"
+        assert logger.name == "crypto_loader.agents-sync"
         assert log_root / "agents-sync.log" in file_paths
-        assert log_root / "crypto-history-loader.log" not in file_paths
+        assert log_root / "crypto-loader.log" not in file_paths
         assert any("%(name)s" in item for item in formats)
         assert all("|" not in item for item in formats)
     finally:
         for handler in list(logger.handlers):
             logger.removeHandler(handler)
             handler.close()
-        logging.getLogger("crypto_history_loader.agents-sync").handlers.clear()
+    logging.getLogger("crypto_loader.agents-sync").handlers.clear()

@@ -174,7 +174,7 @@ def test_inventory_renders_stable_json_and_markdown(tmp_path: Path) -> None:
     assert "`gold.history.extended_full.m1`" in markdown
     assert "`gold.live.full.m1`" in markdown
     history_full = next(row for row in rows if row.layer == "gold" and row.dataset == "gold.history.full.m1")
-    assert history_full.origin_repository == "crypto-history-loader"
+    assert history_full.origin_repository == "crypto-loader"
 
 
 def test_inventory_command_writes_explicit_output_only(tmp_path: Path) -> None:

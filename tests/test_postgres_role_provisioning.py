@@ -42,9 +42,9 @@ def test_provisioning_config_exact_identity_and_redaction() -> None:
     assert config.host == "10.10.1.3"
     assert config.port == 54321
     assert config.database == "market_data"
-    assert APP_ROLE == "crypto-history-loader"
-    assert CONSUMER_SCHEMA == "crypto_history_gold"
-    assert SYNC_SCHEMA == "crypto_history_sync"
+    assert APP_ROLE == "crypto-loader"
+    assert CONSUMER_SCHEMA == "crypto_loader_gold"
+    assert SYNC_SCHEMA == "crypto_loader_sync"
     rendered = repr(config)
     assert "fake-admin-secret" not in rendered
     assert "fake-app-secret" not in rendered
@@ -67,9 +67,9 @@ def test_wrong_endpoint_is_rejected() -> None:
 
 def test_static_sql_contains_only_least_privilege_contract() -> None:
     sql_text = (Path(__file__).resolve().parents[1] / "infra/postgres/provisioning.sql").read_text(encoding="utf-8")
-    assert '"crypto-history-loader"' in sql_text
-    assert '"crypto_history_gold"' in sql_text
-    assert '"crypto_history_sync"' in sql_text
+    assert '"crypto-loader"' in sql_text
+    assert '"crypto_loader_gold"' in sql_text
+    assert '"crypto_loader_sync"' in sql_text
     for token in ("NOSUPERUSER", "NOCREATEDB", "NOCREATEROLE", "NOREPLICATION", "NOBYPASSRLS"):
         assert token in sql_text
     assert "fake-admin-secret" not in sql_text

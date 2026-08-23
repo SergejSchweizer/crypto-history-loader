@@ -163,7 +163,7 @@ wheels = [
 ]
 
 [[package]]
-name = "crypto-history-loader"
+name = "crypto-loader"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [

@@ -14,7 +14,7 @@ from application.postgres_sync import GoldSyncResult
 def _set_valid_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("PGHOST", "10.10.1.3")
     monkeypatch.setenv("PGPORT", "54321")
-    monkeypatch.setenv("PGUSER", "crypto-history-loader")
+    monkeypatch.setenv("PGUSER", "crypto-loader")
     monkeypatch.setenv("PGDATABASE", "market_data")
     monkeypatch.setenv("PGPASSWORD", "fake-secret")
 

@@ -75,7 +75,7 @@ def _inventory_policy_errors(
     for row in rows:
         if row.layer != "gold":
             continue
-        expected_origin = "crypto-live-loader" if row.dataset.startswith("gold.live.") else "crypto-history-loader"
+    expected_origin = "crypto-live-loader" if row.dataset.startswith("gold.live.") else "crypto-loader"
         if row.origin_repository != expected_origin:
             errors.append(
                 f"Gold dataset has wrong origin: {row.dataset} -> {row.origin_repository}; expected {expected_origin}"

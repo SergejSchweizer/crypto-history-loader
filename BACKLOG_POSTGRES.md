@@ -1,23 +1,23 @@
 # PostgreSQL Gold Sync Backlog
 
 This backlog extension is the implementation source of truth for replicating the current Gold serving state from
-`crypto-history-loader` into PostgreSQL. It intentionally follows the proven PostgreSQL Gold-sync architecture in
+`crypto-loader` into PostgreSQL. It intentionally follows the proven PostgreSQL Gold-sync architecture in
 `market-regime-loader`, but adapts it to this repository's larger, heterogeneous Gold contract set.
 
 The PostgreSQL endpoint is exactly `10.10.1.3:54321`. Parquet Gold under the repository Gold lake remains the
 canonical source of truth; PostgreSQL is a rebuildable serving-plane replica. Only registered Gold datasets are
 eligible for replication. Bronze and Silver data must never be written to PostgreSQL by this stack.
 
-The dedicated PostgreSQL LOGIN role is exactly `crypto-history-loader`. Because the role name contains hyphens,
-provisioning SQL must quote it as `"crypto-history-loader"`. The operational password is supplied out-of-band via
+The dedicated PostgreSQL LOGIN role is exactly `crypto-loader`. Because the role name contains hyphens,
+provisioning SQL must quote it as `"crypto-loader"`. The operational password is supplied out-of-band via
 protected runtime configuration/environment and must never be committed, printed, logged, embedded in examples, or
 persisted in sync metadata. Administrator credentials used to create the role are separate from application runtime
 credentials.
 
-PostgreSQL consumer data lives in schema `crypto_history_gold`. Synchronization state lives separately in schema
-`crypto_history_sync`. Every registered Gold dataset maps one-to-one to a consumer table whose name is derived
+PostgreSQL consumer data lives in schema `crypto_loader_gold`. Synchronization state lives separately in schema
+`crypto_loader_sync`. Every registered Gold dataset maps one-to-one to a consumer table whose name is derived
 deterministically from the dataset ID by replacing `.` with `_`, for example
-`gold.market.regime_features.m1 -> crypto_history_gold.gold_market_regime_features_m1`. All current registered Gold
+`gold.market.regime_features.m1 -> crypto_loader_gold.gold_market_regime_features_m1`. All current registered Gold
 dataset IDs must map uniquely and fit PostgreSQL's identifier length limit; collisions or overlong names are hard
 errors, never silently shortened.
 
@@ -134,8 +134,8 @@ Description:
   acceptance criteria, and parallel waves for weak agents.
 - R2: Define the serving-plane contract: only registered current Gold is replicated to `10.10.1.3:54321`; Parquet
   Gold remains authoritative and Bronze/Silver replication is forbidden.
-- R3: Define the exact runtime role `crypto-history-loader`, consumer schema `crypto_history_gold`, internal schema
-  `crypto_history_sync`, and strict no-secret-in-Git/logging policy.
+- R3: Define the exact runtime role `crypto-loader`, consumer schema `crypto_loader_gold`, internal schema
+  `crypto_loader_sync`, and strict no-secret-in-Git/logging policy.
 - R4: Define deterministic one-table-per-Gold-dataset mapping and composite row identity
   `(exchange, symbol, timestamp_m1)`.
 - R5: Define first-full/later-delta reconciliation using current Gold fingerprints plus complete row digests for changed
@@ -178,11 +178,11 @@ Allowed files: `application/postgres_sync/__init__.py`, `application/postgres_sy
 Description:
 - R1: Add immutable typed contracts for `GoldLineage`, `GoldSourceSnapshot`, `GoldSyncState`, `GoldRowDigest`,
   `GoldDeltaPlan`, and `GoldSyncResult`; counts must include inserted/updated/deleted/unchanged.
-- R2: Define exact constants for host `10.10.1.3`, port `54321`, role `crypto-history-loader`, consumer schema
-  `crypto_history_gold`, sync schema `crypto_history_sync`, state table `gold_sync_state`, and digest table
+- R2: Define exact constants for host `10.10.1.3`, port `54321`, role `crypto-loader`, consumer schema
+  `crypto_loader_gold`, sync schema `crypto_loader_sync`, state table `gold_sync_state`, and digest table
   `gold_row_hashes`.
 - R3: Define deterministic dataset-ID -> consumer-table mapping by replacing `.` with `_`; reject invalid characters,
-  collisions, names longer than 63 bytes, or mapping outside `crypto_history_gold`.
+  collisions, names longer than 63 bytes, or mapping outside `crypto_loader_gold`.
 - R4: Define the publishable Gold row key exactly as `(exchange, symbol, timestamp_m1)` and add a contract check proving
   every current `supported_gold_build_ids()` dataset can satisfy this key; no current Gold contract may be silently
   excluded.
@@ -306,7 +306,7 @@ Commit: `feat(PR-71): map Gold schemas to PostgreSQL DDL`
 Allowed files: `application/postgres_sync/schema.py`, `tests/test_postgres_sync_schema.py`
 
 Description:
-- R1: Implement deterministic, quoted PostgreSQL DDL generation for one consumer table in `crypto_history_gold` using
+- R1: Implement deterministic, quoted PostgreSQL DDL generation for one consumer table in `crypto_loader_gold` using
   the PR-68 table-name mapping and source column order; the primary key is exactly
   `(exchange, symbol, timestamp_m1)`.
 - R2: Map datetime to `TIMESTAMPTZ(6)` in UTC, date to `DATE`, string/categorical/enum to `TEXT`, boolean to `BOOLEAN`,
@@ -354,9 +354,9 @@ Description:
 - R1: Add `psycopg` as the only new PostgreSQL runtime client; do not add SQLAlchemy, an ORM, or a second PostgreSQL
   driver.
 - R2: Implement connection creation from injected `PGHOST/PGPORT/PGUSER/PGDATABASE/PGPASSWORD`, require exact host
-  `10.10.1.3`, port `54321`, user `crypto-history-loader`, and force session timezone UTC before any data operation.
+  `10.10.1.3`, port `54321`, user `crypto-loader`, and force session timezone UTC before any data operation.
 - R3: Implement idempotent creation/validation of consumer tables from PR-71 DDL plus internal tables
-  `crypto_history_sync.gold_sync_state` and `crypto_history_sync.gold_row_hashes`; internal tables are not exposed as
+  `crypto_loader_sync.gold_sync_state` and `crypto_loader_sync.gold_row_hashes`; internal tables are not exposed as
   consumer Gold tables.
 - R4: Read per-lineage sync state, target summary `(count,min_timestamp,max_timestamp)`, and complete
   `(exchange,symbol,timestamp_m1,row_sha256)` digest state without fetching unchanged consumer feature payloads.
@@ -409,13 +409,13 @@ Allowed files: `scripts/provision_postgres_sync_role.py`, `infra/postgres/provis
 
 Description:
 - R1: Add an idempotent operator provisioning command targeting exactly `10.10.1.3:54321` that creates or validates
-  the LOGIN role exactly `crypto-history-loader`; static SQL must quote the hyphenated role name.
+  the LOGIN role exactly `crypto-loader`; static SQL must quote the hyphenated role name.
 - R2: Receive administrator username/password and application-role password only from protected environment/runtime
   input; no operational secret may occur in tracked files, command arguments visible in process listings, examples,
   logs, or exception text.
 - R3: Enforce exact role attributes `LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS`.
-- R4: Create/validate schemas `crypto_history_gold` and `crypto_history_sync` owned by or granting only sufficient
-  `USAGE/CREATE` rights to `crypto-history-loader`; do not grant rights on schemas owned by other repositories.
+- R4: Create/validate schemas `crypto_loader_gold` and `crypto_loader_sync` owned by or granting only sufficient
+  `USAGE/CREATE` rights to `crypto-loader`; do not grant rights on schemas owned by other repositories.
 - R5: Keep administrator credentials completely separate from application runtime credentials and never export admin
   credentials into Medallion/CLI runtime configuration.
 - R6: Make repeated provisioning idempotent; incompatible pre-existing role attributes/schema ownership fail safely
@@ -426,11 +426,11 @@ Description:
   idempotency behavior, quoted role identity, and absence of literal credentials.
 
 Acceptance:
-- A1 (verifies R1): command/SQL fixtures resolve exact endpoint and exact role `crypto-history-loader`.
+- A1 (verifies R1): command/SQL fixtures resolve exact endpoint and exact role `crypto-loader`.
 - A2 (verifies R2): tracked content contains only environment variable references/test placeholders and process-command
   construction never embeds a password argument.
 - A3 (verifies R3): SQL contract asserts all six exact least-privilege attributes.
-- A4 (verifies R4): only `crypto_history_gold` and `crypto_history_sync` rights are provisioned for the application role.
+- A4 (verifies R4): only `crypto_loader_gold` and `crypto_loader_sync` rights are provisioned for the application role.
 - A5 (verifies R5): admin inputs are distinct and absent from application-role output/config objects.
 - A6 (verifies R6): second-run fixture is a no-op/validation pass while incompatible state fails without privilege
   escalation.
@@ -455,7 +455,7 @@ Allowed files: `application/postgres_sync/config.py`, `scripts/runtime_config.py
 
 Description:
 - R1: Define a typed runtime configuration loader resolving exact `PGHOST=10.10.1.3`, `PGPORT=54321`,
-  `PGUSER=crypto-history-loader`, required non-empty `PGDATABASE`, and required protected `PGPASSWORD` from environment
+  `PGUSER=crypto-loader`, required non-empty `PGDATABASE`, and required protected `PGPASSWORD` from environment
   or the repository's already-ignored runtime config; tracked source/docs must contain no password value.
 - R2: Preserve existing logging/runtime behavior in `scripts/runtime_config.py`; PostgreSQL support is additive and
   must not change existing log-path resolution.
@@ -633,10 +633,10 @@ Acceptance:
 
 The PostgreSQL Gold serving-plane stack is complete only when all of the following are true:
 
-- `crypto-history-loader` Gold Parquet remains canonical and PostgreSQL contains no Bronze/Silver serving tables from
+- `crypto-loader` Gold Parquet remains canonical and PostgreSQL contains no Bronze/Silver serving tables from
   this stack.
-- The exact dedicated runtime role `crypto-history-loader` exists with least privilege on only
-  `crypto_history_gold` and `crypto_history_sync` within the configured database.
+- The exact dedicated runtime role `crypto-loader` exists with least privilege on only
+  `crypto_loader_gold` and `crypto_loader_sync` within the configured database.
 - Every current materialized registered Gold lineage has exactly one current PostgreSQL representation; retained old
   Gold versions are not duplicated into PostgreSQL.
 - First sync performs a complete lineage bootstrap; later runs write only accumulated INSERT/UPDATE/DELETE deltas.

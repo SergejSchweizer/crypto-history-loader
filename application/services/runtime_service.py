@@ -23,9 +23,9 @@ from application.services.fetch_runtime_policy import (
     fetch_concurrency as _fetch_concurrency,
 )
 
-LOGGER_NAME = "crypto_history_loader"
+LOGGER_NAME = "crypto_loader"
 DEFAULT_LOG_DIR = ".logs"
-DEFAULT_LOG_FILE = "crypto-history-loader.log"
+DEFAULT_LOG_FILE = "crypto-loader.log"
 DEFAULT_FETCH_CONCURRENCY = _DEFAULT_FETCH_CONCURRENCY
 MAX_FETCH_CONCURRENCY = _MAX_FETCH_CONCURRENCY
 LOG_PLAIN_DAILY_FILES = 5
@@ -247,7 +247,7 @@ class SingleInstanceLock:
         except BlockingIOError as exc:
             os.close(self._fd)
             self._fd = None
-            raise SingleInstanceError("Another crypto-history-loader instance is already running. Exiting.") from exc
+            raise SingleInstanceError("Another crypto-loader instance is already running. Exiting.") from exc
         os.ftruncate(self._fd, 0)
         os.write(self._fd, str(os.getpid()).encode("utf-8"))
         return self
@@ -264,10 +264,10 @@ def _safe_log_module_name(module_name: str) -> str:
     """Return a filesystem-safe log module name."""
 
     normalized = module_name.strip().replace("/", "-").replace("\\", "-")
-    return normalized or "crypto-history-loader"
+    return normalized or "crypto-loader"
 
 
-def configure_logging(module_name: str = "crypto-history-loader", *, debug: bool = False) -> logging.Logger:
+def configure_logging(module_name: str = "crypto-loader", *, debug: bool = False) -> logging.Logger:
     """Configure process logging with daily rotation and repository retention."""
 
     safe_module_name = _safe_log_module_name(module_name)
@@ -279,7 +279,7 @@ def configure_logging(module_name: str = "crypto-history-loader", *, debug: bool
     logger.propagate = False
     formatter = logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s")
     log_file_env = os.getenv("DEPTH_SYNC_LOG_FILE", "").strip()
-    use_explicit_log_file = bool(log_file_env) and safe_module_name in {"", "crypto-history-loader"}
+    use_explicit_log_file = bool(log_file_env) and safe_module_name in {"", "crypto-loader"}
     if use_explicit_log_file:
         log_path = Path(log_file_env)
     else:

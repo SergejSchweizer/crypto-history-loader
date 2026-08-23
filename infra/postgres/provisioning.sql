@@ -3,11 +3,11 @@
 -- the application password as a runtime parameter and never renders it into SQL text.
 
 -- Required role identity/attributes:
--- CREATE ROLE "crypto-history-loader" WITH
+-- CREATE ROLE "crypto-loader" WITH
 --   LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
 
-CREATE SCHEMA IF NOT EXISTS "crypto_history_gold" AUTHORIZATION "crypto-history-loader";
-CREATE SCHEMA IF NOT EXISTS "crypto_history_sync" AUTHORIZATION "crypto-history-loader";
+CREATE SCHEMA IF NOT EXISTS "crypto_loader_gold" AUTHORIZATION "crypto-loader";
+CREATE SCHEMA IF NOT EXISTS "crypto_loader_sync" AUTHORIZATION "crypto-loader";
 
-GRANT USAGE, CREATE ON SCHEMA "crypto_history_gold" TO "crypto-history-loader";
-GRANT USAGE, CREATE ON SCHEMA "crypto_history_sync" TO "crypto-history-loader";
+GRANT USAGE, CREATE ON SCHEMA "crypto_loader_gold" TO "crypto-loader";
+GRANT USAGE, CREATE ON SCHEMA "crypto_loader_sync" TO "crypto-loader";

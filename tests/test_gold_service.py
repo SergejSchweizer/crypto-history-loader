@@ -346,7 +346,7 @@ def test_gold_service_delegation_boundaries(monkeypatch: pytest.MonkeyPatch) -> 
     assert service._strategy_feature_lookbacks("gold.market.full.m1") == {}
     assert service._prediction_target_definitions("gold.market.full.m1") == {}
     assert service._origin_repository("gold.live.full.m1") == "crypto-live-loader"
-    assert service._origin_repository("gold.history.full.m1") == "crypto-history-loader"
+    assert service._origin_repository("gold.history.full.m1") == "crypto-loader"
     assert service._add_strategy_feature_families(sentinel, sentinel, "gold.market.full.m1") is sentinel
     assert service._add_prediction_targets(sentinel, sentinel, "gold.market.full.m1") is sentinel
     assert service._add_live_extended_feature_families(sentinel, sentinel, "gold.market.full.m1") is sentinel
