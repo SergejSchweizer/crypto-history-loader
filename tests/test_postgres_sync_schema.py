@@ -21,7 +21,7 @@ def _base_schema() -> OrderedDict[str, pl.DataType]:
 
 def test_exact_table_order_key_and_timestamp_type() -> None:
     mapped = build_postgres_table_schema("gold.history.full.m1", _base_schema())
-    assert mapped.schema_name == "crypto_loader_gold"
+    assert mapped.schema_name == "crypto_loader"
     assert mapped.table_name == "gold_history_full_m1"
     assert [column.name for column in mapped.columns] == ["exchange", "symbol", "timestamp_m1", "value"]
     assert mapped.primary_key == ("exchange", "symbol", "timestamp_m1")

@@ -6,8 +6,8 @@
 -- CREATE ROLE "crypto-loader" WITH
 --   LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
 
-CREATE SCHEMA IF NOT EXISTS "crypto_loader_gold" AUTHORIZATION "crypto-loader";
+CREATE SCHEMA IF NOT EXISTS "crypto_loader" AUTHORIZATION "crypto-loader";
 CREATE SCHEMA IF NOT EXISTS "crypto_loader_sync" AUTHORIZATION "crypto-loader";
 
-GRANT USAGE, CREATE ON SCHEMA "crypto_loader_gold" TO "crypto-loader";
+GRANT USAGE, CREATE ON SCHEMA "crypto_loader" TO "crypto-loader";
 GRANT USAGE, CREATE ON SCHEMA "crypto_loader_sync" TO "crypto-loader";

@@ -36,7 +36,7 @@ def test_exact_postgres_identity_constants() -> None:
     assert POSTGRES_HOST == "10.10.1.3"
     assert POSTGRES_PORT == 54321
     assert POSTGRES_ROLE == "crypto-loader"
-    assert POSTGRES_CONSUMER_SCHEMA == "crypto_loader_gold"
+    assert POSTGRES_CONSUMER_SCHEMA == "crypto_loader"
     assert POSTGRES_SYNC_SCHEMA == "crypto_loader_sync"
     assert POSTGRES_SYNC_STATE_TABLE == "gold_sync_state"
     assert POSTGRES_ROW_HASH_TABLE == "gold_row_hashes"

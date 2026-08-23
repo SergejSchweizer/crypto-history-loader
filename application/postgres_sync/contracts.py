@@ -11,7 +11,7 @@ from typing import Protocol, runtime_checkable
 POSTGRES_HOST = "10.10.1.3"
 POSTGRES_PORT = 54321
 POSTGRES_ROLE = "crypto-loader"
-POSTGRES_CONSUMER_SCHEMA = "crypto_loader_gold"
+POSTGRES_CONSUMER_SCHEMA = "crypto_loader"
 POSTGRES_SYNC_SCHEMA = "crypto_loader_sync"
 POSTGRES_SYNC_STATE_TABLE = "gold_sync_state"
 POSTGRES_ROW_HASH_TABLE = "gold_row_hashes"

@@ -14,7 +14,7 @@ from psycopg import sql
 POSTGRES_HOST = "10.10.1.3"
 POSTGRES_PORT = 54321
 APP_ROLE = "crypto-loader"
-CONSUMER_SCHEMA = "crypto_loader_gold"
+CONSUMER_SCHEMA = "crypto_loader"
 SYNC_SCHEMA = "crypto_loader_sync"
 _REQUIRED_ROLE_ATTRIBUTES = {
     "rolsuper": False,
