@@ -21,6 +21,11 @@ def _isolate_cli_test_logs(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> N
     """Keep CLI tests from writing to the configured runtime log directory."""
 
     monkeypatch.setenv("DEPTH_SYNC_LOG_DIR", str(tmp_path / "logs"))
+    monkeypatch.setattr(
+        cli,
+        "_load_yaml_config",
+        lambda _path: {"env": {}, "export-descriptive-stats": {}, "bronze-build": {}},
+    )
 
 
 def test_single_instance_lock_creates_lock_file(tmp_path: Path) -> None:

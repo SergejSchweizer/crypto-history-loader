@@ -182,9 +182,7 @@ def test_apply_delta_order_and_microsecond_preservation() -> None:
 
     queries = [query for query, _ in connection.trace]
     lock_idx = next(index for index, query in enumerate(queries) if "pg_advisory_xact_lock" in query)
-    insert_idx = next(
-        index for index, query in enumerate(queries) if query.startswith('INSERT INTO "crypto_loader"')
-    )
+    insert_idx = next(index for index, query in enumerate(queries) if query.startswith('INSERT INTO "crypto_loader"'))
     digest_idx = next(
         index for index, query in enumerate(queries) if "gold_row_hashes" in query and query.startswith("INSERT")
     )
