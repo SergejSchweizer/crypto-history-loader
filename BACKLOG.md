@@ -2,7 +2,7 @@
 
 This file is the single implementation backlog for `crypto-loader`.
 
-Last updated: 2026-08-22
+Last updated: 2026-08-24
 
 ## Backlog policy
 
@@ -71,7 +71,7 @@ Every publishable current Gold contract must expose those three fields. Unsuppor
 
 ### Timestamp compatibility contract
 
-The timestamp contract must be type-compatible with the implemented `market-regime-loader` Gold/PostgreSQL serving path.
+The timestamp contract must be type-compatible with the implemented `regime-loader` and `xetra-loader` PostgreSQL serving paths.
 
 Canonical source timestamp type:
 
@@ -93,8 +93,10 @@ Mandatory invariants:
 - Internal sync timestamps are also exactly `TIMESTAMPTZ(6)`: `gold_sync_state.min_timestamp`, `gold_sync_state.max_timestamp`, `gold_sync_state.synced_at_utc`, and `gold_row_hashes.timestamp_m1`.
 - Every PostgreSQL sync session explicitly uses timezone `UTC`.
 - `TIMESTAMP WITHOUT TIME ZONE`, naive datetimes, non-UTC timestamp semantics, millisecond/nanosecond timestamp storage, and PostgreSQL timestamp precision other than `(6)` are forbidden at this boundary.
+- The PostgreSQL persistence boundary receives only timezone-aware UTC values with zero offset; any non-UTC aware value must be normalized upstream before the persistence contract and is rejected if it reaches that boundary.
 - Timestamp round-trip tests must prove that an aware UTC microsecond source value is read back from PostgreSQL with identical instant and microsecond precision.
-- This mirrors the `market-regime-loader` convention: source Gold `Datetime(us, UTC)` and PostgreSQL `TIMESTAMPTZ(6)` with a UTC session. The observation semantics of the crypto datasets remain their own; only the timestamp type/precision/timezone contract is shared.
+- PostgreSQL stores typed instants rather than a textual datetime format. Where acceptance artifacts/logs serialize an instant, the canonical diagnostic form is `YYYY-MM-DDTHH:MM:SS.ffffffZ`.
+- This is the shared `pg-temporal-v1` convention across `crypto-loader`, `regime-loader`, and `xetra-loader`; observation semantics remain repository-specific.
 
 Synchronization is state reconciliation, not a timestamp-watermark feed:
 
@@ -145,6 +147,12 @@ PR-69 delta        PR-70 inventory  PR-71 schema mapper
                                       |
                                       v
                                   PR-77 Medallion integration
+                                      |
+                                      v
+                                  PR-79 temporal verifier
+                                      |
+                                      v
+                                  PR-80 forced PG rewrite
 ```
 
 Maximum safe parallelism:
@@ -155,6 +163,8 @@ Maximum safe parallelism:
 - Wave 4: PR-75 after PR-69, PR-70, PR-72.
 - Wave 5: PR-76 after PR-74 and PR-75.
 - Wave 6: PR-77 after PR-73 and PR-76.
+- Wave 7: PR-79 after PR-77 and this PR-78 planning contract.
+- Final serial gate: PR-80 after PR-79.
 
 ---
 
@@ -180,7 +190,7 @@ Description:
 - R6: Define atomic lineage transactions, advisory locks, schema-mismatch failure behavior, and forbidden destructive SQL during normal sync.
 - R7: Define Medallion ordering `Bronze -> Silver -> Gold -> PostgreSQL`, Gold-success gating, non-rollback of already-published Gold, and sync-only retry semantics.
 - R8: Move completed backlog history out of the active section and summarize completed work only at the end of this file; explicitly distinguish superseded PR-47 through PR-53 from completed work.
-- R9: Make the timestamp boundary exactly type-compatible with `market-regime-loader`: canonical source `timestamp_m1` is `Datetime(us, UTC)`, all PostgreSQL timestamp/datetime columns are `TIMESTAMPTZ(6)`, and every sync session is UTC.
+- R9: Make the timestamp boundary exactly type-compatible with `regime-loader` and `xetra-loader`: canonical source `timestamp_m1` is `Datetime(us, UTC)`, all PostgreSQL timestamp/datetime columns are `TIMESTAMPTZ(6)`, and every sync session is UTC.
 
 Acceptance:
 - A1 (verifies R1): repository root contains `BACKLOG.md` and no `BACKLOG_POSTGRES.md`; repository contains no second backlog source of truth.
@@ -311,7 +321,7 @@ Allowed files: `application/postgres_sync/schema.py`, `tests/test_postgres_sync_
 
 Description:
 - R1: Generate deterministic quoted PostgreSQL DDL for one table in `crypto_loader` using source column order; primary key exactly `(exchange, symbol, timestamp_m1)`.
-- R2: Match `market-regime-loader` timestamp storage exactly: canonical `timestamp_m1` source type is `Polars Datetime(time_unit="us", time_zone="UTC")`; every source timestamp/datetime column maps to PostgreSQL `TIMESTAMPTZ(6)` and every true date maps to `DATE`. Map string/categorical/enum -> `TEXT`, bool -> `BOOLEAN`, signed integer -> `BIGINT`, UInt64 -> `NUMERIC(20,0)`, float -> `DOUBLE PRECISION`, decimal -> exact `NUMERIC`, binary -> `BYTEA`, list/struct-like -> `JSONB`; reject unknown/ambiguous dtypes and reject naive/non-UTC timestamp source types rather than silently changing semantics.
+- R2: Match the shared `pg-temporal-v1` storage contract: canonical `timestamp_m1` source type is `Polars Datetime(time_unit="us", time_zone="UTC")`; every source timestamp/datetime column maps to PostgreSQL `TIMESTAMPTZ(6)` and every true date maps to `DATE`. Map string/categorical/enum -> `TEXT`, bool -> `BOOLEAN`, signed integer -> `BIGINT`, UInt64 -> `NUMERIC(20,0)`, float -> `DOUBLE PRECISION`, decimal -> exact `NUMERIC`, binary -> `BYTEA`, list/struct-like -> `JSONB`; reject unknown/ambiguous dtypes and reject naive/non-UTC timestamp source types rather than silently changing semantics.
 - R3: Quote every schema/table/column identifier safely; dataset IDs and source column names are never interpolated unquoted.
 - R4: Generate deterministic schema signature from ordered `(column_name, normalized_source_type, postgres_type, nullable)` entries plus primary-key contract.
 - R5: Require `exchange`, `symbol`, `timestamp_m1` to exist and be non-nullable at the logical-key boundary; do not invent surrogate IDs or row-position keys.
@@ -529,7 +539,7 @@ Description:
 - R3: PostgreSQL failure makes Medallion non-zero and logs failed active step, but already published local Gold and existing NAS mirror remain untouched/authoritative.
 - R4: Preserve existing Sunday cron schedule; no second PostgreSQL cron job. Every manual Medallion invocation receives same post-Gold behavior.
 - R5: Use PR-74 protected runtime configuration only; no PostgreSQL/admin password in pipeline script, README, ARCHITECTURE, tests, command line, or logged plan.
-- R6: Document PostgreSQL as rebuildable Gold-only serving replica, exact endpoint/user/schema names, first-full/later-delta behavior, current-version-only selection, manual retry, schema-migration failure semantics, and exact timestamp compatibility with `market-regime-loader`: source `Datetime(us, UTC)`, PostgreSQL `TIMESTAMPTZ(6)`, UTC session.
+- R6: Document PostgreSQL as rebuildable Gold-only serving replica, exact endpoint/user/schema names, first-full/later-delta behavior, current-version-only selection, manual retry, schema-migration failure semantics, and exact timestamp compatibility with the shared `pg-temporal-v1` convention: source `Datetime(us, UTC)`, PostgreSQL `TIMESTAMPTZ(6)`, UTC session.
 - R7: Add deterministic Medallion tests for exact order `bronze -> silver -> gold -> postgres-gold-sync`, Gold-failure gating, PostgreSQL-failure propagation, no-op, retry without rebuilding Gold, dry-run inclusion, and timestamp-contract preservation.
 - R8: Run complete configured quality suite (Ruff lint/format, Mypy, Pyright, ty, import-linter, config validation, docs inventory validation, Pytest, coverage) and record any environment-only check that cannot run.
 
@@ -540,8 +550,97 @@ Acceptance:
 - A4 (verifies R4): no second scheduled PostgreSQL cron is introduced and docs state existing Sunday Medallion run owns scheduling.
 - A5 (verifies R5): touched-file scans contain no operational/admin credential literal and dry-run output has no password/DSN.
 - A6 (verifies R6): README/ARCHITECTURE contain all listed serving-plane, delta, current-version, retry, migration, and exact `Datetime(us, UTC)` -> `TIMESTAMPTZ(6)` rules without claiming PostgreSQL is canonical.
-- A7 (verifies R7): all ordering/failure/no-op/retry/dry-run tests pass offline and a regression fixture confirms no timestamp type/precision/timezone drift from the market-regime-loader convention.
+- A7 (verifies R7): all ordering/failure/no-op/retry/dry-run tests pass offline and a regression fixture confirms no timestamp type/precision/timezone drift from `pg-temporal-v1`.
 - A8 (verifies R8): final PR records full quality-gate result and preserves or improves repository coverage.
+
+---
+
+## PR-78: Cross-Repository PostgreSQL Temporal Conformance Plan
+
+PR name: `postgres-temporal-conformance-plan`
+Status: In Progress
+Updated: 2026-08-24
+PR: TBD
+Git branch: `codex/pr78-postgres-temporal-conformance-plan`
+Git status: `planning branch; handoff requires empty git status --short`
+Agent lane: Planning/governance; one agent only
+Depends on: none
+Commit: `docs(PR-78): add PostgreSQL temporal conformance and rewrite plan`
+Allowed files: `BACKLOG.md`
+
+Description:
+- R1: Freeze one cross-repository `pg-temporal-v1` PostgreSQL contract shared with `xetra-loader` and `regime-loader`: every persisted instant is exactly `TIMESTAMPTZ(6)`, every PostgreSQL session is UTC, persistence-boundary datetimes are aware UTC at microsecond precision, true date-only fields remain `DATE`, and diagnostic serialization is `YYYY-MM-DDTHH:MM:SS.ffffffZ` only outside PostgreSQL storage.
+- R2: Record the audited implementation state: the current mapper accepts only `Polars Datetime(us, UTC)`, maps it to `TIMESTAMPTZ(6)`, sync metadata uses the same exact type, runtime connections set UTC, and typed contracts reject naive/non-UTC keys; code shape is already compatible but live target state has not been independently proven by repository evidence.
+- R3: Add PR-79 as a small live temporal verifier/hardening gate and PR-80 as a separate one-time controlled PostgreSQL schema/data rewrite and acceptance gate; do not merge their implementation concerns into this planning PR.
+- R4: Require the PostgreSQL stack completion definition to include the PR-80 real-target acceptance report; static/offline tests alone cannot establish production temporal conformance.
+
+Acceptance:
+- A1 (verifies R1): the exact shared type/precision/timezone/date/diagnostic rules appear once and contain no textual-format claim about PostgreSQL internals.
+- A2 (verifies R2): every audited claim is backed by existing `contracts.py`, `schema.py`, and `gold_repository.py` behavior; no unsupported current-data claim is made.
+- A3 (verifies R3): PR-79 and PR-80 are separately specified with non-overlapping ownership and exact dependencies.
+- A4 (verifies R4): completion explicitly requires a real-target PR-80 `PASS`, not only fixture or fake-connection evidence.
+
+---
+
+## PR-79: Live PostgreSQL Temporal Conformance Verifier
+
+PR name: `postgres-temporal-live-verifier`
+Status: Planned
+Updated: 2026-08-24
+PR: TBD
+Git branch: `codex/pr79-postgres-temporal-live-verifier`
+Git status: `planned; start only when git status --short is empty`
+Agent lane: Temporal contract/verification; one weak agent
+Depends on: PR-77, PR-78
+Commit: `test(PR-79): verify PostgreSQL temporal contract`
+Allowed files: `application/postgres_sync/temporal.py`, `api/commands/postgres.py`, `api/cli.py`, `tests/test_postgres_temporal_contract.py`, `tests/test_postgres_sync_command.py`, temporal acceptance documentation/artifact only
+
+Description:
+- R1: Add a read-mostly verifier that introspects every timestamp column in `crypto_loader` and `crypto_loader_sync` and requires `data_type='timestamp with time zone'` with `datetime_precision=6`; any `timestamp without time zone`, alternate precision, missing expected column, or unexpected owned timestamp column fails closed.
+- R2: Verify `SHOW TIME ZONE` is exactly UTC and prove the application persistence boundary rejects naive and non-zero-offset datetimes rather than allowing ambiguous database interpretation; upstream normalization must happen before that boundary.
+- R3: Compare every registered current Gold timestamp/datetime source dtype with its PostgreSQL column mapping and require `Datetime(us, UTC) -> TIMESTAMPTZ(6)` while true date columns remain `DATE`.
+- R4: Execute a transaction-scoped microsecond round-trip probe using at least two UTC instants around European DST transitions and require exact instant plus six-digit microsecond preservation after readback; roll back the probe completely.
+- R5: Emit a sanitized machine-readable temporal report with contract version `pg-temporal-v1`, target host/port, session timezone, checked columns/types/precision, Gold/source mappings, round-trip results, and `PASS|FAIL`; no password, DSN, or row payloads.
+
+Acceptance:
+- A1 (verifies R1): a compatible fixture/live database passes and deliberate `TIMESTAMP WITHOUT TIME ZONE` or precision-3 fixtures fail.
+- A2 (verifies R2): UTC session passes; non-UTC session, naive input, and `+01:00/+02:00` persistence-boundary inputs fail deterministically before semantic mutation.
+- A3 (verifies R3): every current registered Gold datetime column has exactly one `TIMESTAMPTZ(6)` target and every date source maps to `DATE`; no unsupported coercion is accepted.
+- A4 (verifies R4): values such as `2026-03-29T00:59:59.123456Z` and `2026-10-25T01:30:00.654321Z` round-trip identically and the probe leaves zero durable rows/objects.
+- A5 (verifies R5): report is deterministic/sanitized and cannot be `PASS` if any prior assertion fails.
+
+---
+
+## PR-80: Forced PostgreSQL Temporal Schema And Data Rewrite
+
+PR name: `postgres-temporal-authoritative-rewrite`
+Status: Planned
+Updated: 2026-08-24
+PR: TBD
+Git branch: `codex/pr80-postgres-temporal-authoritative-rewrite`
+Git status: `planned; start only when git status --short is empty`
+Agent lane: Production operations; one agent only
+Depends on: PR-79
+Commit: `chore(PR-80): rewrite PostgreSQL under temporal contract`
+Allowed files: guarded production rewrite command/runbook, production temporal acceptance report, focused operator tests; no provider/Gold business-semantic changes
+
+Description:
+- R1: Stop/disable the scheduled Medallion PostgreSQL publication path for the maintenance window and acquire an explicit rewrite lock; concurrent normal publication is forbidden.
+- R2: Before destructive work, create an operator-controlled timestamped backup of `crypto_loader` and `crypto_loader_sync`, record checksums/private restore instructions, and capture sanitized pre-rewrite schema/type/count summaries.
+- R3: Force a one-time recreation of only the owned `crypto_loader` and `crypto_loader_sync` serving/sync schemas from current canonical DDL, even if the existing schema appears compatible; never touch unrelated schemas, roles, or other repositories' data.
+- R4: Bootstrap every current materialized registered Gold lineage from authoritative Parquet into the empty target using the normal validated repository path so every persisted instant is written under `pg-temporal-v1`.
+- R5: Run PR-79 independently after the rebuild and additionally require exact Gold/PostgreSQL row counts, logical-key equality, digest/state equality, and timestamp min/max equality for every lineage.
+- R6: Immediately run unchanged `gold-sync-postgres` again and require exactly zero inserts, updates, deletes, and timestamp rewrites; then re-enable scheduling only after the production report is `PASS`.
+- R7: Commit only a sanitized acceptance report containing no credentials/raw market data and fail closed on backup failure, schema drift, temporal mismatch, data mismatch, non-zero replay mutation, or unrelated-schema mutation.
+
+Acceptance:
+- A1 (verifies R1): test/runbook evidence proves no scheduled/concurrent writer can run during rewrite.
+- A2 (verifies R2): backup completes before drop/recreate and the runbook has an independently testable restore path.
+- A3 (verifies R3): before/after catalog confirms only `crypto_loader` and `crypto_loader_sync` are recreated; all owned instant columns introspect exactly as `TIMESTAMPTZ(6)` and unrelated schemas are unchanged.
+- A4 (verifies R4): every current Gold lineage is present after bootstrap and all timestamp values use UTC microsecond semantics.
+- A5 (verifies R5): PR-79 report is `PASS` and all row/key/digest/bounds comparisons are exact.
+- A6 (verifies R6): immediate replay reports zero semantic mutations and scheduling is restored only after PASS.
+- A7 (verifies R7): production report is sanitized, explicitly names `pg-temporal-v1`, and any injected mismatch prevents completion.
 
 ## PostgreSQL stack completion definition
 
@@ -552,6 +651,7 @@ The stack is complete only when:
 - Every current materialized registered Gold lineage has exactly one current PostgreSQL representation; retained old Gold versions are not duplicated.
 - Canonical key timestamp `timestamp_m1` is `Polars Datetime(time_unit="us", time_zone="UTC")` at the sync boundary.
 - Every PostgreSQL timestamp/datetime consumer column and internal sync timestamp is exactly `TIMESTAMPTZ(6)` and each session is UTC; no `TIMESTAMP WITHOUT TIME ZONE` or alternate timestamp precision is emitted.
+- Every PostgreSQL persistence-boundary datetime is aware UTC with zero offset and microsecond precision; true dates remain `DATE`.
 - A UTC timestamp containing non-zero microseconds round-trips without instant, timezone, or precision loss.
 - First sync performs complete lineage bootstrap; later runs write only accumulated INSERT/UPDATE/DELETE deltas.
 - Historical corrections and deletes are detected without a timestamp watermark.
@@ -559,6 +659,7 @@ The stack is complete only when:
 - Unchanged source fingerprint performs no consumer-row rewrite.
 - Every successful Medallion Gold step is followed by PostgreSQL sync, including the existing Sunday run.
 - PostgreSQL outage never invalidates or rolls back already-published local Gold; manual `gold-sync-postgres` retry is sufficient after connectivity returns.
+- PR-80 has forced a one-time owned-schema/data rebuild from authoritative current Gold and its real-target `pg-temporal-v1` acceptance report is `PASS`.
 - No operational password, administrator credential, or credential-bearing DSN exists in Git history, tracked files, logs, persisted sync metadata, or test snapshots.
 
 ---
