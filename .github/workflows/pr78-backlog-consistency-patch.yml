@@ -1,0 +1,71 @@
+name: pr78-backlog-consistency-patch
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.head_ref == 'codex/pr78-postgres-temporal-conformance-plan' && github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/pr78-postgres-temporal-conformance-plan
+          fetch-depth: 0
+      - name: Correct backlog dependency and historical-state consistency
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('BACKLOG.md')
+          text = path.read_text(encoding='utf-8')
+
+          replacements = {
+              """                                  PR-77 Medallion integration
+                                      |
+                                      v
+                                  PR-79 temporal verifier
+                                      |
+                                      v
+                                  PR-80 forced PG rewrite
+""": """                                  PR-77 Medallion integration
+""",
+              """- Wave 6: PR-77 after PR-73 and PR-76.
+- Wave 7: PR-79 after PR-77 and this PR-78 planning contract.
+- Final serial gate: PR-80 after PR-79.
+""": """- Wave 6: PR-77 after PR-73 and PR-76.
+""",
+              "- R1: Reconcile PR-67 through PR-77 backlog delivery metadata with merged GitHub PRs #174 through #184, including exact merged PR number and truthful merged status.": "- R1: Move detailed PR-67 through PR-77 tickets out of the active section in accordance with backlog policy and record their exact merged GitHub mapping (#174 through #184) in `Completed PR summary`; no merged ticket remains active.",
+              "- A1 (verifies R1): PR-67..PR-77 metadata matches GitHub merge history exactly.": "- A1 (verifies R1): the active section contains no PR-67..PR-77 ticket body and `Completed PR summary` maps each backlog ID to its exact merged GitHub PR #174..#184.",
+              "PR-99 -> PR-100 targeted source reconcile and Silver/Gold rebuild": "PR-89 + PR-90 + PR-99 -> PR-100 targeted source reconcile and certified Gold rebuild",
+              "PR-81 + PR-82 + PR-83 + PR-84 + PR-85 + PR-86 + PR-87 + PR-88 + PR-90 + PR-92 -> PR-101 live PostgreSQL conformance": "PR-81 + PR-82 + PR-83 + PR-84 + PR-85 + PR-86 + PR-87 + PR-88 + PR-90 + PR-92 + PR-100 -> PR-101 live PostgreSQL conformance",
+              "Depends on: PR-99\nCommit: `chore(PR-100): reconcile unverified historical intervals`": "Depends on: PR-89, PR-90, PR-99\nCommit: `chore(PR-100): reconcile unverified historical intervals`",
+              "- R3: Rebuild only dependent Silver partitions plus required lookback propagation, then rebuild affected Gold lineages from certified Silver inputs and require new PR-89 output hashes/manifests.": "- R3: Rebuild only source-change-dependent Silver partitions plus required lookback propagation. Then ensure every PostgreSQL-serving-eligible current Gold lineage is published under the PR-89 certified manifest contract: rebuild affected Gold and re-publish/re-certify any otherwise-current legacy Gold that lacks required output attestation, without refetching source data solely for certification.",
+              "- R4: Rerun PR-99 and Gold freshness/input-fingerprint checks and emit a sanitized `PASS|FAIL` recovery report; failure leaves PostgreSQL reconstruction blocked.": "- R4: Rerun PR-99, Gold freshness/input-fingerprint checks, and PR-90 certified-artifact inventory validation; emit a sanitized `PASS|FAIL` recovery report and block live PostgreSQL certification while any serving-eligible Gold lineage is uncertified.",
+              "- A3 (verifies R3): only dependency-reachable Silver/Gold outputs change and all rebuilt Gold artifacts are certified.": "- A3 (verifies R3): only dependency-reachable Silver changes occur; every serving-eligible current Gold lineage is PR-89/PR-90 certified even when source reconciliation was a no-op, and source data is never refetched merely to upgrade artifact attestation.",
+              "- A4 (verifies R4): final lake audit is PASS and any unresolved gap/corruption prevents downstream PR-102.": "- A4 (verifies R4): final lake audit and PR-90 inventory validation are PASS and any unresolved gap/corruption/uncertified serving lineage prevents downstream PR-101/PR-102.",
+              "Depends on: PR-81, PR-82, PR-83, PR-84, PR-85, PR-86, PR-87, PR-88, PR-90, PR-92\nCommit: `test(PR-101): verify live PostgreSQL serving plane`": "Depends on: PR-81, PR-82, PR-83, PR-84, PR-85, PR-86, PR-87, PR-88, PR-90, PR-92, PR-100\nCommit: `test(PR-101): verify live PostgreSQL serving plane`",
+              "finite non-negative quantity under documented provider semantics": "finite positive quantity under documented provider semantics",
+              "for configured BTC/ETH/SOL historical Bronze lineages": "for every configured historical Bronze lineage (including the currently configured BTC/ETH/SOL lineages)"
+          }
+
+          for old, new in replacements.items():
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'expected exactly one replacement target, got {count}: {old[:80]!r}')
+              text = text.replace(old, new, 1)
+
+          path.write_text(text, encoding='utf-8')
+          PY
+          rm -f .github/workflows/pr78-backlog-consistency-patch.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "docs(PR-78): correct audit backlog dependencies"
+          git push origin HEAD:codex/pr78-postgres-temporal-conformance-plan
