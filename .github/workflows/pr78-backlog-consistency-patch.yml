@@ -22,20 +22,21 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
+          import re
 
           path = Path('BACKLOG.md')
           text = path.read_text(encoding='utf-8')
 
+          text, graph_count = re.subn(
+              r"(\s*PR-77 Medallion integration\n)(?:\s*\|\n\s*v\n\s*PR-79 temporal verifier\n\s*\|\n\s*v\n\s*PR-80 forced PG rewrite\n)",
+              r"\1",
+              text,
+              count=1,
+          )
+          if graph_count != 1:
+              raise SystemExit(f'expected one legacy PR-79/PR-80 graph tail, got {graph_count}')
+
           replacements = {
-              """                                  PR-77 Medallion integration
-                                      |
-                                      v
-                                  PR-79 temporal verifier
-                                      |
-                                      v
-                                  PR-80 forced PG rewrite
-""": """                                  PR-77 Medallion integration
-""",
               """- Wave 6: PR-77 after PR-73 and PR-76.
 - Wave 7: PR-79 after PR-77 and this PR-78 planning contract.
 - Final serial gate: PR-80 after PR-79.
