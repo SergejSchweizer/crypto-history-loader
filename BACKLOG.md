@@ -147,12 +147,6 @@ PR-69 delta        PR-70 inventory  PR-71 schema mapper
                                       |
                                       v
                                   PR-77 Medallion integration
-                                      |
-                                      v
-                                  PR-79 temporal verifier
-                                      |
-                                      v
-                                  PR-80 forced PG rewrite
 ```
 
 Maximum safe parallelism:
@@ -163,8 +157,6 @@ Maximum safe parallelism:
 - Wave 4: PR-75 after PR-69, PR-70, PR-72.
 - Wave 5: PR-76 after PR-74 and PR-75.
 - Wave 6: PR-77 after PR-73 and PR-76.
-- Wave 7: PR-79 after PR-77 and this PR-78 planning contract.
-- Final serial gate: PR-80 after PR-79.
 
 ---
 
@@ -608,8 +600,8 @@ PR-84 + PR-85 -> PR-87 consumer/digest/state integrity
 PR-82 + PR-84 -> PR-88 PostgreSQL timeout policy
 PR-90 + PR-91 -> PR-92 fresh/current Medallion PostgreSQL scope
 PR-93 + PR-94 + PR-95 + PR-96 + PR-97 + PR-98 -> PR-99 historical lake completeness audit
-PR-99 -> PR-100 targeted source reconcile and Silver/Gold rebuild
-PR-81 + PR-82 + PR-83 + PR-84 + PR-85 + PR-86 + PR-87 + PR-88 + PR-90 + PR-92 -> PR-101 live PostgreSQL conformance
+PR-89 + PR-90 + PR-99 -> PR-100 targeted source reconcile and certified Gold rebuild
+PR-81 + PR-82 + PR-83 + PR-84 + PR-85 + PR-86 + PR-87 + PR-88 + PR-90 + PR-92 + PR-100 -> PR-101 live PostgreSQL conformance
 PR-79 + PR-100 + PR-101 -> PR-102 authoritative PostgreSQL reconstruction
 ```
 
@@ -662,12 +654,12 @@ Commit: `docs(PR-79): restore one PostgreSQL backlog source`
 Allowed files: `BACKLOG.md`, `BACKLOG_POSTGRES.md`, `README.md`, `ARCHITECTURE.md`, documentation contract tests only
 
 Description:
-- R1: Reconcile PR-67 through PR-77 backlog delivery metadata with merged GitHub PRs #174 through #184, including exact merged PR number and truthful merged status.
+- R1: Move detailed PR-67 through PR-77 tickets out of the active section in accordance with backlog policy and record their exact merged GitHub mapping (#174 through #184) in `Completed PR summary`; no merged ticket remains active.
 - R2: Delete `BACKLOG_POSTGRES.md` again because PR #174 established `BACKLOG.md` as the single planning source of truth; migrate no still-unique requirement without first placing it in `BACKLOG.md`.
 - R3: Remove README/ARCHITECTURE references that treat the duplicate file as authoritative and add a regression check preventing a second active PostgreSQL backlog source from reappearing.
 
 Acceptance:
-- A1 (verifies R1): PR-67..PR-77 metadata matches GitHub merge history exactly.
+- A1 (verifies R1): the active section contains no PR-67..PR-77 ticket body and `Completed PR summary` maps each backlog ID to its exact merged GitHub PR #174..#184.
 - A2 (verifies R2): repository contains one active backlog source and no requirement is lost by deletion.
 - A3 (verifies R3): docs point only to `BACKLOG.md` and a negative fixture fails if a second PostgreSQL backlog source is introduced.
 
@@ -1087,7 +1079,7 @@ Commit: `fix(PR-96): validate required trade payload fields`
 Allowed files: `ingestion/trades.py`, shared Deribit trade parser helpers, focused trade tests
 
 Description:
-- R1: Require non-empty trade ID, positive valid timestamp, finite positive price, finite non-negative quantity under documented provider semantics, and side exactly `buy|sell`; do not synthesize zero/empty/`unknown` values for malformed required fields.
+- R1: Require non-empty trade ID, positive valid timestamp, finite positive price, finite positive quantity under documented provider semantics, and side exactly `buy|sell`; do not synthesize zero/empty/`unknown` values for malformed required fields.
 - R2: For options, require parseable instrument name, expiry, positive finite strike, and option type `call|put`; malformed contract identity is a data-quality failure.
 - R3: Reject non-dict malformed trade entries instead of silently dropping them from an otherwise successful provider response when that would hide source corruption.
 
@@ -1162,7 +1154,7 @@ Commit: `test(PR-99): audit historical lake completeness`
 Allowed files: read-only audit service/CLI, data-quality report schema, focused tests, sanitized acceptance artifact; no Bronze/Silver/Gold mutation
 
 Description:
-- R1: Build a read-only completeness auditor for configured BTC/ETH/SOL historical Bronze lineages that distinguishes observed rows, explicitly confirmed empty intervals, expected provider gaps, and intervals whose acquisition success cannot be proven.
+- R1: Build a read-only completeness auditor for every configured historical Bronze lineage (including the currently configured BTC/ETH/SOL lineages) that distinguishes observed rows, explicitly confirmed empty intervals, expected provider gaps, and intervals whose acquisition success cannot be proven.
 - R2: Check OHLCV minute continuity over configured listing bounds, funding/open-interest provider cadence/capability semantics, and trade minute coverage/confirmed-empty sidecars without inventing rows or market-calendar assumptions unsupported by Deribit.
 - R3: Emit a deterministic sanitized interval report with lineage, bounds, gap category, evidence source, and `PASS|RECONCILE_REQUIRED`; no provider payloads/secrets and no data writes.
 
@@ -1182,21 +1174,21 @@ PR: TBD
 Git branch: `codex/pr100-targeted-historical-reconciliation`
 Git status: `planned; start only when git status --short is empty`
 Agent lane: Production lake recovery; one agent only
-Depends on: PR-99
+Depends on: PR-89, PR-90, PR-99
 Commit: `chore(PR-100): reconcile unverified historical intervals`
 Allowed files: guarded reconciliation command/runbook, reconciliation state/report, focused operator tests; no PostgreSQL destructive code
 
 Description:
 - R1: Consume a PR-99 report and perform provider reload only for exact failed/unverified intervals; if PR-99 is already PASS, perform no source mutation and record a no-op certification.
 - R2: Before source mutation, back up affected Bronze partitions/manifests; refetched rows must pass PR-93..PR-98 contracts and preserve existing valid rows outside target intervals.
-- R3: Rebuild only dependent Silver partitions plus required lookback propagation, then rebuild affected Gold lineages from certified Silver inputs and require new PR-89 output hashes/manifests.
-- R4: Rerun PR-99 and Gold freshness/input-fingerprint checks and emit a sanitized `PASS|FAIL` recovery report; failure leaves PostgreSQL reconstruction blocked.
+- R3: Rebuild only source-change-dependent Silver partitions plus required lookback propagation. Then ensure every PostgreSQL-serving-eligible current Gold lineage is published under the PR-89 certified manifest contract: rebuild affected Gold and re-publish/re-certify any otherwise-current legacy Gold that lacks required output attestation, without refetching source data solely for certification.
+- R4: Rerun PR-99, Gold freshness/input-fingerprint checks, and PR-90 certified-artifact inventory validation; emit a sanitized `PASS|FAIL` recovery report and block live PostgreSQL certification while any serving-eligible Gold lineage is uncertified.
 
 Acceptance:
 - A1 (verifies R1): target interval set equals PR-99 non-PASS intervals exactly and PASS input is a no-op.
 - A2 (verifies R2): before/after evidence proves unaffected Bronze bytes/partitions are unchanged and recovered rows satisfy strict source validation.
-- A3 (verifies R3): only dependency-reachable Silver/Gold outputs change and all rebuilt Gold artifacts are certified.
-- A4 (verifies R4): final lake audit is PASS and any unresolved gap/corruption prevents downstream PR-102.
+- A3 (verifies R3): only dependency-reachable Silver changes occur; every serving-eligible current Gold lineage is PR-89/PR-90 certified even when source reconciliation was a no-op, and source data is never refetched merely to upgrade artifact attestation.
+- A4 (verifies R4): final lake audit and PR-90 inventory validation are PASS and any unresolved gap/corruption/uncertified serving lineage prevents downstream PR-101/PR-102.
 
 ---
 
@@ -1209,7 +1201,7 @@ PR: TBD
 Git branch: `codex/pr101-postgres-live-conformance-verifier`
 Git status: `planned; start only when git status --short is empty`
 Agent lane: Production verification; one agent only
-Depends on: PR-81, PR-82, PR-83, PR-84, PR-85, PR-86, PR-87, PR-88, PR-90, PR-92
+Depends on: PR-81, PR-82, PR-83, PR-84, PR-85, PR-86, PR-87, PR-88, PR-90, PR-92, PR-100
 Commit: `test(PR-101): verify live PostgreSQL serving plane`
 Allowed files: read-only/live verifier command, sanitized acceptance report schema, focused offline/live tests; no destructive SQL
 
