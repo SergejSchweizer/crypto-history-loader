@@ -602,7 +602,7 @@ PR-90 + PR-91 -> PR-92 fresh/current Medallion PostgreSQL scope
 PR-93 + PR-94 + PR-95 + PR-96 + PR-97 + PR-98 -> PR-99 historical lake completeness audit
 PR-89 + PR-90 + PR-99 -> PR-100 targeted source reconcile and certified Gold rebuild
 PR-81 + PR-82 + PR-83 + PR-84 + PR-85 + PR-86 + PR-87 + PR-88 + PR-90 + PR-92 + PR-100 -> PR-101 live PostgreSQL conformance
-PR-79 + PR-100 + PR-101 -> PR-102 authoritative PostgreSQL reconstruction
+PR-79 + PR-100 + PR-101 -> PR-102 conditional PostgreSQL certification/reconstruction
 ```
 
 Safe first parallel wave after PR-78: PR-79, PR-80, PR-82, PR-83, PR-89, PR-91, PR-93, PR-94, PR-95, PR-96, and PR-98. A ticket may start only after every explicit dependency is merged.
@@ -1185,7 +1185,7 @@ Description:
 - R4: Rerun PR-99, Gold freshness/input-fingerprint checks, and PR-90 certified-artifact inventory validation; emit a sanitized `PASS|FAIL` recovery report and block live PostgreSQL certification while any serving-eligible Gold lineage is uncertified.
 
 Acceptance:
-- A1 (verifies R1): target interval set equals PR-99 non-PASS intervals exactly and PASS input is a no-op.
+- A1 (verifies R1): target interval set equals PR-99 non-PASS intervals exactly; PASS input performs zero provider/source mutation, while certification-only Gold republish allowed by R3 is not treated as a source reload.
 - A2 (verifies R2): before/after evidence proves unaffected Bronze bytes/partitions are unchanged and recovered rows satisfy strict source validation.
 - A3 (verifies R3): only dependency-reachable Silver changes occur; every serving-eligible current Gold lineage is PR-89/PR-90 certified even when source reconciliation was a no-op, and source data is never refetched merely to upgrade artifact attestation.
 - A4 (verifies R4): final lake audit and PR-90 inventory validation are PASS and any unresolved gap/corruption/uncertified serving lineage prevents downstream PR-101/PR-102.
@@ -1209,17 +1209,17 @@ Description:
 - R1: Preflight exact production endpoint and introspect only `crypto_loader`/`crypto_loader_sync`: tables, columns, PKs, types/precision, ownership, grants, runtime role attributes, session timezone, and configured timeouts.
 - R2: For every eligible certified current Gold lineage, compare exact source and consumer row counts, logical-key sets, deterministic row digests, digest-table contents, checkpoint versions/fingerprint/hash/bounds, and require zero symmetric differences.
 - R3: Run rollback-only `pg-temporal-v1` microsecond probes around European DST boundaries and DML/DDL permission probes under the runtime role.
-- R4: Emit a sanitized `artifacts/acceptance/postgres-live-conformance-v2.json` with `PASS|FAIL`; any schema/role/data/temporal/permission/timeout discrepancy is FAIL.
+- R4: Emit a sanitized `artifacts/acceptance/postgres-live-conformance-v2.json` with `PASS|FAIL`; any schema/role/data/temporal/permission/timeout discrepancy is FAIL. A pre-reconstruction live FAIL is valid verifier output and remains strictly read-only: it blocks production certification but does not itself authorize reconstruction or block merging a correctly implemented verifier whose offline/controlled tests pass.
 
 Acceptance:
 - A1 (verifies R1): compatible target passes and deliberate catalog/role/grant/timeout drift fails.
 - A2 (verifies R2): same-count payload tamper, missing/extra key, digest mismatch, and stale checkpoint fixtures all fail.
 - A3 (verifies R3): exact six-digit UTC instants round-trip and runtime DML succeeds while prohibited DDL fails; probes leave no durable mutation.
-- A4 (verifies R4): report contains no password/DSN/raw market payload and cannot be PASS when any check fails.
+- A4 (verifies R4): report contains no password/DSN/raw market payload and cannot be PASS when any check fails; an expected pre-reconstruction FAIL is preserved as evidence rather than rewritten into PASS.
 
 ---
 
-## PR-102: Reconstruct Owned PostgreSQL Schemas From Certified Gold
+## PR-102: Conditionally Reconstruct Owned PostgreSQL Schemas Or Certify No-Op
 
 PR name: `postgres-authoritative-reconstruction`
 Status: Planned
@@ -1229,30 +1229,30 @@ Git branch: `codex/pr102-postgres-authoritative-reconstruction`
 Git status: `planned; start only when git status --short is empty`
 Agent lane: Production reconstruction; one agent only
 Depends on: PR-79, PR-100, PR-101
-Commit: `chore(PR-102): reconstruct PostgreSQL from certified Gold`
+Commit: `chore(PR-102): certify or reconstruct PostgreSQL serving state`
 Allowed files: guarded production reconstruction command/runbook, final acceptance report, focused operator tests; no provider/business-feature code
 
 Description:
-- R1: Disable the scheduled Medallion publication path and acquire both the host pipeline lock and a dedicated PostgreSQL reconstruction lock; verify exact endpoint/database and prohibit concurrent normal writers.
-- R2: Before destructive work, create and validate a timestamped backup of only `crypto_loader` and `crypto_loader_sync`, capture private restore/checksum evidence plus sanitized pre-state catalog/count/digest summaries, and stop if backup verification fails.
-- R3: Recreate/migrate only the two loader-owned serving/sync schemas through the PR-85/PR-86 administrator path, preserving all unrelated schemas/roles/data exactly and provisioning the runtime role with DML-only privileges.
-- R4: Bootstrap every PR-92 eligible current certified Gold lineage from PR-100 certified Gold using the locked normal PR-84 repository path; write exact consumer rows, digest index, and checkpoints under `pg-temporal-v1`.
-- R5: Run PR-101 independently after reconstruction and require PASS plus exact source/consumer keys/digests/rows/bounds/versions/output hashes and role/permission/schema/timeout/temporal equality.
-- R6: Immediately run unchanged `gold-sync-postgres` and require zero inserts, updates, deletes, digest changes, checkpoint semantic rewrites, or timestamp rewrites; re-enable scheduling only after all evidence is PASS.
-- R7: Commit only a sanitized `artifacts/acceptance/postgres-production-reconstruction-v2.json`; any backup, source-certification, schema, role, data, temporal, permission, timeout, unrelated-object, or replay mismatch blocks completion.
+- R1: Consume the latest PR-101 report and choose exactly one fail-closed mode: `no-op-certification` when PR-101 already reports PASS, or `reconstruction` only when PR-101 identifies owned-schema/serving-data drift that reconstruction can correct. Other failures such as unresolved configuration, permission, timeout, or unrelated-object drift are hard stops. Destructive SQL is forbidden in `no-op-certification` mode.
+- R2: In `reconstruction` mode only, disable the scheduled Medallion publication path, acquire the host pipeline lock plus a dedicated PostgreSQL reconstruction lock, verify the exact endpoint/database, then create and validate a timestamped backup of only `crypto_loader` and `crypto_loader_sync` before the first destructive statement; stop if lock or backup verification fails. In `no-op-certification` mode no destructive maintenance window or backup is required.
+- R3: In `reconstruction` mode only, recreate/migrate only the two loader-owned serving/sync schemas through the PR-85/PR-86 administrator path, preserving all unrelated schemas/roles/data exactly and provisioning the runtime role with DML-only privileges; in `no-op-certification` mode catalog/schema bytes and ownership remain untouched.
+- R4: In `reconstruction` mode, bootstrap every PR-92 eligible current certified Gold lineage from PR-100 certified Gold using the locked normal PR-84 repository path and write exact consumer rows, digest index, and checkpoints under `pg-temporal-v1`; in `no-op-certification` mode perform no bootstrap or row rewrite.
+- R5: Run PR-101 independently after the selected mode and require PASS plus exact source/consumer keys/digests/rows/bounds/versions/output hashes and role/permission/schema/timeout/temporal equality; reconstruction that does not convert the relevant report to PASS fails closed.
+- R6: Immediately run unchanged `gold-sync-postgres` and require zero inserts, updates, deletes, digest changes, checkpoint semantic rewrites, or timestamp rewrites. Restore scheduling only if it was disabled for reconstruction and only after all evidence is PASS.
+- R7: Commit only a sanitized `artifacts/acceptance/postgres-production-reconstruction-v2.json` recording mode `no-op-certification|reconstruction`; any required backup, source-certification, schema, role, data, temporal, permission, timeout, unrelated-object, or replay mismatch blocks completion.
 
 Acceptance:
-- A1 (verifies R1): scheduler/host/DB lock evidence proves no normal writer overlaps reconstruction.
-- A2 (verifies R2): validated restore evidence exists before the first destructive statement and covers both owned schemas.
-- A3 (verifies R3): before/after catalog proves only `crypto_loader` and `crypto_loader_sync` were reconstructed and runtime has no DDL privilege.
-- A4 (verifies R4): every eligible certified Gold lineage is fully present with exact canonical keys/data/digests/checkpoint state and `TIMESTAMPTZ(6)` UTC semantics.
-- A5 (verifies R5): PR-101 independently returns PASS with zero symmetric differences and all operational contracts satisfied.
-- A6 (verifies R6): immediate replay is a semantic no-op and schedule restoration occurs only after PASS.
-- A7 (verifies R7): final report is sanitized, names `pg-temporal-v1`, and any injected mismatch prevents completion.
+- A1 (verifies R1): a pre-existing PR-101 PASS selects no-op certification with zero destructive SQL; only a reconstruction-correctable PR-101 failure selects reconstruction, while unrelated/unresolved failures hard-stop.
+- A2 (verifies R2): reconstruction mode proves scheduler/host/DB exclusion and validated restore evidence before the first destructive statement; no-op mode proves neither destructive SQL nor unnecessary backup/rewrite occurred.
+- A3 (verifies R3): reconstruction-mode before/after catalog proves only `crypto_loader` and `crypto_loader_sync` were reconstructed and runtime has no DDL privilege; no-op mode proves owned catalog/ownership was unchanged.
+- A4 (verifies R4): reconstruction mode fully bootstraps every eligible certified Gold lineage with exact canonical keys/data/digests/checkpoints and `TIMESTAMPTZ(6)` UTC semantics; no-op mode performs zero bootstrap/row rewrite.
+- A5 (verifies R5): PR-101 independently returns PASS after either mode with zero symmetric differences and all operational contracts satisfied.
+- A6 (verifies R6): immediate replay is a semantic no-op; scheduling is restored only when reconstruction had disabled it and post-mode evidence is PASS.
+- A7 (verifies R7): final report is sanitized, names `pg-temporal-v1`, records the selected mode, and any injected mismatch prevents completion.
 
 ## Corrected production completion definition
 
-The PostgreSQL serving plane is not production-certified merely because PR-67 through PR-77 are merged or because unit/fake-connection checks pass. Completion requires: PR-79 establishes one accurate backlog source; PR-81 restores the already-approved 95% quality gate; PR-82 proves real PostgreSQL behavior in CI; PR-83 through PR-98 close the temporal, concurrency, schema, privilege, integrity, orchestration, ingestion-validation, and diagnostic gaps; PR-99 certifies historical lake completeness; PR-100 performs only evidence-driven source reconciliation and produces certified current Gold; PR-101 independently verifies the live target; and PR-102 reconstructs only the owned PostgreSQL schemas from certified Gold, proves exact equivalence, and obtains a zero-mutation replay. Until PR-102 PASS, existing PostgreSQL data must be treated as a serving replica whose full current correctness has not been independently certified.
+The PostgreSQL serving plane is not production-certified merely because PR-67 through PR-77 are merged or because unit/fake-connection checks pass. Completion requires: PR-79 establishes one accurate backlog source; PR-81 restores the already-approved 95% quality gate; PR-82 proves real PostgreSQL behavior in CI; PR-83 through PR-98 close the temporal, concurrency, schema, privilege, integrity, orchestration, ingestion-validation, and diagnostic gaps; PR-99 certifies historical lake completeness; PR-100 performs only evidence-driven source reconciliation and produces certified current Gold; PR-101 independently verifies the live target; and PR-102 performs evidence-driven no-op certification when the live target already passes or reconstructs only the owned PostgreSQL schemas when PR-101 proves reconstruction is required, then proves exact equivalence and a zero-mutation replay. Until PR-102 PASS, existing PostgreSQL data must be treated as a serving replica whose full current correctness has not been independently certified.
 
 ---
 
