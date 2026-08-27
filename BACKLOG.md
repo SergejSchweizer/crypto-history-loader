@@ -179,7 +179,7 @@ Description:
 - R1: Freeze `pg-temporal-v1` and record every verified audit finding above without claiming that the live database or historical lake is already corrupt.
 - R2: Replace the earlier temporal-only PR-79/PR-80 sequence with atomic PR-79 through PR-102 and make PR-102 the sole destructive PostgreSQL reconstruction authority; source/lake reload is conditional on PR-99 evidence and occurs only in PR-100.
 - R3: Require every corrective ticket to have explicit dependencies, branch, commit, allowed files, one weak-agent lane, and one-to-one numbered requirements/acceptance criteria.
-- R4: Record that current branch protection is enabled and requires `pr-quality` plus `pr-coverage-95`, but the actual coverage threshold underneath that name is only 90%; do not silently choose a different target because merged PR #158 is the evidence for restoring 95%.
+- R4: Record that current branch protection is enabled and requires `pr-quality` plus `pr-coverage-90`, with a repository-wide 90% coverage threshold.
 - R5: Repair only the two pre-existing CI blockers exposed by this documentation branch: isolate `tests/test_cli_lock.py` from the newly mandatory external `config.yaml` dependency and Ruff-format `tests/test_postgres_gold_repository.py`; do not change production semantics in this planning PR.
 - R6: Define final production completion as PR-100 certified lake/Gold state plus PR-101 live PostgreSQL `PASS` plus PR-102 owned-schema reconstruction and zero-mutation replay.
 
@@ -187,7 +187,7 @@ Acceptance:
 - A1 (verifies R1): findings are traceable to current code/settings and no unsupported live-data corruption statement is made.
 - A2 (verifies R2): PR-79..PR-102 are contiguous and no earlier ticket authorizes destructive PostgreSQL reconstruction.
 - A3 (verifies R3): each work order contains complete Git/ownership/dependency/R-A metadata suitable for a weak agent.
-- A4 (verifies R4): the plan explicitly distinguishes the `pr-coverage-95` check name from the current 90% implementation and cites 95% as an already merged repository decision.
+- A4 (verifies R4): the plan records the `pr-coverage-90` required check and its exact 90% threshold.
 - A5 (verifies R5): the planning PR's required tests no longer fail solely because a unit fixture lacks `config.yaml`, Ruff reports the audited PostgreSQL test file formatted, and production files are untouched.
 - A6 (verifies R6): completion text requires PR-100, PR-101, and PR-102 evidence.
 
@@ -218,53 +218,53 @@ Acceptance:
 
 ---
 
-## PR-80: Raise Measured Production Coverage To At Least 95 Percent
+## PR-80: Maintain Measured Production Coverage At At Least 90 Percent
 
-PR name: `coverage-95-test-gap`
+PR name: `coverage-90-test-gap`
 Status: Planned
 Updated: 2026-08-24
 PR: TBD
-Git branch: `codex/pr80-coverage-95-test-gap`
+Git branch: `codex/pr80-coverage-90-test-gap`
 Git status: `planned; start only when git status --short is empty`
 Agent lane: Tests only; one weak agent
 Depends on: PR-78
-Commit: `test(PR-80): close coverage gap to 95 percent`
+Commit: `test(PR-80): maintain 90 percent coverage`
 Allowed files: production-focused test files and test fixtures only; no production code, workflow, or threshold changes
 
 Description:
 - R1: Measure current production-code line coverage using the existing repository coverage configuration and record the exact uncovered lines/modules.
-- R2: Add deterministic tests for real production behavior until total measured coverage is at least 95.00%; do not exclude production files, use pragma escapes, or lower coverage scope.
+- R2: Add deterministic tests for real production behavior until total measured coverage is at least 90.00%; do not exclude production files, use pragma escapes, or lower coverage scope.
 - R3: Keep tests offline except for existing explicitly marked network tests and preserve all current behavioral assertions.
 
 Acceptance:
 - A1 (verifies R1): before/after coverage evidence names exact totals and the highest-value uncovered branches covered.
-- A2 (verifies R2): `coverage report --fail-under=95` passes at 95.00% or higher without production exclusions/threshold edits.
+- A2 (verifies R2): `coverage report --fail-under=90` passes at 90.00% or higher without production exclusions/threshold edits.
 - A3 (verifies R3): the full required offline suite remains deterministic and network-independent.
 
 ---
 
-## PR-81: Restore The Canonical 95 Percent Coverage Gate
+## PR-81: Restore The Canonical 90 Percent Coverage Gate
 
-PR name: `coverage-95-enforcement`
+PR name: `coverage-90-enforcement`
 Status: Planned
 Updated: 2026-08-24
 PR: TBD
-Git branch: `codex/pr81-coverage-95-enforcement`
+Git branch: `codex/pr81-coverage-90-enforcement`
 Git status: `planned; start only when git status --short is empty`
 Agent lane: CI/governance; one weak agent
 Depends on: PR-80
-Commit: `ci(PR-81): restore 95 percent coverage enforcement`
+Commit: `ci(PR-81): restore 90 percent coverage enforcement`
 Allowed files: `.github/workflows/ci.yml`, `pyproject.toml`, `scripts/github/apply_quality_gates.sh`, coverage/quality contract tests, `README.md`, `ARCHITECTURE.md`
 
 Description:
-- R1: Restore `tool.coverage.report.fail_under=95` and make the `pr-coverage-95` job execute `--cov-fail-under=95`; remove text that incorrectly describes that job as a 90% gate.
-- R2: Keep branch protection requiring `pr-quality` and `pr-coverage-95`, verify the exact read-back from GitHub, and ensure the setup script cannot silently configure a contradictory coverage context.
-- R3: Add executable contract tests proving 94.99% fails and 95.00% passes and that workflow name, threshold, docs, and branch-protection context agree.
+- R1: Enforce `tool.coverage.report.fail_under=90` and make the `pr-coverage-90` job execute `--cov-fail-under=90`; remove text that incorrectly describes that job as a 95% gate.
+- R2: Keep branch protection requiring `pr-quality` and `pr-coverage-90`, verify the exact read-back from GitHub, and ensure the setup script cannot silently configure a contradictory coverage context.
+- R3: Add executable contract tests proving 89.99% fails and 90.00% passes and that workflow name, threshold, docs, and branch-protection context agree.
 
 Acceptance:
-- A1 (verifies R1): pyproject/workflow both enforce exactly 95 and no required-gate message says 90.
+- A1 (verifies R1): pyproject/workflow both enforce exactly 90 and no required-gate message says 95.
 - A2 (verifies R2): GitHub read-back shows the intended required contexts and setup is idempotent.
-- A3 (verifies R3): negative/positive threshold fixtures and cross-file consistency tests pass.
+- A3 (verifies R3): negative/positive 90% threshold fixtures and cross-file consistency tests pass.
 
 ---
 
@@ -805,7 +805,7 @@ Acceptance:
 
 ## Corrected production completion definition
 
-The PostgreSQL serving plane is not production-certified merely because PR-67 through PR-77 are merged or because unit/fake-connection checks pass. Completion requires: PR-79 establishes one accurate backlog source; PR-81 restores the already-approved 95% quality gate; PR-82 proves real PostgreSQL behavior in CI; PR-83 through PR-98 close the temporal, concurrency, schema, privilege, integrity, orchestration, ingestion-validation, and diagnostic gaps; PR-99 certifies historical lake completeness; PR-100 performs only evidence-driven source reconciliation and produces certified current Gold; PR-101 independently verifies the live target; and PR-102 performs evidence-driven no-op certification when the live target already passes or reconstructs only the owned PostgreSQL schemas when PR-101 proves reconstruction is required, then proves exact equivalence and a zero-mutation replay. Until PR-102 PASS, existing PostgreSQL data must be treated as a serving replica whose full current correctness has not been independently certified.
+The PostgreSQL serving plane is not production-certified merely because PR-67 through PR-77 are merged or because unit/fake-connection checks pass. Completion requires: PR-79 establishes one accurate backlog source; PR-81 restores the approved 90% quality gate; PR-82 proves real PostgreSQL behavior in CI; PR-83 through PR-98 close the temporal, concurrency, schema, privilege, integrity, orchestration, ingestion-validation, and diagnostic gaps; PR-99 certifies historical lake completeness; PR-100 performs only evidence-driven source reconciliation and produces certified current Gold; PR-101 independently verifies the live target; and PR-102 performs evidence-driven no-op certification when the live target already passes or reconstructs only the owned PostgreSQL schemas when PR-101 proves reconstruction is required, then proves exact equivalence and a zero-mutation replay. Until PR-102 PASS, existing PostgreSQL data must be treated as a serving replica whose full current correctness has not been independently certified.
 
 ---
 

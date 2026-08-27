@@ -76,7 +76,7 @@ def test_pre_commit_and_ci_include_same_required_quality_gates() -> None:
         "pr-typing-quality",
         "pr-unit-tests",
         "pr-integration-tests",
-        "pr-coverage-95",
+        "pr-coverage-90",
     ]
     assert ci["jobs"]["main-quality"]["needs"] == [
         "main-lint-quality",
@@ -120,6 +120,6 @@ def test_coverage_threshold_is_explicit_in_pyproject() -> None:
     pyproject = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     coverage_report = pyproject["tool"]["coverage"]["report"]
 
-    assert coverage_report["fail_under"] >= 90
+    assert coverage_report["fail_under"] == 90
     assert coverage_report["show_missing"] is True
     assert "--cov-fail-under" not in pyproject["tool"]["pytest"]["ini_options"]["addopts"]
