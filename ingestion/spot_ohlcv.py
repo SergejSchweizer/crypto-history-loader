@@ -7,10 +7,10 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from math import isfinite
 from typing import Any, Literal
 
 from ingestion.exchanges import deribit
-from ingestion.http_client import HttpClientError
 
 Exchange = Literal["deribit"]
 Market = Literal["spot_ohlcv", "perp"]
@@ -66,23 +66,73 @@ def _ms_to_utc(ts_ms: int) -> datetime:
 def parse_kline(exchange: Exchange, symbol: str, interval: str, row: list[Any]) -> SpotCandle:
     """Parse a common kline row into a typed candle object."""
 
+    if len(row) not in {9, 12}:
+        raise ValueError("OHLCV row must contain the 9-field base or 12-field extended layout")
+    interval_ms = interval_to_milliseconds(exchange=exchange, interval=interval)
+    open_time_ms = _non_negative_integer(row[0], "open_time")
+    close_time_ms = _non_negative_integer(row[6], "close_time")
+    if open_time_ms % interval_ms != 0:
+        raise ValueError("OHLCV open_time must align to the candle interval")
+    if close_time_ms != open_time_ms + interval_ms - 1:
+        raise ValueError("OHLCV close_time must match the candle interval")
+
+    open_price = _finite_number(row[1], "open_price", positive=True)
+    high_price = _finite_number(row[2], "high_price", positive=True)
+    low_price = _finite_number(row[3], "low_price", positive=True)
+    close_price = _finite_number(row[4], "close_price", positive=True)
+    volume = _finite_number(row[5], "volume", positive=False)
     quote_volume_raw = row[7]
-    quote_volume = None if quote_volume_raw is None else float(quote_volume_raw)
+    quote_volume = (
+        None if quote_volume_raw is None else _finite_number(quote_volume_raw, "quote_volume", positive=False)
+    )
+    trade_count = _non_negative_integer(row[8], "trade_count")
+
+    if high_price < max(open_price, close_price, low_price):
+        raise ValueError("OHLCV high_price must be the greatest price")
+    if low_price > min(open_price, close_price, high_price):
+        raise ValueError("OHLCV low_price must be the lowest price")
 
     return SpotCandle(
         exchange=exchange,
         symbol=symbol,
         interval=interval,
-        open_time=_ms_to_utc(int(row[0])),
-        close_time=_ms_to_utc(int(row[6])),
-        open_price=float(row[1]),
-        high_price=float(row[2]),
-        low_price=float(row[3]),
-        close_price=float(row[4]),
-        volume=float(row[5]),
+        open_time=_ms_to_utc(open_time_ms),
+        close_time=_ms_to_utc(close_time_ms),
+        open_price=open_price,
+        high_price=high_price,
+        low_price=low_price,
+        close_price=close_price,
+        volume=volume,
         quote_volume=quote_volume,
-        trade_count=int(row[8]),
+        trade_count=trade_count,
     )
+
+
+def _finite_number(value: object, field_name: str, *, positive: bool) -> float:
+    """Validate finite OHLCV numeric semantics without silently accepting invalid values."""
+
+    try:
+        numeric_value = float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"OHLCV {field_name} must be numeric") from exc
+    if not isfinite(numeric_value) or numeric_value < 0 or (positive and numeric_value == 0):
+        qualifier = "positive" if positive else "non-negative"
+        raise ValueError(f"OHLCV {field_name} must be finite and {qualifier}")
+    return numeric_value
+
+
+def _non_negative_integer(value: object, field_name: str) -> int:
+    """Validate integer timestamp/count fields without truncating fractional values."""
+
+    if isinstance(value, bool):
+        raise ValueError(f"OHLCV {field_name} must be a non-negative integer")
+    try:
+        integer_value = int(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError(f"OHLCV {field_name} must be a non-negative integer") from exc
+    if integer_value < 0 or str(value).strip() not in {str(integer_value), f"{integer_value}.0"}:
+        raise ValueError(f"OHLCV {field_name} must be a non-negative integer")
+    return integer_value
 
 
 def list_supported_intervals(exchange: Exchange) -> tuple[str, ...]:

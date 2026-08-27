@@ -23,7 +23,7 @@ from ingestion.spot_ohlcv import (
 
 
 def test_parse_deribit_kline_maps_fields() -> None:
-    row = [1714478400000, "64000.0", "64200.0", "63850.0", "64100.0", "120.5", 1714481999999, "7720000.0", 2300]
+    row = [1714478400000, "64000.0", "64200.0", "63850.0", "64100.0", "120.5", 1714478459999, "7720000.0", 2300]
 
     candle = parse_kline("deribit", "BTC-PERPETUAL", "1m", row)
 
@@ -34,6 +34,27 @@ def test_parse_deribit_kline_maps_fields() -> None:
     assert candle.volume == pytest.approx(120.5)
     assert candle.quote_volume == pytest.approx(7720000.0)
     assert candle.trade_count == 2300
+
+
+@pytest.mark.parametrize(
+    "row",
+    [
+        [0] * 8,
+        [0, 0, 2, 0.5, 1.5, 1, 59_999, 1, 1],
+        [0, float("nan"), 2, 1, 1.5, 1, 59_999, 1, 1],
+        [0, 1, float("inf"), 1, 1, 1, 59_999, 1, 1],
+        [0, 1, 2, 1, 1, -1, 59_999, 1, 1],
+        [0, 1, 2, 1, 1, 1, 59_999, -1, 1],
+        [0, 1, 2, 1, 1, 1, 59_999, 1, -1],
+        [0, 2, 1, 0.5, 1.5, 1, 59_999, 1, 1],
+        [0, 1, 2, 1.5, 1, 1, 59_999, 1, 1],
+        [1, 1, 2, 0.5, 1.5, 1, 60_000, 1, 1],
+        [0, 1, 2, 0.5, 1.5, 1, 60_000, 1, 1],
+    ],
+)
+def test_parse_kline_rejects_invalid_numeric_and_time_semantics(row: list[object]) -> None:
+    with pytest.raises(ValueError):
+        parse_kline("deribit", "BTC-PERPETUAL", "1m", row)
 
 
 @pytest.mark.parametrize(
@@ -70,7 +91,7 @@ def test_fetch_deribit_candles_respects_limit(monkeypatch: pytest.MonkeyPatch) -
         return {
             "result": {
                 "status": "ok",
-                "ticks": [1000, 2000, 3000, 4000],
+                "ticks": [0, 60_000, 120_000, 180_000],
                 "open": [1, 2, 3, 4],
                 "high": [1, 2, 3, 4],
                 "low": [1, 2, 3, 4],
@@ -84,7 +105,7 @@ def test_fetch_deribit_candles_respects_limit(monkeypatch: pytest.MonkeyPatch) -
 
     candles = fetch_candles(exchange="deribit", market="perp", symbol="BTC", interval="1m", limit=3)
     assert len(candles) == 3
-    assert [int(item.open_time.timestamp()) for item in candles] == [2, 3, 4]
+    assert [int(item.open_time.timestamp()) for item in candles] == [60, 120, 180]
     assert all(item.quote_volume is None for item in candles)
 
 
@@ -115,7 +136,7 @@ def test_fetch_deribit_routes_spot_ohlcv_and_perp_symbols(
         return {
             "result": {
                 "status": "ok",
-                "ticks": [1000, 2000],
+                "ticks": [0, 60_000],
                 "open": [1, 2],
                 "high": [1, 2],
                 "low": [1, 2],
@@ -140,7 +161,7 @@ def test_fetch_all_history_deribit(monkeypatch: pytest.MonkeyPatch) -> None:
         assert symbol == "BTC"
         assert market == "perp"
         assert interval == "1m"
-        return [[1000, "1", "1", "1", "1", "1", 1999, "1", 1]]
+        return [[0, "1", "1", "1", "1", "1", 59_999, "1", 1]]
 
     monkeypatch.setattr(deribit_exchange, "fetch_klines_all", fake_fetch_klines_all_deribit)
 
@@ -278,7 +299,7 @@ def test_spot_adapter_delegates_capabilities_and_rejects_unsupported_exchange() 
 def test_fetch_candles_all_history_supports_legacy_fetcher_and_chunks(monkeypatch: pytest.MonkeyPatch) -> None:
     """History reads retain compatibility with fetchers that predate the page callback."""
 
-    row = [1000, "1", "1", "1", "1", "1", 1999, None, 1]
+    row = [0, "1", "1", "1", "1", "1", 59_999, None, 1]
 
     def _legacy_fetcher(**kwargs: object) -> list[list[object]]:
         if "on_page" in kwargs:
