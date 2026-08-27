@@ -11,6 +11,9 @@ from typing import Any, cast
 import polars as pl
 
 from application.postgres_sync.contracts import (
+    GoldReconcileDecision,
+    GoldReconcilePlanner,
+    GoldRowDigest,
     GoldSourceSnapshot,
     GoldSyncLineageResult,
     GoldSyncRepository,
@@ -114,11 +117,17 @@ def _state_for_snapshot(snapshot: GoldSourceSnapshot, *, clock: Clock) -> GoldSy
     )
 
 
-def _verify_summary(repository: GoldSyncRepository, snapshot: GoldSourceSnapshot) -> None:
-    actual = repository.summary(snapshot.lineage)
-    expected = expected_target_summary(snapshot)
-    if actual != expected:
-        raise ValueError(f"PostgreSQL target summary mismatch: expected={expected!r} actual={actual!r}")
+def _reconcile_planner(snapshot: GoldSourceSnapshot, *, clock: Clock) -> GoldReconcilePlanner:
+    def plan(state: GoldSyncState | None, target_digests: tuple[GoldRowDigest, ...]) -> GoldReconcileDecision:
+        expected_summary = expected_target_summary(snapshot)
+        if state is not None and state_matches_snapshot(state, snapshot):
+            return GoldReconcileDecision(None, None, expected_summary)
+
+        source_rows = _validated_source_rows(snapshot)
+        delta = plan_gold_delta(source_rows, target_digests, state_exists=state is not None)
+        return GoldReconcileDecision(delta, _state_for_snapshot(snapshot, clock=clock), expected_summary)
+
+    return plan
 
 
 def reconcile_snapshots(
@@ -134,11 +143,14 @@ def reconcile_snapshots(
         try:
             table_schema = _mapped_schema(raw_snapshot)
             snapshot = _snapshot_for_target(raw_snapshot, table_schema)
-            repository.ensure_lineage(snapshot, table_schema.ddl, table_schema.signature)
-            state = repository.read_state(snapshot.lineage)
+            decision = repository.reconcile_lineage(
+                snapshot,
+                table_schema.ddl,
+                table_schema.signature,
+                _reconcile_planner(snapshot, clock=clock),
+            )
 
-            if state is not None and state_matches_snapshot(state, snapshot):
-                _verify_summary(repository, snapshot)
+            if decision.plan is None:
                 results.append(
                     GoldSyncLineageResult(
                         lineage=snapshot.lineage,
@@ -152,12 +164,7 @@ def reconcile_snapshots(
                 )
                 continue
 
-            target_digests = repository.read_digests(snapshot.lineage)
-            source_rows = _validated_source_rows(snapshot)
-            plan = plan_gold_delta(source_rows, target_digests, state_exists=state is not None)
-            next_state = _state_for_snapshot(snapshot, clock=clock)
-            repository.apply_delta(snapshot.lineage, plan, next_state)
-            _verify_summary(repository, snapshot)
+            plan = decision.plan
             results.append(
                 GoldSyncLineageResult(
                     lineage=snapshot.lineage,

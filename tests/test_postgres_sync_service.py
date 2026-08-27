@@ -15,6 +15,7 @@ from application.postgres_sync import (
     GoldSyncState,
     GoldTargetSummary,
 )
+from application.postgres_sync.contracts import GoldReconcileDecision, GoldReconcilePlanner
 from application.postgres_sync.delta import canonical_row_hash
 from application.postgres_sync.service import GoldSyncServiceError, reconcile_snapshots
 
@@ -27,28 +28,44 @@ class FakeRepository:
         self.applied: list[tuple[GoldLineage, GoldDeltaPlan, GoldSyncState]] = []
         self.ensure_calls: list[GoldLineage] = []
         self.fail_lineage: GoldLineage | None = None
+        self.bad_summary = False
+        self.events: list[str] = []
 
-    def ensure_lineage(self, snapshot: GoldSourceSnapshot, ddl: str, schema_signature: str) -> None:
+    def reconcile_lineage(
+        self,
+        snapshot: GoldSourceSnapshot,
+        ddl: str,
+        schema_signature: str,
+        planner: GoldReconcilePlanner,
+    ) -> GoldReconcileDecision:
         assert "CREATE TABLE IF NOT EXISTS" in ddl
         assert schema_signature == snapshot.schema_signature
         self.ensure_calls.append(snapshot.lineage)
-
-    def read_state(self, lineage: GoldLineage) -> GoldSyncState | None:
-        return self.states.get(lineage)
-
-    def read_digests(self, lineage: GoldLineage) -> tuple[GoldRowDigest, ...]:
-        return self.digests.get(lineage, ())
-
-    def summary(self, lineage: GoldLineage) -> GoldTargetSummary:
-        return self.summaries.get(lineage, GoldTargetSummary(0, None, None))
-
-    def apply_delta(self, lineage: GoldLineage, plan: GoldDeltaPlan, state: GoldSyncState) -> None:
+        lineage = snapshot.lineage
+        self.events.extend(("lock", "state-read", "digests-read", "plan"))
+        decision = planner(self.states.get(lineage), self.digests.get(lineage, ()))
         if self.fail_lineage == lineage:
+            self.events.append("rollback")
             raise RuntimeError("injected repository failure")
-        self.applied.append((lineage, plan, state))
-        self.states[lineage] = state
-        self.digests[lineage] = plan.source_digests
-        self.summaries[lineage] = GoldTargetSummary(state.row_count, state.min_timestamp, state.max_timestamp)
+        if decision.plan is not None and decision.next_state is not None:
+            self.events.append("mutations")
+            self.applied.append((lineage, decision.plan, decision.next_state))
+            self.digests[lineage] = decision.plan.source_digests
+            self.summaries[lineage] = GoldTargetSummary(
+                decision.next_state.row_count,
+                decision.next_state.min_timestamp,
+                decision.next_state.max_timestamp,
+            )
+        self.events.append("verification")
+        actual = self.summaries.get(lineage, GoldTargetSummary(0, None, None))
+        if self.bad_summary or actual != decision.expected_summary:
+            self.events.append("rollback")
+            raise ValueError("PostgreSQL target summary mismatch")
+        if decision.next_state is not None:
+            self.events.append("checkpoint")
+            self.states[lineage] = decision.next_state
+        self.events.append("commit")
+        return decision
 
 
 def _write_snapshot(
@@ -169,13 +186,29 @@ def test_summary_mismatch_fails_without_false_success(tmp_path: Path) -> None:
     timestamp = datetime(2026, 1, 1, tzinfo=UTC)
     snapshot = _write_snapshot(tmp_path, rows=((timestamp, 1.0),))
 
-    class BadSummaryRepository(FakeRepository):
-        def summary(self, lineage: GoldLineage) -> GoldTargetSummary:
-            return GoldTargetSummary(999, timestamp, timestamp)
-
-    repository = BadSummaryRepository()
+    repository = FakeRepository()
+    repository.bad_summary = True
     with pytest.raises(GoldSyncServiceError, match="compatibility"):
         reconcile_snapshots((snapshot,), repository, clock=_fixed_clock)
+
+
+def test_service_uses_only_locked_repository_unit_of_work(tmp_path: Path) -> None:
+    timestamp = datetime(2026, 1, 1, tzinfo=UTC)
+    snapshot = _write_snapshot(tmp_path, rows=((timestamp, 1.0),))
+    repository = FakeRepository()
+
+    reconcile_snapshots((snapshot,), repository, clock=_fixed_clock)
+
+    assert repository.events == [
+        "lock",
+        "state-read",
+        "digests-read",
+        "plan",
+        "mutations",
+        "verification",
+        "checkpoint",
+        "commit",
+    ]
 
 
 def test_processing_is_stable_and_stops_on_first_failure(tmp_path: Path) -> None:

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -227,6 +227,19 @@ class GoldTargetSummary:
 
 
 @dataclass(frozen=True, slots=True)
+class GoldReconcileDecision:
+    """Application decision returned while a repository lineage lock is held."""
+
+    plan: GoldDeltaPlan | None
+    next_state: GoldSyncState | None
+    expected_summary: GoldTargetSummary
+
+    def __post_init__(self) -> None:
+        if (self.plan is None) != (self.next_state is None):
+            raise ValueError("Gold reconcile plan and next state must either both be present or both be absent")
+
+
+@dataclass(frozen=True, slots=True)
 class GoldSyncLineageResult:
     """One lineage synchronization result without credentials."""
 
@@ -262,19 +275,23 @@ class GoldSyncResult:
         return sum(item.unchanged for item in self.lineages)
 
 
+GoldReconcilePlanner = Callable[
+    [GoldSyncState | None, tuple[GoldRowDigest, ...]],
+    GoldReconcileDecision,
+]
+
+
 @runtime_checkable
 class GoldSyncRepository(Protocol):
     """Application port implemented by the PostgreSQL infrastructure adapter."""
 
-    def ensure_lineage(self, snapshot: GoldSourceSnapshot, ddl: str, schema_signature: str) -> None: ...
-
-    def read_state(self, lineage: GoldLineage) -> GoldSyncState | None: ...
-
-    def read_digests(self, lineage: GoldLineage) -> tuple[GoldRowDigest, ...]: ...
-
-    def summary(self, lineage: GoldLineage) -> GoldTargetSummary: ...
-
-    def apply_delta(self, lineage: GoldLineage, plan: GoldDeltaPlan, state: GoldSyncState) -> None: ...
+    def reconcile_lineage(
+        self,
+        snapshot: GoldSourceSnapshot,
+        ddl: str,
+        schema_signature: str,
+        planner: GoldReconcilePlanner,
+    ) -> GoldReconcileDecision: ...
 
 
 def state_matches_snapshot(state: GoldSyncState, snapshot: GoldSourceSnapshot) -> bool:

@@ -15,7 +15,9 @@ from application.postgres_sync import (
     GoldRowPayload,
     GoldSourceSnapshot,
     GoldSyncState,
+    GoldTargetSummary,
 )
+from application.postgres_sync.contracts import GoldReconcileDecision
 from application.postgres_sync.schema import build_postgres_table_schema
 from infra.postgres.gold_repository import (
     PostgresConnectionSettings,
@@ -211,7 +213,7 @@ def test_apply_delta_order_and_microsecond_preservation() -> None:
     )
     summary_idx = next(index for index, query in enumerate(queries) if query.startswith("SELECT COUNT"))
     commit_idx = queries.index("COMMIT")
-    assert lock_idx < insert_idx < digest_idx < state_idx < summary_idx < commit_idx
+    assert lock_idx < insert_idx < digest_idx < summary_idx < state_idx < commit_idx
     assert timestamp.microsecond == 654321
     assert any(timestamp in params for _, params in connection.trace if isinstance(params, tuple))
 
@@ -228,7 +230,74 @@ def test_apply_delta_rolls_back_on_sql_failure() -> None:
     state = GoldSyncState(lineage, "fingerprint", "c" * 64, 1, timestamp, timestamp, timestamp)
     connection = FakeConnection(fail_token='INSERT INTO "crypto_loader"')
     repository = PostgresGoldSyncRepository(_settings(), connection_factory=lambda _: connection)
-    with pytest.raises(RuntimeError):
+    with pytest.raises(Exception, match="transaction failed"):
         repository.apply_delta(lineage, plan, state)
+    assert ("ROLLBACK", None) in connection.trace
+    assert ("COMMIT", None) not in connection.trace
+
+
+def test_reconcile_lineage_locks_before_reads_and_commits_after_checkpoint() -> None:
+    schema = _schema()
+    snapshot = _snapshot(schema.signature)
+    timestamp = snapshot.min_timestamp
+    assert timestamp is not None
+    key = GoldRowKey("deribit", "BTC", timestamp)
+    payload = GoldRowPayload(
+        key,
+        (("exchange", "deribit"), ("symbol", "BTC"), ("timestamp_m1", timestamp), ("value", 1.0)),
+    )
+    plan = GoldDeltaPlan((payload,), (), (), (), (GoldRowDigest(key, "a" * 64),))
+    state = GoldSyncState(snapshot.lineage, "fingerprint", schema.signature, 1, timestamp, timestamp, timestamp)
+    connection = FakeConnection(fetchone_queue=[None, [], (1, timestamp, timestamp)])
+    repository = PostgresGoldSyncRepository(_settings(), connection_factory=lambda _: connection)
+
+    def planner(current: GoldSyncState | None, digests: tuple[GoldRowDigest, ...]) -> GoldReconcileDecision:
+        connection.trace.append(("PLANNER", (current, digests)))
+        return GoldReconcileDecision(plan, state, GoldTargetSummary(1, timestamp, timestamp))
+
+    repository.reconcile_lineage(snapshot, schema.ddl, schema.signature, planner)
+
+    queries = [query for query, _ in connection.trace]
+    lock_idx = next(index for index, query in enumerate(queries) if "pg_advisory_xact_lock" in query)
+    state_read_idx = next(index for index, query in enumerate(queries) if query.startswith("SELECT dataset_id"))
+    digest_read_idx = next(index for index, query in enumerate(queries) if query.startswith("SELECT timestamp_m1"))
+    planner_idx = queries.index("PLANNER")
+    mutation_idx = next(index for index, query in enumerate(queries) if query.startswith('INSERT INTO "crypto_loader"'))
+    verification_idx = next(index for index, query in enumerate(queries) if query.startswith("SELECT COUNT"))
+    checkpoint_idx = next(
+        index
+        for index, query in enumerate(queries)
+        if query.startswith('INSERT INTO "crypto_loader_sync"."gold_sync_state"')
+    )
+    commit_idx = queries.index("COMMIT")
+    assert lock_idx < state_read_idx < digest_read_idx < planner_idx
+    assert planner_idx < mutation_idx < verification_idx < checkpoint_idx < commit_idx
+
+
+def test_reconcile_lineage_rolls_back_mutations_when_checkpoint_fails() -> None:
+    schema = _schema()
+    snapshot = _snapshot(schema.signature)
+    timestamp = snapshot.min_timestamp
+    assert timestamp is not None
+    key = GoldRowKey("deribit", "BTC", timestamp)
+    payload = GoldRowPayload(
+        key,
+        (("exchange", "deribit"), ("symbol", "BTC"), ("timestamp_m1", timestamp), ("value", 1.0)),
+    )
+    plan = GoldDeltaPlan((payload,), (), (), (), (GoldRowDigest(key, "a" * 64),))
+    state = GoldSyncState(snapshot.lineage, "fingerprint", schema.signature, 1, timestamp, timestamp, timestamp)
+    connection = FakeConnection(
+        fetchone_queue=[None, [], (1, timestamp, timestamp)],
+        fail_token='INSERT INTO "crypto_loader_sync"."gold_sync_state"',
+    )
+    repository = PostgresGoldSyncRepository(_settings(), connection_factory=lambda _: connection)
+
+    def planner(_state: GoldSyncState | None, _digests: tuple[GoldRowDigest, ...]) -> GoldReconcileDecision:
+        return GoldReconcileDecision(plan, state, GoldTargetSummary(1, timestamp, timestamp))
+
+    with pytest.raises(Exception, match="transaction failed"):
+        repository.reconcile_lineage(snapshot, schema.ddl, schema.signature, planner)
+
+    assert any(query.startswith('INSERT INTO "crypto_loader"') for query, _ in connection.trace)
     assert ("ROLLBACK", None) in connection.trace
     assert ("COMMIT", None) not in connection.trace

@@ -28,6 +28,7 @@ from application.postgres_sync import (
     GoldTargetSummary,
     consumer_table_name,
 )
+from application.postgres_sync.contracts import GoldReconcileDecision, GoldReconcilePlanner
 from application.postgres_sync.schema import quote_identifier
 
 
@@ -260,6 +261,31 @@ class PostgresGoldSyncRepository:
         except Exception:
             raise PostgresGoldRepositoryError("PostgreSQL connection initialization failed") from None
 
+    @staticmethod
+    def _read_state(cursor: CursorPort, lineage: GoldLineage) -> GoldSyncState | None:
+        cursor.execute(_SELECT_STATE, _lineage_params(lineage))
+        row = cursor.fetchone()
+        return None if row is None else _state_from_row(row)
+
+    @staticmethod
+    def _read_digests(cursor: CursorPort, lineage: GoldLineage) -> tuple[GoldRowDigest, ...]:
+        cursor.execute(_SELECT_DIGESTS, _lineage_params(lineage))
+        rows = cursor.fetchall()
+        result: list[GoldRowDigest] = []
+        for row in rows:
+            if len(row) != 2:
+                raise ValueError("PostgreSQL Gold digest row has unexpected width")
+            timestamp = _as_datetime(row[0], "timestamp_m1")
+            if timestamp is None:
+                raise ValueError("PostgreSQL Gold digest timestamp cannot be null")
+            result.append(
+                GoldRowDigest(
+                    GoldRowKey(lineage.exchange, lineage.symbol, timestamp),
+                    _as_text(row[1], "row_sha256"),
+                )
+            )
+        return tuple(result)
+
     def ensure_lineage(self, snapshot: GoldSourceSnapshot, ddl: str, schema_signature: str) -> None:
         """Create/validate target tables before any consumer-row mutation."""
 
@@ -294,11 +320,9 @@ class PostgresGoldSyncRepository:
         try:
             cursor = connection.cursor()
             try:
-                cursor.execute(_SELECT_STATE, _lineage_params(lineage))
-                row = cursor.fetchone()
+                return self._read_state(cursor, lineage)
             finally:
                 cursor.close()
-            return None if row is None else _state_from_row(row)
         except Exception:
             raise PostgresGoldRepositoryError("PostgreSQL Gold sync-state read failed") from None
         finally:
@@ -309,24 +333,9 @@ class PostgresGoldSyncRepository:
         try:
             cursor = connection.cursor()
             try:
-                cursor.execute(_SELECT_DIGESTS, _lineage_params(lineage))
-                rows = cursor.fetchall()
+                return self._read_digests(cursor, lineage)
             finally:
                 cursor.close()
-            result: list[GoldRowDigest] = []
-            for row in rows:
-                if len(row) != 2:
-                    raise ValueError("PostgreSQL Gold digest row has unexpected width")
-                timestamp = _as_datetime(row[0], "timestamp_m1")
-                if timestamp is None:
-                    raise ValueError("PostgreSQL Gold digest timestamp cannot be null")
-                result.append(
-                    GoldRowDigest(
-                        GoldRowKey(lineage.exchange, lineage.symbol, timestamp),
-                        _as_text(row[1], "row_sha256"),
-                    )
-                )
-            return tuple(result)
         except Exception:
             raise PostgresGoldRepositoryError("PostgreSQL Gold digest read failed") from None
         finally:
@@ -402,16 +411,103 @@ class PostgresGoldSyncRepository:
         )
         cursor.execute(query, (key.exchange, key.symbol, key.timestamp_m1))
 
-    def apply_delta(self, lineage: GoldLineage, plan: GoldDeltaPlan, state: GoldSyncState) -> None:
-        """Apply exactly one supplied lineage delta atomically under an advisory lock."""
-
-        if state.lineage != lineage:
-            raise ValueError("Gold sync state lineage does not match requested lineage")
+    def _apply_plan(self, cursor: CursorPort, lineage: GoldLineage, plan: GoldDeltaPlan) -> None:
         digest_map = self._digest_map(plan)
         for payload in (*plan.inserts, *plan.updates):
             if payload.key not in digest_map:
                 raise ValueError("Gold delta mutation is missing its source digest")
 
+        for payload in plan.inserts:
+            self._insert_row(cursor, lineage, payload.values)
+        for payload in plan.updates:
+            self._update_row(cursor, lineage, payload.values)
+        for key in plan.deletes:
+            self._delete_row(cursor, lineage, key)
+
+        for payload in (*plan.inserts, *plan.updates):
+            cursor.execute(
+                _UPSERT_DIGEST,
+                (
+                    lineage.dataset_id,
+                    lineage.exchange,
+                    lineage.symbol,
+                    payload.key.timestamp_m1,
+                    digest_map[payload.key],
+                ),
+            )
+        for key in plan.deletes:
+            cursor.execute(
+                _DELETE_DIGEST,
+                (lineage.dataset_id, lineage.exchange, lineage.symbol, key.timestamp_m1),
+            )
+
+    def _verify_summary(
+        self,
+        cursor: CursorPort,
+        lineage: GoldLineage,
+        expected: GoldTargetSummary,
+    ) -> None:
+        summary_query, summary_params = self._summary_sql(lineage)
+        cursor.execute(summary_query, summary_params)
+        summary_row = cursor.fetchone()
+        if summary_row is None:
+            raise ValueError("PostgreSQL Gold verification query returned no row")
+        actual = _summary_from_row(summary_row)
+        if actual != expected:
+            raise ValueError("PostgreSQL Gold post-write summary does not match source")
+
+    def reconcile_lineage(
+        self,
+        snapshot: GoldSourceSnapshot,
+        ddl: str,
+        schema_signature: str,
+        planner: GoldReconcilePlanner,
+    ) -> GoldReconcileDecision:
+        """Reconcile one lineage under one lock and transaction from first target read through commit."""
+
+        table_ddl = _safe_table_ddl(ddl)
+        lineage = snapshot.lineage
+        connection = self._open()
+        try:
+            cursor = connection.cursor()
+            try:
+                lock_key = f"{lineage.dataset_id}|{lineage.exchange}|{lineage.symbol}"
+                cursor.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", (lock_key,))
+                cursor.execute(_STATE_DDL)
+                cursor.execute(_DIGEST_DDL)
+                cursor.execute(table_ddl)
+
+                state = self._read_state(cursor, lineage)
+                if state is not None and state.schema_signature != schema_signature:
+                    raise PostgresSchemaMismatchError("PostgreSQL Gold schema migration required")
+                digests = self._read_digests(cursor, lineage)
+                decision = planner(state, digests)
+
+                if decision.plan is not None:
+                    if decision.next_state is None or decision.next_state.lineage != lineage:
+                        raise ValueError("Gold reconcile state lineage does not match requested lineage")
+                    self._apply_plan(cursor, lineage, decision.plan)
+                self._verify_summary(cursor, lineage, decision.expected_summary)
+                if decision.next_state is not None:
+                    cursor.execute(_UPSERT_STATE, _state_params(decision.next_state))
+            finally:
+                cursor.close()
+            connection.commit()
+            return decision
+        except PostgresSchemaMismatchError, ValueError, TypeError:
+            connection.rollback()
+            raise
+        except Exception:
+            connection.rollback()
+            raise PostgresGoldRepositoryError("PostgreSQL Gold reconcile transaction failed") from None
+        finally:
+            connection.close()
+
+    def apply_delta(self, lineage: GoldLineage, plan: GoldDeltaPlan, state: GoldSyncState) -> None:
+        """Apply exactly one supplied lineage delta atomically under an advisory lock."""
+
+        if state.lineage != lineage:
+            raise ValueError("Gold sync state lineage does not match requested lineage")
         connection = self._open()
         try:
             cursor = connection.cursor()
@@ -419,40 +515,10 @@ class PostgresGoldSyncRepository:
                 lock_key = f"{lineage.dataset_id}|{lineage.exchange}|{lineage.symbol}"
                 cursor.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", (lock_key,))
 
-                for payload in plan.inserts:
-                    self._insert_row(cursor, lineage, payload.values)
-                for payload in plan.updates:
-                    self._update_row(cursor, lineage, payload.values)
-                for key in plan.deletes:
-                    self._delete_row(cursor, lineage, key)
-
-                for payload in (*plan.inserts, *plan.updates):
-                    cursor.execute(
-                        _UPSERT_DIGEST,
-                        (
-                            lineage.dataset_id,
-                            lineage.exchange,
-                            lineage.symbol,
-                            payload.key.timestamp_m1,
-                            digest_map[payload.key],
-                        ),
-                    )
-                for key in plan.deletes:
-                    cursor.execute(
-                        _DELETE_DIGEST,
-                        (lineage.dataset_id, lineage.exchange, lineage.symbol, key.timestamp_m1),
-                    )
-
-                cursor.execute(_UPSERT_STATE, _state_params(state))
-                summary_query, summary_params = self._summary_sql(lineage)
-                cursor.execute(summary_query, summary_params)
-                summary_row = cursor.fetchone()
-                if summary_row is None:
-                    raise ValueError("PostgreSQL Gold verification query returned no row")
-                actual = _summary_from_row(summary_row)
                 expected = GoldTargetSummary(state.row_count, state.min_timestamp, state.max_timestamp)
-                if actual != expected:
-                    raise ValueError("PostgreSQL Gold post-write summary does not match source")
+                self._apply_plan(cursor, lineage, plan)
+                self._verify_summary(cursor, lineage, expected)
+                cursor.execute(_UPSERT_STATE, _state_params(state))
             finally:
                 cursor.close()
             connection.commit()
