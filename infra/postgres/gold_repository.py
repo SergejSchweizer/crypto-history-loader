@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Protocol, cast
 
 import psycopg
@@ -173,6 +173,8 @@ def _as_datetime(value: object, name: str) -> datetime | None:
         return None
     if not isinstance(value, datetime):
         raise TypeError(f"PostgreSQL {name} must be datetime")
+    if value.tzinfo is None or value.utcoffset() != timedelta(0):
+        raise ValueError(f"PostgreSQL {name} must be UTC-aware with a zero offset")
     return value
 
 

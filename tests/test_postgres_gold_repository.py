@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -21,6 +21,7 @@ from infra.postgres.gold_repository import (
     PostgresConnectionSettings,
     PostgresGoldSyncRepository,
     PostgresSchemaMismatchError,
+    _as_datetime,
 )
 
 
@@ -111,6 +112,25 @@ def test_settings_exact_endpoint_and_secret_redaction() -> None:
     assert "fake-secret" not in repr(settings)
     with pytest.raises(ValueError):
         PostgresConnectionSettings("localhost", 54321, "crypto-loader", "db", "secret")
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        datetime(2026, 1, 1),
+        datetime(2026, 1, 1, tzinfo=timezone(timedelta(hours=1))),
+        datetime(2026, 1, 1, tzinfo=timezone(timedelta(hours=2))),
+        datetime(2026, 1, 1, tzinfo=timezone(timedelta(hours=-5))),
+    ],
+)
+def test_database_datetime_reader_rejects_naive_and_non_utc_offsets(value: datetime) -> None:
+    with pytest.raises(ValueError, match="UTC-aware"):
+        _as_datetime(value, "timestamp_m1")
+
+
+def test_database_datetime_reader_accepts_utc() -> None:
+    timestamp = datetime(2026, 1, 1, 0, 0, 0, 123456, tzinfo=UTC)
+    assert _as_datetime(timestamp, "timestamp_m1") == timestamp
 
 
 def test_ensure_lineage_uses_utc_and_non_destructive_ddl() -> None:
