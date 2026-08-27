@@ -142,3 +142,35 @@ def test_get_json_http_400_sets_retryable_false(monkeypatch: pytest.MonkeyPatch)
         get_json("https://example.com", max_retries=0)
     assert exc_info.value.status_code == 400
     assert exc_info.value.retryable is False
+
+
+@pytest.mark.parametrize("error_kind", ["http", "url", "timeout", "json"])
+def test_get_json_redacts_query_values_from_errors(monkeypatch: pytest.MonkeyPatch, error_kind: str) -> None:
+    def _raise_http(url: str, timeout: float) -> _FakeResponse:
+        del timeout
+        if error_kind == "http":
+            raise HTTPError(url=url, code=400, msg="bad request", hdrs=Message(), fp=None)
+        if error_kind == "url":
+            raise URLError("offline")
+        if error_kind == "timeout":
+            raise TimeoutError("offline")
+        return _FakeResponse("not-json")
+
+    monkeypatch.setattr(http_client, "urlopen", _raise_http)
+    with pytest.raises(HttpClientError) as exc_info:
+        get_json("https://example.com/v1/data", params={"api_key": "super-secret"}, max_retries=0)
+
+    message = str(exc_info.value)
+    assert "https://example.com/v1/data" in message
+    assert "api_key" not in message
+    assert "super-secret" not in message
+
+
+def test_retry_sleep_uses_deterministic_exponential_delays(monkeypatch: pytest.MonkeyPatch) -> None:
+    delays: list[float] = []
+    monkeypatch.setattr(http_client.time, "sleep", delays.append)
+
+    http_client._retry_sleep(attempt=0, backoff_s=0.25)
+    http_client._retry_sleep(attempt=2, backoff_s=0.25)
+
+    assert delays == [0.25, 1.0]

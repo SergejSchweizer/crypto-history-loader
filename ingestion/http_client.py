@@ -4,11 +4,10 @@ from __future__ import annotations
 
 import json
 import os
-import random
 import time
 from typing import Any
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit, urlunsplit
 from urllib.request import urlopen
 
 
@@ -52,11 +51,16 @@ def _env_int(name: str, default: int) -> int:
 
 
 def _retry_sleep(attempt: int, backoff_s: float) -> None:
-    """Sleep with exponential backoff and light jitter."""
+    """Sleep with deterministic exponential backoff."""
 
-    base_delay = backoff_s * (2**attempt)
-    jitter = random.uniform(0.0, backoff_s)
-    time.sleep(base_delay + jitter)
+    time.sleep(backoff_s * (2**attempt))
+
+
+def _diagnostic_url(request_url: str) -> str:
+    """Return a URL safe for exceptions and logs by omitting query values."""
+
+    parsed = urlsplit(request_url)
+    return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, "", ""))
 
 
 def _is_retryable_http_error(exc: HTTPError) -> bool:
@@ -90,6 +94,7 @@ def get_json(
 
     query = urlencode(params or {})
     request_url = f"{url}?{query}" if query else url
+    diagnostic_url = _diagnostic_url(request_url)
     timeout_value = timeout_s if timeout_s is not None else _env_float("DEPTH_HTTP_TIMEOUT_S", 8.0)
     retries = max_retries if max_retries is not None else _env_int("DEPTH_HTTP_MAX_RETRIES", 2)
     backoff = retry_backoff_s if retry_backoff_s is not None else _env_float("DEPTH_HTTP_RETRY_BACKOFF_S", 0.5)
@@ -104,7 +109,7 @@ def get_json(
                 _retry_sleep(attempt=attempt, backoff_s=backoff)
                 continue
             raise HttpClientHttpError(
-                f"HTTP error {exc.code} for {request_url}",
+                f"HTTP error {exc.code} for {diagnostic_url}",
                 status_code=exc.code,
                 retryable=_is_retryable_http_error(exc),
             ) from exc
@@ -112,13 +117,13 @@ def get_json(
             if attempt < retries:
                 _retry_sleep(attempt=attempt, backoff_s=backoff)
                 continue
-            raise HttpClientError(f"Connection error for {request_url}: {exc.reason}") from exc
+            raise HttpClientError(f"Connection error for {diagnostic_url}: {exc.reason}") from exc
         except TimeoutError as exc:
             if attempt < retries:
                 _retry_sleep(attempt=attempt, backoff_s=backoff)
                 continue
-            raise HttpClientError(f"Connection timeout for {request_url}") from exc
+            raise HttpClientError(f"Connection timeout for {diagnostic_url}") from exc
         except json.JSONDecodeError as exc:
-            raise HttpClientError(f"Invalid JSON from {request_url}") from exc
+            raise HttpClientError(f"Invalid JSON from {diagnostic_url}") from exc
 
-    raise HttpClientError(f"Connection error for {request_url}: max retries exceeded")
+    raise HttpClientError(f"Connection error for {diagnostic_url}: max retries exceeded")
