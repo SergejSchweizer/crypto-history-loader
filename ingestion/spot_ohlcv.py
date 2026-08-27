@@ -8,7 +8,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from math import isfinite
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from ingestion.exchanges import deribit
 
