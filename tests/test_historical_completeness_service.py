@@ -44,6 +44,23 @@ def _write_rows(root: Path, lineage: HistoricalBronzeLineage, name: str, rows: l
     pl.DataFrame(rows).write_parquet(path)
 
 
+def _write_empty_data_file(root: Path, lineage: HistoricalBronzeLineage) -> None:
+    path = (
+        root
+        / f"dataset_type={lineage.dataset_type}"
+        / f"exchange={lineage.exchange}"
+        / f"instrument_type={lineage.instrument_type}"
+        / f"symbol={lineage.symbol}"
+        / f"timeframe={lineage.timeframe}"
+        / "year=2026"
+        / "month=2026-01"
+        / "date=2026-01-01"
+        / "data.parquet"
+    )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    pl.DataFrame(schema={"open_time": pl.Datetime(time_unit="ms", time_zone="UTC")}).write_parquet(path)
+
+
 def _lake_bytes(root: Path) -> dict[str, bytes]:
     return {str(path.relative_to(root)): path.read_bytes() for path in sorted(root.rglob("*")) if path.is_file()}
 
@@ -213,3 +230,234 @@ def test_config_expands_every_dataset_and_btc_eth_sol_lineage() -> None:
         "SOL-PERPETUAL",
     }
     assert {spec.family for spec in specs} == {"ohlcv", "funding", "open_interest", "trade"}
+
+
+@pytest.mark.parametrize("section_name", ["bronze-ingest", "loader"])
+def test_config_accepts_historical_bronze_section_aliases(section_name: str) -> None:
+    """Legacy Bronze section aliases retain the same audit configuration contract."""
+
+    specs = lineage_audit_specs_from_config(
+        config={
+            section_name: {
+                "dataset": ["perps_ohlcv"],
+                "symbols": ["BTC"],
+                "start_date": "2026-01-01",
+            }
+        },
+        end=datetime(2026, 1, 2, tzinfo=UTC),
+    )
+
+    assert len(specs) == 1
+    assert specs[0].start == datetime(2026, 1, 1, tzinfo=UTC)
+    assert specs[0].lineage.symbol == "BTC-PERPETUAL"
+
+
+def test_config_start_date_precedence_uses_specific_bound_and_global_floor() -> None:
+    """Exchange-symbol starts win over symbol starts but cannot precede the global floor."""
+
+    specs = lineage_audit_specs_from_config(
+        config={
+            "bronze-build": {
+                "dataset": ["perps_ohlcv"],
+                "symbols": ["BTC", "ETH"],
+                "start_date": "2020-01-01",
+                "symbol_start_dates": ["BTC=2019-01-01", "ETH=2021-01-01"],
+                "exchange_symbol_start_dates": ["deribit:BTC=2022-01-01"],
+            }
+        },
+        end=datetime(2026, 1, 2, tzinfo=UTC),
+    )
+
+    starts = {spec.lineage.symbol: spec.start for spec in specs}
+    assert starts == {
+        "BTC-PERPETUAL": datetime(2022, 1, 1, tzinfo=UTC),
+        "ETH-PERPETUAL": datetime(2021, 1, 1, tzinfo=UTC),
+    }
+
+
+def test_config_attaches_sorted_provider_gaps_to_matching_lineage() -> None:
+    """Configured UTC provider gaps are parsed, ordered, and scoped by lineage identity."""
+
+    specs = lineage_audit_specs_from_config(
+        config={
+            "bronze-build": {
+                "dataset": ["perps_ohlcv"],
+                "symbols": ["BTC"],
+                "start_date": "2026-01-01",
+            },
+            "historical-completeness-audit": {
+                "expected_provider_gaps": [
+                    {
+                        "lineage": "perps_ohlcv|deribit|perp|BTC-PERPETUAL|1m",
+                        "start": "2026-01-03T00:00:00Z",
+                        "end": "2026-01-03T00:01:00Z",
+                    },
+                    {
+                        "lineage": "perps_ohlcv|deribit|perp|BTC-PERPETUAL|1m",
+                        "start": "2026-01-02T00:00:00Z",
+                        "end": "2026-01-02T00:01:00Z",
+                    },
+                ]
+            },
+        },
+        end=datetime(2026, 1, 4, tzinfo=UTC),
+    )
+
+    assert [(gap.start, gap.end) for gap in specs[0].expected_provider_gaps] == [
+        (datetime(2026, 1, 2, tzinfo=UTC), datetime(2026, 1, 2, 0, 1, tzinfo=UTC)),
+        (datetime(2026, 1, 3, tzinfo=UTC), datetime(2026, 1, 3, 0, 1, tzinfo=UTC)),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "message"),
+    [
+        (
+            {"start": datetime(2026, 1, 1), "end": datetime(2026, 1, 1, tzinfo=UTC)},
+            "timezone-aware UTC",
+        ),
+        (
+            {
+                "start": datetime(2026, 1, 1, tzinfo=UTC),
+                "end": datetime(2025, 12, 31, tzinfo=UTC),
+            },
+            "must not precede",
+        ),
+    ],
+)
+def test_expected_provider_gap_rejects_invalid_bounds(kwargs: dict[str, datetime], message: str) -> None:
+    """Configured provider-gap evidence requires ordered UTC bounds."""
+
+    with pytest.raises(ValueError, match=message):
+        ExpectedProviderGap(**kwargs)
+
+
+@pytest.mark.parametrize(
+    ("family", "cadence", "message"),
+    [
+        ("open_interest", timedelta(minutes=1), "event-driven cadence"),
+        ("funding", None, "positive provider cadence"),
+        ("trade", timedelta(0), "positive provider cadence"),
+    ],
+)
+def test_lineage_audit_spec_rejects_invalid_family_cadence(
+    family: str, cadence: timedelta | None, message: str
+) -> None:
+    """Family contracts prevent regular and event-driven audit policies from mixing."""
+
+    with pytest.raises(ValueError, match=message):
+        LineageAuditSpec(
+            lineage=_lineage("perps_ohlcv", "perp", "1m"),
+            family=family,  # type: ignore[arg-type]  # Parametrization exercises each literal family policy.
+            start=datetime(2026, 1, 1, tzinfo=UTC),
+            end=datetime(2026, 1, 1, tzinfo=UTC),
+            cadence=cadence,
+        )
+
+
+@pytest.mark.parametrize(
+    ("config", "message"),
+    [
+        ({}, "missing historical Bronze build section"),
+        ({"bronze-build": {"dataset": [], "symbols": ["BTC"]}}, "dataset must be a non-empty list"),
+        (
+            {"bronze-build": {"dataset": ["perps_ohlcv"], "symbols": ["BTC"], "exchanges": ["binance"]}},
+            "unsupported historical Bronze exchange",
+        ),
+        (
+            {"bronze-build": {"dataset": ["unknown"], "symbols": ["BTC"], "start_date": "2026-01-01"}},
+            "unsupported historical Bronze dataset",
+        ),
+        (
+            {"bronze-build": {"dataset": ["perps_ohlcv"], "symbols": ["BTC"]}},
+            "missing configured listing start",
+        ),
+        (
+            {
+                "bronze-build": {"dataset": ["perps_ohlcv"], "symbols": ["BTC"], "start_date": "2026-01-01"},
+                "historical-completeness-audit": {"expected_provider_gaps": {}},
+            },
+            "expected_provider_gaps must be a list",
+        ),
+    ],
+)
+def test_config_rejects_invalid_historical_audit_contracts(config: dict[str, object], message: str) -> None:
+    """Invalid audit configuration fails before it can produce a misleading report."""
+
+    with pytest.raises(ValueError, match=message):
+        lineage_audit_specs_from_config(config=config, end=datetime(2026, 1, 2, tzinfo=UTC))
+
+
+def test_malformed_or_empty_parquet_evidence_fails_closed(tmp_path: Path) -> None:
+    """Files without usable timestamp rows never count as observed acquisition evidence."""
+
+    root = tmp_path / "bronze"
+    start = datetime(2026, 1, 1, tzinfo=UTC)
+    lineage = _lineage("perps_ohlcv", "perp", "1m")
+    _write_empty_data_file(root, lineage)
+
+    report = audit_historical_completeness(
+        bronze_root=root,
+        specs=(
+            LineageAuditSpec(
+                lineage=lineage,
+                family="ohlcv",
+                start=start,
+                end=start,
+                cadence=timedelta(minutes=1),
+            ),
+        ),
+    )
+
+    assert report.intervals[0].category == "unverified_acquisition"
+    assert report.status == "RECONCILE_REQUIRED"
+
+
+def test_parquet_without_timestamp_schema_fails_closed(tmp_path: Path) -> None:
+    """A recognized data file missing open_time does not count as acquisition evidence."""
+
+    root = tmp_path / "bronze"
+    start = datetime(2026, 1, 1, tzinfo=UTC)
+    lineage = _lineage("perps_ohlcv", "perp", "1m")
+    _write_rows(root, lineage, "data.parquet", [{"not_open_time": "not-a-timestamp"}])
+
+    report = audit_historical_completeness(
+        bronze_root=root,
+        specs=(
+            LineageAuditSpec(
+                lineage=lineage,
+                family="ohlcv",
+                start=start,
+                end=start,
+                cadence=timedelta(minutes=1),
+            ),
+        ),
+    )
+
+    assert report.intervals[0].category == "unverified_acquisition"
+    assert report.status == "RECONCILE_REQUIRED"
+
+
+def test_malformed_and_unconfirmed_empty_sidecars_do_not_certify_trade_minutes(tmp_path: Path) -> None:
+    """Only correctly shaped confirmed-empty sidecars certify an otherwise missing trade minute."""
+
+    root = tmp_path / "bronze"
+    start = datetime(2026, 1, 1, tzinfo=UTC)
+    lineage = _lineage("perps_trades", "perp", "tick")
+    _write_rows(root, lineage, "empty_minutes.parquet", [{"minute": start, "state": "confirmed_empty"}])
+
+    report = audit_historical_completeness(
+        bronze_root=root,
+        specs=(
+            LineageAuditSpec(
+                lineage=lineage,
+                family="trade",
+                start=start,
+                end=start,
+                cadence=timedelta(minutes=1),
+            ),
+        ),
+    )
+
+    assert report.intervals[0].category == "unverified_acquisition"
+    assert report.status == "RECONCILE_REQUIRED"

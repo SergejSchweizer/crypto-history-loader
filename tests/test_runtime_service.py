@@ -155,6 +155,52 @@ def test_configure_logging_uses_unified_format_with_module_name(
     logging.getLogger("crypto_loader.gold-build").handlers.clear()
 
 
+def test_configure_logging_falls_back_to_stderr_when_log_file_cannot_be_created(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Logging should remain usable when the configured log path rejects file creation."""
+
+    import application.services.runtime_service as module
+
+    class FailingFileHandler:
+        def __init__(self, *_args: object, **_kwargs: object) -> None:
+            raise OSError("read-only filesystem")
+
+    monkeypatch.setenv("DEPTH_SYNC_LOG_DIR", str(tmp_path))
+    monkeypatch.setattr(module, "RetentionTimedRotatingFileHandler", FailingFileHandler)
+    logger = configure_logging(module_name="fallback-test")
+
+    try:
+        assert len(logger.handlers) == 1
+        assert isinstance(logger.handlers[0], logging.StreamHandler)
+        assert not hasattr(logger.handlers[0], "baseFilename")
+    finally:
+        for handler in list(logger.handlers):
+            logger.removeHandler(handler)
+            handler.close()
+    logging.getLogger("crypto_loader.fallback-test").handlers.clear()
+
+
+def test_configure_logging_reuses_existing_module_logger(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Repeated configuration should preserve the original logger and avoid duplicate handlers."""
+
+    monkeypatch.setenv("DEPTH_SYNC_LOG_DIR", str(tmp_path))
+    logger = configure_logging(module_name="reuse-test")
+
+    try:
+        handler_count = len(logger.handlers)
+
+        assert configure_logging(module_name="reuse-test", debug=True) is logger
+        assert len(logger.handlers) == handler_count
+        assert logger.level == logging.INFO
+    finally:
+        for handler in list(logger.handlers):
+            logger.removeHandler(handler)
+            handler.close()
+    logging.getLogger("crypto_loader.reuse-test").handlers.clear()
+
+
 def test_enforce_log_retention_keeps_five_plain_days_archives_older_and_deletes_stale(tmp_path: Path) -> None:
     """Daily log retention should keep five plain rotations, gzip older days, and prune stale archives."""
 

@@ -239,3 +239,133 @@ def test_build_futures_summary_ignores_unused_bronze_schema_drift(tmp_path: Path
 
     assert observed_report.rows_in == 2
     assert observed_report.rows_out == 2
+
+
+def test_build_futures_summary_observed_drops_blank_symbols_and_missing_timestamps(tmp_path: Path) -> None:
+    """Observed summaries should publish only rows with usable snapshot identities."""
+
+    bronze = tmp_path / "bronze"
+    silver = tmp_path / "silver"
+    timestamp = datetime(2026, 8, 10, 9, 30, tzinfo=UTC)
+    _write_futures_summary_hour_file(
+        bronze,
+        exchange="deribit",
+        currency="ETH",
+        month="2026-08",
+        day="2026-08-10",
+        hour="09",
+        rows=[
+            {
+                "snapshot_time": timestamp,
+                "instrument_name": " eth-29aug26 ",
+                "exchange": " DERIBIT ",
+                "instrument_type": " FUTURE ",
+                "mark_price": 101.0,
+                "underlying_price": 100.0,
+                "estimated_delivery_price": 99.0,
+                "open_interest": 4.0,
+                "volume": 2.0,
+                "volume_usd": 202.0,
+                "interest_rate": 0.001,
+                "ingested_at": timestamp,
+                "source": "rest_get_book_summary_by_currency",
+            },
+            {
+                "snapshot_time": timestamp,
+                "instrument_name": "   ",
+                "exchange": "deribit",
+                "instrument_type": "future",
+                "ingested_at": timestamp,
+                "source": "rest_get_book_summary_by_currency",
+            },
+            {
+                "snapshot_time": None,
+                "instrument_name": "ETH-29AUG26",
+                "exchange": "deribit",
+                "instrument_type": "future",
+                "ingested_at": timestamp,
+                "source": "rest_get_book_summary_by_currency",
+            },
+        ],
+    )
+
+    report = build_futures_summary_observed_for_symbol(
+        bronze_root=str(bronze),
+        silver_root=str(silver),
+        exchange="deribit",
+        symbol="eth",
+    )
+
+    observed = pl.read_parquet(
+        silver
+        / "dataset_type=futures_summary_snapshot_1m_observed"
+        / "exchange=deribit"
+        / "symbol=ETH"
+        / "timeframe=1m"
+        / "year=2026"
+        / "month=2026-08"
+        / "ETH-2026-08.parquet"
+    )
+    assert report.rows_in == 3
+    assert report.rows_out == 1
+    assert observed.to_dicts() == [
+        {
+            "timestamp": timestamp,
+            "exchange": "deribit",
+            "symbol": "ETH-29AUG26",
+            "instrument_type": "future",
+            "mark_price": 101.0,
+            "index_price": 100.0,
+            "open_interest": 4.0,
+            "volume": 2.0,
+            "turnover": 202.0,
+            "funding_rate": 0.001,
+            "ingested_at": timestamp,
+            "source_endpoint": "rest_get_book_summary_by_currency",
+        }
+    ]
+
+
+def test_build_futures_summary_feature_skips_non_datetime_observed_timestamps(tmp_path: Path) -> None:
+    """Feature building should not publish a partition whose observed range is invalid."""
+
+    silver = tmp_path / "silver"
+    observed_path = (
+        silver
+        / "dataset_type=futures_summary_snapshot_1m_observed"
+        / "exchange=deribit"
+        / "symbol=BTC"
+        / "timeframe=1m"
+        / "year=2026"
+        / "month=2026-08"
+        / "BTC-2026-08.parquet"
+    )
+    observed_path.parent.mkdir(parents=True)
+    pl.DataFrame(
+        {
+            "timestamp": ["not-a-timestamp"],
+            "exchange": ["deribit"],
+            "symbol": ["BTC-29AUG26"],
+            "instrument_type": ["future"],
+        }
+    ).write_parquet(observed_path)
+
+    report = build_futures_summary_1m_feature_for_symbol(
+        silver_root=str(silver),
+        exchange="deribit",
+        symbol="BTC",
+    )
+
+    assert report.months_processed == ["2026-08"]
+    assert report.rows_in == 0
+    assert report.rows_out == 0
+    assert not (
+        silver
+        / "dataset_type=futures_summary_1m_feature"
+        / "exchange=deribit"
+        / "symbol=BTC"
+        / "timeframe=1m"
+        / "year=2026"
+        / "month=2026-08"
+        / "BTC-2026-08.parquet"
+    ).exists()

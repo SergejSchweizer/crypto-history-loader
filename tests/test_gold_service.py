@@ -28,10 +28,12 @@ from application.services.gold_service import (
     _json_payload_hash,
     _parse_semver,
     _read_latest_gold_dataset_artifact,
+    _unchanged_gold_report_from_manifest,
     build_gold_for_symbol,
     discover_gold_symbols,
     discover_gold_symbols_for_dataset,
     normalize_symbol,
+    prepare_gold_timeframe_fanout,
     validate_gold_retention_keep_versions,
 )
 
@@ -241,6 +243,132 @@ def test_unchanged_gold_report_rejects_corrupt_parquet(tmp_path: Path) -> None:
         )
         is None
     )
+
+
+def test_unchanged_gold_report_validates_manifest_and_returns_cache_hit(tmp_path: Path) -> None:
+    """A complete matching manifest returns its already-published Gold artifact."""
+
+    parquet_path = tmp_path / "cached.parquet"
+    manifest_path = tmp_path / "cached.json"
+    plot_path = tmp_path / "cached.png"
+    pl.DataFrame({"timestamp_m1": [datetime(2026, 5, 1, tzinfo=UTC)]}).write_parquet(parquet_path)
+    plot_path.write_bytes(b"plot")
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "input_fingerprint": "input",
+                "feature_set_hash": "feature",
+                "source_data_hash": "source",
+                "columns": ["timestamp_m1"],
+                "rows_out": 1,
+                "exchange": "deribit",
+                "symbol": "BTC",
+                "dataset_id": "gold.market.core.m1",
+                "dataset_version": "v1.2.3",
+                "git_commit_hash": "deadbeef",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report = _existing_gold_report_if_unchanged(
+        parquet_path=parquet_path,
+        manifest_path=manifest_path,
+        plot_path=plot_path,
+        input_fingerprint="input",
+        feature_set_hash="feature",
+        source_data_hash="source",
+    )
+
+    assert report is not None
+    assert report.dataset_version == "v1.2.3"
+    assert report.parquet_path == str(parquet_path.resolve())
+    assert report.plot_path == str(plot_path.resolve())
+
+    manifest_path.write_text("{not json", encoding="utf-8")
+    assert (
+        _existing_gold_report_if_unchanged(
+            parquet_path=parquet_path,
+            manifest_path=manifest_path,
+            plot_path=plot_path,
+            input_fingerprint="input",
+            feature_set_hash="feature",
+            source_data_hash="source",
+        )
+        is None
+    )
+
+
+def test_unchanged_manifest_and_timeframe_fanout_reject_invalid_inputs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Cache and fanout helpers reject incomplete lineage before publication work."""
+
+    assert (
+        _unchanged_gold_report_from_manifest(
+            gold_root=tmp_path,
+            exchange="deribit",
+            symbol="BTC",
+            dataset_id="gold.market.core.m1",
+            input_fingerprint="input",
+            manifest_payload={"input_fingerprint": "other"},
+            expected_dataset_version=None,
+        )
+        is None
+    )
+    assert (
+        _unchanged_gold_report_from_manifest(
+            gold_root=tmp_path,
+            exchange="deribit",
+            symbol="BTC",
+            dataset_id="gold.market.core.m1",
+            input_fingerprint="input",
+            manifest_payload={"input_fingerprint": "input", "dataset_version": "v1.0.0"},
+            expected_dataset_version="v1.0.1",
+        )
+        is None
+    )
+    assert (
+        _unchanged_gold_report_from_manifest(
+            gold_root=tmp_path,
+            exchange="deribit",
+            symbol="BTC",
+            dataset_id="gold.market.core.m1",
+            input_fingerprint="input",
+            manifest_payload={"input_fingerprint": "input", "dataset_version": "v1.0.0"},
+            expected_dataset_version="v1.0.0",
+        )
+        is None
+    )
+
+    with pytest.raises(ValueError, match="at least one"):
+        prepare_gold_timeframe_fanout(gold_root=str(tmp_path), exchange="deribit", symbol="BTC", dataset_ids=[])
+    with pytest.raises(ValueError, match="Unsupported derived"):
+        prepare_gold_timeframe_fanout(
+            gold_root=str(tmp_path), exchange="deribit", symbol="BTC", dataset_ids=["gold.market.core.m1"]
+        )
+    with pytest.raises(ValueError, match="share one M1 source"):
+        prepare_gold_timeframe_fanout(
+            gold_root=str(tmp_path),
+            exchange="deribit",
+            symbol="BTC",
+            dataset_ids=["gold.history.full.m5", "gold.live.full.m5"],
+        )
+
+    source = pl.DataFrame({"timestamp_m1": [datetime(2026, 5, 1, tzinfo=UTC)]})
+    empty = source.head(0)
+    monkeypatch.setattr(
+        "application.services.gold_service._read_latest_gold_dataset_artifact",
+        lambda **_kwargs: (source, tmp_path / "source.parquet", {}),
+    )
+    monkeypatch.setattr(
+        "application.services.gold_service.gold_frames.resample_history_full_frame",
+        lambda *_args: empty,
+    )
+    with pytest.raises(ValueError, match="produced zero rows"):
+        prepare_gold_timeframe_fanout(
+            gold_root=str(tmp_path), exchange="deribit", symbol="BTC", dataset_ids=["gold.history.full.m5"]
+        )
 
 
 def test_gold_service_rejects_invalid_derived_dataset_ids() -> None:

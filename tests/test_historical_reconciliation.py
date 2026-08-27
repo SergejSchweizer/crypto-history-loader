@@ -100,6 +100,67 @@ class RecordingAdapter:
         return self.inventory_passes
 
 
+@pytest.mark.parametrize(
+    ("payload", "message"),
+    [
+        ({"schema_version": "unknown", "intervals": [], "status": "PASS"}, "unsupported"),
+        ({"schema_version": "historical-lake-completeness-v1", "intervals": {}, "status": "PASS"}, "list"),
+        (
+            {
+                "schema_version": "historical-lake-completeness-v1",
+                "intervals": [
+                    {
+                        "lineage": "perps_trades|deribit|perp|BTC-PERPETUAL",
+                        "start": "2026-01-01T00:00:00Z",
+                        "end": "2026-01-01T00:00:00Z",
+                        "gap_category": "observed_rows",
+                        "evidence_source": "bronze_data:open_time",
+                        "status": "PASS",
+                    }
+                ],
+                "status": "PASS",
+            },
+            "five non-empty fields",
+        ),
+        (
+            {
+                "schema_version": "historical-lake-completeness-v1",
+                "intervals": [
+                    {
+                        "lineage": "perps_trades|deribit|perp|BTC-PERPETUAL|tick",
+                        "start": "2026-01-01T00:00:00Z",
+                        "end": "2026-01-01T00:00:00Z",
+                        "gap_category": "observed_rows",
+                        "evidence_source": "bronze_data:open_time",
+                        "status": "INVALID",
+                    }
+                ],
+                "status": "PASS",
+            },
+            "unsupported PR-99 interval status",
+        ),
+    ],
+)
+def test_load_historical_report_rejects_invalid_schema_and_malformed_intervals(
+    tmp_path: Path, payload: dict[str, object], message: str
+) -> None:
+    report_path = tmp_path / "pr99.json"
+    report_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ValueError, match=message):
+        load_historical_report(report_path)
+
+
+def test_load_historical_report_rejects_aggregate_status_mismatch(tmp_path: Path) -> None:
+    report_path = tmp_path / "pr99.json"
+    payload = json.loads(HistoricalCompletenessReport((_interval(status="RECONCILE_REQUIRED", minute=1),)).to_json())
+    payload["status"] = "PASS"
+    report_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="aggregate status"):
+        load_historical_report(report_path)
+
+
 def test_reloads_exact_non_pass_intervals_after_backup_and_preserves_other_bytes() -> None:
     passed = _interval(status="PASS", minute=0)
     failed_one = _interval(status="RECONCILE_REQUIRED", minute=1)
@@ -173,6 +234,83 @@ def test_unresolved_audit_inventory_or_gold_certification_blocks_downstream() ->
         "gold_inventory",
     )
     assert json.loads(report.to_json())["downstream_blocked"] is True
+    assert sink.states[-1].phase == "blocked"
+
+
+def test_unverified_silver_lookback_blocks_otherwise_passing_reconciliation() -> None:
+    class MissingLookbackAdapter(RecordingAdapter):
+        def rebuild_silver(self, intervals: tuple[CompletenessInterval, ...]) -> SilverRebuild:
+            self.events.append(f"silver:{len(intervals)}")
+            return SilverRebuild(("silver.features|deribit|BTC|2026-01-01",), False)
+
+    adapter = MissingLookbackAdapter()
+    sink = RecordingSink()
+
+    report = reconcile_historical_intervals(
+        input_report=HistoricalCompletenessReport((_interval(status="RECONCILE_REQUIRED", minute=0),)),
+        adapter=adapter,
+        sink=sink,
+    )
+
+    assert report.status == "FAIL"
+    assert report.blockers == ("silver_lookback_unverified",)
+    assert adapter.events == [
+        "snapshot:1",
+        "backup:1",
+        "reload:2026-01-01T00:00:00Z",
+        "validate:2026-01-01T00:00:00Z",
+        "unchanged:1",
+        "silver:1",
+        "gold:1:True",
+        "audit",
+        "freshness",
+        "inventory",
+    ]
+    assert sink.states[-1].phase == "blocked"
+
+
+def test_uncertified_gold_blocks_otherwise_passing_reconciliation() -> None:
+    adapter = RecordingAdapter(gold=(GoldCertification("gold.history.full.m1|deribit|BTC", "current", False),))
+    sink = RecordingSink()
+
+    report = reconcile_historical_intervals(
+        input_report=HistoricalCompletenessReport((_interval(status="PASS", minute=0),)),
+        adapter=adapter,
+        sink=sink,
+    )
+
+    assert report.status == "FAIL"
+    assert report.blockers == ("uncertified_serving_gold",)
+    assert adapter.events == ["gold:0:False", "audit", "freshness", "inventory"]
+    assert sink.states[-1].phase == "blocked"
+
+
+def test_adapter_exception_during_silver_rebuild_stops_downstream_and_fails_closed() -> None:
+    class FailingSilverAdapter(RecordingAdapter):
+        def rebuild_silver(self, intervals: tuple[CompletenessInterval, ...]) -> SilverRebuild:
+            self.events.append("silver-failed")
+            raise RuntimeError("secret=/private/silver-input")
+
+    adapter = FailingSilverAdapter()
+    sink = RecordingSink()
+
+    report = reconcile_historical_intervals(
+        input_report=HistoricalCompletenessReport((_interval(status="RECONCILE_REQUIRED", minute=0),)),
+        adapter=adapter,
+        sink=sink,
+    )
+
+    assert report.status == "FAIL"
+    assert report.blockers == ("reconciliation_operation_failed",)
+    assert adapter.events == [
+        "snapshot:1",
+        "backup:1",
+        "reload:2026-01-01T00:00:00Z",
+        "validate:2026-01-01T00:00:00Z",
+        "unchanged:1",
+        "silver-failed",
+    ]
+    assert "secret" not in report.to_json()
     assert sink.states[-1].phase == "blocked"
 
 

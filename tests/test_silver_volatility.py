@@ -792,3 +792,115 @@ def test_build_volatility_index_1m_feature_preserves_previous_close_across_year_
     # Without cross-year buffering this would be null because the prior close
     # lived in a different calendar-year monthly partition.
     assert january_output["iv_return_1m"].to_list()[0] == pytest.approx(log(55.0 / 50.0))
+
+
+def test_snapshot_layout_discovery_handles_missing_and_mixed_month_directories(tmp_path: Path) -> None:
+    """Snapshot discovery returns normalized symbols and canonical month keys."""
+
+    bronze = tmp_path / "bronze"
+    assert (
+        silver_volatility.discover_snapshot_symbols(
+            bronze_root=str(bronze),
+            dataset_type="volatility_index_snapshot_1m",
+            exchange="deribit",
+        )
+        == []
+    )
+
+    source_root = (
+        bronze
+        / "dataset_type=volatility_index_snapshot_1m"
+        / "exchange=deribit"
+        / "currency=btc"
+        / "source=rest_get_volatility_index_data"
+    )
+    (source_root / "year=2026" / "month=06").mkdir(parents=True)
+    (source_root / "year=2026" / "month=2026-07").mkdir(parents=True)
+    (bronze / "dataset_type=volatility_index_snapshot_1m" / "exchange=deribit" / "currency=eth").mkdir(parents=True)
+
+    assert silver_volatility.discover_snapshot_symbols(
+        bronze_root=str(bronze),
+        dataset_type="volatility_index_snapshot_1m",
+        exchange="deribit",
+    ) == ["BTC", "ETH"]
+    assert silver_volatility._discover_snapshot_months(
+        bronze_root=str(bronze),
+        dataset_type="volatility_index_snapshot_1m",
+        exchange="deribit",
+        currency="btc",
+        source="rest_get_volatility_index_data",
+    ) == ["2026-06", "2026-07"]
+
+
+def test_rolling_percentile_uses_closed_trailing_window_and_resets_by_symbol() -> None:
+    """Percentiles retain same-cutoff rows, discard older rows, and isolate symbols."""
+
+    frame = pl.DataFrame(
+        {
+            "exchange": ["deribit", "deribit", "deribit", "deribit"],
+            "symbol": ["BTC", "BTC", "BTC", "ETH"],
+            "timestamp_m1": [
+                datetime(2026, 1, 1, tzinfo=UTC),
+                datetime(2026, 1, 2, tzinfo=UTC),
+                datetime(2026, 2, 1, tzinfo=UTC),
+                datetime(2026, 2, 1, tzinfo=UTC),
+            ],
+            "iv_close": [10.0, 20.0, 10.0, 5.0],
+        }
+    )
+
+    assert silver_volatility._rolling_percentile_30d(frame) == [1.0, 1.0, 0.5, 1.0]
+
+
+def test_read_dedup_observed_month_prefers_snapshot_then_newest_ingestion(tmp_path: Path) -> None:
+    """Snapshot observations override historical rows at equal timestamps deterministically."""
+
+    silver = tmp_path / "silver"
+    timestamp = datetime(2026, 6, 12, 19, 48, tzinfo=UTC)
+    base_row = {
+        "exchange": "deribit",
+        "symbol": "BTC",
+        "timestamp": timestamp,
+        "ingested_at": datetime(2026, 6, 12, 19, 49, tzinfo=UTC),
+    }
+    _write_silver_observed_file(
+        silver,
+        dataset_type="volatility_index_data_observed",
+        exchange="deribit",
+        symbol="BTC",
+        month="2026-06",
+        rows=[base_row],
+    )
+    _write_silver_observed_file(
+        silver,
+        dataset_type="volatility_index_snapshot_1m_observed",
+        exchange="deribit",
+        symbol="BTC",
+        month="2026-06",
+        rows=[{**base_row, "ingested_at": datetime(2026, 6, 12, 19, 48, tzinfo=UTC)}],
+    )
+
+    selected, rows_in = silver_volatility._read_dedup_observed_month(
+        pl,
+        silver_root=str(silver),
+        historical_dataset_type="volatility_index_data_observed",
+        snapshot_dataset_type="volatility_index_snapshot_1m_observed",
+        exchange="deribit",
+        symbol="BTC",
+        timeframe="1m",
+        month="2026-06",
+    )
+
+    assert rows_in == 2
+    assert selected is not None
+    assert selected["iv_source_dataset"].to_list() == ["volatility_index_snapshot_1m_observed"]
+    assert silver_volatility._read_dedup_observed_month(
+        pl,
+        silver_root=str(silver),
+        historical_dataset_type="volatility_index_data_observed",
+        snapshot_dataset_type="volatility_index_snapshot_1m_observed",
+        exchange="deribit",
+        symbol="ETH",
+        timeframe="1m",
+        month="2026-06",
+    ) == (None, 0)

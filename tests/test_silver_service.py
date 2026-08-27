@@ -399,6 +399,66 @@ def test_build_silver_for_symbol_skips_matching_performance_manifest(
     assert final_repeat.rows_in == 0
 
 
+def test_build_silver_for_symbol_reports_and_reraises_publish_failure(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Publish failures retain their cause and emit the terminal operational event."""
+
+    caplog.set_level("INFO", logger="application.services.silver_service")
+    bronze = tmp_path / "bronze"
+    symbol = "BTC-PERPETUAL"
+    timestamp = datetime(2026, 5, 1, tzinfo=UTC)
+    _write_bronze_day_file(
+        bronze,
+        market="perps_ohlcv",
+        exchange="deribit",
+        symbol=symbol,
+        timeframe="1m",
+        month="2026-05",
+        day="2026-05-01",
+        rows=[
+            {
+                "schema_version": "v1",
+                "dataset_type": "perps_ohlcv",
+                "exchange": "deribit",
+                "symbol": symbol,
+                "instrument_type": "perp",
+                "timeframe": "1m",
+                "run_id": "r1",
+                "source_endpoint": "public_market_data",
+                "event_time": timestamp,
+                "open_time": timestamp,
+                "close_time": timestamp.replace(second=59, microsecond=999000),
+                "ingested_at": timestamp.replace(minute=1),
+                "open_price": 100.0,
+                "high_price": 101.0,
+                "low_price": 99.0,
+                "close_price": 100.5,
+                "volume": 1.0,
+                "quote_volume": 1.0,
+                "trade_count": 1,
+            }
+        ],
+    )
+
+    def fail_publish(**_kwargs: object) -> None:
+        raise OSError("simulated publish failure")
+
+    monkeypatch.setattr(silver_service, "publish_partition_atomically", fail_publish)
+
+    with pytest.raises(OSError, match="simulated publish failure"):
+        build_silver_for_symbol(
+            bronze_root=str(bronze),
+            silver_root=str(tmp_path / "silver"),
+            market="perps_ohlcv",
+            exchange="deribit",
+            symbol=symbol,
+        )
+
+    events = [json.loads(record.message)["event"] for record in caplog.records]
+    assert events == ["planned", "built", "failed"]
+
+
 def test_build_funding_observed_and_1m_feature(tmp_path: Path) -> None:
     bronze = tmp_path / "bronze"
     silver = tmp_path / "silver"

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta, timezone
+from decimal import Decimal
 
 import pytest
 
@@ -40,6 +41,16 @@ def test_invalid_timestamp_and_non_finite_values_fail() -> None:
         canonical_row_hash(_row(aware, float("nan")))
 
 
+def test_invalid_canonical_values_fail() -> None:
+    with pytest.raises(ValueError, match="non-finite decimal"):
+        canonical_row_hash({"value": Decimal("Infinity")})
+    with pytest.raises(TypeError, match="unsupported deterministic hash value type"):
+        canonical_row_hash({"value": object()})
+    assert canonical_row_hash({"nested": {"b": 2, "a": [None, "value"]}}) == canonical_row_hash(
+        {"nested": {"a": [None, "value"], "b": 2}}
+    )
+
+
 def test_bootstrap_classifies_every_source_row_as_insert() -> None:
     t0 = datetime(2026, 1, 1, tzinfo=UTC)
     t1 = datetime(2026, 1, 2, tzinfo=UTC)
@@ -54,6 +65,18 @@ def test_digest_without_state_is_rejected() -> None:
     digest = GoldRowDigest(key, canonical_row_hash(_row(timestamp, 1.0)))
     with pytest.raises(ValueError):
         plan_gold_delta([_row(timestamp, 1.0)], (digest,), state_exists=False)
+
+
+def test_duplicate_source_or_target_keys_are_rejected() -> None:
+    timestamp = datetime(2026, 1, 1, tzinfo=UTC)
+    source = _row(timestamp, 1.0)
+    key = GoldRowKey("deribit", "BTC", timestamp)
+    digest = GoldRowDigest(key, canonical_row_hash(source))
+
+    with pytest.raises(ValueError, match="duplicate source Gold key"):
+        plan_gold_delta([source, dict(source)], (), state_exists=True)
+    with pytest.raises(ValueError, match="duplicate PostgreSQL digest key"):
+        plan_gold_delta([source], (digest, digest), state_exists=True)
 
 
 def test_mixed_complete_state_delta_is_exact() -> None:

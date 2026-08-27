@@ -112,6 +112,69 @@ def test_duplicate_current_version_fails(tmp_path: Path) -> None:
         discover_current_gold_lineages(tmp_path)
 
 
+def test_invalid_candidate_manifest_fails(tmp_path: Path) -> None:
+    parquet = _write_candidate(tmp_path)
+    parquet.with_suffix(".json").write_text("not-json", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="invalid Gold manifest"):
+        discover_current_gold_lineages(tmp_path)
+
+
+def test_candidate_dataset_must_match_its_registered_path(tmp_path: Path) -> None:
+    parquet = _write_candidate(tmp_path)
+    manifest_path = parquet.with_suffix(".json")
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    payload["dataset_id"] = "gold.history.extended.m1"
+    manifest_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="dataset/path mismatch"):
+        discover_current_gold_lineages(tmp_path)
+
+
+def test_current_inventory_handles_absent_root_and_manifest_edge_cases(tmp_path: Path) -> None:
+    assert discover_current_gold_lineages(tmp_path / "missing") == ()
+
+    parquet = _write_candidate(tmp_path)
+    parquet.unlink()
+    with pytest.raises(ValueError, match="no matching parquet"):
+        discover_current_gold_lineages(tmp_path)
+
+
+@pytest.mark.parametrize(
+    ("field_name", "field_value", "message"),
+    [
+        ("build_date_utc", 1, "ISO UTC timestamp"),
+        ("build_date_utc", "2026-01-01T01:00:00+01:00", "must use UTC"),
+        ("schema_signature", None, "schema signature"),
+        ("input_fingerprint", "", "source fingerprint"),
+    ],
+)
+def test_current_inventory_rejects_invalid_manifest_fields(
+    tmp_path: Path, field_name: str, field_value: object, message: str
+) -> None:
+    parquet = _write_candidate(tmp_path)
+    manifest_path = parquet.with_suffix(".json")
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    payload[field_name] = field_value
+    manifest_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ValueError, match=message):
+        discover_current_gold_lineages(tmp_path)
+
+
+def test_current_inventory_accepts_legacy_source_data_hash(tmp_path: Path) -> None:
+    parquet = _write_candidate(tmp_path)
+    manifest_path = parquet.with_suffix(".json")
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    payload.pop("input_fingerprint")
+    payload["source_data_hash"] = "legacy-fingerprint"
+    manifest_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    snapshots = discover_current_gold_lineages(tmp_path)
+
+    assert snapshots[0].source_fingerprint == "legacy-fingerprint"
+
+
 def test_wrong_timestamp_unit_or_timezone_fails(tmp_path: Path) -> None:
     _write_candidate(tmp_path, timestamp_dtype=pl.Datetime("ms", "UTC"))
     with pytest.raises(TypeError, match=r"Datetime\(us, UTC\)"):
@@ -192,6 +255,88 @@ def test_declared_inventory_excludes_retained_stale_extended_lineage(tmp_path: P
     assert [(item.lineage.dataset_id, item.lineage.exchange, item.lineage.symbol) for item in snapshots] == [
         ("gold.history.full.m1", "deribit", "BTC")
     ]
+
+
+def test_declared_inventory_rejects_duplicate_lineages(tmp_path: Path) -> None:
+    current = _write_candidate(tmp_path)
+    result_path = tmp_path / "publication-result.json"
+    _write_publication_result(result_path, [current])
+    payload = json.loads(result_path.read_text(encoding="utf-8"))
+    payload["artifacts"].append(payload["artifacts"][0])
+    result_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="duplicate lineages"):
+        discover_declared_gold_lineages(tmp_path, result_path)
+
+
+@pytest.mark.parametrize(
+    ("payload", "message"),
+    [
+        (None, "invalid Gold publication result"),
+        ({}, "not a certified success"),
+        ({"result_version": 1, "status": "success", "serving_deprecations": ["old"]}, "deprecation policy"),
+        (
+            {"result_version": 1, "status": "success", "serving_deprecations": [], "artifacts": {}},
+            "artifacts must be a list",
+        ),
+        (
+            {"result_version": 1, "status": "success", "serving_deprecations": [], "artifacts": ["bad"]},
+            "artifact must contain an object",
+        ),
+    ],
+)
+def test_declared_inventory_rejects_invalid_publication_result(tmp_path: Path, payload: object, message: str) -> None:
+    result_path = tmp_path / "publication-result.json"
+    if payload is None:
+        result_path.write_text("not-json", encoding="utf-8")
+    else:
+        result_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ValueError, match=message):
+        discover_declared_gold_lineages(tmp_path, result_path)
+
+
+@pytest.mark.parametrize(
+    ("change", "message"),
+    [
+        (("dataset_id", "gold.unregistered.m1"), "unregistered dataset"),
+        (("parquet_path", 1), "paths must be strings"),
+        (("parquet_path", "/tmp/outside.parquet"), "outside the Gold root"),
+        (("manifest_path", "other.json"), "outside the Gold root"),
+    ],
+)
+def test_declared_inventory_rejects_invalid_artifact_locations(
+    tmp_path: Path, change: tuple[str, object], message: str
+) -> None:
+    current = _write_candidate(tmp_path)
+    result_path = tmp_path / "publication-result.json"
+    _write_publication_result(result_path, [current])
+    payload = json.loads(result_path.read_text(encoding="utf-8"))
+    payload["artifacts"][0][change[0]] = change[1]
+    result_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ValueError, match=message):
+        discover_declared_gold_lineages(tmp_path, result_path)
+
+
+def test_declared_inventory_requires_matching_artifact_pair_and_manifest_lineage(tmp_path: Path) -> None:
+    current = _write_candidate(tmp_path)
+    result_path = tmp_path / "publication-result.json"
+    _write_publication_result(result_path, [current])
+    payload = json.loads(result_path.read_text(encoding="utf-8"))
+    payload["artifacts"][0]["manifest_path"] = str((tmp_path / "other.json").resolve())
+    result_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="artifact pair does not match"):
+        discover_declared_gold_lineages(tmp_path, result_path)
+
+    _write_publication_result(result_path, [current])
+    payload = json.loads(result_path.read_text(encoding="utf-8"))
+    payload["artifacts"][0]["symbol"] = "ETH"
+    result_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="lineage does not match its manifest"):
+        discover_declared_gold_lineages(tmp_path, result_path)
 
 
 def test_all_declared_artifacts_are_certified_before_repository_mutation(tmp_path: Path) -> None:

@@ -121,6 +121,92 @@ def test_build_open_interest_observed_and_feature_use_dataset_family_module(tmp_
     assert feature.select("minutes_since_open_interest_observation").to_series().to_list() == [0, 1, 0]
 
 
+def test_open_interest_observed_skips_unobserved_rows_reuses_cache_and_honors_cutoff(tmp_path: Path) -> None:
+    bronze = tmp_path / "bronze"
+    silver = tmp_path / "silver"
+    rows = [
+        {
+            "exchange": "Deribit",
+            "symbol": "btc_perpetual",
+            "instrument_type": "perp",
+            "source_endpoint": "public_open_interest",
+            "open_time": datetime(2026, 5, 1, 0, 0, tzinfo=UTC),
+            "timeframe": "1m",
+            "open_interest": 1000.0,
+            "open_interest_is_observed": True,
+            "ingested_at": datetime(2026, 5, 1, 0, 0, 30, tzinfo=UTC),
+        },
+        {
+            "exchange": "Deribit",
+            "symbol": "btc_perpetual",
+            "instrument_type": "perp",
+            "source_endpoint": "public_open_interest",
+            "open_time": datetime(2026, 5, 1, 0, 1, tzinfo=UTC),
+            "timeframe": "1m",
+            "open_interest": 1010.0,
+            "open_interest_is_observed": False,
+            "ingested_at": datetime(2026, 5, 1, 0, 1, 30, tzinfo=UTC),
+        },
+        {
+            "exchange": "Deribit",
+            "symbol": "btc_perpetual",
+            "instrument_type": "perp",
+            "source_endpoint": "public_open_interest",
+            "open_time": datetime(2026, 5, 1, 0, 2, tzinfo=UTC),
+            "timeframe": "1m",
+            "open_interest": 1020.0,
+            "open_interest_is_observed": True,
+            "ingested_at": datetime(2026, 5, 1, 0, 2, 30, tzinfo=UTC),
+        },
+    ]
+    source_file = (
+        bronze
+        / "dataset_type=open_interest"
+        / "exchange=deribit"
+        / "instrument_type=perp"
+        / "symbol=BTC-PERPETUAL"
+        / "timeframe=1m"
+        / "year=2026"
+        / "month=2026-05"
+        / "date=2026-05-01"
+        / "data.parquet"
+    )
+    source_file.parent.mkdir(parents=True)
+    pl.DataFrame(rows).write_parquet(source_file)
+
+    observed_report = silver_open_interest.build_open_interest_observed_for_symbol(
+        bronze_root=str(bronze),
+        silver_root=str(silver),
+        exchange="deribit",
+        symbol="BTC-PERPETUAL",
+        dependencies=_dependencies(),
+    )
+    cached_report = silver_open_interest.build_open_interest_observed_for_symbol(
+        bronze_root=str(bronze),
+        silver_root=str(silver),
+        exchange="deribit",
+        symbol="BTC-PERPETUAL",
+        dependencies=_dependencies(),
+    )
+
+    assert observed_report.rows_in == 3
+    assert observed_report.rows_out == 2
+    assert cached_report.rows_in == 0
+    assert cached_report.rows_out == 2
+
+    feature_report = silver_open_interest.build_open_interest_1m_feature_for_symbol(
+        silver_root=str(silver),
+        exchange="deribit",
+        symbol="BTC-PERPETUAL",
+        cutoff_time=datetime(2026, 5, 1, 0, 1, tzinfo=UTC),
+        dependencies=_dependencies(),
+    )
+
+    assert feature_report.rows_in == 2
+    assert feature_report.rows_out == 2
+    assert feature_report.max_timestamp == "2026-05-01T00:01:00Z"
+
+
 def _dependencies() -> silver_open_interest.OpenInterestDependencies:
     return silver_open_interest.OpenInterestDependencies(
         require_polars=_require_polars,

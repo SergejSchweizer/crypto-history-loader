@@ -9,6 +9,7 @@ from application.services.fetch_range_planning import (
     day_end_ms,
     day_start_ms,
     missing_trade_day_ranges,
+    missing_trade_minute_ranges,
     ranges_in_random_order,
     split_range_into_utc_days,
 )
@@ -67,6 +68,62 @@ def test_missing_trade_day_ranges_resumes_clear_partial_days() -> None:
     ) == [(int(datetime(2026, 4, 27, 23, 58, 0, tzinfo=UTC).timestamp() * 1000) + 1, end_ms)]
 
 
+def test_missing_trade_day_ranges_refetches_partition_missing_coverage_metadata() -> None:
+    """Refetch a persisted partition when its timestamp bounds are unavailable."""
+
+    target_day = date(2026, 4, 27)
+    start_ms = day_start_ms(target_day)
+    end_ms = day_end_ms(target_day)
+
+    assert missing_trade_day_ranges(
+        existing_dates=[target_day],
+        coverage_bounds={date(2026, 4, 26): (datetime(2026, 4, 26, tzinfo=UTC), datetime(2026, 4, 26, tzinfo=UTC))},
+        start_open_ms=start_ms,
+        end_open_ms=end_ms,
+    ) == [(start_ms, end_ms)]
+
+
+def test_trade_range_planners_reject_inverted_bounds() -> None:
+    """Return no fetch work when a caller supplies an inverted interval."""
+
+    start_ms = int(datetime(2026, 4, 27, 10, 1, tzinfo=UTC).timestamp() * 1000)
+    end_ms = int(datetime(2026, 4, 27, 10, 0, tzinfo=UTC).timestamp() * 1000)
+
+    assert split_range_into_utc_days(start_ms, end_ms) == []
+    assert (
+        missing_trade_day_ranges(
+            existing_dates=[],
+            start_open_ms=start_ms,
+            end_open_ms=end_ms,
+        )
+        == []
+    )
+    assert (
+        missing_trade_minute_ranges(
+            existing_open_minutes=[],
+            start_open_ms=start_ms,
+            end_open_ms=end_ms,
+        )
+        == []
+    )
+
+
+def test_missing_trade_minute_ranges_clips_partial_edge_minutes() -> None:
+    """Plan only absent minute buckets within exact caller-provided bounds."""
+
+    start_ms = int(datetime(2026, 4, 27, 10, 0, 30, tzinfo=UTC).timestamp() * 1000)
+    end_ms = int(datetime(2026, 4, 27, 10, 3, 15, tzinfo=UTC).timestamp() * 1000)
+
+    assert missing_trade_minute_ranges(
+        existing_open_minutes=[datetime(2026, 4, 27, 10, 1, 45, tzinfo=UTC)],
+        start_open_ms=start_ms,
+        end_open_ms=end_ms,
+    ) == [
+        (start_ms, int(datetime(2026, 4, 27, 10, 0, 59, 999000, tzinfo=UTC).timestamp() * 1000)),
+        (int(datetime(2026, 4, 27, 10, 2, tzinfo=UTC).timestamp() * 1000), end_ms),
+    ]
+
+
 def test_build_missing_ranges_with_optional_head_gap_extends_from_start_bound() -> None:
     """Include leading explicit start-bound coverage before first persisted point."""
 
@@ -101,3 +158,19 @@ def test_build_missing_ranges_with_optional_head_gap_skips_when_bound_is_covered
     )
 
     assert ranges == [(end_ms - 60_000, end_ms)]
+
+
+def test_build_missing_ranges_with_optional_head_gap_clips_to_early_end_bound() -> None:
+    """Clip a leading range when the fetch end predates stored coverage."""
+
+    existing = [datetime(2026, 4, 27, 10, 2, tzinfo=UTC)]
+    start_bound_ms = int(datetime(2026, 4, 27, 10, 0, tzinfo=UTC).timestamp() * 1000)
+    end_ms = int(datetime(2026, 4, 27, 10, 1, tzinfo=UTC).timestamp() * 1000)
+
+    assert build_missing_ranges_with_optional_head_gap(
+        existing_open_times=existing,
+        interval_ms=60_000,
+        end_open_ms=end_ms,
+        start_open_ms_bound=start_bound_ms,
+        ranges_builder=lambda **_: [],
+    ) == [(start_bound_ms, end_ms)]

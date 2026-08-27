@@ -192,6 +192,40 @@ def test_run_gold_build_uses_helpers_and_emits_reports(
     assert captured_kwargs["plot"] is False
 
 
+def test_run_gold_build_suppresses_json_output_when_requested(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A successful Gold build keeps stdout empty with ``--no-json-output``."""
+
+    monkeypatch.setattr(gold_cmd, "_resolve_gold_symbols", lambda **_kwargs: ["BTC"])
+    monkeypatch.setattr(gold_cmd, "_validate_version_args", lambda **_kwargs: None)
+
+    class _Report:
+        dataset_id = "gold.market.full.m1"
+        rows_out = 1
+        parquet_path = "/tmp/data.parquet"
+
+        def to_dict(self) -> dict[str, object]:
+            return {"dataset_id": self.dataset_id, "rows_out": self.rows_out}
+
+    monkeypatch.setattr(gold_cmd, "build_gold_for_symbol", lambda **_kwargs: _Report())
+
+    gold_cmd.run_gold_build(args=gold_args(no_json_output=True), logger=logging.getLogger("test"))
+
+    assert capsys.readouterr().out == ""
+
+
+def test_run_gold_build_rejects_dataset_that_is_also_excluded() -> None:
+    """A selected dataset cannot be removed from the same Gold invocation."""
+
+    args = gold_args()
+    args.exclude_dataset_id = ["gold.market.full.m1"]
+
+    with pytest.raises(ValueError, match="cannot also be passed"):
+        gold_cmd.run_gold_build(args=args, logger=logging.getLogger("test"))
+
+
 def test_run_gold_build_mirrors_completed_gold_output(monkeypatch: pytest.MonkeyPatch) -> None:
     """A successful CLI Gold build mirrors the full output tree once."""
 

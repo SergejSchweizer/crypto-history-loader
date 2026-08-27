@@ -5,13 +5,14 @@ from __future__ import annotations
 import builtins
 import json
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, cast
 
 import polars as pl
 import pytest
 
+from application.services import silver_sidecars
 from application.services.silver_sidecars import (
     _iso_utc,
     _with_timestamp_m1,
@@ -156,3 +157,76 @@ def test_silver_sidecar_helpers_handle_missing_dependencies_and_plot_schema(
 
     no_time = pl.DataFrame({"value": [1.0]})
     assert _write_silver_plot(no_time, tmp_path / "missing.png") is None
+
+
+def test_write_monthly_sidecars_marks_non_datetime_timestamps_as_unavailable(tmp_path: Path) -> None:
+    """String timestamps must not be published as validated UTC manifest bounds."""
+
+    parquet_path = (
+        tmp_path
+        / "dataset_type=funding_1m_feature"
+        / "exchange=deribit"
+        / "symbol=ETH"
+        / "timeframe=1m"
+        / "year=2026"
+        / "month=2026-05"
+        / "ETH-2026-05.parquet"
+    )
+    parquet_path.parent.mkdir(parents=True)
+    pl.DataFrame({"timestamp": ["not-a-timestamp"], "funding_rate_last_known": [0.01]}).write_parquet(parquet_path)
+
+    manifests, plots = write_monthly_sidecars(
+        silver_root=str(tmp_path),
+        market="funding_1m_feature",
+        exchange="deribit",
+        symbol="ETH",
+        report=_Report("funding_1m_feature", "deribit", "ETH", "1m", ["2026-05"], 7),
+    )
+
+    assert plots == []
+    payload = json.loads(Path(manifests[0]).read_text(encoding="utf-8"))
+    assert payload["min_timestamp"] is None
+    assert payload["max_timestamp"] is None
+    assert payload["source_silver_datasets"]["funding_1m_feature"]["source_symbols"] == ["ETH"]
+    assert payload["feature_metadata"]["funding_rate_last_known"]["time_range"] == {
+        "min_timestamp": None,
+        "max_timestamp": None,
+    }
+    assert payload["calculation_lookback_days"] == 7
+
+
+def test_silver_sidecar_helpers_prefer_canonical_timestamp_and_prepare_plot_schema(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Timestamp aliases and missing plot dimensions should be normalized deterministically."""
+
+    timestamp = datetime(2026, 5, 1, tzinfo=UTC)
+    frame = pl.DataFrame({"timestamp_m1": [timestamp], "open_time": [timestamp], "value": [1.0]})
+    assert _with_timestamp_m1(frame).columns == frame.columns
+    assert _iso_utc(datetime(2026, 5, 1, 2, tzinfo=timezone(timedelta(hours=2)))) == "2026-05-01T00:00:00Z"
+
+    captured: dict[str, object] = {}
+
+    def capture_plot(plot_frame: object, output_path: Path, *, normalize_y: bool) -> str:
+        captured["columns"] = cast(Any, plot_frame).columns
+        captured["output_path"] = output_path
+        captured["normalize_y"] = normalize_y
+        return str(output_path.resolve())
+
+    monkeypatch.setattr(silver_sidecars, "write_feature_distribution_plot", capture_plot)
+    output_path = tmp_path / "profile.png"
+    assert _write_silver_plot(pl.DataFrame({"open_time": [timestamp], "value": [1.0]}), output_path) == str(
+        output_path.resolve()
+    )
+    assert captured == {
+        "columns": ["open_time", "value", "timestamp_m1", "exchange", "symbol"],
+        "output_path": output_path,
+        "normalize_y": False,
+    }
+
+    def fail_plot(*_args: object, **_kwargs: object) -> None:
+        raise OSError("plot storage unavailable")
+
+    monkeypatch.setattr(silver_sidecars, "write_feature_distribution_plot", fail_plot)
+    with pytest.raises(OSError, match="plot storage unavailable"):
+        _write_silver_plot(pl.DataFrame({"timestamp": [timestamp], "value": [1.0]}), output_path)

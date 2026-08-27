@@ -135,6 +135,34 @@ def test_prepare_options_snapshot_aggregates_contract_rows_to_unique_minutes() -
     assert prepared["options_surface_quote_coverage_ratio"].to_list() == [pytest.approx(2 / 3)]
 
 
+def test_prepare_options_snapshot_keeps_latest_preaggregated_surface_row() -> None:
+    """Pre-aggregated option surfaces retain their supported contract columns."""
+
+    timestamp = datetime(2026, 5, 1, 0, 0, tzinfo=UTC)
+    frame = pl.DataFrame(
+        {
+            "timestamp_m1": [timestamp, timestamp],
+            "exchange": ["deribit", "deribit"],
+            "symbol": ["BTC", "BTC"],
+            "atm_iv": [0.50, 0.55],
+            "options_surface_atm_iv": [0.50, 0.55],
+            "options_surface_contract_count": [10, 12],
+        }
+    )
+
+    prepared = gold_frames.prepare_options_snapshot(pl, frame, "BTC")
+
+    assert prepared.to_dicts() == [
+        {
+            "timestamp_m1": timestamp,
+            "exchange": "deribit",
+            "symbol": "BTC",
+            "options_surface_atm_iv": 0.55,
+            "options_surface_contract_count": 12,
+        }
+    ]
+
+
 def test_prepare_recent_trade_snapshot_deduplicates_tick_rows() -> None:
     """Multiple live executions in one minute must produce one lineage key."""
 
@@ -188,6 +216,74 @@ def test_prepare_raw_l2_snapshots_normalizes_timestamp_and_aggregates_contracts(
     assert prepared_perps["timestamp_m1"].to_list() == [timestamp]
     assert prepared_options.height == 1
     assert prepared_options["options_l2_contract_count"].to_list() == [2]
+
+
+def test_prepare_feature_l2_frames_preserves_derived_market_metrics() -> None:
+    """Feature-form L2 inputs should use their direct metrics instead of raw-snapshot defaults."""
+
+    timestamp = datetime(2026, 5, 1, 0, 0, tzinfo=UTC)
+    perps = pl.DataFrame(
+        {
+            "timestamp_m1": [timestamp],
+            "exchange": ["deribit"],
+            "best_bid_price": [99.0],
+            "best_ask_price": [101.0],
+            "mid_price": [100.0],
+            "spread": [2.0],
+            "top_bid_size": [5.0],
+            "top_ask_size": [4.0],
+            "top_of_book_imbalance": [1 / 9],
+            "bid_depth_10bps": [20.0],
+            "ask_depth_10bps": [18.0],
+            "bid_depth_50bps": [50.0],
+            "ask_depth_50bps": [48.0],
+            "quote_age_seconds": [3.0],
+            "quote_available": [True],
+            "stale_quote": [False],
+            "minutes_since_l2_observation": [0],
+        }
+    )
+    options = pl.DataFrame(
+        {
+            "timestamp_m1": [timestamp, timestamp],
+            "exchange": ["deribit", "deribit"],
+            "instrument_name": ["BTC-C", "BTC-P"],
+            "quote_available": [True, False],
+            "stale_quote": [False, True],
+            "spread": [1.0, 3.0],
+            "top_bid_size": [5.0, 2.0],
+            "top_ask_size": [4.0, 3.0],
+            "bid_depth_10bps": [20.0, 10.0],
+            "ask_depth_10bps": [18.0, 8.0],
+            "bid_depth_50bps": [50.0, 30.0],
+            "ask_depth_50bps": [48.0, 28.0],
+            "quote_age_seconds": [1.0, 4.0],
+        }
+    )
+
+    prepared_perps = gold_frames.prepare_perps_l2_feature(pl, perps, "BTC")
+    prepared_options = gold_frames.prepare_options_l2_feature(pl, options, "BTC")
+
+    assert prepared_perps.select("perps_l2_spread", "perps_l2_quote_available").to_dicts() == [
+        {"perps_l2_spread": 2.0, "perps_l2_quote_available": True}
+    ]
+    assert prepared_options.select(
+        "options_l2_contract_count",
+        "options_l2_quote_coverage_ratio",
+        "options_l2_stale_quote_ratio",
+        "options_l2_median_spread",
+        "options_l2_top_bid_depth",
+        "options_l2_max_quote_age_seconds",
+    ).to_dicts() == [
+        {
+            "options_l2_contract_count": 2,
+            "options_l2_quote_coverage_ratio": 0.5,
+            "options_l2_stale_quote_ratio": 0.5,
+            "options_l2_median_spread": 2.0,
+            "options_l2_top_bid_depth": 7.0,
+            "options_l2_max_quote_age_seconds": 4.0,
+        }
+    ]
 
 
 def test_resample_history_full_frame_aggregates_buckets() -> None:
@@ -443,6 +539,71 @@ def test_gold_frame_optional_columns_and_resample_edge_paths() -> None:
     with pytest.raises(ValueError, match="requires timestamp"):
         gold_frames.resample_history_full_frame(pl, pl.DataFrame({"value": [1]}), "5m")
     assert gold_frames.resample_history_full_frame(pl, index, "1m").height == 1
+
+
+def test_add_live_extended_feature_families_defaults_missing_optional_inputs() -> None:
+    """Live extensions retain nullable optional fields while calculating available source ratios."""
+
+    timestamps = [datetime(2026, 5, 1, 0, minute, tzinfo=UTC) for minute in range(2)]
+    frame = pl.DataFrame(
+        {
+            "timestamp_m1": timestamps,
+            "exchange": ["deribit"] * 2,
+            "symbol": ["BTC"] * 2,
+            "volatility_index_close": [100.0, 110.0],
+            "volatility_index_high": [101.0, 112.0],
+            "volatility_index_low": [99.0, 108.0],
+            "index_price": [200.0, 220.0],
+            "futures_summary_mark_price": [201.0, 224.0],
+            "futures_summary_index_price": [200.0, 220.0],
+            "futures_summary_open_interest": [1000.0, 1200.0],
+            "futures_summary_turnover": [500.0, 600.0],
+        }
+    )
+
+    enriched = gold_frames.add_live_extended_feature_families(pl, frame)
+
+    assert enriched["live_extended_futures_basis_ratio"].to_list() == [0.005, pytest.approx(4 / 220)]
+    assert enriched["live_extended_futures_open_interest_turnover_ratio"].to_list() == [2.0, 2.0]
+    assert enriched["live_extended_options_surface_quote_fill_ratio"].to_list() == [None, None]
+    assert enriched["live_extended_perps_l2_spread_bps"].to_list() == [None, None]
+    assert enriched["live_extended_futures_mark_price_mean_15m"].to_list() == [None, 212.5]
+
+
+def test_add_strategy_feature_families_keeps_market_windows_isolated() -> None:
+    """Trailing strategy windows never use a prior row from another market group."""
+
+    timestamps = [datetime(2026, 5, 1, 0, minute, tzinfo=UTC) for minute in range(3)]
+    frame = pl.DataFrame(
+        {
+            "timestamp_m1": [*timestamps, *timestamps],
+            "exchange": ["deribit"] * 6,
+            "symbol": ["BTC"] * 3 + ["ETH"] * 3,
+            "perp_close_price": [100.0, 110.0, 121.0, 200.0, 180.0, 162.0],
+            "spot_ohlcv_close_price": [100.0, 100.0, 100.0, 200.0, 200.0, 200.0],
+            "perp_volume": [2.0] * 6,
+            "rv_1h": [0.5] * 6,
+        }
+    )
+
+    enriched = gold_frames.add_strategy_feature_families(pl, frame)
+
+    assert enriched.filter(pl.col("symbol") == "BTC")["strategy_momentum_log_return_1m"].to_list() == [
+        None,
+        pytest.approx(math.log(1.1)),
+        pytest.approx(math.log(1.1)),
+    ]
+    assert enriched.filter(pl.col("symbol") == "ETH")["strategy_momentum_log_return_1m"].to_list()[0] is None
+    assert enriched.filter(pl.col("symbol") == "BTC")["strategy_cost_turnover_notional_5m"].to_list() == [
+        200.0,
+        420.0,
+        662.0,
+    ]
+    assert enriched.filter(pl.col("symbol") == "ETH")["strategy_cost_turnover_notional_5m"].to_list() == [
+        400.0,
+        760.0,
+        1084.0,
+    ]
 
 
 def test_gold_target_helpers_cover_grouping_and_incomplete_future_windows() -> None:

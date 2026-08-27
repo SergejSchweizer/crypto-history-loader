@@ -3,12 +3,16 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 import api.commands.postgres as postgres_cmd
 from api.cli import build_parser
 from application.postgres_sync import GoldSyncResult
+from application.postgres_sync.service import GoldSyncServiceError
+from infra.postgres.gold_repository import PostgresGoldRepositoryError, PostgresSchemaMismatchError
 
 
 def _set_valid_env(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -107,3 +111,69 @@ def test_declared_certification_failure_is_sanitized(monkeypatch: pytest.MonkeyP
 
     assert str(exc_info.value) == ("current-gold-inventory: declared Gold publication result could not be certified")
     assert "/private/" not in str(exc_info.value)
+
+
+@pytest.mark.parametrize(
+    ("error", "category"),
+    [
+        (PostgresSchemaMismatchError("table contract differs"), "compatibility-schema"),
+        (
+            GoldSyncServiceError(
+                SimpleNamespace(lineage=SimpleNamespace(dataset_id="gold", exchange="deribit", symbol="BTC")),
+                "compatibility",
+                "Gold artifact is incompatible",
+            ),
+            "compatibility-schema",
+        ),
+        (
+            GoldSyncServiceError(
+                SimpleNamespace(lineage=SimpleNamespace(dataset_id="gold", exchange="deribit", symbol="BTC")),
+                "postgresql",
+                "database unavailable",
+            ),
+            "postgresql",
+        ),
+        (PostgresGoldRepositoryError("write rejected"), "postgresql"),
+    ],
+)
+def test_declared_sync_errors_have_stable_categories(
+    monkeypatch: pytest.MonkeyPatch,
+    error: Exception,
+    category: str,
+) -> None:
+    """Known synchronization failures preserve their safe command category."""
+
+    _set_valid_env(monkeypatch)
+    monkeypatch.setattr(postgres_cmd, "PostgresGoldSyncRepository", lambda settings: object())
+
+    def fail(*_: object, **__: object) -> GoldSyncResult:
+        raise error
+
+    monkeypatch.setattr(postgres_cmd, "synchronize_gold_root", fail)
+    args = argparse.Namespace(gold_root="lake/gold", publication_result=".run/gold-publication-result.json")
+
+    with pytest.raises(postgres_cmd.PostgresSyncCommandError) as exc_info:
+        postgres_cmd.run_gold_sync_postgres(args, logging.getLogger("test"))
+
+    assert exc_info.value.category == category
+    assert str(error) in str(exc_info.value)
+
+
+def test_declared_publication_result_is_forwarded(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A declared Gold publication result is passed as a Path to the sync service."""
+
+    _set_valid_env(monkeypatch)
+    monkeypatch.setattr(postgres_cmd, "PostgresGoldSyncRepository", lambda settings: object())
+    calls: list[tuple[Path, Path]] = []
+
+    def synchronize(root: Path, _: object, *, publication_result: Path) -> GoldSyncResult:
+        calls.append((root, publication_result))
+        return GoldSyncResult(())
+
+    monkeypatch.setattr(postgres_cmd, "synchronize_gold_root", synchronize)
+    postgres_cmd.run_gold_sync_postgres(
+        argparse.Namespace(gold_root="lake/gold", publication_result=".run/gold-publication-result.json"),
+        logging.getLogger("test"),
+    )
+
+    assert calls == [(Path("lake/gold"), Path(".run/gold-publication-result.json"))]

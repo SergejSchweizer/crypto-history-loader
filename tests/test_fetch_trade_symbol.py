@@ -190,6 +190,29 @@ def test_fetch_symbol_trades_tail_fetches_windows_and_streams_rows(monkeypatch: 
     assert chunks == []
 
 
+def test_fetch_symbol_trades_tail_fails_when_all_trade_windows_fail(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Tail mode should report a total recoverable-window outage."""
+
+    import application.services.fetch_trade_symbol as module
+
+    monkeypatch.setattr(module, "trade_windows_in_random_order", lambda *_args, **_kwargs: [(100, 200)])
+
+    def _range_fetcher(**_kwargs: object) -> list[TradeTick]:
+        raise HttpClientError("Connection error for x: timed out")
+
+    with pytest.raises(RuntimeError, match="all trade windows failed"):
+        fetch_symbol_trades(
+            exchange="deribit",
+            market="perp",
+            symbol="BTC",
+            lake_root="lake/bronze",
+            tail_delta_only=True,
+            latest_open_time_reader=lambda **_kwargs: datetime.fromtimestamp(0, tz=UTC),
+            now_open_resolver=lambda **_kwargs: 200,
+            range_fetcher=_range_fetcher,
+        )
+
+
 def test_fetch_symbol_trades_gap_marks_empty_trade_minutes(monkeypatch: pytest.MonkeyPatch) -> None:
     """A successful empty gap window should be persisted as confirmed empty coverage."""
 
@@ -215,6 +238,34 @@ def test_fetch_symbol_trades_gap_marks_empty_trade_minutes(monkeypatch: pytest.M
     )
     assert rows == []
     assert writes[0]["dataset_type"] == "options_trades"
+
+
+def test_fetch_symbol_trades_gap_fails_when_all_trade_windows_fail(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Gap mode should report a total recoverable-window outage."""
+
+    import application.services.fetch_trade_symbol as module
+
+    monkeypatch.setattr(module, "missing_trade_minute_ranges", lambda **_kwargs: [(100, 200)])
+    monkeypatch.setattr(module, "ranges_in_random_order", lambda ranges: ranges)
+    monkeypatch.setattr(module, "trade_windows_in_random_order", lambda *_args, **_kwargs: [(100, 200)])
+    day_start_ms = int(datetime(2022, 4, 29, tzinfo=UTC).timestamp() * 1000)
+
+    def _range_fetcher(**_kwargs: object) -> list[TradeTick]:
+        raise HttpClientError("Connection error for x: timed out")
+
+    with pytest.raises(RuntimeError, match="all trade windows failed"):
+        fetch_symbol_trades(
+            exchange="deribit",
+            market="option",
+            symbol="BTC",
+            lake_root="lake/bronze",
+            partition_dates_reader=lambda **_kwargs: [date(2022, 4, 29)],
+            partition_open_time_bounds_reader=lambda **_kwargs: {},
+            open_time_minutes_reader=lambda **_kwargs: [],
+            empty_minutes_reader=lambda **_kwargs: [],
+            now_open_resolver=lambda **_kwargs: day_start_ms + 200,
+            range_fetcher=_range_fetcher,
+        )
 
 
 def _trade_tick(*, trade_id: str, trade_time: datetime) -> TradeTick:

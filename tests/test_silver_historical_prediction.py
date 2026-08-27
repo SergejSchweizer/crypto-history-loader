@@ -8,10 +8,68 @@ from pathlib import Path
 import pytest
 
 from application.dataset_contracts import SILVER_HISTORICAL_PREDICTION_FEATURE_COLUMNS
+from application.services import silver_historical_prediction
 from application.services.silver_service import build_historical_prediction_1m_feature_for_symbol
 from tests.test_gold_regime_features import _write_silver
 
 pl = pytest.importorskip("polars")
+
+
+def test_discover_historical_prediction_symbols_normalizes_and_intersects_sources(tmp_path: Path) -> None:
+    silver = tmp_path / "silver"
+    for dataset_type, symbols in (
+        ("spot_ohlcv", ("BTC_USDC", "ETH-USDC")),
+        ("perps_ohlcv", ("BTC-PERPETUAL", "SOL-PERPETUAL")),
+    ):
+        for symbol in symbols:
+            (silver / f"dataset_type={dataset_type}" / "exchange=deribit" / f"symbol={symbol}" / "timeframe=1m").mkdir(
+                parents=True
+            )
+
+    assert silver_historical_prediction.discover_historical_prediction_symbols(
+        silver_root=str(silver), exchange="deribit"
+    ) == ["BTC"]
+
+
+def test_build_historical_prediction_features_returns_empty_report_without_sources(tmp_path: Path) -> None:
+    report = build_historical_prediction_1m_feature_for_symbol(
+        silver_root=str(tmp_path / "silver"),
+        exchange="deribit",
+        symbol="btc-perpetual",
+    )
+
+    assert report.rows_in == 0
+    assert report.rows_out == 0
+    assert report.months_processed == []
+    assert report.period_start is None
+    assert report.period_end is None
+    assert report.symbols == ["BTC"]
+    assert report.columns == SILVER_HISTORICAL_PREDICTION_FEATURE_COLUMNS
+
+
+def test_build_feature_frame_handles_missing_optional_sources_and_zero_denominators() -> None:
+    timestamps = [datetime(2026, 5, 1, 0, minute, tzinfo=UTC) for minute in range(2)]
+    frame = pl.DataFrame(
+        {
+            "timestamp_m1": timestamps,
+            "exchange": ["deribit", "deribit"],
+            "symbol": ["BTC", "BTC"],
+            "spot_close_price": [100.0, 100.0],
+            "perps_close_price": [100.0, 99.0],
+            "open_interest": [0.0, 10.0],
+        }
+    )
+
+    feature = silver_historical_prediction._build_feature_frame(pl, frame)
+    second = feature.row(1, named=True)
+
+    assert feature.columns == SILVER_HISTORICAL_PREDICTION_FEATURE_COLUMNS
+    assert second["historical_prediction_spot_perp_basis"] == pytest.approx(-0.01)
+    assert second["historical_prediction_open_interest_pct_change_1m"] is None
+    assert second["historical_prediction_perps_trade_imbalance"] is None
+    assert second["historical_prediction_options_trade_imbalance"] is None
+    assert second["historical_prediction_perps_price_impact_1m"] is None
+    assert second["historical_prediction_short_stress_signal"] == 1
 
 
 def test_build_historical_prediction_features_from_history_sources(tmp_path: Path) -> None:

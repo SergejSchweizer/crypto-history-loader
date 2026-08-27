@@ -49,6 +49,42 @@ def test_run_silver_build_rejects_worker_counts_outside_polars_limit(maxprocesse
         )
 
 
+def test_run_silver_build_rejects_conflicting_month_planning_inputs() -> None:
+    """Exact-month and incremental planning modes cannot be combined."""
+
+    args = silver_args(market=["spot_ohlcv"])
+    args.months = ["2026-01"]
+    args.changed_months = ["2026-01"]
+
+    with pytest.raises(ValueError, match="cannot be used together"):
+        silver_cmd.run_silver_build(args=args, logger=logging.getLogger("test"))
+
+
+def test_run_silver_build_rejects_missing_dataset_selection() -> None:
+    """The command requires a dataset list before it can construct a plan."""
+
+    args = silver_args(market=["spot_ohlcv"])
+    args.dataset = None
+    args.market = None
+
+    with pytest.raises(ValueError, match="Missing dataset selection"):
+        silver_cmd.run_silver_build(args=args, logger=logging.getLogger("test"))
+
+
+def test_run_silver_build_handles_empty_discovery_without_output(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """An empty symbol schedule creates no jobs and emits no suppressed JSON."""
+
+    monkeypatch.setattr(silver_cmd, "discover_symbols", lambda **_kwargs: [])
+    args = silver_args(market=["spot_ohlcv"])
+
+    silver_cmd.run_silver_build(args=args, logger=logging.getLogger("test"))
+
+    assert capsys.readouterr().out == ""
+
+
 def test_run_silver_build_uses_native_funding_timeframe_for_symbol_discovery(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

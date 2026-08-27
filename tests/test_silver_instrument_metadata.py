@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from application.dataset_contracts import SILVER_INSTRUMENT_METADATA_OBSERVED_COLUMNS
+from application.services import silver_instrument_metadata
 from application.services.silver_service import (
     build_futures_instrument_metadata_observed_for_symbol,
     build_instrument_metadata_observed_for_symbol,
@@ -67,6 +68,162 @@ def _metadata_row(
         "option_type": option_type,
         "strike": strike,
     }
+
+
+def test_discover_metadata_symbols_normalizes_values_and_handles_no_snapshots(tmp_path: Path) -> None:
+    """Discovery should return only normalized base currencies from available snapshots."""
+
+    bronze = tmp_path / "bronze"
+    dataset_type = "instrument_metadata_snapshot_daily"
+    rows = [
+        {
+            **_metadata_row(
+                dataset_type=dataset_type,
+                instrument_name="BTC-12JUN26-65000-C",
+                kind="option",
+                ingested_at=datetime(2026, 5, 25, 3, tzinfo=UTC),
+                expiration_timestamp=datetime(2026, 6, 12, 8, tzinfo=UTC),
+                option_type="call",
+                strike=65000.0,
+                tick_size=0.0001,
+            ),
+            "base_currency": value,
+        }
+        for value in [" eth ", "btc", "BTC", " ", None]
+    ]
+    _write_metadata(bronze, dataset_type=dataset_type, rows=rows)
+
+    assert discover_instrument_metadata_symbols(
+        bronze_root=str(bronze), exchange="deribit", dataset_type=dataset_type
+    ) == ["BTC", "ETH"]
+    assert (
+        discover_instrument_metadata_symbols(
+            bronze_root=str(tmp_path / "empty"), exchange="deribit", dataset_type=dataset_type
+        )
+        == []
+    )
+
+
+def test_metadata_builder_rejects_invalid_rows_and_preserves_optional_fields(tmp_path: Path) -> None:
+    """The builder should reject malformed contracts while retaining valid sparse futures metadata."""
+
+    bronze = tmp_path / "bronze"
+    silver = tmp_path / "silver"
+    dataset_type = "futures_instrument_metadata_snapshot_daily"
+    ingested = datetime(2026, 5, 25, 3, tzinfo=UTC)
+    valid = _metadata_row(
+        dataset_type=dataset_type,
+        instrument_name=" btc-perpetual ",
+        kind=" FUTURE ",
+        ingested_at=ingested,
+        expiration_timestamp=None,
+        option_type=None,
+        strike=None,
+        tick_size=0.5,
+    )
+    valid.update({"is_active": False, "contract_size": 10.0})
+    for column in ("state", "creation_timestamp", "min_trade_amount", "option_type", "strike"):
+        valid.pop(column)
+    invalid_expiry = {
+        **_metadata_row(
+            dataset_type=dataset_type,
+            instrument_name="BTC-19JUN26",
+            kind="future",
+            ingested_at=ingested,
+            expiration_timestamp=None,
+            option_type=None,
+            strike=None,
+            tick_size=2.5,
+        )
+    }
+    invalid_tick = {
+        **invalid_expiry,
+        "instrument_name": "BTC-20JUN26",
+        "expiration_timestamp": datetime(2026, 6, 20, 8, tzinfo=UTC),
+        "tick_size": float("nan"),
+    }
+    invalid_size = {
+        **invalid_expiry,
+        "instrument_name": "BTC-21JUN26",
+        "expiration_timestamp": datetime(2026, 6, 21, 8, tzinfo=UTC),
+        "contract_size": 0.0,
+    }
+    _write_metadata(
+        bronze,
+        dataset_type=dataset_type,
+        rows=[valid, invalid_expiry, invalid_tick, invalid_size],
+    )
+
+    report = build_futures_instrument_metadata_observed_for_symbol(
+        bronze_root=str(bronze), silver_root=str(silver), exchange="deribit", symbol="btc"
+    )
+
+    assert report.rows_in == 4
+    assert report.rows_out == 1
+    assert report.invalid_ohlc_rows == 3
+    observed = pl.read_parquet(
+        silver
+        / "dataset_type=futures_instrument_metadata_snapshot_daily_observed"
+        / "exchange=deribit"
+        / "symbol=BTC"
+        / "timeframe=1d"
+        / "year=2026"
+        / "month=2026-05"
+        / "BTC-2026-05.parquet"
+    )
+    assert observed.select(
+        ["instrument_name", "instrument_type", "min_trade_amount", "is_listed", "listing_state"]
+    ).to_dicts() == [
+        {
+            "instrument_name": "BTC-PERPETUAL",
+            "instrument_type": "perp",
+            "min_trade_amount": None,
+            "is_listed": True,
+            "listing_state": "inactive",
+        }
+    ]
+
+
+def test_collect_metadata_files_falls_back_only_for_schema_errors() -> None:
+    """Schema mismatches should use diagonal reads while unrelated scan failures remain visible."""
+
+    class SchemaError(Exception):
+        pass
+
+    class Scan:
+        def __init__(self, error: Exception) -> None:
+            self.error = error
+
+        def collect(self) -> object:
+            raise self.error
+
+    class PolarsStub:
+        def __init__(self, error: Exception) -> None:
+            self.error = error
+            self.concatenated: list[object] | None = None
+
+        def scan_parquet(self, paths: list[str]) -> Scan:
+            assert paths == ["first.parquet", "second.parquet"]
+            return Scan(self.error)
+
+        def read_parquet(self, path: str) -> str:
+            return f"read:{path}"
+
+        def concat(self, frames: list[object], *, how: str) -> object:
+            assert how == "diagonal_relaxed"
+            self.concatenated = frames
+            return "fallback-frame"
+
+    schema_stub = PolarsStub(SchemaError("incompatible schema"))
+    assert (
+        silver_instrument_metadata._collect_files(schema_stub, ["first.parquet", "second.parquet"]) == "fallback-frame"
+    )
+    assert schema_stub.concatenated == ["read:first.parquet", "read:second.parquet"]
+
+    with pytest.raises(RuntimeError, match="network failure"):
+        silver_instrument_metadata._collect_files(
+            PolarsStub(RuntimeError("network failure")), ["first.parquet", "second.parquet"]
+        )
 
 
 def test_metadata_builders_share_contract_and_keep_latest_valid_daily_rows(tmp_path: Path) -> None:
