@@ -77,6 +77,10 @@ class PostgresConnectionSettings:
     user: str
     database: str
     password: str = field(repr=False)
+    connect_timeout_s: int = 10
+    lock_timeout_ms: int = 5_000
+    statement_timeout_ms: int = 30_000
+    idle_in_transaction_session_timeout_ms: int = 60_000
 
     def __post_init__(self) -> None:
         if self.host != POSTGRES_HOST or self.port != POSTGRES_PORT or self.user != POSTGRES_ROLE:
@@ -85,6 +89,14 @@ class PostgresConnectionSettings:
             raise ValueError("PostgreSQL database must not be empty")
         if not self.password:
             raise ValueError("PostgreSQL password must not be empty")
+        for name, value in (
+            ("connect timeout", self.connect_timeout_s),
+            ("lock timeout", self.lock_timeout_ms),
+            ("statement timeout", self.statement_timeout_ms),
+            ("idle transaction timeout", self.idle_in_transaction_session_timeout_ms),
+        ):
+            if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+                raise ValueError(f"PostgreSQL {name} must be a positive integer")
 
 
 ConnectionFactory = Callable[[PostgresConnectionSettings], ConnectionPort]
@@ -97,6 +109,7 @@ def _default_connection(settings: PostgresConnectionSettings) -> ConnectionPort:
         user=settings.user,
         dbname=settings.database,
         password=settings.password,
+        connect_timeout=settings.connect_timeout_s,
         autocommit=False,
     )
     return cast(ConnectionPort, connection)
@@ -323,6 +336,15 @@ class PostgresGoldSyncRepository:
             cursor = connection.cursor()
             try:
                 cursor.execute(f"SET TIME ZONE '{POSTGRES_SESSION_TIMEZONE}'")
+                cursor.execute("SELECT set_config('lock_timeout', %s, false)", (f"{self._settings.lock_timeout_ms}ms",))
+                cursor.execute(
+                    "SELECT set_config('statement_timeout', %s, false)",
+                    (f"{self._settings.statement_timeout_ms}ms",),
+                )
+                cursor.execute(
+                    "SELECT set_config('idle_in_transaction_session_timeout', %s, false)",
+                    (f"{self._settings.idle_in_transaction_session_timeout_ms}ms",),
+                )
             finally:
                 cursor.close()
             return connection

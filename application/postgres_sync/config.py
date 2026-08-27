@@ -10,6 +10,12 @@ POSTGRES_HOST = "10.10.1.3"
 POSTGRES_PORT = 54321
 POSTGRES_ROLE = "crypto-loader"
 _REQUIRED_KEYS = ("PGHOST", "PGPORT", "PGUSER", "PGDATABASE", "PGPASSWORD")
+_TIMEOUT_DEFAULTS = {
+    "PGCONNECT_TIMEOUT_S": 10,
+    "PGLOCK_TIMEOUT_MS": 5_000,
+    "PGSTATEMENT_TIMEOUT_MS": 30_000,
+    "PGIDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS": 60_000,
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -21,6 +27,10 @@ class PostgresSyncConfig:
     user: str
     database: str
     password: str = field(repr=False)
+    connect_timeout_s: int = _TIMEOUT_DEFAULTS["PGCONNECT_TIMEOUT_S"]
+    lock_timeout_ms: int = _TIMEOUT_DEFAULTS["PGLOCK_TIMEOUT_MS"]
+    statement_timeout_ms: int = _TIMEOUT_DEFAULTS["PGSTATEMENT_TIMEOUT_MS"]
+    idle_in_transaction_session_timeout_ms: int = _TIMEOUT_DEFAULTS["PGIDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS"]
 
     def __post_init__(self) -> None:
         if self.host != POSTGRES_HOST:
@@ -33,6 +43,14 @@ class PostgresSyncConfig:
             raise ValueError("PGDATABASE must not be empty")
         if not self.password:
             raise ValueError("PGPASSWORD must not be empty")
+        for name, value in (
+            ("PGCONNECT_TIMEOUT_S", self.connect_timeout_s),
+            ("PGLOCK_TIMEOUT_MS", self.lock_timeout_ms),
+            ("PGSTATEMENT_TIMEOUT_MS", self.statement_timeout_ms),
+            ("PGIDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS", self.idle_in_transaction_session_timeout_ms),
+        ):
+            if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+                raise ValueError(f"{name} must be a positive integer")
 
     @classmethod
     def from_sources(
@@ -61,12 +79,23 @@ class PostgresSyncConfig:
             port = int(resolved["PGPORT"])
         except ValueError as exc:
             raise ValueError("PGPORT must be an integer") from exc
+        timeout_values: dict[str, int] = {}
+        for key, default in _TIMEOUT_DEFAULTS.items():
+            raw_timeout = env.get(key, runtime.get(key, default))
+            try:
+                timeout_values[key] = int(str(raw_timeout).strip())
+            except (TypeError, ValueError) as exc:
+                raise ValueError(f"{key} must be a positive integer") from exc
         return cls(
             host=resolved["PGHOST"].strip(),
             port=port,
             user=resolved["PGUSER"].strip(),
             database=resolved["PGDATABASE"].strip(),
             password=resolved["PGPASSWORD"],
+            connect_timeout_s=timeout_values["PGCONNECT_TIMEOUT_S"],
+            lock_timeout_ms=timeout_values["PGLOCK_TIMEOUT_MS"],
+            statement_timeout_ms=timeout_values["PGSTATEMENT_TIMEOUT_MS"],
+            idle_in_transaction_session_timeout_ms=timeout_values["PGIDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS"],
         )
 
     @classmethod

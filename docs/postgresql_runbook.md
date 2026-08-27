@@ -22,6 +22,14 @@ NOREPLICATION NOBYPASSRLS`. It has:
 No runtime role membership or `PUBLIC` table grant is permitted in the two owned
 schemas.
 
+## Runtime timeouts
+
+`gold-sync-postgres` requires positive bounded timeout settings. The defaults are
+`PGCONNECT_TIMEOUT_S=10`, `PGLOCK_TIMEOUT_MS=5000`, `PGSTATEMENT_TIMEOUT_MS=30000`,
+and `PGIDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS=60000`. The connection timeout is
+applied before connecting; the remaining settings are applied in the UTC session
+before catalog reads or DML. Invalid or non-positive values fail configuration.
+
 ## Administrator bootstrap
 
 Export the protected settings in the administrator's process environment:

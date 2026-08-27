@@ -152,6 +152,8 @@ def test_settings_exact_endpoint_and_secret_redaction() -> None:
     assert "fake-secret" not in repr(settings)
     with pytest.raises(ValueError):
         PostgresConnectionSettings("localhost", 54321, "crypto-loader", "db", "secret")
+    with pytest.raises(ValueError, match="timeout"):
+        PostgresConnectionSettings("10.10.1.3", 54321, "crypto-loader", "db", "secret", lock_timeout_ms=0)
 
 
 @pytest.mark.parametrize(
@@ -181,6 +183,9 @@ def test_ensure_lineage_uses_utc_and_verifies_catalog_without_ddl() -> None:
     repository.ensure_lineage(_snapshot(schema.signature), schema.ddl, schema.signature)
     sql_trace = "\n".join(query for query, _ in connection.trace)
     assert "SET TIME ZONE 'UTC'" in sql_trace
+    assert "set_config('lock_timeout'" in sql_trace
+    assert "set_config('statement_timeout'" in sql_trace
+    assert "set_config('idle_in_transaction_session_timeout'" in sql_trace
     assert "information_schema.columns" in sql_trace
     assert "pg_catalog.pg_index" in sql_trace
     assert "CREATE " not in sql_trace

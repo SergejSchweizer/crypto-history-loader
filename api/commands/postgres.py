@@ -47,6 +47,10 @@ def _settings_from_config(config: PostgresSyncConfig) -> PostgresConnectionSetti
         user=config.user,
         database=config.database,
         password=config.password,
+        connect_timeout_s=config.connect_timeout_s,
+        lock_timeout_ms=config.lock_timeout_ms,
+        statement_timeout_ms=config.statement_timeout_ms,
+        idle_in_transaction_session_timeout_ms=config.idle_in_transaction_session_timeout_ms,
     )
 
 

@@ -56,3 +56,31 @@ def test_shell_special_password_is_not_rendered() -> None:
     config = PostgresSyncConfig.from_sources(environment={}, runtime_values=runtime)
     assert config.as_env()["PGPASSWORD"] == "fake-$()'\" secret"
     assert "fake-$()" not in repr(config)
+
+
+def test_timeout_configuration_defaults_and_overrides() -> None:
+    runtime = _runtime()
+    runtime.update(
+        {
+            "PGCONNECT_TIMEOUT_S": "7",
+            "PGLOCK_TIMEOUT_MS": "800",
+            "PGSTATEMENT_TIMEOUT_MS": "900",
+            "PGIDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS": "1000",
+        }
+    )
+    config = PostgresSyncConfig.from_sources(environment={}, runtime_values=runtime)
+    assert (
+        config.connect_timeout_s,
+        config.lock_timeout_ms,
+        config.statement_timeout_ms,
+        config.idle_in_transaction_session_timeout_ms,
+    ) == (7, 800, 900, 1000)
+
+
+@pytest.mark.parametrize("key", ["PGCONNECT_TIMEOUT_S", "PGLOCK_TIMEOUT_MS", "PGSTATEMENT_TIMEOUT_MS"])
+@pytest.mark.parametrize("value", ["0", "-1", "bad"])
+def test_timeout_configuration_rejects_non_positive_values(key: str, value: str) -> None:
+    runtime = _runtime()
+    runtime[key] = value
+    with pytest.raises(ValueError, match=key):
+        PostgresSyncConfig.from_sources(environment={}, runtime_values=runtime)
