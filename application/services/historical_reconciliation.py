@@ -368,15 +368,16 @@ def reconcile_historical_intervals(
 def _parse_interval(raw: object) -> CompletenessInterval:
     if not isinstance(raw, dict):
         raise ValueError("PR-99 interval must be an object")
+    parsed = cast(dict[str, object], raw)
     required = ("lineage", "start", "end", "gap_category", "evidence_source", "status")
-    if any(not isinstance(raw.get(field), str) for field in required):
+    if any(not isinstance(parsed.get(field), str) for field in required):
         raise ValueError("PR-99 interval fields must be strings")
-    lineage_parts = cast(str, raw["lineage"]).split("|")
+    lineage_parts = cast(str, parsed["lineage"]).split("|")
     if len(lineage_parts) != 5 or any(not part for part in lineage_parts):
         raise ValueError("PR-99 interval lineage must contain five non-empty fields")
-    category = raw["gap_category"]
-    evidence = raw["evidence_source"]
-    status = raw["status"]
+    category = parsed["gap_category"]
+    evidence = parsed["evidence_source"]
+    status = parsed["status"]
     if category not in {"observed_rows", "confirmed_empty", "expected_provider_gap", "unverified_acquisition"}:
         raise ValueError("unsupported PR-99 gap category")
     if evidence not in {
@@ -390,8 +391,8 @@ def _parse_interval(raw: object) -> CompletenessInterval:
         raise ValueError("unsupported PR-99 interval status")
     return CompletenessInterval(
         lineage=HistoricalBronzeLineage(*lineage_parts),
-        start=cast(str, raw["start"]),
-        end=cast(str, raw["end"]),
+        start=cast(str, parsed["start"]),
+        end=cast(str, parsed["end"]),
         category=cast(GapCategory, category),
         evidence=cast(EvidenceSource, evidence),
         status=cast(AuditStatus, status),
