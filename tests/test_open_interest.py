@@ -75,21 +75,37 @@ def test_fetch_open_interest_all_returns_empty_on_http_400(monkeypatch: pytest.M
     assert rows == []
 
 
-def test_fetch_open_interest_range_returns_empty_on_connection_error(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_fetch_open_interest_range_propagates_connection_error(monkeypatch: pytest.MonkeyPatch) -> None:
     def _raise_connection_error(**kwargs: object) -> list[dict[str, object]]:
         del kwargs
         raise HttpClientError("Connection error")
 
     monkeypatch.setattr(deribit_open_interest, "fetch_open_interest_range", _raise_connection_error)
-    rows = open_interest.fetch_open_interest_range(
-        exchange="deribit",
-        symbol="BTC",
-        interval="1m",
-        start_open_ms=0,
-        end_open_ms=60_000,
-        market="perp",
-    )
-    assert rows == []
+    with pytest.raises(HttpClientError, match="Connection error"):
+        open_interest.fetch_open_interest_range(
+            exchange="deribit",
+            symbol="BTC",
+            interval="1m",
+            start_open_ms=0,
+            end_open_ms=60_000,
+            market="perp",
+        )
+
+
+def test_fetch_open_interest_all_history_propagates_connection_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _raise_connection_error(**kwargs: object) -> list[dict[str, object]]:
+        del kwargs
+        raise HttpClientError("Connection error")
+
+    monkeypatch.setattr(deribit_open_interest, "fetch_open_interest_all", _raise_connection_error)
+
+    with pytest.raises(HttpClientError, match="Connection error"):
+        open_interest.fetch_open_interest_all_history(
+            exchange="deribit",
+            symbol="BTC",
+            interval="1m",
+            market="perp",
+        )
 
 
 @pytest.mark.parametrize(

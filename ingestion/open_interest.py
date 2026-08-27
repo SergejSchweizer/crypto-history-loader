@@ -10,7 +10,6 @@ from datetime import datetime
 from typing import Any, cast
 
 from ingestion.exchanges import deribit_open_interest
-from ingestion.http_client import HttpClientError
 from ingestion.spot_ohlcv import (
     Exchange,
     Market,
@@ -106,23 +105,20 @@ def fetch_open_interest_all_history(
         )
 
     try:
-        try:
-            rows = deribit_open_interest.fetch_open_interest_all(
-                symbol=normalized_symbol,
-                period=normalized_interval,
-                on_page=_on_page if on_history_chunk is not None else None,
-                collect=on_history_chunk is None,
-            )
-        except TypeError as exc:
-            if "collect" not in str(exc):
-                raise
-            rows = deribit_open_interest.fetch_open_interest_all(
-                symbol=normalized_symbol,
-                period=normalized_interval,
-                on_page=_on_page if on_history_chunk is not None else None,
-            )
-    except HttpClientError:
-        return []
+        rows = deribit_open_interest.fetch_open_interest_all(
+            symbol=normalized_symbol,
+            period=normalized_interval,
+            on_page=_on_page if on_history_chunk is not None else None,
+            collect=on_history_chunk is None,
+        )
+    except TypeError as exc:
+        if "collect" not in str(exc):
+            raise
+        rows = deribit_open_interest.fetch_open_interest_all(
+            symbol=normalized_symbol,
+            period=normalized_interval,
+            on_page=_on_page if on_history_chunk is not None else None,
+        )
     if on_history_chunk is not None:
         return []
     parsed = [
@@ -160,24 +156,12 @@ def fetch_open_interest_range(
     if exchange != "deribit":
         return []
     started = time.monotonic()
-    try:
-        rows = deribit_open_interest.fetch_open_interest_range(
-            symbol=normalized_symbol,
-            period=normalized_interval,
-            start_open_ms=start_open_ms,
-            end_open_ms=end_open_ms,
-        )
-    except HttpClientError:
-        logger.warning(
-            "Open Interest day fetch failed exchange=%s symbol=%s interval=%s start_ms=%s end_ms=%s elapsed_s=%.2f",
-            exchange,
-            normalized_symbol,
-            normalized_interval,
-            start_open_ms,
-            end_open_ms,
-            time.monotonic() - started,
-        )
-        return []
+    rows = deribit_open_interest.fetch_open_interest_range(
+        symbol=normalized_symbol,
+        period=normalized_interval,
+        start_open_ms=start_open_ms,
+        end_open_ms=end_open_ms,
+    )
     parsed = [
         deribit_open_interest.parse_open_interest_row(normalized_symbol, normalized_interval, row) for row in rows
     ]
