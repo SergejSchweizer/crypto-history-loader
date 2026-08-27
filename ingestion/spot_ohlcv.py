@@ -127,7 +127,7 @@ def _non_negative_integer(value: object, field_name: str) -> int:
     if isinstance(value, bool):
         raise ValueError(f"OHLCV {field_name} must be a non-negative integer")
     try:
-        integer_value = int(value)  # type: ignore[arg-type]
+        integer_value = int(cast(Any, value))
     except (TypeError, ValueError, OverflowError) as exc:
         raise ValueError(f"OHLCV {field_name} must be a non-negative integer") from exc
     if integer_value < 0 or str(value).strip() not in {str(integer_value), f"{integer_value}.0"}:
