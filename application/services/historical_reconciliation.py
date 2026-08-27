@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Literal, Protocol, cast
+from typing import Literal, Protocol, TypeGuard, cast
 
 from application.data_quality_report import (
     AuditStatus,
@@ -20,6 +20,29 @@ RecoveryStatus = Literal["PASS", "FAIL"]
 RecoveryMode = Literal["targeted_reload", "no_op_certification"]
 CheckStatus = Literal["PASS", "FAIL", "NOT_RUN"]
 GoldPublicationMode = Literal["rebuilt", "certification_only", "current"]
+
+
+def _is_gap_category(value: object) -> TypeGuard[GapCategory]:
+    """Return whether a decoded report value is a supported gap category."""
+
+    return value in {"observed_rows", "confirmed_empty", "expected_provider_gap", "unverified_acquisition"}
+
+
+def _is_evidence_source(value: object) -> TypeGuard[EvidenceSource]:
+    """Return whether a decoded report value is a supported evidence source."""
+
+    return value in {
+        "bronze_data:open_time",
+        "bronze_sidecar:confirmed_empty",
+        "config:expected_provider_gap",
+        "missing:acquisition_evidence",
+    }
+
+
+def _is_audit_status(value: object) -> TypeGuard[AuditStatus]:
+    """Return whether a decoded report value is a supported audit status."""
+
+    return value in {"PASS", "RECONCILE_REQUIRED"}
 
 
 @dataclass(frozen=True, order=True)
@@ -378,24 +401,19 @@ def _parse_interval(raw: object) -> CompletenessInterval:
     category = parsed["gap_category"]
     evidence = parsed["evidence_source"]
     status = parsed["status"]
-    if category not in {"observed_rows", "confirmed_empty", "expected_provider_gap", "unverified_acquisition"}:
+    if not _is_gap_category(category):
         raise ValueError("unsupported PR-99 gap category")
-    if evidence not in {
-        "bronze_data:open_time",
-        "bronze_sidecar:confirmed_empty",
-        "config:expected_provider_gap",
-        "missing:acquisition_evidence",
-    }:
+    if not _is_evidence_source(evidence):
         raise ValueError("unsupported PR-99 evidence source")
-    if status not in {"PASS", "RECONCILE_REQUIRED"}:
+    if not _is_audit_status(status):
         raise ValueError("unsupported PR-99 interval status")
     return CompletenessInterval(
         lineage=HistoricalBronzeLineage(*lineage_parts),
         start=cast(str, parsed["start"]),
         end=cast(str, parsed["end"]),
-        category=cast(GapCategory, category),
-        evidence=cast(EvidenceSource, evidence),
-        status=cast(AuditStatus, status),
+        category=category,
+        evidence=evidence,
+        status=status,
     )
 
 
