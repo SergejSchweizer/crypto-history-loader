@@ -5,10 +5,13 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import dataclass
+from hashlib import sha256
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Any, Protocol
 from uuid import uuid4
+
+GOLD_MANIFEST_VERSION = 2
 
 
 class ParquetFrame(Protocol):
@@ -56,7 +59,8 @@ def publish_gold_artifact_atomically(
     try:
         frame.write_parquet(staged_parquet)
         _validate_parquet(staged_parquet)
-        _write_json_fsync(staged_manifest, manifest_payload)
+        attested_payload = _attested_manifest_payload(manifest_payload, staged_parquet)
+        _write_json_fsync(staged_manifest, attested_payload)
         _validate_manifest(staged_manifest, expected_dataset_id=manifest_payload.get("dataset_id"))
         if had_parquet:
             os.replace(parquet_path, previous_parquet)
@@ -64,6 +68,7 @@ def publish_gold_artifact_atomically(
             os.replace(manifest_path, previous_manifest)
         os.replace(staged_parquet, parquet_path)
         os.replace(staged_manifest, manifest_path)
+        validate_gold_artifact_attestation(parquet_path, manifest_path)
     except Exception:
         if previous_parquet.exists():
             os.replace(previous_parquet, parquet_path)
@@ -112,7 +117,8 @@ def publish_gold_artifacts_atomically(*, requests: list[GoldArtifactPublishReque
             temporary_paths.extend([staged_parquet, staged_manifest, previous_parquet, previous_manifest])
             request.frame.write_parquet(staged_parquet)
             _validate_parquet(staged_parquet)
-            _write_json_fsync(staged_manifest, request.manifest_payload)
+            attested_payload = _attested_manifest_payload(request.manifest_payload, staged_parquet)
+            _write_json_fsync(staged_manifest, attested_payload)
             _validate_manifest(staged_manifest, expected_dataset_id=request.manifest_payload.get("dataset_id"))
             staged.append(
                 (
@@ -140,6 +146,7 @@ def publish_gold_artifacts_atomically(*, requests: list[GoldArtifactPublishReque
                 os.replace(request.manifest_path, previous_manifest)
             os.replace(staged_parquet, request.parquet_path)
             os.replace(staged_manifest, request.manifest_path)
+            validate_gold_artifact_attestation(request.parquet_path, request.manifest_path)
     except Exception:
         for (
             request,
@@ -170,6 +177,38 @@ def _validate_parquet(path: Path) -> None:
     except ImportError as exc:
         raise RuntimeError("polars is required for Gold parquet publication.") from exc
     pl.read_parquet(path, n_rows=1)
+
+
+def _sha256_file(path: Path) -> str:
+    """Return the SHA-256 of exact artifact bytes."""
+
+    digest = sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _attested_manifest_payload(payload: dict[str, object], parquet_path: Path) -> dict[str, object]:
+    """Return a manifest-v2 copy attesting its paired Parquet bytes."""
+
+    attested = dict(payload)
+    attested["manifest_version"] = GOLD_MANIFEST_VERSION
+    attested["output_sha256"] = _sha256_file(parquet_path)
+    return attested
+
+
+def validate_gold_artifact_attestation(parquet_path: Path, manifest_path: Path) -> None:
+    """Fail unless a manifest-v2 hash matches the exact paired Parquet bytes."""
+
+    payload: Any = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict) or payload.get("manifest_version") != GOLD_MANIFEST_VERSION:
+        raise ValueError("Gold manifest does not use the certified manifest version")
+    expected_hash = payload.get("output_sha256")
+    if not isinstance(expected_hash, str) or len(expected_hash) != 64:
+        raise ValueError("Gold manifest output SHA-256 is missing or invalid")
+    if _sha256_file(parquet_path) != expected_hash:
+        raise ValueError("Gold Parquet output SHA-256 does not match its manifest")
 
 
 def _write_json_fsync(path: Path, payload: dict[str, object]) -> None:
