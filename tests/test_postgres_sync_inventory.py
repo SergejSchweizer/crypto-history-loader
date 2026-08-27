@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
+from hashlib import sha256
 from pathlib import Path
 
 import polars as pl
@@ -53,6 +54,11 @@ def _write_candidate(
         "build_id": f"build-{version}",
         "build_date_utc": build_date_utc,
     }
+    schema = pl.read_parquet_schema(parquet)
+    canonical_schema = json.dumps([(name, str(dtype)) for name, dtype in schema.items()], separators=(",", ":"))
+    manifest["manifest_version"] = 2
+    manifest["output_sha256"] = sha256(parquet.read_bytes()).hexdigest()
+    manifest["schema_signature"] = sha256(canonical_schema.encode("utf-8")).hexdigest()
     parquet.with_suffix(".json").write_text(json.dumps(manifest), encoding="utf-8")
     return parquet
 
@@ -68,6 +74,7 @@ def test_selects_highest_semver_without_using_mtime(tmp_path: Path) -> None:
     assert snapshots[0].artifact_path == new.resolve()
     assert snapshots[0].min_timestamp is not None
     assert snapshots[0].min_timestamp.microsecond == 123456
+    assert snapshots[0].output_sha256 == sha256(new.read_bytes()).hexdigest()
 
 
 def test_selects_newest_build_when_semver_is_unchanged(tmp_path: Path) -> None:
@@ -78,6 +85,7 @@ def test_selects_newest_build_when_semver_is_unchanged(tmp_path: Path) -> None:
     payload["build_date_utc"] = "2026-01-02T00:00:00Z"
     payload["input_fingerprint"] = "fingerprint-newer"
     payload["build_id"] = "build-newer"
+    payload["output_sha256"] = sha256(new.read_bytes()).hexdigest()
     new.with_suffix(".json").write_text(json.dumps(payload), encoding="utf-8")
 
     snapshots = discover_current_gold_lineages(tmp_path)
@@ -113,4 +121,41 @@ def test_corrupt_or_incomplete_manifest_fails(tmp_path: Path) -> None:
     payload.pop("input_fingerprint")
     manifest_path.write_text(json.dumps(payload), encoding="utf-8")
     with pytest.raises(ValueError, match="fingerprint"):
+        discover_current_gold_lineages(tmp_path)
+
+
+def test_legacy_or_tampered_artifact_fails_before_snapshot(tmp_path: Path) -> None:
+    parquet = _write_candidate(tmp_path)
+    manifest_path = parquet.with_suffix(".json")
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    payload.pop("manifest_version")
+    manifest_path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ValueError, match="certified manifest version"):
+        discover_current_gold_lineages(tmp_path)
+
+    parquet = _write_candidate(tmp_path)
+    parquet.write_bytes(parquet.read_bytes() + b"tampered")
+    with pytest.raises(ValueError, match="SHA-256"):
+        discover_current_gold_lineages(tmp_path)
+
+
+@pytest.mark.parametrize(
+    ("field_name", "field_value", "message"),
+    [
+        ("rows_out", 2, "row count"),
+        ("schema_signature", "0" * 64, "schema signature"),
+        ("symbol", "ETH", "lineage"),
+        ("max_timestamp", "2026-01-01T00:01:00.123456Z", "timestamp bounds"),
+    ],
+)
+def test_manifest_metadata_must_match_parquet(
+    tmp_path: Path, field_name: str, field_value: object, message: str
+) -> None:
+    parquet = _write_candidate(tmp_path)
+    manifest_path = parquet.with_suffix(".json")
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    payload[field_name] = field_value
+    manifest_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ValueError, match=message):
         discover_current_gold_lineages(tmp_path)

@@ -13,6 +13,7 @@ import polars as pl
 
 from application.dataset_contracts import supported_gold_dataset_ids
 from application.postgres_sync.contracts import GoldLineage, GoldSourceSnapshot, validate_unique_table_names
+from application.services.gold_publication import validate_gold_artifact_attestation
 from application.services.gold_versioning import parse_semver
 
 
@@ -98,15 +99,32 @@ def _snapshot_from_candidate(manifest_path: Path, payload: dict[str, object]) ->
     parquet_path = manifest_path.with_suffix(".parquet")
     if not parquet_path.is_file():
         raise ValueError(f"Gold manifest has no matching parquet artifact: {manifest_path}")
+    validate_gold_artifact_attestation(parquet_path, manifest_path)
     schema_obj = pl.read_parquet_schema(parquet_path)
     schema = dict(schema_obj)
     _validate_timestamp_schema(schema)
+    schema_signature = _schema_signature(schema)
+    if payload.get("schema_signature") != schema_signature:
+        raise ValueError("Gold manifest schema signature does not match Parquet schema")
+    frame = pl.read_parquet(parquet_path)
+    actual_lineage = frame.select("exchange", "symbol").unique().rows()
+    if actual_lineage != [(lineage.exchange, lineage.symbol)]:
+        raise ValueError("Gold manifest lineage does not match Parquet rows")
     row_count = _manifest_row_count(payload)
+    if frame.height != row_count:
+        raise ValueError("Gold manifest row count does not match Parquet rows")
     min_timestamp = _parse_utc_timestamp(payload.get("min_timestamp"), "min_timestamp")
     max_timestamp = _parse_utc_timestamp(payload.get("max_timestamp"), "max_timestamp")
     if row_count == 0:
         min_timestamp = None
         max_timestamp = None
+    else:
+        actual_bounds = frame.select(
+            pl.col("timestamp_m1").min().alias("min_timestamp"),
+            pl.col("timestamp_m1").max().alias("max_timestamp"),
+        ).row(0, named=True)
+        if actual_bounds["min_timestamp"] != min_timestamp or actual_bounds["max_timestamp"] != max_timestamp:
+            raise ValueError("Gold manifest timestamp bounds do not match Parquet rows")
     version = _manifest_version(payload)
     build_id_raw = payload.get("build_id")
     build_id = build_id_raw if isinstance(build_id_raw, str) and build_id_raw else None
@@ -114,12 +132,13 @@ def _snapshot_from_candidate(manifest_path: Path, payload: dict[str, object]) ->
         lineage=lineage,
         artifact_path=parquet_path.resolve(),
         source_fingerprint=_manifest_fingerprint(payload),
-        schema_signature=_schema_signature(schema),
+        schema_signature=schema_signature,
         row_count=row_count,
         min_timestamp=min_timestamp,
         max_timestamp=max_timestamp,
         source_version=version,
         build_id=build_id,
+        output_sha256=cast(str, payload["output_sha256"]),
     )
 
 

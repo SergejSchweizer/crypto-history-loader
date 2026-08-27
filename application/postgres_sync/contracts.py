@@ -115,6 +115,7 @@ class GoldSourceSnapshot:
     max_timestamp: datetime | None
     source_version: str | None = None
     build_id: str | None = None
+    output_sha256: str | None = None
 
     def __post_init__(self) -> None:
         if not self.source_fingerprint:
