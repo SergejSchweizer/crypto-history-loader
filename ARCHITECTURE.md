@@ -212,6 +212,14 @@ deterministic bucket-start resampling. In a multi-dataset build, dataset depende
 serialized while symbols remain parallel within each dataset, bounded by the configured process
 limit. This prevents a derived build from racing its minute source artifact.
 
+After a successful Medallion Gold command, the command atomically writes a versioned publication
+result containing the exact certified artifact paths and lineages approved by that run. The
+following PostgreSQL sync consumes only that declared set and certifies every artifact before any
+repository mutation. Retained artifacts omitted from the result, including intentionally excluded
+Extended-history datasets, remain untouched in PostgreSQL and are not treated as fresh output.
+`medallion-pipeline.postgres-sync.serving_deprecation_policy` is explicitly `retain`; lineage
+deletion requires a separately implemented and configured serving-deprecation policy.
+
 The live extended minute dataset is built directly from live snapshot Silver sources and adds only
 causal, same-row or trailing live-derived features. It does not read back from a materialized
 `gold.live.full.m1` artifact.

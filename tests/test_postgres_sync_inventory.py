@@ -4,11 +4,15 @@ import json
 from datetime import UTC, datetime
 from hashlib import sha256
 from pathlib import Path
+from typing import cast
 
 import polars as pl
 import pytest
 
-from application.postgres_sync.inventory import discover_current_gold_lineages
+from application.postgres_sync.contracts import GoldSyncRepository
+from application.postgres_sync.inventory import discover_current_gold_lineages, discover_declared_gold_lineages
+from application.postgres_sync.service import synchronize_gold_root
+from application.services.gold_publication import write_gold_publication_result
 
 UTC_MICROSECOND_TIMESTAMP = pl.Datetime("us", "UTC")
 
@@ -159,3 +163,51 @@ def test_manifest_metadata_must_match_parquet(
 
     with pytest.raises(ValueError, match=message):
         discover_current_gold_lineages(tmp_path)
+
+
+def _write_publication_result(path: Path, artifacts: list[Path]) -> None:
+    reports = []
+    for artifact in artifacts:
+        manifest = json.loads(artifact.with_suffix(".json").read_text(encoding="utf-8"))
+        reports.append(
+            {
+                "dataset_id": manifest["dataset_id"],
+                "exchange": manifest["exchange"],
+                "symbol": manifest["symbol"],
+                "parquet_path": str(artifact.resolve()),
+                "manifest_path": str(artifact.with_suffix(".json").resolve()),
+            }
+        )
+    write_gold_publication_result(path, reports)
+
+
+def test_declared_inventory_excludes_retained_stale_extended_lineage(tmp_path: Path) -> None:
+    current = _write_candidate(tmp_path, dataset_id="gold.history.full.m1")
+    _write_candidate(tmp_path, dataset_id="gold.history.extended.m1")
+    result_path = tmp_path / "publication-result.json"
+    _write_publication_result(result_path, [current])
+
+    snapshots = discover_declared_gold_lineages(tmp_path, result_path)
+
+    assert [(item.lineage.dataset_id, item.lineage.exchange, item.lineage.symbol) for item in snapshots] == [
+        ("gold.history.full.m1", "deribit", "BTC")
+    ]
+
+
+def test_all_declared_artifacts_are_certified_before_repository_mutation(tmp_path: Path) -> None:
+    first = _write_candidate(tmp_path, dataset_id="gold.history.full.m1")
+    tampered = _write_candidate(tmp_path, dataset_id="gold.history.extended.m1")
+    result_path = tmp_path / "publication-result.json"
+    _write_publication_result(result_path, [first, tampered])
+    tampered.write_bytes(tampered.read_bytes() + b"tampered")
+    repository_calls: list[str] = []
+
+    class MutationSpy:
+        def __getattr__(self, name: str) -> object:
+            repository_calls.append(name)
+            raise AssertionError(f"repository called before certification: {name}")
+
+    with pytest.raises(ValueError, match="SHA-256"):
+        synchronize_gold_root(tmp_path, cast(GoldSyncRepository, MutationSpy()), publication_result=result_path)
+
+    assert repository_calls == []

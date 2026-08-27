@@ -89,3 +89,21 @@ def test_service_failure_is_sanitized(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(postgres_cmd, "synchronize_gold_root", fail)
     with pytest.raises(postgres_cmd.PostgresSyncCommandError, match="current-gold-inventory"):
         postgres_cmd.run_gold_sync_postgres(argparse.Namespace(gold_root="lake/gold"), logging.getLogger("test"))
+
+
+def test_declared_certification_failure_is_sanitized(monkeypatch: pytest.MonkeyPatch) -> None:
+    _set_valid_env(monkeypatch)
+    monkeypatch.setattr(postgres_cmd, "PostgresGoldSyncRepository", lambda settings: object())
+
+    def fail(root: object, repository: object, *, publication_result: object) -> GoldSyncResult:
+        del root, repository, publication_result
+        raise ValueError("/private/runtime/path/tampered.parquet SHA-256 mismatch")
+
+    monkeypatch.setattr(postgres_cmd, "synchronize_gold_root", fail)
+    args = argparse.Namespace(gold_root="lake/gold", publication_result=".run/gold-publication-result.json")
+
+    with pytest.raises(postgres_cmd.PostgresSyncCommandError) as exc_info:
+        postgres_cmd.run_gold_sync_postgres(args, logging.getLogger("test"))
+
+    assert str(exc_info.value) == ("current-gold-inventory: declared Gold publication result could not be certified")
+    assert "/private/" not in str(exc_info.value)

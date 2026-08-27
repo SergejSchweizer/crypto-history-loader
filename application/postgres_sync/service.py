@@ -23,7 +23,7 @@ from application.postgres_sync.contracts import (
     state_matches_snapshot,
 )
 from application.postgres_sync.delta import plan_gold_delta
-from application.postgres_sync.inventory import discover_current_gold_lineages
+from application.postgres_sync.inventory import discover_current_gold_lineages, discover_declared_gold_lineages
 from application.postgres_sync.schema import PostgresTableSchema, build_postgres_table_schema
 
 Clock = Callable[[], datetime]
@@ -189,9 +189,14 @@ def synchronize_gold_root(
     gold_root: str | Path,
     repository: GoldSyncRepository,
     *,
+    publication_result: str | Path | None = None,
     clock: Clock = _utc_now,
 ) -> GoldSyncResult:
-    """Discover current registered Gold lineages and reconcile only those snapshots."""
+    """Discover and reconcile either declared-run or backward-compatible current Gold."""
 
-    snapshots = discover_current_gold_lineages(gold_root)
+    snapshots = (
+        discover_current_gold_lineages(gold_root)
+        if publication_result is None
+        else discover_declared_gold_lineages(gold_root, publication_result)
+    )
     return reconcile_snapshots(snapshots, repository, clock=clock)

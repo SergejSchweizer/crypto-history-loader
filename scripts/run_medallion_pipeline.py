@@ -115,6 +115,22 @@ def _build_steps(
     checker = freshness_checker or _inputs_are_fresh
     _validate_disabled_prerequisites(pipeline_cfg, execution_order, main_path.parent, checker)
 
+    postgres_cfg = pipeline_cfg.get("postgres-sync", {})
+    if not isinstance(postgres_cfg, dict):
+        raise ValueError("medallion-pipeline.postgres-sync must be a mapping")
+    serving_deprecation_policy = str(postgres_cfg.get("serving_deprecation_policy", "retain")).strip()
+    if serving_deprecation_policy != "retain":
+        raise ValueError(
+            "medallion-pipeline.postgres-sync.serving_deprecation_policy must be 'retain'; "
+            "serving deletion requires a separately implemented explicit policy"
+        )
+    publication_result_value = str(postgres_cfg.get("publication_result", ".run/gold-publication-result.json")).strip()
+    if not publication_result_value:
+        raise ValueError("medallion-pipeline.postgres-sync.publication_result must not be empty")
+    publication_result = Path(publication_result_value)
+    if not publication_result.is_absolute():
+        publication_result = main_path.parent / publication_result
+
     steps: list[PipelineStep] = []
     for layer_name in execution_order:
         layer_cfg = pipeline_cfg.get(layer_name)
@@ -143,6 +159,8 @@ def _build_steps(
                 skip_layer_step = not cli_args
         if layer_name == "silver" and command == "silver-build":
             cli_args = _ensure_volatility_dataset_arg(cli_args)
+        if layer_name == "gold" and command == "gold-build" and "--publication-result" not in cli_args:
+            cli_args.extend(["--publication-result", str(publication_result)])
 
         if not skip_layer_step:
             cmd = [str(main_path), "--config", str(config_path), command, *cli_args]
@@ -155,6 +173,8 @@ def _build_steps(
                     "gold-sync-postgres",
                     "--gold-root",
                     "lake/gold",
+                    "--publication-result",
+                    str(publication_result),
                 ]
                 steps.append(PipelineStep(name="postgres-gold-sync", args=sync_cmd))
     return steps

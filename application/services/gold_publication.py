@@ -12,6 +12,7 @@ from typing import Any, Protocol
 from uuid import uuid4
 
 GOLD_MANIFEST_VERSION = 2
+GOLD_PUBLICATION_RESULT_VERSION = 1
 
 
 class ParquetFrame(Protocol):
@@ -29,6 +30,63 @@ class GoldArtifactPublishRequest:
     parquet_path: Path
     manifest_path: Path
     manifest_payload: dict[str, object]
+
+
+@dataclass(frozen=True, slots=True, order=True)
+class GoldPublishedArtifact:
+    """Certified artifact identity approved by one successful Gold command."""
+
+    dataset_id: str
+    exchange: str
+    symbol: str
+    parquet_path: str
+    manifest_path: str
+
+    @classmethod
+    def from_report(cls, report: dict[str, object]) -> GoldPublishedArtifact:
+        """Build a publication entry from a successful Gold build report."""
+
+        required = ("dataset_id", "exchange", "symbol", "parquet_path", "manifest_path")
+        values = {name: report.get(name) for name in required}
+        if any(not isinstance(value, str) or not value for value in values.values()):
+            raise ValueError("Gold build report is missing publication identity")
+        return cls(
+            dataset_id=str(values["dataset_id"]),
+            exchange=str(values["exchange"]),
+            symbol=str(values["symbol"]),
+            parquet_path=str(values["parquet_path"]),
+            manifest_path=str(values["manifest_path"]),
+        )
+
+    def to_dict(self) -> dict[str, str]:
+        """Return a deterministic JSON-safe publication entry."""
+
+        return {
+            "dataset_id": self.dataset_id,
+            "exchange": self.exchange,
+            "symbol": self.symbol,
+            "parquet_path": self.parquet_path,
+            "manifest_path": self.manifest_path,
+        }
+
+
+def write_gold_publication_result(path: Path, reports: list[dict[str, object]]) -> None:
+    """Atomically declare the exact artifact set approved by a successful Gold command."""
+
+    artifacts = sorted(GoldPublishedArtifact.from_report(report) for report in reports)
+    lineages = [(artifact.dataset_id, artifact.exchange, artifact.symbol) for artifact in artifacts]
+    if len(lineages) != len(set(lineages)):
+        raise ValueError("Gold publication result contains duplicate lineages")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    _write_json_fsync(
+        path,
+        {
+            "result_version": GOLD_PUBLICATION_RESULT_VERSION,
+            "status": "success",
+            "artifacts": [artifact.to_dict() for artifact in artifacts],
+            "serving_deprecations": [],
+        },
+    )
 
 
 def publish_gold_artifact_atomically(

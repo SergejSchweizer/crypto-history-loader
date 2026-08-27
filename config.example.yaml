@@ -35,6 +35,9 @@ bronze-build:
 
 medallion-pipeline:
   execution_order: [bronze, silver, gold]
+  postgres-sync:
+    publication_result: .run/gold-publication-result.json
+    serving_deprecation_policy: retain
   reuse-existing-inputs:
     enabled: false
     max_age_seconds: 86400

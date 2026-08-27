@@ -34,6 +34,10 @@ def add_gold_sync_postgres_parser(subparsers: Any) -> None:
         help="Synchronize current registered Gold datasets into PostgreSQL",
     )
     parser.add_argument("--gold-root", default="lake/gold", help="Gold lake root")
+    parser.add_argument(
+        "--publication-result",
+        help="Successful Gold result declaring the exact lineages eligible for this sync",
+    )
 
 
 def _settings_from_config(config: PostgresSyncConfig) -> PostgresConnectionSettings:
@@ -55,8 +59,16 @@ def run_gold_sync_postgres(args: argparse.Namespace, logger: logging.Logger) -> 
         raise PostgresSyncCommandError("configuration", str(exc)) from None
 
     repository = PostgresGoldSyncRepository(_settings_from_config(config))
+    publication_result = getattr(args, "publication_result", None)
     try:
-        result = synchronize_gold_root(Path(str(args.gold_root)), repository)
+        if publication_result:
+            result = synchronize_gold_root(
+                Path(str(args.gold_root)),
+                repository,
+                publication_result=Path(str(publication_result)),
+            )
+        else:
+            result = synchronize_gold_root(Path(str(args.gold_root)), repository)
     except PostgresSchemaMismatchError as exc:
         raise PostgresSyncCommandError("compatibility-schema", str(exc)) from None
     except GoldSyncServiceError as exc:
@@ -65,6 +77,11 @@ def run_gold_sync_postgres(args: argparse.Namespace, logger: logging.Logger) -> 
     except PostgresGoldRepositoryError as exc:
         raise PostgresSyncCommandError("postgresql", str(exc)) from None
     except (OSError, ValueError, TypeError) as exc:
+        if publication_result:
+            raise PostgresSyncCommandError(
+                "current-gold-inventory",
+                "declared Gold publication result could not be certified",
+            ) from None
         raise PostgresSyncCommandError("current-gold-inventory", str(exc)) from None
 
     payload = {

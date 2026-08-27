@@ -9,9 +9,11 @@ import re
 import subprocess
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 from typing import Any, cast
 
 from application.dataset_contracts import supported_gold_dataset_ids
+from application.services.gold_publication import write_gold_publication_result
 from application.services.gold_service import (
     GOLD_RETENTION_KEEP_VERSIONS,
     build_gold_for_symbol,
@@ -108,6 +110,10 @@ def add_gold_build_parser(subparsers: Any) -> None:
         help="Skip mirroring successful Gold output to /volume1/Temp/gold",
     )
     parser.set_defaults(mirror_gold_to_temp=True)
+    parser.add_argument(
+        "--publication-result",
+        help="Write the exact successful Gold artifact set for a subsequent PostgreSQL sync",
+    )
     parser.add_argument("--no-json-output", action="store_true", help="Suppress JSON output")
 
 
@@ -195,6 +201,10 @@ def run_gold_build(args: argparse.Namespace, logger: logging.Logger) -> None:
         int(getattr(args, "retention_keep_versions", GOLD_RETENTION_KEEP_VERSIONS))
     )
     maxprocesses = int(getattr(args, "maxprocesses", 4))
+    publication_result_value = cast(str | None, getattr(args, "publication_result", None))
+    publication_result = Path(publication_result_value).resolve() if publication_result_value else None
+    if publication_result is not None:
+        publication_result.unlink(missing_ok=True)
     if maxprocesses < 1:
         raise ValueError(f"Invalid --maxprocesses '{maxprocesses}'. Value must be an integer >= 1")
     reports: list[dict[str, object]] = []
@@ -351,3 +361,5 @@ def run_gold_build(args: argparse.Namespace, logger: logging.Logger) -> None:
     logger.info("Command complete: gold-build reports=%s", len(reports))
     if bool(getattr(args, "mirror_gold_to_temp", False)):
         _mirror_gold_to_temp(gold_root=gold_root, logger=logger)
+    if publication_result is not None:
+        write_gold_publication_result(publication_result, reports)

@@ -13,7 +13,10 @@ import polars as pl
 
 from application.dataset_contracts import supported_gold_dataset_ids
 from application.postgres_sync.contracts import GoldLineage, GoldSourceSnapshot, validate_unique_table_names
-from application.services.gold_publication import validate_gold_artifact_attestation
+from application.services.gold_publication import (
+    GOLD_PUBLICATION_RESULT_VERSION,
+    validate_gold_artifact_attestation,
+)
 from application.services.gold_versioning import parse_semver
 
 
@@ -149,6 +152,64 @@ def _candidate_manifests(gold_root: Path, dataset_id: str) -> Iterable[Path]:
     modern = dataset_root.glob("dataset_type=gold_symbol_dataset/feature_set_version=*/exchange=*/symbol=*/*.json")
     legacy = dataset_root.glob("exchange=*/symbol=*/version=*/build_id=*/manifest.json")
     return (*modern, *legacy)
+
+
+def _publication_result_payload(path: Path) -> dict[str, object]:
+    try:
+        raw: Any = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError("invalid Gold publication result") from exc
+    if not isinstance(raw, dict):
+        raise ValueError("Gold publication result must contain an object")
+    payload = cast(dict[str, object], raw)
+    if payload.get("result_version") != GOLD_PUBLICATION_RESULT_VERSION or payload.get("status") != "success":
+        raise ValueError("Gold publication result is not a certified success")
+    deprecations = payload.get("serving_deprecations")
+    if deprecations != []:
+        raise ValueError("Gold serving deletion requires an explicit supported deprecation policy")
+    return payload
+
+
+def discover_declared_gold_lineages(
+    gold_root: str | Path,
+    publication_result: str | Path,
+) -> tuple[GoldSourceSnapshot, ...]:
+    """Certify and return exactly the successful lineages declared by one Gold command."""
+
+    root = Path(gold_root).resolve()
+    payload = _publication_result_payload(Path(publication_result))
+    artifacts = payload.get("artifacts")
+    if not isinstance(artifacts, list):
+        raise ValueError("Gold publication result artifacts must be a list")
+    supported = set(supported_gold_dataset_ids())
+    validate_unique_table_names(tuple(supported))
+    snapshots: list[GoldSourceSnapshot] = []
+    declared_lineages: set[GoldLineage] = set()
+    for artifact in artifacts:
+        if not isinstance(artifact, dict):
+            raise ValueError("Gold publication result artifact must contain an object")
+        artifact_payload = cast(dict[str, object], artifact)
+        lineage = _lineage_from_manifest(artifact_payload)
+        if lineage.dataset_id not in supported:
+            raise ValueError("Gold publication result declares an unregistered dataset")
+        if lineage in declared_lineages:
+            raise ValueError("Gold publication result contains duplicate lineages")
+        declared_lineages.add(lineage)
+        parquet_value = artifact_payload.get("parquet_path")
+        manifest_value = artifact_payload.get("manifest_path")
+        if not isinstance(parquet_value, str) or not isinstance(manifest_value, str):
+            raise ValueError("Gold publication result artifact paths must be strings")
+        parquet_path = Path(parquet_value).resolve()
+        manifest_path = Path(manifest_value).resolve()
+        if not parquet_path.is_relative_to(root) or not manifest_path.is_relative_to(root):
+            raise ValueError("Gold publication result artifact is outside the Gold root")
+        if manifest_path.with_suffix(".parquet") != parquet_path:
+            raise ValueError("Gold publication result artifact pair does not match")
+        manifest_payload = _manifest_payload(manifest_path)
+        if _lineage_from_manifest(manifest_payload) != lineage:
+            raise ValueError("Gold publication result lineage does not match its manifest")
+        snapshots.append(_snapshot_from_candidate(manifest_path, manifest_payload))
+    return tuple(sorted(snapshots, key=lambda snapshot: snapshot.lineage))
 
 
 def discover_current_gold_lineages(gold_root: str | Path) -> tuple[GoldSourceSnapshot, ...]:

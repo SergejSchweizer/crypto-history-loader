@@ -39,6 +39,9 @@ def test_postgres_sync_is_exactly_once_directly_after_gold(tmp_path: Path) -> No
     steps = module._build_steps(main_path=main_path, config_path=config_path, config_data=_config())
 
     assert [step.name for step in steps] == ["bronze", "silver", "gold", "postgres-gold-sync"]
+    publication_result = tmp_path / ".run" / "gold-publication-result.json"
+    gold_step = steps[-2]
+    assert gold_step.args[-2:] == ["--publication-result", str(publication_result)]
     sync_step = steps[-1]
     assert sync_step.args == [
         str(main_path),
@@ -47,6 +50,8 @@ def test_postgres_sync_is_exactly_once_directly_after_gold(tmp_path: Path) -> No
         "gold-sync-postgres",
         "--gold-root",
         "lake/gold",
+        "--publication-result",
+        str(publication_result),
     ]
     assert sum(step.name == "postgres-gold-sync" for step in steps) == 1
 
@@ -157,3 +162,18 @@ def test_sync_plan_contains_no_credentials(tmp_path: Path) -> None:
     assert "PGPASSWORD" not in serialized
     assert "PGADMINPASSWORD" not in serialized
     assert "postgresql://" not in serialized
+
+
+def test_pipeline_rejects_implicit_serving_deletion_policy(tmp_path: Path) -> None:
+    module = _load_pipeline_module()
+    config = _config()
+    pipeline = config["medallion-pipeline"]
+    assert isinstance(pipeline, dict)
+    pipeline["postgres-sync"] = {"serving_deprecation_policy": "delete"}
+
+    with pytest.raises(ValueError, match="serving deletion requires"):
+        module._build_steps(
+            main_path=tmp_path / "main.py",
+            config_path=tmp_path / "config.yaml",
+            config_data=config,
+        )
