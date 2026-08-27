@@ -30,6 +30,7 @@ def test_publish_gold_artifact_atomically_writes_valid_pair(tmp_path: Path) -> N
     assert manifest["dataset_id"] == "gold.history.full.m1"
     assert manifest["manifest_version"] == 2
     assert manifest["output_sha256"] == sha256(parquet_path.read_bytes()).hexdigest()
+    assert manifest["schema_signature"] == gold_publication._parquet_schema_signature(parquet_path)
     gold_publication.validate_gold_artifact_attestation(parquet_path, manifest_path)
 
 

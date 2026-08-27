@@ -195,7 +195,20 @@ def _attested_manifest_payload(payload: dict[str, object], parquet_path: Path) -
     attested = dict(payload)
     attested["manifest_version"] = GOLD_MANIFEST_VERSION
     attested["output_sha256"] = _sha256_file(parquet_path)
+    attested["schema_signature"] = _parquet_schema_signature(parquet_path)
     return attested
+
+
+def _parquet_schema_signature(path: Path) -> str:
+    """Return the canonical signature of the ordered Parquet schema."""
+
+    try:
+        import polars as pl
+    except ImportError as exc:
+        raise RuntimeError("polars is required for Gold parquet publication.") from exc
+    schema = pl.read_parquet_schema(path)
+    canonical = json.dumps([(name, str(dtype)) for name, dtype in schema.items()], separators=(",", ":"))
+    return sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def validate_gold_artifact_attestation(parquet_path: Path, manifest_path: Path) -> None:
