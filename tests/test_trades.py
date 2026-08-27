@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pyarrow.parquet as pq
+import pytest
 
 from ingestion import trades
 from ingestion.lake import save_trades_parquet_lake
@@ -229,14 +230,51 @@ def test_save_options_trades_parquet_lake_writes_option_dataset(tmp_path: Path) 
 
 
 def test_trade_parsers_normalize_symbol_side_maker_and_option_contract_edges() -> None:
-    """Source-row parsing handles all Deribit symbol aliases and malformed option contracts."""
+    """Source-row parsing accepts valid contracts and rejects malformed identities."""
 
     assert trades._canonical_underlying_symbol("BTC-PERPETUAL") == "BTC"
     assert trades._canonical_underlying_symbol("SOL_USDC") == "SOL"
     assert trades._canonical_underlying_symbol("ETHUSDT") == "ETH"
     assert trades._parse_side({"direction": "SELL"}) == "sell"
-    assert trades._parse_side({"direction": "other"}) == "unknown"
+    with pytest.raises(ValueError, match="buy.*sell"):
+        trades._parse_side({"direction": "other"})
     assert trades._parse_is_maker({"liquidation": "m"}) is True
     assert trades._parse_is_maker({}) is False
-    assert trades._parse_option_contract_fields("") == ("", 0.0, "unknown")
-    assert trades._parse_option_contract_fields("BTC-31DEC26-invalid-X") == ("31DEC26", 0.0, "unknown")
+    assert trades._parse_option_contract_fields("BTC-31DEC26-100000-C") == ("31DEC26", 100000.0, "call")
+    with pytest.raises(ValueError):
+        trades._parse_option_contract_fields("")
+    with pytest.raises(ValueError):
+        trades._parse_option_contract_fields("BTC-31DEC26-invalid-X")
+
+
+@pytest.mark.parametrize(
+    "row",
+    [
+        {},
+        {"timestamp": 0, "trade_id": "id", "price": 1, "amount": 1, "direction": "buy"},
+        {"timestamp": 1, "trade_id": "", "price": 1, "amount": 1, "direction": "buy"},
+        {"timestamp": 1, "trade_id": "id", "price": float("nan"), "amount": 1, "direction": "buy"},
+        {"timestamp": 1, "trade_id": "id", "price": 1, "amount": 0, "direction": "buy"},
+        {"timestamp": 1, "trade_id": "id", "price": 1, "amount": 1, "direction": "unknown"},
+    ],
+)
+def test_perp_trade_parser_rejects_malformed_required_fields(row: dict[str, object]) -> None:
+    with pytest.raises((TypeError, ValueError)):
+        trades._parse_trade_row("deribit", "BTC", "perp", row)
+
+
+@pytest.mark.parametrize(
+    "instrument_name",
+    ["", "BTC-bad-100-C", "BTC-31DEC26-0-C", "BTC-31DEC26-100-X"],
+)
+def test_option_trade_parser_rejects_malformed_contract(instrument_name: str) -> None:
+    row: dict[str, object] = {
+        "timestamp": 1,
+        "trade_id": "id",
+        "price": 1,
+        "amount": 1,
+        "direction": "buy",
+        "instrument_name": instrument_name,
+    }
+    with pytest.raises(ValueError):
+        trades._parse_options_trade_row("deribit", "BTC", row)
