@@ -93,6 +93,10 @@ EXPECTED_MEDALLION_SILVER_DATASETS = set(supported_silver_build_ids())
         (["dataset-inventory", "--format", "json"], {"format": "json"}),
         (["dataset-inventory", "--builder-commit", "abc123"], {"builder_commit": "abc123"}),
         (["dataset-inventory", "--no-json-output"], {"no_json_output": True}),
+        (
+            ["postgres-live-conformance", "--gold-root", "lake/test-gold", "--report-file", "evidence.json"],
+            {"gold_root": "lake/test-gold", "report_file": "evidence.json"},
+        ),
         (["list-spot_ohlcv-timeframes", "--exchange", "deribit"], {"exchange": "deribit"}),
         (["list-spot_ohlcv-timeframes", "--exchanges", "deribit"], {"exchanges": ["deribit"]}),
         (["export-descriptive-stats", "--lake-root", "lake/test-bronze"], {"lake_root": "lake/test-bronze"}),

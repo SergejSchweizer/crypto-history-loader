@@ -27,6 +27,10 @@ from api.commands.gold import add_gold_build_parser, run_gold_build
 from api.commands.inventory import add_dataset_inventory_parser, run_dataset_inventory
 from api.commands.loader import add_bronze_build_parser
 from api.commands.postgres import add_gold_sync_postgres_parser, run_gold_sync_postgres
+from api.commands.postgres_conformance import (
+    add_postgres_live_conformance_parser,
+    run_postgres_live_conformance,
+)
 from api.commands.silver import add_silver_build_parser, run_silver_build
 from api.commands.stats import add_export_descriptive_stats_parser, run_export_descriptive_stats
 from api.commands.timeframes import add_list_spot_ohlcv_timeframes_parser, run_list_spot_ohlcv_timeframes
@@ -157,6 +161,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_silver_build_parser(subparsers)
     add_gold_build_parser(subparsers)
     add_gold_sync_postgres_parser(subparsers)
+    add_postgres_live_conformance_parser(subparsers)
     add_benchmark_build_parser(subparsers)
     add_dataset_inventory_parser(subparsers)
     historical_completeness_cmd.add_historical_completeness_parser(subparsers)
@@ -334,6 +339,8 @@ def main() -> None:
         run_gold_build(args=args, logger=logger)
     elif args.command == "gold-sync-postgres":
         run_gold_sync_postgres(args=args, logger=logger)
+    elif args.command == "postgres-live-conformance":
+        raise SystemExit(run_postgres_live_conformance(args=args, logger=logger))
     elif args.command == "benchmark-build":
         run_benchmark_build(args=args, logger=logger)
     elif args.command == "dataset-inventory":
