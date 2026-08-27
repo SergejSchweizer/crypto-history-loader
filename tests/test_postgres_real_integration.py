@@ -11,6 +11,9 @@ import psycopg
 import pytest
 from psycopg import sql
 
+from application.postgres_sync.schema import PostgresCatalogColumn, PostgresCatalogTable
+from infra.postgres.gold_repository import _verify_owned_catalog
+
 
 def _test_dsn() -> str:
     dsn = os.getenv("TEST_POSTGRES_DSN", "").strip()
@@ -44,6 +47,18 @@ def test_real_postgres_temporal_transaction_lock_and_sync_operations() -> None:
                     PRIMARY KEY (exchange, symbol, timestamp_m1)
                 )"""
             )
+            expected_catalog = PostgresCatalogTable(
+                "crypto_loader_test",
+                "temporal_probe",
+                (
+                    PostgresCatalogColumn("exchange", "text", False),
+                    PostgresCatalogColumn("symbol", "text", False),
+                    PostgresCatalogColumn("timestamp_m1", "timestamp with time zone", False, datetime_precision=6),
+                    PostgresCatalogColumn("row_sha256", "character", False, character_maximum_length=64),
+                ),
+                ("exchange", "symbol", "timestamp_m1"),
+            )
+            _verify_owned_catalog(cursor, (expected_catalog,))
             cursor.execute(
                 "INSERT INTO crypto_loader_test.temporal_probe VALUES (%s, %s, %s, %s)",
                 ("deribit", "BTC", timestamp, "a" * 64),

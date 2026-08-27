@@ -18,7 +18,6 @@ from application.postgres_sync import (
     POSTGRES_SESSION_TIMEZONE,
     POSTGRES_SYNC_SCHEMA,
     POSTGRES_SYNC_STATE_TABLE,
-    POSTGRES_TIMESTAMP_TYPE,
     GoldDeltaPlan,
     GoldLineage,
     GoldRowDigest,
@@ -29,7 +28,12 @@ from application.postgres_sync import (
     consumer_table_name,
 )
 from application.postgres_sync.contracts import GoldReconcileDecision, GoldReconcilePlanner
-from application.postgres_sync.schema import quote_identifier
+from application.postgres_sync.schema import (
+    PostgresCatalogColumn,
+    PostgresCatalogTable,
+    owned_catalog_tables,
+    quote_identifier,
+)
 
 
 class PostgresGoldRepositoryError(RuntimeError):
@@ -100,28 +104,6 @@ def _qualified(schema_name: str, table_name: str) -> str:
 
 _STATE = _qualified(POSTGRES_SYNC_SCHEMA, POSTGRES_SYNC_STATE_TABLE)
 _DIGESTS = _qualified(POSTGRES_SYNC_SCHEMA, POSTGRES_ROW_HASH_TABLE)
-_STATE_DDL = f"""CREATE TABLE IF NOT EXISTS {_STATE} (
-    dataset_id TEXT NOT NULL,
-    exchange TEXT NOT NULL,
-    symbol TEXT NOT NULL,
-    source_fingerprint TEXT NOT NULL,
-    schema_signature CHAR(64) NOT NULL,
-    row_count BIGINT NOT NULL,
-    min_timestamp {POSTGRES_TIMESTAMP_TYPE} NULL,
-    max_timestamp {POSTGRES_TIMESTAMP_TYPE} NULL,
-    synced_at_utc {POSTGRES_TIMESTAMP_TYPE} NOT NULL,
-    source_version TEXT NULL,
-    build_id TEXT NULL,
-    PRIMARY KEY (dataset_id, exchange, symbol)
-)"""
-_DIGEST_DDL = f"""CREATE TABLE IF NOT EXISTS {_DIGESTS} (
-    dataset_id TEXT NOT NULL,
-    exchange TEXT NOT NULL,
-    symbol TEXT NOT NULL,
-    timestamp_m1 {POSTGRES_TIMESTAMP_TYPE} NOT NULL,
-    row_sha256 CHAR(64) NOT NULL,
-    PRIMARY KEY (dataset_id, exchange, symbol, timestamp_m1)
-)"""
 _SELECT_STATE = f"""SELECT dataset_id, exchange, symbol, source_fingerprint, schema_signature, row_count,
 min_timestamp, max_timestamp, synced_at_utc, source_version, build_id
 FROM {_STATE} WHERE dataset_id = %s AND exchange = %s AND symbol = %s"""
@@ -145,6 +127,21 @@ VALUES (%s, %s, %s, %s, %s)
 ON CONFLICT (dataset_id, exchange, symbol, timestamp_m1)
 DO UPDATE SET row_sha256 = EXCLUDED.row_sha256"""
 _DELETE_DIGEST = f"DELETE FROM {_DIGESTS} WHERE dataset_id = %s AND exchange = %s AND symbol = %s AND timestamp_m1 = %s"
+
+_CATALOG_COLUMNS = """SELECT table_schema, table_name, ordinal_position, column_name, data_type, is_nullable,
+character_maximum_length, numeric_precision, numeric_scale, datetime_precision
+FROM information_schema.columns
+WHERE (table_schema, table_name) IN ({table_pairs})
+ORDER BY table_schema, table_name, ordinal_position"""
+_CATALOG_PRIMARY_KEYS = """SELECT namespace.nspname, relation.relname, attribute.attname, key_column.ordinality
+FROM pg_catalog.pg_index AS index_definition
+JOIN pg_catalog.pg_class AS relation ON relation.oid = index_definition.indrelid
+JOIN pg_catalog.pg_namespace AS namespace ON namespace.oid = relation.relnamespace
+JOIN LATERAL unnest(index_definition.indkey) WITH ORDINALITY AS key_column(attnum, ordinality) ON TRUE
+JOIN pg_catalog.pg_attribute AS attribute
+    ON attribute.attrelid = relation.oid AND attribute.attnum = key_column.attnum
+WHERE index_definition.indisprimary AND (namespace.nspname, relation.relname) IN ({table_pairs})
+ORDER BY namespace.nspname, relation.relname, key_column.ordinality"""
 
 
 def _lineage_params(lineage: GoldLineage) -> tuple[object, ...]:
@@ -237,6 +234,73 @@ def _safe_table_ddl(ddl: str) -> str:
     return table_statements[0]
 
 
+def _optional_catalog_int(value: object, name: str) -> int | None:
+    if value is None:
+        return None
+    return _as_int(value, name)
+
+
+def _actual_catalog_tables(
+    column_rows: list[tuple[object, ...]],
+    primary_key_rows: list[tuple[object, ...]],
+) -> dict[tuple[str, str], PostgresCatalogTable]:
+    columns: dict[tuple[str, str], list[PostgresCatalogColumn]] = {}
+    for row in column_rows:
+        if len(row) != 10:
+            raise ValueError("PostgreSQL catalog column row has unexpected width")
+        key = (_as_text(row[0], "table_schema"), _as_text(row[1], "table_name"))
+        expected_ordinal = len(columns.setdefault(key, [])) + 1
+        if _as_int(row[2], "ordinal_position") != expected_ordinal:
+            raise ValueError("PostgreSQL catalog column order is not contiguous")
+        nullable_text = _as_text(row[5], "is_nullable")
+        if nullable_text not in {"YES", "NO"}:
+            raise ValueError("PostgreSQL catalog nullability is invalid")
+        columns[key].append(
+            PostgresCatalogColumn(
+                name=_as_text(row[3], "column_name"),
+                data_type=_as_text(row[4], "data_type"),
+                nullable=nullable_text == "YES",
+                character_maximum_length=_optional_catalog_int(row[6], "character_maximum_length"),
+                numeric_precision=_optional_catalog_int(row[7], "numeric_precision"),
+                numeric_scale=_optional_catalog_int(row[8], "numeric_scale"),
+                datetime_precision=_optional_catalog_int(row[9], "datetime_precision"),
+            )
+        )
+
+    primary_keys: dict[tuple[str, str], list[str]] = {}
+    for row in primary_key_rows:
+        if len(row) != 4:
+            raise ValueError("PostgreSQL catalog primary-key row has unexpected width")
+        key = (_as_text(row[0], "table_schema"), _as_text(row[1], "table_name"))
+        expected_ordinal = len(primary_keys.setdefault(key, [])) + 1
+        if _as_int(row[3], "primary_key_ordinal") != expected_ordinal:
+            raise ValueError("PostgreSQL catalog primary-key order is not contiguous")
+        primary_keys[key].append(_as_text(row[2], "primary_key_column"))
+
+    return {
+        key: PostgresCatalogTable(key[0], key[1], tuple(table_columns), tuple(primary_keys.get(key, ())))
+        for key, table_columns in columns.items()
+    }
+
+
+def _verify_owned_catalog(cursor: CursorPort, expected_tables: tuple[PostgresCatalogTable, ...]) -> None:
+    placeholders = ", ".join("(%s, %s)" for _ in expected_tables)
+    params = tuple(value for table in expected_tables for value in (table.schema_name, table.table_name))
+    cursor.execute(_CATALOG_COLUMNS.format(table_pairs=placeholders), params)
+    column_rows = cursor.fetchall()
+    cursor.execute(_CATALOG_PRIMARY_KEYS.format(table_pairs=placeholders), params)
+    primary_key_rows = cursor.fetchall()
+    try:
+        actual = _actual_catalog_tables(column_rows, primary_key_rows)
+    except TypeError, ValueError:
+        raise PostgresSchemaMismatchError(
+            "PostgreSQL Gold schema migration required: actual catalog is malformed"
+        ) from None
+    expected = {(table.schema_name, table.table_name): table for table in expected_tables}
+    if actual != expected:
+        raise PostgresSchemaMismatchError("PostgreSQL Gold schema migration required: actual catalog is incompatible")
+
+
 class PostgresGoldSyncRepository:
     """Transactional repository adapter implementing one-lineage atomic reconciliation."""
 
@@ -287,16 +351,15 @@ class PostgresGoldSyncRepository:
         return tuple(result)
 
     def ensure_lineage(self, snapshot: GoldSourceSnapshot, ddl: str, schema_signature: str) -> None:
-        """Create/validate target tables before any consumer-row mutation."""
+        """Validate actual target catalogs before any consumer-row mutation."""
 
-        table_ddl = _safe_table_ddl(ddl)
+        _safe_table_ddl(ddl)
+        expected_tables = owned_catalog_tables(ddl)
         connection = self._open()
         try:
             cursor = connection.cursor()
             try:
-                cursor.execute(_STATE_DDL)
-                cursor.execute(_DIGEST_DDL)
-                cursor.execute(table_ddl)
+                _verify_owned_catalog(cursor, expected_tables)
                 cursor.execute(_SELECT_STATE, _lineage_params(snapshot.lineage))
                 row = cursor.fetchone()
                 if row is not None:
@@ -466,6 +529,7 @@ class PostgresGoldSyncRepository:
         """Reconcile one lineage under one lock and transaction from first target read through commit."""
 
         table_ddl = _safe_table_ddl(ddl)
+        expected_tables = owned_catalog_tables(table_ddl)
         lineage = snapshot.lineage
         connection = self._open()
         try:
@@ -473,9 +537,7 @@ class PostgresGoldSyncRepository:
             try:
                 lock_key = f"{lineage.dataset_id}|{lineage.exchange}|{lineage.symbol}"
                 cursor.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", (lock_key,))
-                cursor.execute(_STATE_DDL)
-                cursor.execute(_DIGEST_DDL)
-                cursor.execute(table_ddl)
+                _verify_owned_catalog(cursor, expected_tables)
 
                 state = self._read_state(cursor, lineage)
                 if state is not None and state.schema_signature != schema_signature:

@@ -18,7 +18,7 @@ from application.postgres_sync import (
     GoldTargetSummary,
 )
 from application.postgres_sync.contracts import GoldReconcileDecision
-from application.postgres_sync.schema import build_postgres_table_schema
+from application.postgres_sync.schema import PostgresCatalogTable, bootstrap_migration, build_postgres_table_schema
 from infra.postgres.gold_repository import (
     PostgresConnectionSettings,
     PostgresGoldSyncRepository,
@@ -106,6 +106,32 @@ def _snapshot(signature: str) -> GoldSourceSnapshot:
     )
 
 
+def _catalog_rows(
+    tables: tuple[PostgresCatalogTable, ...],
+) -> tuple[list[tuple[object, ...]], list[tuple[object, ...]]]:
+    column_rows: list[tuple[object, ...]] = []
+    primary_key_rows: list[tuple[object, ...]] = []
+    for table in sorted(tables, key=lambda item: (item.schema_name, item.table_name)):
+        for ordinal, column in enumerate(table.columns, start=1):
+            column_rows.append(
+                (
+                    table.schema_name,
+                    table.table_name,
+                    ordinal,
+                    column.name,
+                    column.data_type,
+                    "YES" if column.nullable else "NO",
+                    column.character_maximum_length,
+                    column.numeric_precision,
+                    column.numeric_scale,
+                    column.datetime_precision,
+                )
+            )
+        for ordinal, column_name in enumerate(table.primary_key, start=1):
+            primary_key_rows.append((table.schema_name, table.table_name, column_name, ordinal))
+    return column_rows, primary_key_rows
+
+
 def test_settings_exact_endpoint_and_secret_redaction() -> None:
     settings = _settings()
     assert settings.host == "10.10.1.3"
@@ -135,15 +161,17 @@ def test_database_datetime_reader_accepts_utc() -> None:
     assert _as_datetime(timestamp, "timestamp_m1") == timestamp
 
 
-def test_ensure_lineage_uses_utc_and_non_destructive_ddl() -> None:
-    connection = FakeConnection(fetchone_queue=[None])
+def test_ensure_lineage_uses_utc_and_verifies_catalog_without_ddl() -> None:
     schema = _schema()
+    column_rows, primary_key_rows = _catalog_rows(bootstrap_migration(schema).tables)
+    connection = FakeConnection(fetchone_queue=[column_rows, primary_key_rows, None])
     repository = PostgresGoldSyncRepository(_settings(), connection_factory=lambda _: connection)
     repository.ensure_lineage(_snapshot(schema.signature), schema.ddl, schema.signature)
     sql_trace = "\n".join(query for query, _ in connection.trace)
     assert "SET TIME ZONE 'UTC'" in sql_trace
-    assert "TIMESTAMPTZ(6)" in sql_trace
-    assert 'CREATE TABLE IF NOT EXISTS "crypto_loader"."gold_history_full_m1"' in sql_trace
+    assert "information_schema.columns" in sql_trace
+    assert "pg_catalog.pg_index" in sql_trace
+    assert "CREATE " not in sql_trace
     assert "DROP " not in sql_trace.upper()
     assert "TRUNCATE " not in sql_trace.upper()
     assert ("COMMIT", None) in connection.trace
@@ -165,7 +193,8 @@ def test_existing_schema_signature_mismatch_fails_before_rows() -> None:
         "v1.0.0",
         None,
     )
-    connection = FakeConnection(fetchone_queue=[existing])
+    column_rows, primary_key_rows = _catalog_rows(bootstrap_migration(schema).tables)
+    connection = FakeConnection(fetchone_queue=[column_rows, primary_key_rows, existing])
     repository = PostgresGoldSyncRepository(_settings(), connection_factory=lambda _: connection)
     with pytest.raises(PostgresSchemaMismatchError):
         repository.ensure_lineage(_snapshot(schema.signature), schema.ddl, schema.signature)
@@ -238,6 +267,7 @@ def test_apply_delta_rolls_back_on_sql_failure() -> None:
 
 def test_reconcile_lineage_locks_before_reads_and_commits_after_checkpoint() -> None:
     schema = _schema()
+    column_rows, primary_key_rows = _catalog_rows(bootstrap_migration(schema).tables)
     snapshot = _snapshot(schema.signature)
     timestamp = snapshot.min_timestamp
     assert timestamp is not None
@@ -248,7 +278,7 @@ def test_reconcile_lineage_locks_before_reads_and_commits_after_checkpoint() -> 
     )
     plan = GoldDeltaPlan((payload,), (), (), (), (GoldRowDigest(key, "a" * 64),))
     state = GoldSyncState(snapshot.lineage, "fingerprint", schema.signature, 1, timestamp, timestamp, timestamp)
-    connection = FakeConnection(fetchone_queue=[None, [], (1, timestamp, timestamp)])
+    connection = FakeConnection(fetchone_queue=[column_rows, primary_key_rows, None, [], (1, timestamp, timestamp)])
     repository = PostgresGoldSyncRepository(_settings(), connection_factory=lambda _: connection)
 
     def planner(current: GoldSyncState | None, digests: tuple[GoldRowDigest, ...]) -> GoldReconcileDecision:
@@ -276,6 +306,7 @@ def test_reconcile_lineage_locks_before_reads_and_commits_after_checkpoint() -> 
 
 def test_reconcile_lineage_rolls_back_mutations_when_checkpoint_fails() -> None:
     schema = _schema()
+    column_rows, primary_key_rows = _catalog_rows(bootstrap_migration(schema).tables)
     snapshot = _snapshot(schema.signature)
     timestamp = snapshot.min_timestamp
     assert timestamp is not None
@@ -287,7 +318,7 @@ def test_reconcile_lineage_rolls_back_mutations_when_checkpoint_fails() -> None:
     plan = GoldDeltaPlan((payload,), (), (), (), (GoldRowDigest(key, "a" * 64),))
     state = GoldSyncState(snapshot.lineage, "fingerprint", schema.signature, 1, timestamp, timestamp, timestamp)
     connection = FakeConnection(
-        fetchone_queue=[None, [], (1, timestamp, timestamp)],
+        fetchone_queue=[column_rows, primary_key_rows, None, [], (1, timestamp, timestamp)],
         fail_token='INSERT INTO "crypto_loader_sync"."gold_sync_state"',
     )
     repository = PostgresGoldSyncRepository(_settings(), connection_factory=lambda _: connection)
