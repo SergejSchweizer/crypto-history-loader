@@ -150,7 +150,7 @@ def test_fetch_all_history_deribit(monkeypatch: pytest.MonkeyPatch) -> None:
     assert candles[0].symbol == "BTC-PERPETUAL"
 
 
-def test_fetch_candles_range_returns_empty_on_http_client_error(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_fetch_candles_range_propagates_http_client_error(monkeypatch: pytest.MonkeyPatch) -> None:
     from ingestion.exchanges import deribit as deribit_exchange
 
     def fake_fetch_klines_range(**kwargs: object) -> list[list[object]]:
@@ -159,16 +159,15 @@ def test_fetch_candles_range_returns_empty_on_http_client_error(monkeypatch: pyt
 
     monkeypatch.setattr(deribit_exchange, "fetch_klines_range", fake_fetch_klines_range)
 
-    rows = fetch_candles_range(
-        exchange="deribit",
-        market="perp",
-        symbol="ETH",
-        interval="1m",
-        start_open_ms=1_000,
-        end_open_ms=2_000,
-    )
-
-    assert rows == []
+    with pytest.raises(HttpClientError, match="Connection error"):
+        fetch_candles_range(
+            exchange="deribit",
+            market="perp",
+            symbol="ETH",
+            interval="1m",
+            start_open_ms=1_000,
+            end_open_ms=2_000,
+        )
 
 
 def test_fetch_candles_range_returns_empty_on_deribit_no_data_status(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -213,26 +213,13 @@ def fetch_candles_range(
     if exchange != "deribit":
         raise ValueError(f"Unsupported exchange '{exchange}'")
     started = time.monotonic()
-    try:
-        rows = deribit.fetch_klines_range(
-            symbol=symbol,
-            market=market,
-            interval=normalized_interval,
-            start_open_ms=start_open_ms,
-            end_open_ms=end_open_ms,
-        )
-    except HttpClientError:
-        logger.warning(
-            "OHLCV day fetch failed exchange=%s market=%s symbol=%s interval=%s start_ms=%s end_ms=%s elapsed_s=%.2f",
-            exchange,
-            market,
-            normalized_symbol,
-            normalized_interval,
-            start_open_ms,
-            end_open_ms,
-            time.monotonic() - started,
-        )
-        return []
+    rows = deribit.fetch_klines_range(
+        symbol=symbol,
+        market=market,
+        interval=normalized_interval,
+        start_open_ms=start_open_ms,
+        end_open_ms=end_open_ms,
+    )
 
     candles = [
         parse_kline(exchange=exchange, symbol=normalized_symbol, interval=normalized_interval, row=row) for row in rows
