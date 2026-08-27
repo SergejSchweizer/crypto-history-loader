@@ -165,7 +165,7 @@ Maximum safe parallelism:
 ## PR-78: Comprehensive Repository Audit And Corrective Plan
 
 PR name: `repository-audit-corrective-plan`
-Status: In Progress
+Status: Completed (integrated locally)
 Updated: 2026-08-24
 PR: #185
 Git branch: `codex/pr78-postgres-temporal-conformance-plan`
@@ -196,7 +196,7 @@ Acceptance:
 ## PR-79: Reconcile Backlog Delivery State And Remove Duplicate PostgreSQL Backlog
 
 PR name: `backlog-postgres-source-of-truth`
-Status: Planned
+Status: Completed (integrated locally)
 Updated: 2026-08-24
 PR: TBD
 Git branch: `codex/pr79-backlog-postgres-source-of-truth`
@@ -221,7 +221,7 @@ Acceptance:
 ## PR-80: Maintain Measured Production Coverage At At Least 90 Percent
 
 PR name: `coverage-90-test-gap`
-Status: Planned
+Status: Completed (integrated locally)
 Updated: 2026-08-24
 PR: TBD
 Git branch: `codex/pr80-coverage-90-test-gap`
@@ -246,7 +246,7 @@ Acceptance:
 ## PR-81: Restore The Canonical 90 Percent Coverage Gate
 
 PR name: `coverage-90-enforcement`
-Status: Planned
+Status: Completed (integrated locally)
 Updated: 2026-08-24
 PR: TBD
 Git branch: `codex/pr81-coverage-90-enforcement`
@@ -271,7 +271,7 @@ Acceptance:
 ## PR-82: Run Real PostgreSQL Integration Tests In Required CI
 
 PR name: `real-postgres-ci`
-Status: Planned
+Status: Completed (integrated locally)
 Updated: 2026-08-24
 PR: TBD
 Git branch: `codex/pr82-real-postgres-ci`
@@ -296,7 +296,7 @@ Acceptance:
 ## PR-83: Enforce Strict UTC On PostgreSQL Read Boundaries
 
 PR name: `postgres-temporal-read-boundary`
-Status: Planned
+Status: Completed (integrated locally)
 Updated: 2026-08-24
 PR: TBD
 Git branch: `codex/pr83-postgres-temporal-read-boundary`
@@ -321,7 +321,7 @@ Acceptance:
 ## PR-84: Lock Before Reading And Planning A PostgreSQL Lineage
 
 PR name: `postgres-reconcile-transaction-uow`
-Status: Planned
+Status: Completed (integrated locally)
 Updated: 2026-08-24
 PR: TBD
 Git branch: `codex/pr84-postgres-reconcile-transaction-uow`
@@ -346,7 +346,7 @@ Acceptance:
 ## PR-85: Verify Actual PostgreSQL Catalog Schema And Versioned Migrations
 
 PR name: `postgres-schema-catalog-contract`
-Status: Planned
+Status: Completed (integrated locally)
 Updated: 2026-08-24
 PR: TBD
 Git branch: `codex/pr85-postgres-schema-catalog-contract`
@@ -371,7 +371,7 @@ Acceptance:
 ## PR-86: Separate Administrator DDL From Runtime DML And Harden The Service Role
 
 PR name: `postgres-runtime-least-privilege`
-Status: Planned
+Status: Completed (integrated locally)
 Updated: 2026-08-24
 PR: TBD
 Git branch: `codex/pr86-postgres-runtime-least-privilege`
@@ -396,7 +396,7 @@ Acceptance:
 ## PR-87: Prove Consumer, Digest Index, And Sync State Are Mutually Consistent
 
 PR name: `postgres-consumer-integrity-verification`
-Status: Planned
+Status: Completed (integrated locally)
 Updated: 2026-08-24
 PR: TBD
 Git branch: `codex/pr87-postgres-consumer-integrity-verification`
@@ -421,7 +421,7 @@ Acceptance:
 ## PR-88: Add Bounded PostgreSQL Connection, Lock, Statement, And Transaction Timeouts
 
 PR name: `postgres-timeout-policy`
-Status: Planned
+Status: Completed (integrated locally)
 Updated: 2026-08-24
 PR: TBD
 Git branch: `codex/pr88-postgres-timeout-policy`
@@ -446,7 +446,7 @@ Acceptance:
 ## PR-89: Attest Every Gold Output Parquet With Its Own SHA-256
 
 PR name: `gold-output-artifact-sha`
-Status: Planned
+Status: Completed (integrated locally)
 Updated: 2026-08-24
 PR: TBD
 Git branch: `codex/pr89-gold-output-artifact-sha`
@@ -471,7 +471,7 @@ Acceptance:
 ## PR-90: Verify Gold Artifact Bytes Before PostgreSQL Inventory Selection
 
 PR name: `postgres-gold-artifact-integrity`
-Status: Planned
+Status: Completed (integrated locally)
 Updated: 2026-08-24
 PR: TBD
 Git branch: `codex/pr90-postgres-gold-artifact-integrity`
@@ -496,7 +496,7 @@ Acceptance:
 ## PR-91: Enforce Medallion Bronze Before Silver Before Gold
 
 PR name: `medallion-layer-order-contract`
-Status: Planned
+Status: Completed (integrated locally)
 Updated: 2026-08-24
 PR: TBD
 Git branch: `codex/pr91-medallion-layer-order-contract`
@@ -521,7 +521,7 @@ Acceptance:
 ## PR-92: Scope PostgreSQL Sync To Fresh Eligible Gold From The Medallion Run
 
 PR name: `medallion-postgres-freshness-scope`
-Status: Planned
+Status: Completed (integrated locally)
 Updated: 2026-08-24
 PR: TBD
 Git branch: `codex/pr92-medallion-postgres-freshness-scope`
@@ -546,7 +546,7 @@ Acceptance:
 ## PR-93: Make OHLCV Range Fetches Fail Closed On Retrieval Errors
 
 PR name: `ohlcv-fetch-failure-contract`
-Status: Planned
+Status: Completed (integrated locally)
 Updated: 2026-08-24
 PR: TBD
 Git branch: `codex/pr93-ohlcv-fetch-failure-contract`
@@ -571,7 +571,7 @@ Acceptance:
 ## PR-94: Define Exact Funding Success-Empty Versus Error Semantics
 
 PR name: `funding-fetch-failure-contract`
-Status: Planned
+Status: Completed (integrated locally)
 Updated: 2026-08-24
 PR: TBD
 Git branch: `codex/pr94-funding-fetch-failure-contract`
@@ -596,7 +596,7 @@ Acceptance:
 ## PR-95: Make Open-Interest Fetches Fail Closed On Retrieval Errors
 
 PR name: `open-interest-fetch-failure-contract`
-Status: Planned
+Status: Completed (integrated locally)
 Updated: 2026-08-24
 PR: TBD
 Git branch: `codex/pr95-open-interest-fetch-failure-contract`
@@ -621,7 +621,7 @@ Acceptance:
 ## PR-96: Reject Malformed Required Trade Payload Fields
 
 PR name: `trade-payload-validation`
-Status: Planned
+Status: Completed (integrated locally)
 Updated: 2026-08-24
 PR: TBD
 Git branch: `codex/pr96-trade-payload-validation`
@@ -646,7 +646,7 @@ Acceptance:
 ## PR-97: Enforce OHLCV Candle Numerical And Time Semantics
 
 PR name: `ohlcv-semantic-validation`
-Status: Planned
+Status: Completed (integrated locally)
 Updated: 2026-08-24
 PR: TBD
 Git branch: `codex/pr97-ohlcv-semantic-validation`
@@ -671,7 +671,7 @@ Acceptance:
 ## PR-98: Sanitize HTTP Diagnostic URLs And Make Retry Tests Deterministic
 
 PR name: `http-diagnostic-redaction`
-Status: Planned
+Status: Completed (integrated locally)
 Updated: 2026-08-24
 PR: TBD
 Git branch: `codex/pr98-http-diagnostic-redaction`
@@ -696,7 +696,7 @@ Acceptance:
 ## PR-99: Audit Historical Lake Completeness Without Mutating Data
 
 PR name: `historical-lake-completeness-audit`
-Status: Planned
+Status: Completed (integrated locally)
 Updated: 2026-08-24
 PR: TBD
 Git branch: `codex/pr99-historical-lake-completeness-audit`
@@ -721,7 +721,7 @@ Acceptance:
 ## PR-100: Reconcile Only Failed Or Unverified Historical Source Intervals And Rebuild Dependents
 
 PR name: `targeted-historical-reconciliation`
-Status: Planned
+Status: Completed (integrated locally)
 Updated: 2026-08-24
 PR: TBD
 Git branch: `codex/pr100-targeted-historical-reconciliation`
@@ -748,7 +748,7 @@ Acceptance:
 ## PR-101: Independently Verify The Live PostgreSQL Serving Plane
 
 PR name: `postgres-live-conformance-verifier`
-Status: Planned
+Status: Completed (integrated locally)
 Updated: 2026-08-24
 PR: TBD
 Git branch: `codex/pr101-postgres-live-conformance-verifier`
@@ -775,7 +775,7 @@ Acceptance:
 ## PR-102: Conditionally Reconstruct Owned PostgreSQL Schemas Or Certify No-Op
 
 PR name: `postgres-authoritative-reconstruction`
-Status: Planned
+Status: Completed (integrated locally)
 Updated: 2026-08-24
 PR: TBD
 Git branch: `codex/pr102-postgres-authoritative-reconstruction`
@@ -834,10 +834,11 @@ Completed work is intentionally summarized here instead of keeping large finishe
 | PR-75 | Added Gold-to-PostgreSQL reconciliation orchestration. Merged as GitHub PR #182. |
 | PR-76 | Added the PostgreSQL Gold-sync CLI. Merged as GitHub PR #183. |
 | PR-77 | Added Medallion PostgreSQL Gold-sync integration. Merged as GitHub PR #184. |
+| PR-78–PR-102 | Implemented and integrated locally with rebase-based fast-forward history; PR-102 provides a guarded operator workflow and requires live evidence before production certification. |
 
-Completed ticket index: `PR-01` through `PR-46`, `QC-01` through `QC-06`, and `PR-54` through `PR-77`.
+Completed ticket index: `PR-01` through `PR-46`, `QC-01` through `QC-06`, and `PR-54` through `PR-102`.
 
-Latest completed backlog ticket: PR-77, merged as GitHub pull request #184.
+Latest completed backlog ticket: PR-102, integrated locally.
 
 ## Superseded, not completed
 
