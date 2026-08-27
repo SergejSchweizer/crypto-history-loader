@@ -112,7 +112,7 @@ def _finite_number(value: object, field_name: str, *, positive: bool) -> float:
     """Validate finite OHLCV numeric semantics without silently accepting invalid values."""
 
     try:
-        numeric_value = float(value)  # type: ignore[arg-type]
+        numeric_value = float(cast(Any, value))
     except (TypeError, ValueError) as exc:
         raise ValueError(f"OHLCV {field_name} must be numeric") from exc
     if not isfinite(numeric_value) or numeric_value < 0 or (positive and numeric_value == 0):

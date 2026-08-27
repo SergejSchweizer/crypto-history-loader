@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from importlib import import_module
 from pathlib import Path
-from typing import Any, Literal, cast
+from typing import Any, Literal, TypeGuard, cast
 
 from application.data_quality_report import (
     AuditStatus,
@@ -27,6 +27,12 @@ from ingestion.lake_layout import partition_data_files, partition_empty_minute_f
 from ingestion.spot_ohlcv import Exchange, normalize_storage_symbol
 
 AuditFamily = Literal["ohlcv", "funding", "open_interest", "trade"]
+
+
+def _is_cli_data_type(value: str) -> TypeGuard[CliDataType]:
+    """Return whether a configured dataset name is registered for historical auditing."""
+
+    return value in DATASET_REGISTRY
 
 
 @dataclass(frozen=True)
@@ -131,10 +137,9 @@ def lineage_audit_specs_from_config(*, config: dict[str, object], end: datetime)
 
     specs: list[LineageAuditSpec] = []
     for dataset_name in datasets:
-        if dataset_name not in DATASET_REGISTRY:
+        if not _is_cli_data_type(dataset_name):
             raise ValueError(f"unsupported historical Bronze dataset '{dataset_name}'")
-        dataset_type: CliDataType = dataset_name
-        dataset = DATASET_REGISTRY[dataset_type]
+        dataset = DATASET_REGISTRY[dataset_name]
         family, timeframe, cadence = _family_policy(dataset_name)
         for exchange_name in exchanges:
             if exchange_name != "deribit":
