@@ -133,7 +133,7 @@ def lineage_audit_specs_from_config(*, config: dict[str, object], end: datetime)
     for dataset_name in datasets:
         if dataset_name not in DATASET_REGISTRY:
             raise ValueError(f"unsupported historical Bronze dataset '{dataset_name}'")
-        dataset_type = cast(CliDataType, dataset_name)
+        dataset_type: CliDataType = dataset_name
         dataset = DATASET_REGISTRY[dataset_type]
         family, timeframe, cadence = _family_policy(dataset_name)
         for exchange_name in exchanges:
