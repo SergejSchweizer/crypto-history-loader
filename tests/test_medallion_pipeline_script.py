@@ -162,6 +162,7 @@ def test_build_steps_adds_volatility_to_silver_dataset_args(tmp_path: Path) -> N
     cfg = {
         "medallion-pipeline": {
             "execution_order": ["silver"],
+            "reuse-existing-inputs": {"enabled": True, "max_age_seconds": 60},
             "silver": {
                 "enabled": True,
                 "command": "silver-build",
@@ -169,7 +170,12 @@ def test_build_steps_adds_volatility_to_silver_dataset_args(tmp_path: Path) -> N
             },
         }
     }
-    steps = module._build_steps(main_path=main_path, config_path=config_path, config_data=cfg)
+    steps = module._build_steps(
+        main_path=main_path,
+        config_path=config_path,
+        config_data=cfg,
+        freshness_checker=lambda _layer, _root, _max_age: True,
+    )
     assert len(steps) == 1
     assert "volatility_index_data" in steps[0].args
 
@@ -269,6 +275,60 @@ def test_build_steps_validation_errors(tmp_path: Path) -> None:
             config_path=config_path,
             config_data={"medallion-pipeline": {"execution_order": ["x"]}},
         )
+
+
+@pytest.mark.parametrize(
+    "execution_order",
+    [["gold", "bronze"], ["silver", "bronze", "gold"], ["bronze", "bronze", "silver"]],
+)
+def test_build_steps_rejects_invalid_dependency_order(tmp_path: Path, execution_order: list[str]) -> None:
+    module = _load_pipeline_module()
+    pipeline = {
+        "execution_order": execution_order,
+        "bronze": {"enabled": True, "command": "bronze-build", "cli_args": []},
+        "silver": {"enabled": True, "command": "silver-build", "cli_args": []},
+        "gold": {"enabled": True, "command": "gold-build", "cli_args": []},
+    }
+
+    with pytest.raises(ValueError, match="duplicate|bronze -> silver -> gold"):
+        module._build_steps(
+            main_path=tmp_path / "main.py",
+            config_path=tmp_path / "config.yaml",
+            config_data={"medallion-pipeline": pipeline},
+        )
+
+
+def test_build_steps_requires_verified_reuse_for_disabled_prerequisite(tmp_path: Path) -> None:
+    module = _load_pipeline_module()
+    pipeline = {
+        "execution_order": ["bronze", "silver"],
+        "bronze": {"enabled": False, "command": "bronze-build", "cli_args": []},
+        "silver": {"enabled": True, "command": "silver-build", "cli_args": []},
+    }
+
+    with pytest.raises(ValueError, match="reuse-existing-inputs"):
+        module._build_steps(
+            main_path=tmp_path / "main.py",
+            config_path=tmp_path / "config.yaml",
+            config_data={"medallion-pipeline": pipeline},
+        )
+
+    pipeline["reuse-existing-inputs"] = {"enabled": True, "max_age_seconds": 60}
+    with pytest.raises(ValueError, match="missing or stale"):
+        module._build_steps(
+            main_path=tmp_path / "main.py",
+            config_path=tmp_path / "config.yaml",
+            config_data={"medallion-pipeline": pipeline},
+            freshness_checker=lambda _layer, _root, _max_age: False,
+        )
+
+    steps = module._build_steps(
+        main_path=tmp_path / "main.py",
+        config_path=tmp_path / "config.yaml",
+        config_data={"medallion-pipeline": pipeline},
+        freshness_checker=lambda _layer, _root, _max_age: True,
+    )
+    assert [step.name for step in steps] == ["silver"]
 
 
 def test_build_steps_layer_validation_errors(tmp_path: Path) -> None:

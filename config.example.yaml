@@ -35,6 +35,11 @@ bronze-build:
 
 medallion-pipeline:
   execution_order: [bronze, silver, gold]
+  reuse-existing-inputs:
+    enabled: false
+    max_age_seconds: 86400
+    bronze_root: lake/bronze
+    silver_root: lake/silver
   bronze:
     enabled: true
     command: bronze-build

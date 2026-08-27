@@ -8,6 +8,7 @@ import json
 import os
 import subprocess
 import sys
+from collections.abc import Callable
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -80,7 +81,13 @@ def _apply_env_from_config(config_data: dict[str, Any]) -> None:
             os.environ[str(raw_key)] = str(value)
 
 
-def _build_steps(*, main_path: Path, config_path: Path, config_data: dict[str, Any]) -> list[PipelineStep]:
+def _build_steps(
+    *,
+    main_path: Path,
+    config_path: Path,
+    config_data: dict[str, Any],
+    freshness_checker: Callable[[str, Path, int], bool] | None = None,
+) -> list[PipelineStep]:
     """Build pipeline command sequence and append sync directly after enabled Gold."""
 
     pipeline_cfg = config_data.get("medallion-pipeline")
@@ -99,6 +106,14 @@ def _build_steps(*, main_path: Path, config_path: Path, config_data: dict[str, A
         )
     if execution_order.count("gold") > 1:
         raise ValueError("medallion-pipeline.execution_order may contain Gold at most once")
+    if len(execution_order) != len(set(execution_order)):
+        raise ValueError("medallion-pipeline.execution_order must not contain duplicate layers")
+    canonical_order = {"bronze": 0, "silver": 1, "gold": 2}
+    if execution_order != sorted(execution_order, key=canonical_order.__getitem__):
+        raise ValueError("medallion-pipeline.execution_order must preserve bronze -> silver -> gold")
+
+    checker = freshness_checker or _inputs_are_fresh
+    _validate_disabled_prerequisites(pipeline_cfg, execution_order, main_path.parent, checker)
 
     steps: list[PipelineStep] = []
     for layer_name in execution_order:
@@ -143,6 +158,54 @@ def _build_steps(*, main_path: Path, config_path: Path, config_data: dict[str, A
                 ]
                 steps.append(PipelineStep(name="postgres-gold-sync", args=sync_cmd))
     return steps
+
+
+def _validate_disabled_prerequisites(
+    pipeline_cfg: dict[str, Any],
+    execution_order: list[str],
+    repo_root: Path,
+    freshness_checker: Callable[[str, Path, int], bool],
+) -> None:
+    """Require explicit and fresh existing inputs when a prerequisite layer is disabled."""
+
+    enabled = {
+        layer: bool(pipeline_cfg.get(layer, {}).get("enabled", True))
+        for layer in ("bronze", "silver", "gold")
+        if isinstance(pipeline_cfg.get(layer), dict)
+    }
+    required_reuse: list[str] = []
+    if enabled.get("silver", False) and not enabled.get("bronze", False):
+        required_reuse.append("bronze")
+    if enabled.get("gold", False) and not enabled.get("silver", False):
+        required_reuse.append("silver")
+    if not required_reuse:
+        return
+
+    reuse_cfg = pipeline_cfg.get("reuse-existing-inputs")
+    if not isinstance(reuse_cfg, dict) or not bool(reuse_cfg.get("enabled", False)):
+        raise ValueError("disabled prerequisite layers require reuse-existing-inputs.enabled=true")
+    max_age_seconds = reuse_cfg.get("max_age_seconds")
+    if not isinstance(max_age_seconds, int) or isinstance(max_age_seconds, bool) or max_age_seconds <= 0:
+        raise ValueError("reuse-existing-inputs.max_age_seconds must be a positive integer")
+    for layer in required_reuse:
+        root_value = reuse_cfg.get(f"{layer}_root", f"lake/{layer}")
+        layer_root = Path(str(root_value))
+        if not layer_root.is_absolute():
+            layer_root = repo_root / layer_root
+        if not freshness_checker(layer, layer_root, max_age_seconds):
+            raise ValueError(f"reused {layer} inputs are missing or stale")
+
+
+def _inputs_are_fresh(layer: str, root: Path, max_age_seconds: int) -> bool:
+    """Return whether a layer has a recently modified Parquet artifact."""
+
+    del layer
+    if not root.is_dir():
+        return False
+    newest_mtime = max((path.stat().st_mtime for path in root.rglob("*.parquet")), default=None)
+    if newest_mtime is None:
+        return False
+    return datetime.now(UTC).timestamp() - newest_mtime <= max_age_seconds
 
 
 def _has_option(cli_args: list[str], option_name: str) -> bool:
