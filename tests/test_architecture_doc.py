@@ -28,3 +28,10 @@ def test_architecture_doc_mentions_enforced_boundaries_and_contracts() -> None:
         "lake/bronze -> lake/silver -> lake/gold",
     ):
         assert expected in text
+
+
+def test_backlog_has_no_duplicate_postgres_source() -> None:
+    """Keep BACKLOG.md as the sole repository planning source."""
+
+    assert (REPO_ROOT / "BACKLOG.md").is_file()
+    assert not (REPO_ROOT / "BACKLOG_POSTGRES.md").exists()
