@@ -74,3 +74,39 @@ The runtime DSN must authenticate exactly as `crypto-loader`. The probes create 
 administrator-owned temporary consumer table, verify runtime insert/update/select/
 delete, prove runtime create/alter/drop failures, and remove the probe table. They
 also read back exact schema ownership, role attributes, and table grants.
+
+## Production Reconstruction Or Certification
+
+Run `postgres-live-conformance` first and retain its sanitized PR-101 report. Then
+run the guarded command with the certified current Gold root:
+
+```bash
+python main.py postgres-production-reconstruction \
+	--current-report artifacts/acceptance/postgres-live-conformance-v2.json \
+	--gold-root /absolute/path/to/lake/gold \
+	--evidence-file artifacts/acceptance/postgres-production-reconstruction-v2.json
+```
+
+A `PASS` report chooses `no-op-certification`; no operator adapter, maintenance
+window, backup, bootstrap, replay, or schema mutation is used. The command performs
+an independent live conformance check and writes only sanitized PR-102 evidence.
+
+For a report that fails only `owned-catalog` or `lineage:*` checks in the `catalog`
+or `data` categories, provide an operator-reviewed adapter factory in
+`module:callable` form. It must implement the `ReconstructionAdapter` protocol in
+`application.services.postgres_reconstruction` and may reconstruct only
+`crypto_loader` and `crypto_loader_sync`.
+
+```bash
+python main.py postgres-production-reconstruction \
+	--current-report artifacts/acceptance/postgres-live-conformance-v2.json \
+	--gold-root /absolute/path/to/lake/gold \
+	--adapter-factory operations.postgres_reconstruction:create_adapter
+```
+
+The adapter disables scheduling; obtains host and PostgreSQL exclusion; validates
+the configured endpoint/database; creates and verifies a timestamped backup of the
+two owned schemas; reconstructs schemas and DML-only runtime access; bootstraps
+certified Gold; and runs a zero-mutation replay. The scheduler is restored only
+after the independent verifier passes and replay completes. Permission, timeout,
+configuration, endpoint, source, temporal, or unrelated-object failures hard-stop.
