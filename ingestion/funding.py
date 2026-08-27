@@ -10,7 +10,7 @@ from datetime import datetime
 from typing import Any, cast
 
 from ingestion.exchanges import deribit_funding
-from ingestion.http_client import HttpClientError, HttpClientHttpError
+from ingestion.http_client import HttpClientHttpError
 from ingestion.spot_ohlcv import Exchange, Market, interval_to_milliseconds, normalize_storage_symbol
 
 DERIBIT_FUNDING_NATIVE_INTERVAL = "8h"
@@ -133,8 +133,6 @@ def fetch_funding_all_history(
         if exc.status_code == 400:
             return []
         raise
-    except HttpClientError:
-        return []
     if on_history_chunk is not None:
         return []
     parsed = [deribit_funding.parse_funding_row(normalized_symbol, normalized_interval, row) for row in rows]
@@ -181,17 +179,6 @@ def fetch_funding_range(
         if exc.status_code == 400:
             return []
         raise
-    except HttpClientError:
-        logger.warning(
-            "Funding day fetch failed exchange=%s symbol=%s interval=%s start_ms=%s end_ms=%s elapsed_s=%.2f",
-            exchange,
-            normalized_symbol,
-            normalized_interval,
-            start_open_ms,
-            end_open_ms,
-            time.monotonic() - started,
-        )
-        return []
     parsed = [deribit_funding.parse_funding_row(normalized_symbol, normalized_interval, row) for row in rows]
     points = [
         FundingPoint(

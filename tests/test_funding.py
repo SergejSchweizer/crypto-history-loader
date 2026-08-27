@@ -60,7 +60,7 @@ def test_fetch_funding_range_returns_empty_on_http_400(monkeypatch: pytest.Monke
     assert rows == []
 
 
-def test_fetch_funding_range_returns_empty_on_connection_error(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_fetch_funding_range_propagates_connection_error(monkeypatch: pytest.MonkeyPatch) -> None:
     def fake_fetch_funding_range(
         symbol: str,
         period: str,
@@ -72,15 +72,26 @@ def test_fetch_funding_range_returns_empty_on_connection_error(monkeypatch: pyte
 
     monkeypatch.setattr("ingestion.funding.deribit_funding.fetch_funding_range", fake_fetch_funding_range)
 
-    rows = fetch_funding_range(
-        exchange="deribit",
-        symbol="SOL",
-        interval="1m",
-        start_open_ms=0,
-        end_open_ms=60_000,
-        market="perp",
-    )
-    assert rows == []
+    with pytest.raises(HttpClientError, match="Connection error"):
+        fetch_funding_range(
+            exchange="deribit",
+            symbol="SOL",
+            interval="1m",
+            start_open_ms=0,
+            end_open_ms=60_000,
+            market="perp",
+        )
+
+
+def test_fetch_funding_all_history_propagates_connection_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_fetch_funding_all(**kwargs: object) -> list[dict[str, object]]:
+        del kwargs
+        raise HttpClientError("Connection error")
+
+    monkeypatch.setattr("ingestion.funding.deribit_funding.fetch_funding_all", fake_fetch_funding_all)
+
+    with pytest.raises(HttpClientError, match="Connection error"):
+        fetch_funding_all_history(exchange="deribit", symbol="SOL", interval="1m", market="perp")
 
 
 @pytest.mark.parametrize(
