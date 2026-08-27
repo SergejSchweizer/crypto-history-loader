@@ -16,6 +16,7 @@ INTEGRATION_TEST_NAME_PARTS = (
     "loader",
     "medallion",
     "pipeline",
+    "integration",
     "runtime",
     "script",
     "silver",

@@ -198,6 +198,22 @@ jobs:
     name: pr-coverage-95
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: crypto_loader_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres-test-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d crypto_loader_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      TEST_POSTGRES_DSN: postgresql://postgres:postgres-test-only@127.0.0.1:5432/crypto_loader_test
 
     steps:
       - name: Checkout repository
@@ -218,6 +234,14 @@ jobs:
 
       - name: Install dependencies
         run: uv sync --extra dev
+
+      - name: Verify PostgreSQL readiness
+        run: >
+          uv run python -c
+          "import os, psycopg;
+          connection = psycopg.connect(os.environ['TEST_POSTGRES_DSN'], connect_timeout=5);
+          connection.execute('SELECT 1').fetchone();
+          connection.close()"
 
       - name: Full test suite with 90 percent coverage gate
         run: uv run pytest --cov-fail-under=90 --cov-report=term-missing
