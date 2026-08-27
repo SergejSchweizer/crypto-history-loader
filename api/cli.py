@@ -18,6 +18,7 @@ from application.services.runtime_service import apply_repository_runtime_limits
 # Configure Polars before importing command modules that may import it.
 apply_repository_runtime_limits()
 
+from api.commands import historical_completeness as historical_completeness_cmd
 from api.commands import loader as loader_cmd
 from api.commands import stats as stats_cmd
 from api.commands.benchmark import add_benchmark_build_parser, run_benchmark_build
@@ -157,6 +158,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_gold_sync_postgres_parser(subparsers)
     add_benchmark_build_parser(subparsers)
     add_dataset_inventory_parser(subparsers)
+    historical_completeness_cmd.add_historical_completeness_parser(subparsers)
     add_list_spot_ohlcv_timeframes_parser(subparsers)
     add_export_descriptive_stats_parser(subparsers)
 
@@ -314,7 +316,10 @@ def main() -> None:
     if command_parser is not None:
         explicit = _collect_explicit_cli_dests(command_parser, sys.argv[1:])
         _apply_yaml_defaults(args=args, command=command, config=config_data, explicit_dests=explicit)
-    logger = configure_logging(module_name=str(args.command), debug=_is_debug_logging_enabled(args))
+    if args.command == "historical-completeness-audit":
+        logger = historical_completeness_cmd.configure_read_only_logging(debug=_is_debug_logging_enabled(args))
+    else:
+        logger = configure_logging(module_name=str(args.command), debug=_is_debug_logging_enabled(args))
     logger.info("Command start: %s", args.command)
 
     if args.command == "bronze-build":
@@ -331,6 +336,12 @@ def main() -> None:
         run_benchmark_build(args=args, logger=logger)
     elif args.command == "dataset-inventory":
         run_dataset_inventory(args=args, logger=logger)
+    elif args.command == "historical-completeness-audit":
+        historical_completeness_cmd.run_historical_completeness_audit(
+            args=args,
+            config=config_data,
+            logger=logger,
+        )
     elif args.command == "list-spot_ohlcv-timeframes":
         run_list_spot_ohlcv_timeframes(args=args, logger=logger)
     elif args.command == "export-descriptive-stats":

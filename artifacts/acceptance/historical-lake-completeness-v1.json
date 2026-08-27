@@ -1,0 +1,39 @@
+{
+  "artifact_scope": "controlled_acceptance_fixture",
+  "intervals": [
+    {
+      "end": "2026-01-01T00:00:00Z",
+      "evidence_source": "bronze_data:open_time",
+      "gap_category": "observed_rows",
+      "lineage": "perps_trades|deribit|perp|ACCEPTANCE-PERPETUAL|tick",
+      "start": "2026-01-01T00:00:00Z",
+      "status": "PASS"
+    },
+    {
+      "end": "2026-01-01T00:01:00Z",
+      "evidence_source": "bronze_sidecar:confirmed_empty",
+      "gap_category": "confirmed_empty",
+      "lineage": "perps_trades|deribit|perp|ACCEPTANCE-PERPETUAL|tick",
+      "start": "2026-01-01T00:01:00Z",
+      "status": "PASS"
+    },
+    {
+      "end": "2026-01-01T00:02:00Z",
+      "evidence_source": "config:expected_provider_gap",
+      "gap_category": "expected_provider_gap",
+      "lineage": "perps_trades|deribit|perp|ACCEPTANCE-PERPETUAL|tick",
+      "start": "2026-01-01T00:02:00Z",
+      "status": "PASS"
+    },
+    {
+      "end": "2026-01-01T00:03:00Z",
+      "evidence_source": "missing:acquisition_evidence",
+      "gap_category": "unverified_acquisition",
+      "lineage": "perps_trades|deribit|perp|ACCEPTANCE-PERPETUAL|tick",
+      "start": "2026-01-01T00:03:00Z",
+      "status": "RECONCILE_REQUIRED"
+    }
+  ],
+  "schema_version": "historical-lake-completeness-v1",
+  "status": "RECONCILE_REQUIRED"
+}
