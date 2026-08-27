@@ -53,6 +53,15 @@ def test_filter_suite_splits_unit_and_integration_files() -> None:
     assert filter_suite(files, suite="all") == files
 
 
+def test_real_postgres_integration_file_is_not_routed_to_unit_ci() -> None:
+    """The CI database contract test requires the integration PostgreSQL service."""
+
+    postgres_test = Path("tests/test_postgres_real_integration.py")
+
+    assert classify_test_suite(postgres_test) == "integration"
+    assert filter_suite([postgres_test], suite="unit") == []
+
+
 def test_filter_suite_rejects_unknown_suite() -> None:
     """Suite names should stay explicit."""
 
