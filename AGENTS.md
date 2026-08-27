@@ -11,6 +11,7 @@ Applies to all agent-assisted implementation, refactoring, review, testing, and 
 - [MUST] Optimize for maintainability, modularity, reproducibility, testability, documentation quality, and extensibility.
 - [MUST] Keep behavior understandable without tribal knowledge.
 - [MUST] Prefer explicit contracts, deterministic behavior, and clear ownership of side effects.
+- [MUST] Use rebase-based integration; do not create merge commits.
 - [SHOULD] Favor simple, composable designs over clever abstractions.
 - [SHOULD] Preserve backward compatibility unless a breaking change is intentional and documented.
 
