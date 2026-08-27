@@ -184,3 +184,36 @@ def test_two_writers_replan_after_lock_and_rollback_target_with_checkpoint() -> 
         with psycopg.connect(dsn, autocommit=True) as connection:
             with connection.cursor() as cursor:
                 cursor.execute(sql.SQL("DROP TABLE IF EXISTS {}").format(table))
+
+
+def test_real_postgres_reports_exact_update_delete_row_counts_and_rolls_back() -> None:
+    """Prove psycopg exposes exact affected-row counts used by integrity enforcement."""
+
+    dsn = _test_dsn()
+    table_name = f"rowcount_probe_{uuid.uuid4().hex}"
+    table = sql.Identifier("crypto_loader_sync_test", table_name)
+    with psycopg.connect(dsn, autocommit=True) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute("CREATE SCHEMA IF NOT EXISTS crypto_loader_sync_test")
+            cursor.execute(sql.SQL("CREATE TABLE {} (id INTEGER PRIMARY KEY, value INTEGER NOT NULL)").format(table))
+            cursor.execute(sql.SQL("INSERT INTO {} VALUES (1, 10)").format(table))
+
+    try:
+        with psycopg.connect(dsn, autocommit=False) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(sql.SQL("UPDATE {} SET value = 20 WHERE id = 1").format(table))
+                assert cursor.rowcount == 1
+                cursor.execute(sql.SQL("UPDATE {} SET value = 20 WHERE id = 2").format(table))
+                assert cursor.rowcount == 0
+                cursor.execute(sql.SQL("DELETE FROM {} WHERE id = 1").format(table))
+                assert cursor.rowcount == 1
+                cursor.execute(sql.SQL("DELETE FROM {} WHERE id = 1").format(table))
+                assert cursor.rowcount == 0
+            connection.rollback()
+            with connection.cursor() as cursor:
+                cursor.execute(sql.SQL("SELECT value FROM {} WHERE id = 1").format(table))
+                assert cursor.fetchone() == (10,)
+    finally:
+        with psycopg.connect(dsn, autocommit=True) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(sql.SQL("DROP TABLE IF EXISTS {}").format(table))

@@ -243,3 +243,27 @@ def test_preexisting_digests_without_state_fail_closed(tmp_path: Path) -> None:
     )
     with pytest.raises(GoldSyncServiceError, match="compatibility"):
         reconcile_snapshots((snapshot,), repository, clock=_fixed_clock)
+
+
+@pytest.mark.parametrize("corruption", ["tampered", "missing", "extra"])
+def test_unchanged_fingerprint_rejects_non_equivalent_target_digests(
+    tmp_path: Path,
+    corruption: str,
+) -> None:
+    timestamp = datetime(2026, 1, 1, tzinfo=UTC)
+    snapshot = _write_snapshot(tmp_path, rows=((timestamp, 1.0),))
+    repository = FakeRepository()
+    reconcile_snapshots((snapshot,), repository, clock=_fixed_clock)
+    key = GoldRowKey("deribit", "BTC", timestamp)
+    if corruption == "tampered":
+        repository.digests[snapshot.lineage] = (GoldRowDigest(key, "0" * 64),)
+    elif corruption == "missing":
+        repository.digests[snapshot.lineage] = ()
+    else:
+        extra_timestamp = datetime(2026, 1, 2, tzinfo=UTC)
+        repository.digests[snapshot.lineage] += (
+            GoldRowDigest(GoldRowKey("deribit", "BTC", extra_timestamp), "0" * 64),
+        )
+
+    with pytest.raises(GoldSyncServiceError, match="unchanged Gold checkpoint"):
+        reconcile_snapshots((snapshot,), repository, clock=_fixed_clock)

@@ -120,11 +120,13 @@ def _state_for_snapshot(snapshot: GoldSourceSnapshot, *, clock: Clock) -> GoldSy
 def _reconcile_planner(snapshot: GoldSourceSnapshot, *, clock: Clock) -> GoldReconcilePlanner:
     def plan(state: GoldSyncState | None, target_digests: tuple[GoldRowDigest, ...]) -> GoldReconcileDecision:
         expected_summary = expected_target_summary(snapshot)
-        if state is not None and state_matches_snapshot(state, snapshot):
-            return GoldReconcileDecision(None, None, expected_summary)
-
         source_rows = _validated_source_rows(snapshot)
         delta = plan_gold_delta(source_rows, target_digests, state_exists=state is not None)
+        if state is not None and state_matches_snapshot(state, snapshot):
+            if delta.inserts or delta.updates or delta.deletes or delta.unchanged_count != snapshot.row_count:
+                raise ValueError("unchanged Gold checkpoint does not match canonical source row digests")
+            return GoldReconcileDecision(None, None, expected_summary)
+
         return GoldReconcileDecision(delta, _state_for_snapshot(snapshot, clock=clock), expected_summary)
 
     return plan

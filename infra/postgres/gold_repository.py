@@ -28,6 +28,7 @@ from application.postgres_sync import (
     consumer_table_name,
 )
 from application.postgres_sync.contracts import GoldReconcileDecision, GoldReconcilePlanner
+from application.postgres_sync.delta import canonical_row_hash
 from application.postgres_sync.schema import (
     PostgresCatalogColumn,
     PostgresCatalogTable,
@@ -45,6 +46,9 @@ class PostgresSchemaMismatchError(PostgresGoldRepositoryError):
 
 
 class CursorPort(Protocol):
+    @property
+    def rowcount(self) -> int: ...
+
     def execute(self, query: str, params: Sequence[object] | None = None) -> object: ...
 
     def fetchone(self) -> tuple[object, ...] | None: ...
@@ -350,6 +354,38 @@ class PostgresGoldSyncRepository:
             )
         return tuple(result)
 
+    @staticmethod
+    def _read_consumer_digests(
+        cursor: CursorPort,
+        lineage: GoldLineage,
+        consumer_table: PostgresCatalogTable,
+    ) -> tuple[GoldRowDigest, ...]:
+        column_names = tuple(column.name for column in consumer_table.columns)
+        table = _qualified(consumer_table.schema_name, consumer_table.table_name)
+        query = (
+            f"SELECT {', '.join(quote_identifier(name) for name in column_names)} FROM {table} "
+            f"WHERE {quote_identifier('exchange')} = %s AND {quote_identifier('symbol')} = %s "
+            f"ORDER BY {quote_identifier('timestamp_m1')}"
+        )
+        cursor.execute(query, (lineage.exchange, lineage.symbol))
+        result: list[GoldRowDigest] = []
+        for row in cursor.fetchall():
+            if len(row) != len(column_names):
+                raise ValueError("PostgreSQL Gold consumer row has unexpected width")
+            values = dict(zip(column_names, row, strict=True))
+            exchange = _as_text(values["exchange"], "consumer exchange")
+            symbol = _as_text(values["symbol"], "consumer symbol")
+            timestamp = _as_datetime(values["timestamp_m1"], "consumer timestamp_m1")
+            if timestamp is None:
+                raise ValueError("PostgreSQL Gold consumer timestamp cannot be null")
+            result.append(
+                GoldRowDigest(
+                    GoldRowKey(exchange, symbol, timestamp),
+                    canonical_row_hash(values),
+                )
+            )
+        return tuple(result)
+
     def ensure_lineage(self, snapshot: GoldSourceSnapshot, ddl: str, schema_signature: str) -> None:
         """Validate actual target catalogs before any consumer-row mutation."""
 
@@ -439,6 +475,42 @@ class PostgresGoldSyncRepository:
             result[digest.key] = digest.row_sha256
         return result
 
+    @staticmethod
+    def _exact_digest_map(digests: Sequence[GoldRowDigest], source: str) -> dict[GoldRowKey, str]:
+        result: dict[GoldRowKey, str] = {}
+        for digest in digests:
+            if digest.key in result:
+                raise ValueError(f"duplicate logical key in PostgreSQL Gold {source}")
+            result[digest.key] = digest.row_sha256
+        return result
+
+    @classmethod
+    def _verify_integrity(
+        cls,
+        lineage: GoldLineage,
+        state: GoldSyncState | None,
+        consumer_digests: Sequence[GoldRowDigest],
+        stored_digests: Sequence[GoldRowDigest],
+        source_digests: Sequence[GoldRowDigest] | None = None,
+    ) -> None:
+        consumer = cls._exact_digest_map(consumer_digests, "consumer")
+        stored = cls._exact_digest_map(stored_digests, "digest table")
+        if consumer != stored:
+            raise ValueError("PostgreSQL Gold consumer and digest table are inconsistent")
+        if source_digests is not None and consumer != cls._exact_digest_map(source_digests, "canonical source"):
+            raise ValueError("PostgreSQL Gold target does not exactly match canonical source")
+        if state is None:
+            if consumer:
+                raise ValueError("PostgreSQL Gold target rows exist without an authoritative checkpoint")
+            return
+        if state.lineage != lineage:
+            raise ValueError("PostgreSQL Gold checkpoint lineage is inconsistent")
+        timestamps = sorted(key.timestamp_m1 for key in consumer)
+        minimum = timestamps[0] if timestamps else None
+        maximum = timestamps[-1] if timestamps else None
+        if (state.row_count, state.min_timestamp, state.max_timestamp) != (len(consumer), minimum, maximum):
+            raise ValueError("PostgreSQL Gold checkpoint is inconsistent with exact target keys")
+
     def _insert_row(self, cursor: CursorPort, lineage: GoldLineage, values: tuple[tuple[str, object], ...]) -> None:
         table = _qualified(POSTGRES_CONSUMER_SCHEMA, consumer_table_name(lineage.dataset_id))
         columns = [name for name, _ in values]
@@ -465,6 +537,8 @@ class PostgresGoldSyncRepository:
             mapping["timestamp_m1"],
         )
         cursor.execute(query, params)
+        if cursor.rowcount != 1:
+            raise ValueError("PostgreSQL Gold UPDATE affected an unexpected number of rows")
 
     def _delete_row(self, cursor: CursorPort, lineage: GoldLineage, key: GoldRowKey) -> None:
         table = _qualified(POSTGRES_CONSUMER_SCHEMA, consumer_table_name(lineage.dataset_id))
@@ -473,6 +547,8 @@ class PostgresGoldSyncRepository:
             f"AND {quote_identifier('symbol')} = %s AND {quote_identifier('timestamp_m1')} = %s"
         )
         cursor.execute(query, (key.exchange, key.symbol, key.timestamp_m1))
+        if cursor.rowcount != 1:
+            raise ValueError("PostgreSQL Gold DELETE affected an unexpected number of rows")
 
     def _apply_plan(self, cursor: CursorPort, lineage: GoldLineage, plan: GoldDeltaPlan) -> None:
         digest_map = self._digest_map(plan)
@@ -503,6 +579,8 @@ class PostgresGoldSyncRepository:
                 _DELETE_DIGEST,
                 (lineage.dataset_id, lineage.exchange, lineage.symbol, key.timestamp_m1),
             )
+            if cursor.rowcount != 1:
+                raise ValueError("PostgreSQL Gold digest DELETE affected an unexpected number of rows")
 
     def _verify_summary(
         self,
@@ -543,15 +621,35 @@ class PostgresGoldSyncRepository:
                 if state is not None and state.schema_signature != schema_signature:
                     raise PostgresSchemaMismatchError("PostgreSQL Gold schema migration required")
                 digests = self._read_digests(cursor, lineage)
+                consumer_name = consumer_table_name(lineage.dataset_id)
+                consumer_table = next(
+                    (
+                        table
+                        for table in expected_tables
+                        if table.schema_name == POSTGRES_CONSUMER_SCHEMA and table.table_name == consumer_name
+                    ),
+                    None,
+                )
+                if consumer_table is None:
+                    raise ValueError("PostgreSQL Gold consumer table is absent from the canonical catalog")
+                consumer_digests = self._read_consumer_digests(cursor, lineage, consumer_table)
+                self._verify_integrity(lineage, state, consumer_digests, digests)
                 decision = planner(state, digests)
 
                 if decision.plan is not None:
                     if decision.next_state is None or decision.next_state.lineage != lineage:
                         raise ValueError("Gold reconcile state lineage does not match requested lineage")
                     self._apply_plan(cursor, lineage, decision.plan)
-                self._verify_summary(cursor, lineage, decision.expected_summary)
                 if decision.next_state is not None:
                     cursor.execute(_UPSERT_STATE, _state_params(decision.next_state))
+                verified_state = self._read_state(cursor, lineage)
+                verified_digests = self._read_digests(cursor, lineage)
+                verified_consumer = self._read_consumer_digests(cursor, lineage, consumer_table)
+                expected_source = decision.plan.source_digests if decision.plan is not None else digests
+                expected_state = decision.next_state if decision.next_state is not None else state
+                if verified_state != expected_state:
+                    raise ValueError("PostgreSQL Gold saved checkpoint does not match the reconcile decision")
+                self._verify_integrity(lineage, verified_state, verified_consumer, verified_digests, expected_source)
             finally:
                 cursor.close()
             connection.commit()
